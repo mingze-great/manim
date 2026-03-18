@@ -1,16 +1,23 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from contextlib import asynccontextmanager
 import os
 import pathlib
 import re
+import time
+from collections import defaultdict
+from datetime import datetime
 
 from app.config import get_settings
 from app.database import engine, Base
 from app.api import auth, projects, tasks, templates, admin
 
 settings = get_settings()
+
+request_counts = defaultdict(int)
+request_times = defaultdict(list)
+start_time = time.time()
 
 
 @asynccontextmanager
@@ -166,9 +173,63 @@ def root():
     return {"message": "Manim Video Platform API", "version": "2.0.0"}
 
 
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start = time.time()
+    path = request.url.path
+    
+    if not path.startswith("/health") and not path.startswith("/api/videos"):
+        print(f"[{datetime.now().isoformat()}] {request.method} {path}")
+    
+    response = await call_next(request)
+    
+    process_time = time.time() - start
+    request_counts[path] += 1
+    request_times[path].append(process_time)
+    
+    if process_time > 1.0:
+        print(f"[SLOW] {request.method} {path} took {process_time:.2f}s")
+    
+    return response
+
+
 @app.get("/health")
 def health():
-    return {"status": "healthy", "version": "2.0.0"}
+    uptime = time.time() - start_time
+    memory_mb = 0
+    try:
+        import resource
+        memory_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
+    except:
+        pass
+    
+    return {
+        "status": "healthy",
+        "version": "2.0.0",
+        "uptime_seconds": round(uptime),
+        "memory_mb": round(memory_mb, 2)
+    }
+
+
+@app.get("/metrics")
+def metrics():
+    uptime = time.time() - start_time
+    
+    avg_times = {}
+    for path, times in request_times.items():
+        if times:
+            avg_times[path] = round(sum(times) / len(times), 4)
+    
+    top_endpoints = sorted(request_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+    
+    return JSONResponse({
+        "uptime_seconds": round(uptime),
+        "total_requests": sum(request_counts.values()),
+        "requests_by_endpoint": dict(request_counts),
+        "top_endpoints": [{"path": p, "count": c} for p, c in top_endpoints],
+        "avg_response_times": avg_times,
+        "timestamp": datetime.now().isoformat()
+    })
 
 
 @app.get("/api/videos/{filename}")
