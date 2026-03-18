@@ -16,7 +16,7 @@ export default function Login() {
     try {
       const { data: loginData } = await authApi.login(values)
       const { data: userData } = await authApi.me()
-      login(loginData.access_token, { id: userData.id, username: userData.username, email: userData.email })
+      login(loginData.access_token, { id: userData.id, username: userData.username, email: userData.email, is_admin: userData.is_admin })
       message.success('登录成功')
       navigate('/')
     } catch (error: any) {

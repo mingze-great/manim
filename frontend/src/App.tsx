@@ -2,12 +2,16 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './stores/authStore'
 import AuthLayout from './components/Layout/AuthLayout'
 import MainLayout from './components/Layout/MainLayout'
+import AdminLayout from './components/Layout/AdminLayout'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
 import ProjectChat from './pages/ProjectChat'
 import ProjectTask from './pages/ProjectTask'
-import Admin from './pages/Admin'
+import AdminDashboard from './pages/admin/AdminDashboard'
+import AdminUsers from './pages/admin/AdminUsers'
+import AdminLogs from './pages/admin/AdminLogs'
+import AdminSettings from './pages/admin/AdminSettings'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { token } = useAuthStore()
@@ -35,8 +39,11 @@ function App() {
         <Route path="/project/:id/task" element={<ProjectTask />} />
       </Route>
 
-      <Route element={<AdminRoute><MainLayout /></AdminRoute>}>
-        <Route path="/admin" element={<Admin />} />
+      <Route element={<AdminRoute><AdminLayout /></AdminRoute>}>
+        <Route path="/admin" element={<AdminDashboard />} />
+        <Route path="/admin/users" element={<AdminUsers />} />
+        <Route path="/admin/logs" element={<AdminLogs />} />
+        <Route path="/admin/settings" element={<AdminSettings />} />
       </Route>
     </Routes>
   )
