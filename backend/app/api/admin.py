@@ -208,8 +208,9 @@ async def toggle_user_active(
     
     from app.api.auth import log_audit
     action = "USER_ENABLE" if user.is_active else "USER_DISABLE"
+    action_text = "启用" if user.is_active else "禁用"
     log_audit(db, current_user.id, current_user.username, action, 
               resource="user", resource_id=user_id,
-              details=f"{"启用" if user.is_active else "禁用"}用户: {user.username}", request=request)
+              details=f"{action_text}用户: {user.username}", request=request)
     
-    return {"message": f"用户已{"启用" if user.is_active else "禁用"}", "is_active": user.is_active}
+    return {"message": f"用户已{action_text}", "is_active": user.is_active}
