@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
     
+    # Admin
+    ADMIN_EMAIL: str = ""
+    
     # LLM Provider Configuration (auto/deepseek/gemini/openai)
     LLM_PROVIDER: str = "auto"
     
@@ -31,7 +34,7 @@ class Settings(BaseSettings):
     OPENAI_BASE_URL: str = "https://api.openai.com/v1"
     OPENAI_MODEL: str = "gpt-4o"
     
-    # Legacy support for LLM_MODEL
+    # Legacy support
     LLM_MODEL: str = ""
     
     REDIS_URL: str = "redis://localhost:6379/0"
@@ -41,7 +44,7 @@ class Settings(BaseSettings):
     OSS_BUCKET_NAME: str = "manim-videos"
     OSS_ENDPOINT: str = "oss-cn-hangzhou.aliyuncs.com"
     
-    CORS_ORIGINS: str = "http://localhost:5173"
+    CORS_ORIGINS: str = "*"
     VITE_API_BASE_URL: str = ""
 
 

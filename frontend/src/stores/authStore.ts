@@ -3,8 +3,8 @@ import { persist } from 'zustand/middleware'
 
 interface AuthState {
   token: string | null
-  user: { id: number; username: string; email: string } | null
-  login: (token: string, user: { id: number; username: string; email: string }) => void
+  user: { id: number; username: string; email: string; is_admin?: boolean } | null
+  login: (token: string, user: { id: number; username: string; email: string; is_admin?: boolean }) => void
   logout: () => void
 }
 

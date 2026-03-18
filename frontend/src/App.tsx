@@ -7,10 +7,18 @@ import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
 import ProjectChat from './pages/ProjectChat'
 import ProjectTask from './pages/ProjectTask'
+import Admin from './pages/Admin'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { token } = useAuthStore()
   return token ? <>{children}</> : <Navigate to="/login" />
+}
+
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { token, user } = useAuthStore()
+  if (!token) return <Navigate to="/login" />
+  if (!user?.is_admin) return <Navigate to="/" />
+  return <>{children}</>
 }
 
 function App() {
@@ -25,6 +33,10 @@ function App() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/project/:id/chat" element={<ProjectChat />} />
         <Route path="/project/:id/task" element={<ProjectTask />} />
+      </Route>
+
+      <Route element={<AdminRoute><MainLayout /></AdminRoute>}>
+        <Route path="/admin" element={<Admin />} />
       </Route>
     </Routes>
   )

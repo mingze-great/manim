@@ -4,10 +4,11 @@ from fastapi.responses import FileResponse
 from contextlib import asynccontextmanager
 import os
 import pathlib
+import re
 
 from app.config import get_settings
 from app.database import engine, Base
-from app.api import auth, projects, tasks, templates
+from app.api import auth, projects, tasks, templates, admin
 
 settings = get_settings()
 
@@ -16,6 +17,7 @@ settings = get_settings()
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     from app.models.template import Template
+    from app.models.user import User
     from app.database import SessionLocal
     
     db = SessionLocal()
@@ -128,15 +130,22 @@ class TheoremScene(Scene):
             template = Template(**template_data, is_system=True)
             db.add(template)
     
+    admin_email = os.getenv("ADMIN_EMAIL")
+    if admin_email:
+        admin_user = db.query(User).filter(User.email == admin_email).first()
+        if admin_user and not admin_user.is_admin:
+            admin_user.is_admin = True
+            db.commit()
+    
     db.commit()
     db.close()
     
     yield
 
 
-app = FastAPI(title="Manim Video Platform API", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="Manim Video Platform API", version="2.0.0", lifespan=lifespan)
 
-origins = settings.CORS_ORIGINS.split(",")
+origins = settings.CORS_ORIGINS.split(",") if settings.CORS_ORIGINS else ["*"]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -149,26 +158,36 @@ app.include_router(auth.router, prefix="/api")
 app.include_router(projects.router, prefix="/api")
 app.include_router(tasks.router, prefix="/api")
 app.include_router(templates.router, prefix="/api")
+app.include_router(admin.router, prefix="/api")
 
 
 @app.get("/")
 def root():
-    return {"message": "Manim Video Platform API"}
+    return {"message": "Manim Video Platform API", "version": "2.0.0"}
 
 
 @app.get("/health")
 def health():
-    return {"status": "healthy"}
+    return {"status": "healthy", "version": "2.0.0"}
 
 
 @app.get("/api/videos/{filename}")
 def download_video(filename: str):
-    """下载本地视频"""
+    safe_filename = pathlib.Path(filename).name
+    
+    if not re.match(r'^[\w\-\.]+\.mp4$', safe_filename):
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"error": "Invalid filename"}, status_code=400)
+    
     videos_dir = pathlib.Path(__file__).parent.parent / "videos"
-    video_path = videos_dir / filename
+    video_path = videos_dir / safe_filename
     
     if not video_path.exists():
         from fastapi.responses import JSONResponse
         return JSONResponse({"error": "Video not found"}, status_code=404)
     
-    return FileResponse(video_path, media_type="video/mp4", filename=filename)
+    if not video_path.is_file():
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"error": "Not a file"}, status_code=400)
+    
+    return FileResponse(video_path, media_type="video/mp4", filename=safe_filename)

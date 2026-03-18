@@ -1,15 +1,18 @@
 from datetime import datetime, timedelta
-from typing import Annotated
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Annotated, Optional
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+from collections import defaultdict
+import time
+import re
 
 from app.database import get_db
 from app.config import get_settings
-from app.models.user import User
-from app.schemas.user import UserCreate, UserLogin, UserResponse, Token
+from app.models.user import User, AuditLog
+from app.schemas.user import UserCreate, UserResponse, Token
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -20,6 +23,9 @@ ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+
+token_blacklist = set()
+rate_limit_store = defaultdict(list)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -35,10 +41,45 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=15)
+        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
+
+
+def check_rate_limit(identifier: str, max_requests: int = 10, window_seconds: int = 60) -> bool:
+    now = time.time()
+    window_start = now - window_seconds
+    
+    rate_limit_store[identifier] = [
+        t for t in rate_limit_store[identifier] if t > window_start
+    ]
+    
+    if len(rate_limit_store[identifier]) >= max_requests:
+        return False
+    
+    rate_limit_store[identifier].append(now)
+    return True
+
+
+def log_audit(db: Session, user_id: Optional[int], username: Optional[str], 
+              action: str, resource: Optional[str] = None, resource_id: Optional[int] = None,
+              details: Optional[str] = None, request: Optional[Request] = None):
+    ip_address = request.client.host if request and request.client else None
+    user_agent = request.headers.get("user-agent")[:500] if request and request.headers.get("user-agent") else None
+    
+    audit_log = AuditLog(
+        user_id=user_id,
+        username=username,
+        action=action,
+        resource=resource,
+        resource_id=resource_id,
+        details=details,
+        ip_address=ip_address,
+        user_agent=user_agent
+    )
+    db.add(audit_log)
+    db.commit()
 
 
 def authenticate_user(db: Session, username: str, password: str):
@@ -47,6 +88,8 @@ def authenticate_user(db: Session, username: str, password: str):
         return False
     if not verify_password(password, user.hashed_password):
         return False
+    if not user.is_active:
+        return False
     return user
 
 
@@ -54,6 +97,13 @@ async def get_current_user(
     token: Annotated[str, Depends(oauth2_scheme)],
     db: Annotated[Session, Depends(get_db)]
 ):
+    if token in token_blacklist:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has been revoked",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -72,14 +122,28 @@ async def get_current_user(
     return user
 
 
+async def get_current_admin_user(
+    current_user: Annotated[User, Depends(get_current_user)]
+):
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin privileges required"
+        )
+    return current_user
+
+
 @router.post("/register", response_model=UserResponse)
-def register(user: UserCreate, db: Annotated[Session, Depends(get_db)]):
+def register(user: UserCreate, db: Annotated[Session, Depends(get_db)], request: Request):
+    if not check_rate_limit(f"register:{request.client.host}", max_requests=5, window_seconds=3600):
+        raise HTTPException(status_code=429, detail="Too many registration attempts. Please try again later.")
+    
     db_user = db.query(User).filter(User.username == user.username).first()
     if db_user:
-        raise HTTPException(status_code=400, detail="Username already registered")
+        raise HTTPException(status_code=400, detail="用户名已存在")
     db_user = db.query(User).filter(User.email == user.email).first()
     if db_user:
-        raise HTTPException(status_code=400, detail="Email already registered")
+        raise HTTPException(status_code=400, detail="邮箱已被注册")
     
     hashed_password = get_password_hash(user.password)
     new_user = User(
@@ -90,26 +154,50 @@ def register(user: UserCreate, db: Annotated[Session, Depends(get_db)]):
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
+    
+    log_audit(db, new_user.id, new_user.username, "USER_REGISTER", details=f"新用户注册: {user.username}", request=request)
+    
     return new_user
 
 
 @router.post("/login", response_model=Token)
 def login(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
-    db: Annotated[Session, Depends(get_db)]
+    db: Annotated[Session, Depends(get_db)],
+    request: Request
 ):
+    if not check_rate_limit(f"login:{form_data.username}", max_requests=10, window_seconds=60):
+        raise HTTPException(status_code=429, detail="登录尝试过于频繁，请稍后再试")
+    
     user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
+        log_audit(db, None, form_data.username, "LOGIN_FAILED", details="登录失败", request=request)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
+            detail="用户名或密码错误",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": user.username}, expires_delta=access_token_expires
     )
+    
+    log_audit(db, user.id, user.username, "LOGIN_SUCCESS", details="用户登录", request=request)
+    
     return {"access_token": access_token, "token_type": "bearer"}
+
+
+@router.post("/logout")
+async def logout(
+    token: Annotated[str, Depends(oauth2_scheme)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+    request: Request
+):
+    token_blacklist.add(token)
+    log_audit(db, current_user.id, current_user.username, "LOGOUT", details="用户登出", request=request)
+    return {"message": "Successfully logged out"}
 
 
 @router.get("/me", response_model=UserResponse)
