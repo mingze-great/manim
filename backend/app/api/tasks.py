@@ -188,12 +188,12 @@ async def stream_task_status(
     async def event_generator():
         while True:
             db.refresh(task)
-            yield f"data: {json.dumps({
-                'status': task.status,
-                'progress': task.progress,
-                'video_url': task.video_url,
-                'error_message': task.error_message
-            })}\n\n"
+            yield "data: " + json.dumps({
+                "status": task.status,
+                "progress": task.progress,
+                "video_url": task.video_url,
+                "error_message": task.error_message
+            }) + "\n\n"
             
             if task.status in ["completed", "failed"]:
                 break
