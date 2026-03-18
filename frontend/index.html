@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Manim 视频生成平台</title>
+    <script>
+      window.onerror = function(msg, src, line, col, error) {
+        console.error('Global error:', msg, src, line, col, error);
+        return false;
+      };
+      window.addEventListener('unhandledrejection', function(e) {
+        console.error('Unhandled rejection:', e.reason);
+      });
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
