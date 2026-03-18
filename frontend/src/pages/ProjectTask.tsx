@@ -74,8 +74,9 @@ export default function ProjectTask() {
     setActiveTab('code')
 
     try {
+      const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
       const response = await fetch(
-        `http://localhost:8000/api/tasks/${id}/generate-code${templateId ? `?template_id=${templateId}` : ''}`,
+        `${API_BASE}/api/tasks/${id}/generate-code${templateId ? `?template_id=${templateId}` : ''}`,
         {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('auth-token')}`
