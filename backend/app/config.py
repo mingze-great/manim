@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     OPENAI_BASE_URL: str = "https://api.openai.com/v1"
     OPENAI_MODEL: str = "gpt-4o"
     
+    # Legacy support for LLM_MODEL
+    LLM_MODEL: str = ""
+    
     REDIS_URL: str = "redis://localhost:6379/0"
     
     OSS_ACCESS_KEY_ID: str = ""
@@ -34,9 +37,11 @@ class Settings(BaseSettings):
     OSS_ENDPOINT: str = "oss-cn-hangzhou.aliyuncs.com"
     
     CORS_ORIGINS: str = "http://localhost:5173"
+    VITE_API_BASE_URL: str = ""
     
     class Config:
         env_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), "..", ".env")
+        extra = "ignore"
 
 
 @lru_cache()
