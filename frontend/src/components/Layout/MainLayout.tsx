@@ -1,5 +1,5 @@
 import { Outlet, useNavigate } from 'react-router-dom'
-import { Layout, Menu, Space, Dropdown, Avatar, Tag, Badge } from 'antd'
+import { Layout, Menu, Space, Dropdown, Avatar, Tag } from 'antd'
 import { HomeOutlined, LogoutOutlined, UserOutlined, SafetyOutlined } from '@ant-design/icons'
 import { useAuthStore } from '@/stores/authStore'
 
@@ -14,18 +14,18 @@ export default function MainLayout() {
   ]
   
   if (user?.is_admin) {
-    menuItems.push({ key: '/admin', icon: <SafetyOutlined />, label: <><Badge status="processing" /><span>管理后台</span></> })
+    menuItems.push({ key: '/admin', icon: <SafetyOutlined />, label: '管理后台' })
   }
 
   const userMenu = {
     items: [
       {
-        key: 'profile',
+        key: 'email',
         icon: <UserOutlined />,
         label: user?.email,
         disabled: true,
       },
-      { type: 'divider' },
+      { type: 'divider' as const },
       {
         key: 'logout',
         icon: <LogoutOutlined />,

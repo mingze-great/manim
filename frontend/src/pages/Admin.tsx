@@ -2,12 +2,12 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Table, Card, Statistic, Row, Col, Tag, Button, Input, Space,
-  Modal, Descriptions, message, Popconfirm, Tabs, Timeline, Select, Badge
+  Modal, Descriptions, message, Popconfirm, Tabs, Badge
 } from 'antd'
 import {
   UserOutlined, ProjectOutlined, VideoCameraOutlined,
-  LogoutOutlined, SafetyOutlined, SearchOutlined, DeleteOutlined,
-  LockOutlined, UnlockOutlined, EyeOutlined, BarChartOutlined
+  SafetyOutlined, SearchOutlined, DeleteOutlined,
+  LockOutlined, UnlockOutlined, EyeOutlined
 } from '@ant-design/icons'
 import { adminApi, User, AuditLog, SystemStats } from '../services/admin'
 import { useAuthStore } from '../stores/authStore'
@@ -16,7 +16,7 @@ const { TabPane } = Tabs
 
 export default function Admin() {
   const navigate = useNavigate()
-  const { user, logout } = useAuthStore()
+  const { user } = useAuthStore()
   
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(false)
