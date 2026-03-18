@@ -1,9 +1,14 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
 import os
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=os.path.join(os.path.dirname(os.path.dirname(__file__)), "..", ".env"),
+        extra="ignore"
+    )
+    
     DATABASE_URL: str = "sqlite:///./manim_platform.db"
     SECRET_KEY: str = "your-secret-key-change-in-production"
     ALGORITHM: str = "HS256"
@@ -38,10 +43,6 @@ class Settings(BaseSettings):
     
     CORS_ORIGINS: str = "http://localhost:5173"
     VITE_API_BASE_URL: str = ""
-    
-    class Config:
-        env_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), "..", ".env")
-        extra = "ignore"
 
 
 @lru_cache()
