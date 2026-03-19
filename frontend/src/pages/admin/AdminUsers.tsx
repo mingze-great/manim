@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
 import {
   Table, Card, Input, Button, Space, Tag, Popconfirm,
-  Modal, Descriptions, message, Row, Col
+  Modal, Descriptions, message, Row, Col, Avatar, Badge
 } from 'antd'
 import {
-  ReloadOutlined, DeleteOutlined,
-  LockOutlined, UnlockOutlined, EyeOutlined, UserOutlined
+  ReloadOutlined, DeleteOutlined, SearchOutlined,
+  LockOutlined, UnlockOutlined, EyeOutlined, UserOutlined,
+  ProjectOutlined, VideoCameraOutlined, CheckCircleOutlined, CloseCircleOutlined
 } from '@ant-design/icons'
 import { adminApi, User, UserStats } from '../../services/admin'
 
@@ -64,22 +65,18 @@ export default function AdminUsers() {
 
   const columns = [
     {
-      title: 'ID',
-      dataIndex: 'id',
-      key: 'id',
-      width: 80,
-    },
-    {
       title: '用户',
       key: 'user',
       render: (_: any, record: User) => (
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-            <UserOutlined className="text-blue" />
-          </div>
+          <Avatar 
+            style={{ backgroundColor: record.is_admin ? '#f59e0b' : '#6366f1' }}
+            icon={record.is_admin ? <UserOutlined /> : <UserOutlined />}
+            size={40}
+          />
           <div>
             <div className="font-medium">{record.username}</div>
-            <div className="text-gray text-sm">{record.email}</div>
+            <div className="text-gray-500 text-sm">{record.email}</div>
           </div>
         </div>
       ),
@@ -90,9 +87,7 @@ export default function AdminUsers() {
       key: 'is_active',
       width: 100,
       render: (isActive: boolean) => (
-        <span className={isActive ? 'status-active' : 'status-inactive'}>
-          {isActive ? '正常' : '已禁用'}
-        </span>
+        <Badge status={isActive ? 'success' : 'error'} text={isActive ? '正常' : '已禁用'} />
       ),
     },
     {
@@ -101,26 +96,34 @@ export default function AdminUsers() {
       key: 'is_admin',
       width: 100,
       render: (isAdmin: boolean) => (
-        isAdmin ? <span className="status-admin">管理员</span> : <Tag>用户</Tag>
+        isAdmin ? <Tag color="gold">管理员</Tag> : <Tag color="default">用户</Tag>
       ),
     },
     {
       title: '注册时间',
       dataIndex: 'created_at',
       key: 'created_at',
+      width: 180,
       render: (date: string) => new Date(date).toLocaleString('zh-CN'),
     },
     {
       title: '操作',
       key: 'action',
-      width: 200,
+      width: 220,
       render: (_: any, record: User) => (
         <Space>
-          <Button type="text" icon={<EyeOutlined />} onClick={() => handleViewUser(record)}>
+          <Button 
+            type="primary" 
+            ghost
+            size="small"
+            icon={<EyeOutlined />} 
+            onClick={() => handleViewUser(record)}
+          >
             详情
           </Button>
           <Button
-            type="text"
+            size="small"
+            type={record.is_active ? 'default' : 'primary'}
             icon={record.is_active ? <LockOutlined /> : <UnlockOutlined />}
             onClick={() => handleToggleActive(record.id)}
           >
@@ -133,7 +136,7 @@ export default function AdminUsers() {
             okText="确定"
             cancelText="取消"
           >
-            <Button type="text" danger icon={<DeleteOutlined />}>
+            <Button type="text" danger size="small" icon={<DeleteOutlined />}>
               删除
             </Button>
           </Popconfirm>
@@ -144,40 +147,54 @@ export default function AdminUsers() {
 
   return (
     <div>
-      <Card className="admin-card mb-4">
+      <Card className="mb-4 hover-lift" style={{ borderRadius: '16px' }}>
         <Row gutter={16} align="middle">
           <Col flex="auto">
             <Input.Search
-              placeholder="搜索用户名或邮箱"
+              placeholder="搜索用户名或邮箱..."
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
               onSearch={() => fetchUsers()}
-              className="max-w-xs"
+              style={{ maxWidth: '300px' }}
               allowClear
+              prefix={<SearchOutlined className="text-gray-400" />}
             />
           </Col>
           <Col>
-            <Button icon={<ReloadOutlined />} onClick={() => fetchUsers()}>
-              刷新
+            <Button 
+              icon={<ReloadOutlined />} 
+              onClick={() => fetchUsers()}
+              className="hover-lift"
+            >
+              刷新列表
             </Button>
           </Col>
         </Row>
       </Card>
 
-      <Card className="admin-card">
+      <Card className="hover-lift" style={{ borderRadius: '16px' }}>
         <Table
           columns={columns}
           dataSource={users}
           rowKey="id"
           loading={loading}
-          pagination={{ pageSize: 10, showSizeChanger: true, showQuickJumper: true }}
-          className="admin-table"
+          pagination={{ 
+            pageSize: 10, 
+            showSizeChanger: true, 
+            showQuickJumper: true,
+            showTotal: (total) => `共 ${total} 个用户`
+          }}
           scroll={{ x: 800 }}
         />
       </Card>
 
       <Modal
-        title="用户详情"
+        title={
+          <Space>
+            <Avatar style={{ backgroundColor: '#6366f1' }} icon={<UserOutlined />} />
+            <span>用户详情</span>
+          </Space>
+        }
         open={!!selectedUser}
         onCancel={() => setSelectedUser(null)}
         footer={[
@@ -189,59 +206,57 @@ export default function AdminUsers() {
         style={{ maxWidth: 600 }}
       >
         {selectedUser && (
-          <Descriptions bordered column={1} size="small">
-            <Descriptions.Item label="ID">{selectedUser.id}</Descriptions.Item>
-            <Descriptions.Item label="用户名">{selectedUser.username}</Descriptions.Item>
-            <Descriptions.Item label="邮箱">{selectedUser.email}</Descriptions.Item>
-            <Descriptions.Item label="状态">
-              <span className={selectedUser.is_active ? 'status-active' : 'status-inactive'}>
-                {selectedUser.is_active ? '正常' : '已禁用'}
-              </span>
-            </Descriptions.Item>
-            <Descriptions.Item label="角色">
-              {selectedUser.is_admin ? <span className="status-admin">管理员</span> : '普通用户'}
-            </Descriptions.Item>
-            <Descriptions.Item label="注册时间">
-              {new Date(selectedUser.created_at).toLocaleString('zh-CN')}
-            </Descriptions.Item>
-          </Descriptions>
-        )}
-        
-        {userStats && (
-          <Row gutter={[8, 8]} className="mt-4">
-            <Col span={6}>
-              <Card size="small">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-blue">{userStats.total_projects}</div>
-                  <div className="text-gray text-sm">项目数</div>
-                </div>
-              </Card>
-            </Col>
-            <Col span={6}>
-              <Card size="small">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-green">{userStats.total_tasks}</div>
-                  <div className="text-gray text-sm">任务数</div>
-                </div>
-              </Card>
-            </Col>
-            <Col span={6}>
-              <Card size="small">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-green">{userStats.completed_tasks}</div>
-                  <div className="text-gray text-sm">成功</div>
-                </div>
-              </Card>
-            </Col>
-            <Col span={6}>
-              <Card size="small">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-red">{userStats.failed_tasks}</div>
-                  <div className="text-gray text-sm">失败</div>
-                </div>
-              </Card>
-            </Col>
-          </Row>
+          <>
+            <Card size="small" className="mb-4" style={{ background: '#f9fafb', borderRadius: '12px' }}>
+              <Descriptions bordered column={1} size="small">
+                <Descriptions.Item label="用户ID">{selectedUser.id}</Descriptions.Item>
+                <Descriptions.Item label="用户名">{selectedUser.username}</Descriptions.Item>
+                <Descriptions.Item label="邮箱">{selectedUser.email}</Descriptions.Item>
+                <Descriptions.Item label="状态">
+                  <Badge status={selectedUser.is_active ? 'success' : 'error'} text={selectedUser.is_active ? '正常' : '已禁用'} />
+                </Descriptions.Item>
+                <Descriptions.Item label="角色">
+                  {selectedUser.is_admin ? <Tag color="gold">管理员</Tag> : <Tag color="default">普通用户</Tag>}
+                </Descriptions.Item>
+                <Descriptions.Item label="注册时间">
+                  {new Date(selectedUser.created_at).toLocaleString('zh-CN')}
+                </Descriptions.Item>
+              </Descriptions>
+            </Card>
+            
+            {userStats && (
+              <Row gutter={[12, 12]}>
+                <Col span={6}>
+                  <Card size="small" className="text-center" style={{ borderRadius: '12px' }}>
+                    <ProjectOutlined style={{ fontSize: '24px', color: '#6366f1' }} />
+                    <div className="text-2xl font-bold mt-2" style={{ color: '#6366f1' }}>{userStats.total_projects}</div>
+                    <div className="text-gray-500 text-sm">项目数</div>
+                  </Card>
+                </Col>
+                <Col span={6}>
+                  <Card size="small" className="text-center" style={{ borderRadius: '12px' }}>
+                    <VideoCameraOutlined style={{ fontSize: '24px', color: '#8b5cf6' }} />
+                    <div className="text-2xl font-bold mt-2" style={{ color: '#8b5cf6' }}>{userStats.total_tasks}</div>
+                    <div className="text-gray-500 text-sm">任务数</div>
+                  </Card>
+                </Col>
+                <Col span={6}>
+                  <Card size="small" className="text-center" style={{ borderRadius: '12px' }}>
+                    <CheckCircleOutlined style={{ fontSize: '24px', color: '#10b981' }} />
+                    <div className="text-2xl font-bold mt-2" style={{ color: '#10b981' }}>{userStats.completed_tasks}</div>
+                    <div className="text-gray-500 text-sm">成功</div>
+                  </Card>
+                </Col>
+                <Col span={6}>
+                  <Card size="small" className="text-center" style={{ borderRadius: '12px' }}>
+                    <CloseCircleOutlined style={{ fontSize: '24px', color: '#ef4444' }} />
+                    <div className="text-2xl font-bold mt-2" style={{ color: '#ef4444' }}>{userStats.failed_tasks}</div>
+                    <div className="text-gray-500 text-sm">失败</div>
+                  </Card>
+                </Col>
+              </Row>
+            )}
+          </>
         )}
       </Modal>
     </div>

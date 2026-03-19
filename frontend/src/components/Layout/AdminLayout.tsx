@@ -1,13 +1,14 @@
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
-import { Layout, Menu, Avatar, Dropdown, Space, Badge, Button, Drawer } from 'antd'
+import { Layout, Menu, Avatar, Dropdown, Space, Badge, Button, Drawer, Tag, Tooltip } from 'antd'
 import type { MenuProps } from 'antd'
 import {
   DashboardOutlined, UserOutlined, LogoutOutlined, SafetyOutlined,
-  TeamOutlined, FileTextOutlined, BarChartOutlined, SettingOutlined, MenuOutlined
+  TeamOutlined, FileTextOutlined, BarChartOutlined, SettingOutlined, 
+  MenuOutlined, SwapOutlined, HomeOutlined
 } from '@ant-design/icons'
 import { useAuthStore } from '@/stores/authStore'
 import { useState } from 'react'
-import './AdminLayout.css'
+import './Layout.css'
 
 const { Header, Sider, Content } = Layout
 
@@ -31,16 +32,21 @@ export default function AdminLayout() {
       {
         key: 'username',
         icon: <UserOutlined />,
-        label: user?.username,
-        disabled: true,
-      },
-      {
-        key: 'exit-admin',
-        icon: <SafetyOutlined />,
-        label: '退出管理',
+        label: (
+          <div>
+            <div className="font-medium">{user?.username}</div>
+            <Tag color="gold" className="text-xs">管理员</Tag>
+          </div>
+        ),
         disabled: true,
       },
       { type: 'divider' },
+      {
+        key: 'switch-user',
+        icon: <SwapOutlined />,
+        label: '切换到用户视图',
+        onClick: () => navigate('/'),
+      },
       {
         key: 'logout',
         icon: <LogoutOutlined />,
@@ -65,11 +71,19 @@ export default function AdminLayout() {
   }
 
   return (
-    <Layout className="admin-layout">
-      <Sider width={240} className="admin-sider" theme="dark">
-        <div className="admin-logo">
-          <SafetyOutlined className="admin-logo-icon" />
-          <span className="admin-logo-text">Manim 管理后台</span>
+    <Layout className="main-layout admin-layout">
+      <Sider 
+        width={240} 
+        className="main-sider admin-sider"
+        breakpoint="lg"
+        collapsedWidth={0}
+        onBreakpoint={(broken) => !broken && setMobileMenuOpen(false)}
+      >
+        <div className="sider-logo admin-logo" onClick={() => navigate('/admin')}>
+          <div className="logo-icon" style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}>
+            <SafetyOutlined />
+          </div>
+          <span className="logo-text">管理后台</span>
         </div>
         <Menu
           theme="dark"
@@ -77,26 +91,40 @@ export default function AdminLayout() {
           selectedKeys={[location.pathname]}
           items={menuItems}
           onClick={({ key }) => handleMenuClick(key)}
-          className="admin-menu"
+          className="main-menu admin-menu"
         />
-        <div className="admin-version">
-          <span>v2.0.0</span>
+        <div className="sider-footer">
+          <Tooltip title="返回用户视图">
+            <Button 
+              icon={<HomeOutlined />} 
+              onClick={() => navigate('/')}
+              block
+              className="mb-2"
+            >
+              返回首页
+            </Button>
+          </Tooltip>
+          <div className="user-quota" style={{ background: 'rgba(255,255,255,0.1)' }}>
+            <div className="quota-label" style={{ color: 'rgba(255,255,255,0.6)' }}>当前用户</div>
+            <div className="quota-value" style={{ color: '#fff' }}>{user?.username}</div>
+          </div>
         </div>
       </Sider>
 
       <Drawer
         title={
-          <Space>
-            <SafetyOutlined />
-            <span>Manim 管理后台</span>
-          </Space>
+          <div className="drawer-logo">
+            <div className="logo-icon small" style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}>
+              <SafetyOutlined style={{ color: '#fff' }} />
+            </div>
+            <span>管理后台</span>
+          </div>
         }
         placement="left"
         onClose={() => setMobileMenuOpen(false)}
         open={mobileMenuOpen}
         width={280}
-        className="admin-mobile-drawer"
-        styles={{ body: { padding: 0 } }}
+        className="mobile-drawer"
       >
         <Menu
           theme="dark"
@@ -108,30 +136,43 @@ export default function AdminLayout() {
       </Drawer>
 
       <Layout>
-        <Header className="admin-header">
-          <div className="admin-header-left">
-            <Button 
-              type="text" 
-              icon={<MenuOutlined />} 
+        <Header className="main-header">
+          <div className="header-left">
+            <Button
+              type="text"
+              icon={<MenuOutlined />}
               onClick={() => setMobileMenuOpen(true)}
-              className="admin-mobile-menu-btn"
-              size="large"
+              className="mobile-menu-btn"
             />
-            <h2 className="admin-page-title">{getPageTitle()}</h2>
+            <h1 className="page-title">{getPageTitle()}</h1>
+            <Tag color="gold" className="ml-2">管理</Tag>
           </div>
-          <div className="admin-header-right">
+          <div className="header-right">
+            <Tooltip title="返回用户视图">
+              <Button 
+                type="text" 
+                icon={<HomeOutlined />}
+                onClick={() => navigate('/')}
+              />
+            </Tooltip>
             <Dropdown menu={userMenu} placement="bottomRight">
-              <Space className="admin-user">
+              <Space className="user-info">
                 <Badge dot status="processing" color="#52c41a">
-                  <Avatar icon={<UserOutlined />} className="admin-avatar" />
+                  <Avatar 
+                    size={36} 
+                    style={{ backgroundColor: '#f59e0b' }}
+                    icon={<SafetyOutlined />}
+                  />
                 </Badge>
-                <span className="admin-username">{user?.username}</span>
-                <span className="admin-role">管理员</span>
+                <div className="user-details">
+                  <span className="user-name">{user?.username}</span>
+                  <span className="user-plan" style={{ color: '#f59e0b' }}>管理员</span>
+                </div>
               </Space>
             </Dropdown>
           </div>
         </Header>
-        <Content className="admin-content">
+        <Content className="main-content admin-content">
           <Outlet />
         </Content>
       </Layout>

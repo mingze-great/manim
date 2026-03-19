@@ -18,7 +18,11 @@ export default function Login() {
       const { data: userData } = await authApi.me()
       login(loginData.access_token, { id: userData.id, username: userData.username, email: userData.email, is_admin: userData.is_admin })
       message.success('登录成功')
-      navigate('/')
+      if (userData.is_admin) {
+        navigate('/admin')
+      } else {
+        navigate('/')
+      }
     } catch (error: any) {
       message.error(error.response?.data?.detail || '登录失败')
     } finally {
