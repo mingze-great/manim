@@ -1,0 +1,148 @@
+.profile-page {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.profile-header {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 32px;
+  padding: 32px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 16px;
+  color: white;
+}
+
+.profile-avatar {
+  background: rgba(255, 255, 255, 0.2) !important;
+  font-size: 32px;
+}
+
+.profile-info h3 {
+  color: white !important;
+  margin: 0 0 8px !important;
+}
+
+.profile-info .ant-tag {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+}
+
+.quota-section {
+  text-align: center;
+  padding: 20px 0;
+}
+
+.quota-header {
+  margin-bottom: 24px;
+}
+
+.quota-header h5 {
+  margin: 0 0 4px;
+}
+
+.quota-display {
+  margin-bottom: 24px;
+}
+
+.quota-numbers {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.quota-numbers .used {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.quota-numbers .total {
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.quota-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.usage-stats {
+  margin-top: 32px;
+}
+
+.usage-stats h5 {
+  margin-bottom: 20px;
+}
+
+.stats-grid {
+  display: flex;
+  justify-content: space-around;
+}
+
+.stats-grid .stat-item {
+  text-align: center;
+}
+
+.stats-grid .stat-value {
+  display: block;
+  font-size: 24px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.stats-grid .stat-label {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.security-items {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.security-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  background: #f9fafb;
+  border-radius: 8px;
+}
+
+.security-item .block {
+  display: block;
+  margin-top: 4px;
+}
+
+.notif-icon {
+  width: 40px;
+  height: 40px;
+  background: rgba(99, 102, 241, 0.1);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6366f1;
+}
+
+.logout-card {
+  margin-top: 24px;
+  text-align: center;
+}
+
+@media (max-width: 768px) {
+  .profile-header {
+    flex-direction: column;
+    text-align: center;
+  }
+  
+  .stats-grid {
+    flex-direction: column;
+    gap: 20px;
+  }
+}
