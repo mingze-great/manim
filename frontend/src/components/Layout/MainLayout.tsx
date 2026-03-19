@@ -3,10 +3,10 @@ import { Layout, Menu, Avatar, Dropdown, Space, Button, Drawer, FloatButton } fr
 import type { MenuProps } from 'antd'
 import {
   PlusOutlined, HistoryOutlined, UserOutlined,
-  CrownOutlined, LogoutOutlined, MenuOutlined, BellOutlined
+  CrownOutlined, LogoutOutlined, MenuOutlined, BellOutlined, SafetyOutlined
 } from '@ant-design/icons'
 import { useAuthStore } from '@/stores/authStore'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import './Layout.css'
 
 const { Header, Sider, Content } = Layout
@@ -16,6 +16,11 @@ export default function MainLayout() {
   const location = useLocation()
   const { user, logout } = useAuthStore()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [isAdminMode, setIsAdminMode] = useState(false)
+
+  useEffect(() => {
+    setIsAdminMode(sessionStorage.getItem('admin_mode') === 'true')
+  }, [])
 
   const menuItems: MenuProps['items'] = [
     { key: '/creator', icon: <PlusOutlined />, label: '开始创作' },
@@ -23,25 +28,35 @@ export default function MainLayout() {
     { key: '/pricing', icon: <CrownOutlined />, label: '会员中心' },
   ]
 
+  const userMenuItems = [
+    {
+      key: 'profile',
+      icon: <UserOutlined />,
+      label: '个人中心',
+      onClick: () => navigate('/profile'),
+    },
+    { type: 'divider' as const },
+    {
+      key: 'admin-panel',
+      icon: <SafetyOutlined />,
+      label: '管理后台',
+      onClick: () => navigate('/admin'),
+    },
+    { type: 'divider' as const },
+    {
+      key: 'logout',
+      icon: <LogoutOutlined />,
+      label: '退出登录',
+      onClick: () => {
+        sessionStorage.removeItem('admin_mode')
+        logout()
+        navigate('/login')
+      },
+    },
+  ]
+
   const userMenu: MenuProps = {
-    items: [
-      {
-        key: 'profile',
-        icon: <UserOutlined />,
-        label: '个人中心',
-        onClick: () => navigate('/profile'),
-      },
-      { type: 'divider' },
-      {
-        key: 'logout',
-        icon: <LogoutOutlined />,
-        label: '退出登录',
-        onClick: () => {
-          logout()
-          navigate('/')
-        },
-      },
-    ],
+    items: user?.is_admin ? userMenuItems : userMenuItems.filter(item => item.key !== 'admin-panel'),
   }
 
   const handleMenuClick = (key: string) => {
@@ -81,6 +96,18 @@ export default function MainLayout() {
           className="main-menu"
         />
         <div className="sider-footer">
+          {isAdminMode && user?.is_admin && (
+            <Button 
+              icon={<SafetyOutlined />} 
+              onClick={() => navigate('/admin')}
+              block
+              type="primary"
+              ghost
+              className="mb-2"
+            >
+              管理后台
+            </Button>
+          )}
           <div className="user-quota">
             <div className="quota-label">今日剩余额度</div>
             <div className="quota-value">50 / 100</div>

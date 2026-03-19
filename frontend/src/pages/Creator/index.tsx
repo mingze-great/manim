@@ -2,21 +2,20 @@ import { useState, useRef, useEffect } from 'react'
 import { 
   Card, Button, Input, Tabs, Steps, Progress, 
   Space, Tag, Typography, message, Badge, Tooltip,
-  Empty, Segmented, Select, Avatar, Modal, Form
+  Empty, Segmented, Select, Avatar, Modal, Form, Spin
 } from 'antd'
 import {
   SendOutlined, RobotOutlined, CodeOutlined, PlayCircleOutlined,
   CopyOutlined, ReloadOutlined, DownloadOutlined,
   SettingOutlined, BulbOutlined, MessageOutlined, FileTextOutlined,
-  VideoCameraOutlined, RedoOutlined, PlusOutlined
+  VideoCameraOutlined, RedoOutlined, PlusOutlined, SaveOutlined
 } from '@ant-design/icons'
 import { projectApi, Project, Conversation } from '@/services/project'
-import Prism from 'prismjs'
-import 'prismjs/components/prism-python'
-import 'prismjs/themes/prism-tomorrow.css'
+import { templateApi, Template } from '@/services/template'
 import './Creator.css'
 
 const { Text, Title } = Typography
+const { TextArea } = Input
 
 interface Task {
   id: string
@@ -32,57 +31,6 @@ const presets = [
   { label: '定理讲解', desc: '分步推导 + 高亮强调', icon: '📚' },
 ]
 
-function CodeBlock({ code }: { code: string }) {
-  const codeRef = useRef<HTMLElement>(null)
-  
-  useEffect(() => {
-    if (codeRef.current) {
-      Prism.highlightElement(codeRef.current)
-    }
-  }, [code])
-  
-  return (
-    <pre className="!bg-[#1e1e1e] !m-0 !p-3 !rounded-lg overflow-x-auto">
-      <code ref={codeRef} className="language-python text-sm">
-        {code}
-      </code>
-    </pre>
-  )
-}
-
-function MessageContent({ content }: { content: string }) {
-  const codeBlockRegex = /```python\n([\s\S]*?)```/g
-  const parts: React.ReactNode[] = []
-  let lastIndex = 0
-  let match
-  
-  while ((match = codeBlockRegex.exec(content)) !== null) {
-    if (match.index > lastIndex) {
-      parts.push(
-        <pre key={`text-${lastIndex}`} className="whitespace-pre-wrap text-sm mb-2">
-          {content.slice(lastIndex, match.index)}
-        </pre>
-      )
-    }
-    parts.push(
-      <div key={`code-${match.index}`} className="mb-2 rounded-lg overflow-hidden">
-        <CodeBlock code={match[1]} />
-      </div>
-    )
-    lastIndex = match.index + match[0].length
-  }
-  
-  if (lastIndex < content.length) {
-    parts.push(
-      <pre key={`text-${lastIndex}`} className="whitespace-pre-wrap text-sm">
-        {content.slice(lastIndex)}
-      </pre>
-    )
-  }
-  
-  return <>{parts.length > 0 ? parts : <pre className="whitespace-pre-wrap text-sm">{content}</pre>}</>
-}
-
 export default function Creator() {
   const [activeTab, setActiveTab] = useState('chat')
   const [messages, setMessages] = useState<Conversation[]>([])
@@ -93,6 +41,7 @@ export default function Creator() {
   const [quality, setQuality] = useState('720p')
   const [duration, setDuration] = useState('short')
   const [generatedCode, setGeneratedCode] = useState('')
+  const [editableCode, setEditableCode] = useState('')
   const [tasks, setTasks] = useState<Task[]>([])
   const [videoUrl, setVideoUrl] = useState<string | null>(null)
   const [project, setProject] = useState<Project | null>(null)
@@ -101,17 +50,37 @@ export default function Creator() {
   const [createModalVisible, setCreateModalVisible] = useState(false)
   const [newProjectTitle, setNewProjectTitle] = useState('')
   const [newProjectTheme, setNewProjectTheme] = useState('')
+  const [templates, setTemplates] = useState<Template[]>([])
+  const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null)
+  const [templateModalVisible, setTemplateModalVisible] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  useEffect(() => {
+    fetchTemplates()
+  }, [])
+
+  const fetchTemplates = async () => {
+    try {
+      const { data } = await templateApi.list()
+      setTemplates([...data.system_templates, ...data.user_templates])
+    } catch (error) {
+      console.error('获取模板失败:', error)
+    }
+  }
+
   const fetchProject = async (projectId: number) => {
     try {
       const { data } = await projectApi.get(projectId)
       setProject(data)
-      setGeneratedCode(data.manim_code || '')
+      if (data.manim_code) {
+        setGeneratedCode(data.manim_code)
+        setEditableCode(data.manim_code)
+      }
     } catch (error) {
       message.error('获取项目失败')
     }
@@ -163,6 +132,7 @@ export default function Creator() {
       created_at: new Date().toISOString(),
     }
     setMessages(prev => [...prev, userMessage])
+    const currentInput = inputValue
     setInputValue('')
     setLoading(true)
     setAiThinking(true)
@@ -170,13 +140,75 @@ export default function Creator() {
 
     try {
       setThinkingMessage('AI 思考中...')
-      await projectApi.sendMessage(project.id, inputValue)
+      
+      // 使用流式 API
+      const response = await fetch(`/api/projects/${project.id}/chat/stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('auth-storage') ? JSON.parse(localStorage.getItem('auth-storage') || '{}').state?.token : ''}`
+        },
+        body: JSON.stringify({ content: currentInput }),
+      })
+
+      if (!response.ok) {
+        throw new Error('请求失败')
+      }
+
+      // 创建 Assistant 消息
+      const assistantMessage: Conversation = {
+        id: Date.now() + 1,
+        project_id: project.id,
+        role: 'assistant',
+        content: '',
+        created_at: new Date().toISOString(),
+      }
+      setMessages(prev => [...prev, assistantMessage])
+      
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder()
+      
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          
+          const chunk = decoder.decode(value)
+          const lines = chunk.split('\n')
+          
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6)
+              if (data === '[DONE]') break
+              
+              try {
+                const parsed = JSON.parse(data)
+                if (parsed.content) {
+                  assistantMessage.content += parsed.content
+                  setMessages(prev => [...prev.slice(0, -1), { ...assistantMessage }])
+                }
+              } catch (e) {}
+            }
+          }
+        }
+      }
+
       setThinkingMessage('正在获取回复...')
       await fetchConversations(project.id)
       await fetchProject(project.id)
       setCurrentStep(1)
     } catch (error: any) {
-      message.error(error.response?.data?.detail || '发送消息失败')
+      // 如果流式 API 失败，回退到普通 API
+      try {
+        setThinkingMessage('AI 思考中...')
+        await projectApi.sendMessage(project.id, currentInput)
+        setThinkingMessage('正在获取回复...')
+        await fetchConversations(project.id)
+        await fetchProject(project.id)
+        setCurrentStep(1)
+      } catch (err: any) {
+        message.error(err.response?.data?.detail || '发送消息失败')
+      }
     } finally {
       setLoading(false)
       setAiThinking(false)
@@ -191,18 +223,59 @@ export default function Creator() {
     setCurrentStep(2)
     
     try {
-      await projectApi.generateCode(project.id)
       message.loading('正在生成代码...', 0)
-      setTimeout(async () => {
-        await fetchProject(project.id)
-        message.destroy()
-        message.success('代码生成成功！')
-        setLoading(false)
-      }, 3000)
+      await projectApi.generateCode(project.id, selectedTemplate?.id)
+      
+      // 轮询代码生成状态
+      let attempts = 0
+      const pollCode = async () => {
+        if (attempts > 30) {
+          message.error('代码生成超时')
+          setLoading(false)
+          return
+        }
+        
+        try {
+          const { data } = await projectApi.get(project.id)
+          if (data.manim_code) {
+            setGeneratedCode(data.manim_code)
+            setEditableCode(data.manim_code)
+            message.destroy()
+            message.success('代码生成成功！')
+            setLoading(false)
+            setActiveTab('chat')
+          } else {
+            attempts++
+            setTimeout(pollCode, 1000)
+          }
+        } catch {
+          attempts++
+          setTimeout(pollCode, 1000)
+        }
+      }
+      
+      setTimeout(pollCode, 1000)
     } catch (error: any) {
       message.error(error.response?.data?.detail || '生成失败')
       setLoading(false)
     }
+  }
+
+  const handleUseTemplate = (template: Template) => {
+    setSelectedTemplate(template)
+    setTemplateModalVisible(false)
+    if (template.code) {
+      setEditableCode(template.code)
+      setGeneratedCode(template.code)
+      message.success(`已应用模板: ${template.name}`)
+      setCurrentStep(2)
+    }
+  }
+
+  const handleSaveCode = () => {
+    if (!project) return
+    setGeneratedCode(editableCode)
+    message.success('代码已保存')
   }
 
   const handleRender = async () => {
@@ -210,6 +283,15 @@ export default function Creator() {
     
     setCurrentStep(3)
     setLoading(true)
+    
+    // 先保存代码
+    if (editableCode !== generatedCode) {
+      try {
+        await projectApi.update(project.id, { custom_code: editableCode })
+      } catch (error) {
+        console.error('保存代码失败:', error)
+      }
+    }
     
     const newTask: Task = {
       id: Date.now().toString(),
@@ -220,7 +302,7 @@ export default function Creator() {
     setTasks([newTask])
 
     try {
-      await projectApi.generateVideo(project.id)
+      await projectApi.generateVideo(project.id, selectedTemplate?.id)
       
       let progress = 0
       const interval = setInterval(async () => {
@@ -234,7 +316,7 @@ export default function Creator() {
             message: '渲染完成！',
           })))
           await fetchProject(project.id)
-          setVideoUrl(project.manim_code ? 'https://sample-videos.com/video123/mp4/720/big_buck_bunny_720p_1mb.mp4' : null)
+          setVideoUrl('https://sample-videos.com/video123/mp4/720/big_buck_bunny_720p_1mb.mp4')
           setLoading(false)
           message.success('视频渲染成功！')
         } else {
@@ -252,7 +334,7 @@ export default function Creator() {
   }
 
   const copyCode = () => {
-    navigator.clipboard.writeText(generatedCode)
+    navigator.clipboard.writeText(editableCode)
     message.success('代码已复制')
   }
 
@@ -267,14 +349,14 @@ export default function Creator() {
     <div className="creator-page">
       <div className="creator-layout">
         <div className="creator-panel chat-panel">
-          <Card className="panel-card" bodyStyle={{ padding: 0 }}>
+          <Card className="panel-card" bodyStyle={{ padding: 0, display: 'flex', flexDirection: 'column', height: '100%' }}>
             <div className="panel-header">
               <Space>
                 <MessageOutlined />
                 <span>AI 对话</span>
                 {renderStatus()}
               </Space>
-              {!project && (
+              {!project ? (
                 <Button 
                   type="primary" 
                   icon={<PlusOutlined />}
@@ -283,9 +365,12 @@ export default function Creator() {
                 >
                   新建项目
                 </Button>
+              ) : (
+                <Tag color="blue">{project.title}</Tag>
               )}
             </div>
-            <div className="chat-messages">
+            
+            <div className="chat-messages" ref={messagesContainerRef}>
               {messages.length === 0 ? (
                 <div className="chat-empty">
                   <RobotOutlined className="empty-icon" />
@@ -315,7 +400,7 @@ export default function Creator() {
                         className={msg.role}
                       />
                       <div className="message-content">
-                        <div className="message-text"><MessageContent content={msg.content} /></div>
+                        <div className="message-text">{msg.content}</div>
                         <div className="message-time">
                           {new Date(msg.created_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
                         </div>
@@ -326,13 +411,9 @@ export default function Creator() {
                     <div className="message assistant">
                       <Avatar icon={<RobotOutlined />} className="assistant" />
                       <div className="message-content">
-                        <div className="flex items-center gap-2">
-                          <div className="flex gap-1">
-                            <span className="w-2 h-2 rounded-full bg-[#6366f1] animate-bounce" style={{ animationDelay: '0ms' }} />
-                            <span className="w-2 h-2 rounded-full bg-[#6366f1] animate-bounce" style={{ animationDelay: '150ms' }} />
-                            <span className="w-2 h-2 rounded-full bg-[#6366f1] animate-bounce" style={{ animationDelay: '300ms' }} />
-                          </div>
-                          <span className="text-sm text-gray-500">{thinkingMessage || 'AI正在思考...'}</span>
+                        <div className="message-text" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <Spin size="small" />
+                          <span>{thinkingMessage || 'AI正在思考...'}</span>
                         </div>
                       </div>
                     </div>
@@ -341,6 +422,7 @@ export default function Creator() {
                 </>
               )}
             </div>
+            
             <div className="chat-input">
               <Input.Search
                 placeholder={project ? "输入你的想法..." : "请先创建项目"}
@@ -361,7 +443,7 @@ export default function Creator() {
         </div>
 
         <div className="creator-panel output-panel">
-          <Card className="panel-card" bodyStyle={{ padding: 0 }}>
+          <Card className="panel-card" bodyStyle={{ padding: 0, display: 'flex', flexDirection: 'column', height: '100%' }}>
             <Tabs
               activeKey={activeTab}
               onChange={setActiveTab}
@@ -376,22 +458,55 @@ export default function Creator() {
                         <Space>
                           <FileTextOutlined />
                           <Text strong>Manim 代码</Text>
+                          {selectedTemplate && <Tag color="purple">模板: {selectedTemplate.name}</Tag>}
                         </Space>
                         <Space>
+                          <Tooltip title="选择模板">
+                            <Button 
+                              type="text" 
+                              icon={<FileTextOutlined />} 
+                              onClick={() => setTemplateModalVisible(true)} 
+                            />
+                          </Tooltip>
                           <Tooltip title="复制代码">
-                            <Button type="text" icon={<CopyOutlined />} onClick={copyCode} disabled={!generatedCode} />
+                            <Button type="text" icon={<CopyOutlined />} onClick={copyCode} disabled={!editableCode} />
                           </Tooltip>
                           <Tooltip title="重新生成">
                             <Button type="text" icon={<ReloadOutlined />} onClick={handleGenerateCode} disabled={!project} />
                           </Tooltip>
                         </Space>
                       </div>
-                      {generatedCode ? (
-                        <pre className="code-block"><code>{generatedCode}</code></pre>
+                      {editableCode || generatedCode ? (
+                        <>
+                          <TextArea
+                            className="code-block"
+                            value={editableCode || generatedCode}
+                            onChange={(e) => setEditableCode(e.target.value)}
+                            autoSize={{ minRows: 10, maxRows: 30 }}
+                            spellCheck={false}
+                            style={{ 
+                              fontFamily: "'Fira Code', Monaco, monospace",
+                              fontSize: '13px',
+                              lineHeight: '1.6',
+                              resize: 'none'
+                            }}
+                          />
+                          {editableCode !== generatedCode && (
+                            <div className="code-actions">
+                              <Button 
+                                type="primary" 
+                                icon={<SaveOutlined />}
+                                onClick={handleSaveCode}
+                              >
+                                保存修改
+                              </Button>
+                            </div>
+                          )}
+                        </>
                       ) : (
                         <Empty description="代码将在对话后自动生成" image={Empty.PRESENTED_IMAGE_SIMPLE} />
                       )}
-                      {generatedCode && !videoUrl && (
+                      {(editableCode || generatedCode) && !videoUrl && (
                         <div className="code-actions">
                           <Button type="primary" icon={<PlayCircleOutlined />} onClick={handleRender} size="large">
                             开始渲染
@@ -411,7 +526,7 @@ export default function Creator() {
                           <video controls src={videoUrl} className="video-player" />
                           <div className="video-actions">
                             <Button icon={<DownloadOutlined />} size="large">下载视频</Button>
-                            <Button icon={<RedoOutlined />} size="large">重新生成</Button>
+                            <Button icon={<RedoOutlined />} size="large" onClick={handleRender}>重新生成</Button>
                           </div>
                         </div>
                       ) : tasks.length > 0 ? (
@@ -518,6 +633,46 @@ export default function Creator() {
             />
           </Form.Item>
         </Form>
+      </Modal>
+
+      <Modal
+        title="选择代码模板"
+        open={templateModalVisible}
+        onCancel={() => setTemplateModalVisible(false)}
+        footer={null}
+        width={800}
+      >
+        <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+          {templates.length === 0 ? (
+            <Empty description="暂无可用模板" />
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
+              {templates.map((template) => (
+                <Card
+                  key={template.id}
+                  hoverable
+                  onClick={() => handleUseTemplate(template)}
+                  style={{ 
+                    cursor: 'pointer',
+                    borderColor: selectedTemplate?.id === template.id ? '#6366f1' : undefined
+                  }}
+                  size="small"
+                >
+                  <div style={{ fontWeight: 600, marginBottom: '4px' }}>{template.name}</div>
+                  <div style={{ fontSize: '12px', color: '#6b7280' }}>{template.description}</div>
+                  {template.category && (
+                    <Tag 
+                      color={template.category === 'system' ? 'blue' : template.category === 'user' ? 'green' : 'default'}
+                      style={{ marginTop: '8px' }}
+                    >
+                      {template.category === 'system' ? '系统' : template.category === 'user' ? '自定义' : template.category}
+                    </Tag>
+                  )}
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
       </Modal>
     </div>
   )

@@ -7,6 +7,7 @@ import {
   MenuOutlined, SwapOutlined, HomeOutlined
 } from '@ant-design/icons'
 import { useAuthStore } from '@/stores/authStore'
+import { useEffect } from 'react'
 import { useState } from 'react'
 import './Layout.css'
 
@@ -17,6 +18,12 @@ export default function AdminLayout() {
   const location = useLocation()
   const { user, logout } = useAuthStore()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
+  useEffect(() => {
+    if (user?.is_admin) {
+      sessionStorage.setItem('admin_mode', 'true')
+    }
+  }, [user])
 
   const menuItems: MenuProps['items'] = [
     { key: '/admin', icon: <DashboardOutlined />, label: '仪表盘' },
@@ -52,6 +59,7 @@ export default function AdminLayout() {
         icon: <LogoutOutlined />,
         label: '退出登录',
         onClick: () => {
+          sessionStorage.removeItem('admin_mode')
           logout()
           navigate('/login')
         },
@@ -71,7 +79,7 @@ export default function AdminLayout() {
   }
 
   return (
-    <Layout className="main-layout admin-layout">
+    <Layout className="main-layout">
       <Sider 
         width={240} 
         className="main-sider admin-sider"
@@ -83,30 +91,28 @@ export default function AdminLayout() {
           <div className="logo-icon" style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}>
             <SafetyOutlined />
           </div>
-          <span className="logo-text">管理后台</span>
+          <span className="logo-text admin-logo-text">管理后台</span>
         </div>
         <Menu
-          theme="dark"
+          theme="light"
           mode="inline"
           selectedKeys={[location.pathname]}
           items={menuItems}
           onClick={({ key }) => handleMenuClick(key)}
-          className="main-menu admin-menu"
+          className="main-menu"
         />
         <div className="sider-footer">
-          <Tooltip title="返回用户视图">
-            <Button 
-              icon={<HomeOutlined />} 
-              onClick={() => navigate('/')}
-              block
-              className="mb-2"
-            >
-              返回首页
-            </Button>
-          </Tooltip>
-          <div className="user-quota" style={{ background: 'rgba(255,255,255,0.1)' }}>
-            <div className="quota-label" style={{ color: 'rgba(255,255,255,0.6)' }}>当前用户</div>
-            <div className="quota-value" style={{ color: '#fff' }}>{user?.username}</div>
+          <Button 
+            icon={<HomeOutlined />} 
+            onClick={() => navigate('/')}
+            block
+            className="mb-2"
+          >
+            返回首页
+          </Button>
+          <div className="user-quota">
+            <div className="quota-label">当前用户</div>
+            <div className="quota-value">{user?.username}</div>
           </div>
         </div>
       </Sider>
@@ -127,7 +133,7 @@ export default function AdminLayout() {
         className="mobile-drawer"
       >
         <Menu
-          theme="dark"
+          theme="light"
           mode="inline"
           selectedKeys={[location.pathname]}
           items={menuItems}
@@ -136,7 +142,7 @@ export default function AdminLayout() {
       </Drawer>
 
       <Layout>
-        <Header className="main-header">
+        <Header className="main-header admin-header">
           <div className="header-left">
             <Button
               type="text"
@@ -166,13 +172,13 @@ export default function AdminLayout() {
                 </Badge>
                 <div className="user-details">
                   <span className="user-name">{user?.username}</span>
-                  <span className="user-plan" style={{ color: '#f59e0b' }}>管理员</span>
+                  <span className="user-plan">管理员</span>
                 </div>
               </Space>
             </Dropdown>
           </div>
         </Header>
-        <Content className="main-content admin-content">
+        <Content className="main-content">
           <Outlet />
         </Content>
       </Layout>
