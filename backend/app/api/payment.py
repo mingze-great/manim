@@ -7,6 +7,7 @@ import time
 
 from app.database import get_db
 from app.models.user import User
+from app.models.project import Project, ProjectStatus
 from app.models.subscription import Order, Subscription, SUBSCRIPTION_PLANS
 from app.api.auth import get_current_user
 from app.services.wechat_pay import get_wechat_pay_service
@@ -265,3 +266,53 @@ async def query_order_status(
             return {"status": "pending", "message": result.get("trade_state_desc", "处理中")}
     
     return {"status": "pending", "message": "查询中"}
+
+
+class UsageStatsResponse(BaseModel):
+    daily_quota: int
+    used_today: int
+    weekly_usage: int
+    total_usage: int
+
+
+@router.get("/usage-stats", response_model=UsageStatsResponse)
+async def get_usage_stats(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)]
+):
+    """获取用户使用统计"""
+    from app.models.subscription import Subscription
+    
+    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    week_start = today_start - timedelta(days=today_start.weekday())
+    
+    daily_quota = 100
+    subscription = db.query(Subscription).filter(
+        Subscription.user_id == current_user.id
+    ).first()
+    if subscription:
+        daily_quota = subscription.daily_quota
+    
+    used_today = db.query(Project).filter(
+        Project.user_id == current_user.id,
+        Project.status == ProjectStatus.COMPLETED.value,
+        Project.updated_at >= today_start
+    ).count()
+    
+    weekly_usage = db.query(Project).filter(
+        Project.user_id == current_user.id,
+        Project.status == ProjectStatus.COMPLETED.value,
+        Project.updated_at >= week_start
+    ).count()
+    
+    total_usage = db.query(Project).filter(
+        Project.user_id == current_user.id,
+        Project.status == ProjectStatus.COMPLETED.value
+    ).count()
+    
+    return UsageStatsResponse(
+        daily_quota=daily_quota,
+        used_today=used_today,
+        weekly_usage=weekly_usage,
+        total_usage=total_usage
+    )

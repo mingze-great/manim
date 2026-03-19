@@ -4,7 +4,9 @@ import {
   DownloadOutlined, ClockCircleOutlined, HistoryOutlined, LogoutOutlined
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import { useAuthStore } from '@/stores/authStore'
+import { paymentApi, Subscription, UsageStats } from '@/services/payment'
 import './Profile.css'
 
 const { Title, Text } = Typography
@@ -12,11 +14,42 @@ const { Title, Text } = Typography
 export default function Profile() {
   const navigate = useNavigate()
   const { user, logout } = useAuthStore()
+  const [subscription, setSubscription] = useState<Subscription | null>(null)
+  const [usageStats, setUsageStats] = useState<UsageStats | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [subRes, usageRes] = await Promise.all([
+          paymentApi.getMySubscription(),
+          paymentApi.getUsageStats()
+        ])
+        setSubscription(subRes.data)
+        setUsageStats(usageRes.data)
+      } catch (err) {
+        console.error('Failed to fetch profile data:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchData()
+  }, [])
 
   const handleLogout = () => {
     logout()
     navigate('/')
   }
+
+  const planLabels: Record<string, string> = {
+    free: '免费版',
+    basic: '基础版',
+    pro: '专业版',
+    enterprise: '企业版'
+  }
+
+  const remainingQuota = usageStats ? usageStats.daily_quota - usageStats.used_today : 0
+  const usedPercent = usageStats ? Math.round((usageStats.used_today / usageStats.daily_quota) * 100) : 50
 
   return (
     <div className="profile-page">
@@ -25,7 +58,9 @@ export default function Profile() {
         <div className="profile-info">
           <Title level={3}>{user?.username || '用户'}</Title>
           <Space>
-            <Tag color="blue">免费版</Tag>
+            <Tag color={subscription?.plan === 'free' ? 'blue' : 'green'}>
+              {planLabels[subscription?.plan || 'free'] || subscription?.plan || '免费版'}
+            </Tag>
             <Text type="secondary">ID: {user?.id || 1}</Text>
           </Space>
         </div>
@@ -38,7 +73,7 @@ export default function Profile() {
             key: 'quota',
             label: '额度管理',
             children: (
-              <Card>
+              <Card loading={loading}>
                 <div className="quota-section">
                   <div className="quota-header">
                     <Title level={5}>今日额度</Title>
@@ -47,19 +82,19 @@ export default function Profile() {
                   <div className="quota-display">
                     <Progress 
                       type="dashboard" 
-                      percent={50} 
+                      percent={usedPercent} 
                       size={160}
-                      strokeColor="#6366f1"
-                      format={(percent) => (
+                      strokeColor={remainingQuota > 0 ? "#6366f1" : "#ff4d4f"}
+                      format={() => (
                         <div className="quota-numbers">
-                          <span className="used">{100 - (percent || 0)}</span>
-                          <span className="total">/ 100</span>
+                          <span className="used">{remainingQuota}</span>
+                          <span className="total">/ {usageStats?.daily_quota || 100}</span>
                         </div>
                       )}
                     />
                   </div>
                   <div className="quota-actions">
-                    <Button type="primary">升级套餐</Button>
+                    <Button type="primary" onClick={() => navigate('/pricing')}>升级套餐</Button>
                     <Button>获取更多额度</Button>
                   </div>
                 </div>
@@ -68,15 +103,15 @@ export default function Profile() {
                   <Title level={5}>使用统计</Title>
                   <div className="stats-grid">
                     <div className="stat-item">
-                      <span className="stat-value">25</span>
+                      <span className="stat-value">{usageStats?.used_today || 0}</span>
                       <span className="stat-label">今日使用</span>
                     </div>
                     <div className="stat-item">
-                      <span className="stat-value">156</span>
+                      <span className="stat-value">{usageStats?.weekly_usage || 0}</span>
                       <span className="stat-label">本周使用</span>
                     </div>
                     <div className="stat-item">
-                      <span className="stat-value">1,234</span>
+                      <span className="stat-value">{usageStats?.total_usage?.toLocaleString() || 0}</span>
                       <span className="stat-label">总使用量</span>
                     </div>
                   </div>

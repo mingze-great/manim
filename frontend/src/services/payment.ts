@@ -16,6 +16,13 @@ export interface Subscription {
   features: string[]
 }
 
+export interface UsageStats {
+  daily_quota: number
+  used_today: number
+  weekly_usage: number
+  total_usage: number
+}
+
 export interface Order {
   order_id: string
   plan: string
@@ -29,6 +36,8 @@ export const paymentApi = {
   getPlans: () => api.get<Record<string, SubscriptionPlan>>('/payment/plans'),
   
   getMySubscription: () => api.get<Subscription>('/payment/my-subscription'),
+  
+  getUsageStats: () => api.get<UsageStats>('/payment/usage-stats'),
   
   createOrder: (plan: string) => api.post<{ 
     order_id: string
