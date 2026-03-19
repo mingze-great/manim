@@ -45,17 +45,7 @@ jobs:
           source: "frontend/dist/*"
           target: ${{ env.DEPLOY_PATH }}/frontend/dist/
           strip_components: 1
-
-      - name: Build frontend on server
-        uses: appleboy/ssh-action@v0.1.7
-        with:
-          host: ${{ env.DEPLOY_HOST }}
-          username: ${{ env.DEPLOY_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          script: |
-            cd ${{ env.DEPLOY_PATH }}/frontend
-            npm ci
-            npm run build
+          overwrite: true
 
   deploy-backend:
     name: Deploy Backend
@@ -71,12 +61,10 @@ jobs:
           host: ${{ env.DEPLOY_HOST }}
           username: ${{ env.DEPLOY_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          source: "backend/*"
-          target: ${{ env.DEPLOY_PATH }}/backend/
-          exclude:
-            - "**/__pycache__/**"
-            - "**/*.pyc"
-            - "**/.env"
+          source: "backend/app/*"
+          target: ${{ env.DEPLOY_PATH }}/backend/app/
+          strip_components: 1
+          overwrite: true
 
       - name: Restart backend service
         uses: appleboy/ssh-action@v0.1.7
