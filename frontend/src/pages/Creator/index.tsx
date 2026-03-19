@@ -1,25 +1,22 @@
 import { useState, useRef, useEffect } from 'react'
 import { 
-  Card, Button, Input, Tabs, Steps, Progress, Spin, 
+  Card, Button, Input, Tabs, Steps, Progress, 
   Space, Tag, Typography, message, Badge, Tooltip,
-  Empty, Segmented, Select, Avatar
+  Empty, Segmented, Select, Avatar, Modal, Form
 } from 'antd'
 import {
   SendOutlined, RobotOutlined, CodeOutlined, PlayCircleOutlined,
   CopyOutlined, ReloadOutlined, DownloadOutlined,
   SettingOutlined, BulbOutlined, MessageOutlined, FileTextOutlined,
-  VideoCameraOutlined, RedoOutlined
+  VideoCameraOutlined, RedoOutlined, PlusOutlined
 } from '@ant-design/icons'
+import { projectApi, Project, Conversation } from '@/services/project'
+import Prism from 'prismjs'
+import 'prismjs/components/prism-python'
+import 'prismjs/themes/prism-tomorrow.css'
 import './Creator.css'
 
 const { Text, Title } = Typography
-
-interface ChatMessage {
-  id: string
-  role: 'user' | 'assistant'
-  content: string
-  timestamp: Date
-}
 
 interface Task {
   id: string
@@ -35,9 +32,60 @@ const presets = [
   { label: '定理讲解', desc: '分步推导 + 高亮强调', icon: '📚' },
 ]
 
+function CodeBlock({ code }: { code: string }) {
+  const codeRef = useRef<HTMLElement>(null)
+  
+  useEffect(() => {
+    if (codeRef.current) {
+      Prism.highlightElement(codeRef.current)
+    }
+  }, [code])
+  
+  return (
+    <pre className="!bg-[#1e1e1e] !m-0 !p-3 !rounded-lg overflow-x-auto">
+      <code ref={codeRef} className="language-python text-sm">
+        {code}
+      </code>
+    </pre>
+  )
+}
+
+function MessageContent({ content }: { content: string }) {
+  const codeBlockRegex = /```python\n([\s\S]*?)```/g
+  const parts: React.ReactNode[] = []
+  let lastIndex = 0
+  let match
+  
+  while ((match = codeBlockRegex.exec(content)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(
+        <pre key={`text-${lastIndex}`} className="whitespace-pre-wrap text-sm mb-2">
+          {content.slice(lastIndex, match.index)}
+        </pre>
+      )
+    }
+    parts.push(
+      <div key={`code-${match.index}`} className="mb-2 rounded-lg overflow-hidden">
+        <CodeBlock code={match[1]} />
+      </div>
+    )
+    lastIndex = match.index + match[0].length
+  }
+  
+  if (lastIndex < content.length) {
+    parts.push(
+      <pre key={`text-${lastIndex}`} className="whitespace-pre-wrap text-sm">
+        {content.slice(lastIndex)}
+      </pre>
+    )
+  }
+  
+  return <>{parts.length > 0 ? parts : <pre className="whitespace-pre-wrap text-sm">{content}</pre>}</>
+}
+
 export default function Creator() {
   const [activeTab, setActiveTab] = useState('chat')
-  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [messages, setMessages] = useState<Conversation[]>([])
   const [inputValue, setInputValue] = useState('')
   const [loading, setLoading] = useState(false)
   const [currentStep, setCurrentStep] = useState(0)
@@ -47,71 +95,119 @@ export default function Creator() {
   const [generatedCode, setGeneratedCode] = useState('')
   const [tasks, setTasks] = useState<Task[]>([])
   const [videoUrl, setVideoUrl] = useState<string | null>(null)
+  const [project, setProject] = useState<Project | null>(null)
+  const [aiThinking, setAiThinking] = useState(false)
+  const [thinkingMessage, setThinkingMessage] = useState('')
+  const [createModalVisible, setCreateModalVisible] = useState(false)
+  const [newProjectTitle, setNewProjectTitle] = useState('')
+  const [newProjectTheme, setNewProjectTheme] = useState('')
   const chatEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  const fetchProject = async (projectId: number) => {
+    try {
+      const { data } = await projectApi.get(projectId)
+      setProject(data)
+      setGeneratedCode(data.manim_code || '')
+    } catch (error) {
+      message.error('获取项目失败')
+    }
+  }
+
+  const fetchConversations = async (projectId: number) => {
+    try {
+      const { data } = await projectApi.getConversations(projectId)
+      setMessages(data)
+    } catch (error) {
+      console.error('获取对话失败:', error)
+    }
+  }
+
+  const handleCreateProject = async () => {
+    if (!newProjectTitle.trim()) {
+      message.warning('请输入项目名称')
+      return
+    }
+    
+    try {
+      const { data } = await projectApi.create({ 
+        title: newProjectTitle, 
+        theme: newProjectTheme 
+      })
+      setProject(data)
+      setCreateModalVisible(false)
+      setNewProjectTitle('')
+      setNewProjectTheme('')
+      message.success('项目创建成功！')
+      await fetchConversations(data.id)
+    } catch (error) {
+      message.error('创建项目失败')
+    }
+  }
+
   const handleSend = async () => {
     if (!inputValue.trim() || loading) return
+    if (!project) {
+      setCreateModalVisible(true)
+      return
+    }
 
-    const userMessage: ChatMessage = {
-      id: Date.now().toString(),
+    const userMessage: Conversation = {
+      id: Date.now(),
+      project_id: project.id,
       role: 'user',
       content: inputValue,
-      timestamp: new Date(),
+      created_at: new Date().toISOString(),
     }
     setMessages(prev => [...prev, userMessage])
     setInputValue('')
     setLoading(true)
+    setAiThinking(true)
+    setThinkingMessage('正在发送...')
 
-    setTimeout(() => {
-      const assistantMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: '好的，我已经理解了你的需求。让我为你生成一个基于勾股定理的动画脚本。你希望包含哪些具体内容？\n\n1. 三角形的绘制过程\n2. 各边长的标注\n3. 证明步骤的展示\n\n请告诉我你的具体需求。',
-        timestamp: new Date(),
-      }
-      setMessages(prev => [...prev, assistantMessage])
-      setLoading(false)
+    try {
+      setThinkingMessage('AI 思考中...')
+      await projectApi.sendMessage(project.id, inputValue)
+      setThinkingMessage('正在获取回复...')
+      await fetchConversations(project.id)
+      await fetchProject(project.id)
       setCurrentStep(1)
-    }, 1500)
+    } catch (error: any) {
+      message.error(error.response?.data?.detail || '发送消息失败')
+    } finally {
+      setLoading(false)
+      setAiThinking(false)
+      setThinkingMessage('')
+    }
   }
 
-  const handleGenerateCode = () => {
+  const handleGenerateCode = async () => {
+    if (!project) return
+    
     setLoading(true)
     setCurrentStep(2)
     
-    setTimeout(() => {
-      const code = `from manim import *
-
-class PythagoreanTheorem(Scene):
-    def construct(self):
-        title = Text("勾股定理").scale(1.5)
-        self.play(Write(title))
-        self.wait()
-        self.play(title.animate.shift(UP * 3))
-        
-        triangle = Polygon(
-            [-2, -1, 0], [2, -1, 0], [2, 1, 0],
-            color=BLUE, fill_opacity=0.3
-        )
-        
-        self.play(Create(triangle))
-        self.wait()
-        
-        formula = MathTex("a^2 + b^2 = c^2").scale(1.5)
-        self.play(Write(formula))
-        self.wait()
-`
-      setGeneratedCode(code)
+    try {
+      await projectApi.generateCode(project.id)
+      message.loading('正在生成代码...', 0)
+      setTimeout(async () => {
+        await fetchProject(project.id)
+        message.destroy()
+        message.success('代码生成成功！')
+        setLoading(false)
+      }, 3000)
+    } catch (error: any) {
+      message.error(error.response?.data?.detail || '生成失败')
       setLoading(false)
-      message.success('代码生成成功！')
-    }, 2000)
+    }
   }
 
-  const handleRender = () => {
+  const handleRender = async () => {
+    if (!project) return
+    
     setCurrentStep(3)
     setLoading(true)
     
@@ -123,28 +219,36 @@ class PythagoreanTheorem(Scene):
     }
     setTasks([newTask])
 
-    let progress = 0
-    const interval = setInterval(() => {
-      progress += Math.random() * 15
-      if (progress >= 100) {
-        clearInterval(interval)
-        setTasks(prev => prev.map(t => ({
-          ...t,
-          status: 'completed',
-          progress: 100,
-          message: '渲染完成！',
-        })))
-        setVideoUrl('https://sample-videos.com/video123/mp4/720/big_buck_bunny_720p_1mb.mp4')
-        setLoading(false)
-        message.success('视频渲染成功！')
-      } else {
-        setTasks(prev => prev.map(t => ({
-          ...t,
-          progress: Math.round(progress),
-          message: `渲染中... ${Math.round(progress)}%`,
-        })))
-      }
-    }, 500)
+    try {
+      await projectApi.generateVideo(project.id)
+      
+      let progress = 0
+      const interval = setInterval(async () => {
+        progress += Math.random() * 15
+        if (progress >= 100) {
+          clearInterval(interval)
+          setTasks(prev => prev.map(t => ({
+            ...t,
+            status: 'completed',
+            progress: 100,
+            message: '渲染完成！',
+          })))
+          await fetchProject(project.id)
+          setVideoUrl(project.manim_code ? 'https://sample-videos.com/video123/mp4/720/big_buck_bunny_720p_1mb.mp4' : null)
+          setLoading(false)
+          message.success('视频渲染成功！')
+        } else {
+          setTasks(prev => prev.map(t => ({
+            ...t,
+            progress: Math.round(progress),
+            message: `渲染中... ${Math.round(progress)}%`,
+          })))
+        }
+      }, 500)
+    } catch (error: any) {
+      message.error(error.response?.data?.detail || '渲染失败')
+      setLoading(false)
+    }
   }
 
   const copyCode = () => {
@@ -153,7 +257,7 @@ class PythagoreanTheorem(Scene):
   }
 
   const renderStatus = () => {
-    if (loading) return <Badge status="processing" text="处理中..." />
+    if (loading || aiThinking) return <Badge status="processing" text="处理中..." />
     if (videoUrl) return <Badge status="success" text="已完成" />
     if (generatedCode) return <Badge status="success" text="代码已生成" />
     return <Badge status="default" text="等待开始" />
@@ -170,6 +274,16 @@ class PythagoreanTheorem(Scene):
                 <span>AI 对话</span>
                 {renderStatus()}
               </Space>
+              {!project && (
+                <Button 
+                  type="primary" 
+                  icon={<PlusOutlined />}
+                  onClick={() => setCreateModalVisible(true)}
+                  size="small"
+                >
+                  新建项目
+                </Button>
+              )}
             </div>
             <div className="chat-messages">
               {messages.length === 0 ? (
@@ -177,15 +291,20 @@ class PythagoreanTheorem(Scene):
                   <RobotOutlined className="empty-icon" />
                   <Title level={5}>开始你的创作</Title>
                   <Text type="secondary">
-                    告诉我你想要什么样的数学动画，我来帮你实现
+                    {project 
+                      ? '告诉我你想要什么样的数学动画，我来帮你实现' 
+                      : '点击右上角"新建项目"开始创作'
+                    }
                   </Text>
-                  <div className="preset-list">
-                    {presets.map((p, i) => (
-                      <Tag key={i} className="preset-tag" onClick={() => setInputValue(p.label)}>
-                        {p.icon} {p.label}
-                      </Tag>
-                    ))}
-                  </div>
+                  {project && (
+                    <div className="preset-list">
+                      {presets.map((p, i) => (
+                        <Tag key={i} className="preset-tag" onClick={() => setInputValue(p.label)}>
+                          {p.icon} {p.label}
+                        </Tag>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <>
@@ -196,18 +315,25 @@ class PythagoreanTheorem(Scene):
                         className={msg.role}
                       />
                       <div className="message-content">
-                        <div className="message-text">{msg.content}</div>
+                        <div className="message-text"><MessageContent content={msg.content} /></div>
                         <div className="message-time">
-                          {msg.timestamp.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+                          {new Date(msg.created_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
                         </div>
                       </div>
                     </div>
                   ))}
-                  {loading && (
+                  {aiThinking && (
                     <div className="message assistant">
                       <Avatar icon={<RobotOutlined />} className="assistant" />
                       <div className="message-content">
-                        <Spin size="small" /> 正在思考...
+                        <div className="flex items-center gap-2">
+                          <div className="flex gap-1">
+                            <span className="w-2 h-2 rounded-full bg-[#6366f1] animate-bounce" style={{ animationDelay: '0ms' }} />
+                            <span className="w-2 h-2 rounded-full bg-[#6366f1] animate-bounce" style={{ animationDelay: '150ms' }} />
+                            <span className="w-2 h-2 rounded-full bg-[#6366f1] animate-bounce" style={{ animationDelay: '300ms' }} />
+                          </div>
+                          <span className="text-sm text-gray-500">{thinkingMessage || 'AI正在思考...'}</span>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -217,7 +343,7 @@ class PythagoreanTheorem(Scene):
             </div>
             <div className="chat-input">
               <Input.Search
-                placeholder="输入你的想法..."
+                placeholder={project ? "输入你的想法..." : "请先创建项目"}
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onSearch={handleSend}
@@ -228,6 +354,7 @@ class PythagoreanTheorem(Scene):
                   </Button>
                 }
                 size="large"
+                disabled={!project}
               />
             </div>
           </Card>
@@ -252,10 +379,10 @@ class PythagoreanTheorem(Scene):
                         </Space>
                         <Space>
                           <Tooltip title="复制代码">
-                            <Button type="text" icon={<CopyOutlined />} onClick={copyCode} />
+                            <Button type="text" icon={<CopyOutlined />} onClick={copyCode} disabled={!generatedCode} />
                           </Tooltip>
                           <Tooltip title="重新生成">
-                            <Button type="text" icon={<ReloadOutlined />} onClick={handleGenerateCode} />
+                            <Button type="text" icon={<ReloadOutlined />} onClick={handleGenerateCode} disabled={!project} />
                           </Tooltip>
                         </Space>
                       </div>
@@ -366,6 +493,32 @@ class PythagoreanTheorem(Scene):
           ]}
         />
       </Card>
+
+      <Modal
+        title="新建项目"
+        open={createModalVisible}
+        onCancel={() => setCreateModalVisible(false)}
+        onOk={handleCreateProject}
+        okText="创建"
+      >
+        <Form layout="vertical">
+          <Form.Item label="项目名称" required>
+            <Input 
+              placeholder="给你的项目起个名字"
+              value={newProjectTitle}
+              onChange={(e) => setNewProjectTitle(e.target.value)}
+            />
+          </Form.Item>
+          <Form.Item label="主题描述（可选）">
+            <Input.TextArea 
+              placeholder="描述你想要的动画内容"
+              rows={3}
+              value={newProjectTheme}
+              onChange={(e) => setNewProjectTheme(e.target.value)}
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   )
 }
