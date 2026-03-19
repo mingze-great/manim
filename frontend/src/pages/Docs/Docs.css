@@ -1,0 +1,223 @@
+.docs-page {
+  min-height: 100vh;
+}
+
+.docs-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+  padding: 40px 0;
+  margin-bottom: 32px;
+}
+
+.docs-header .ant-breadcrumb-link {
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+
+.docs-header .ant-breadcrumb-separator {
+  color: rgba(255, 255, 255, 0.6) !important;
+}
+
+.docs-header h2 {
+  color: #fff !important;
+}
+
+.docs-subtitle {
+  color: rgba(255, 255, 255, 0.9) !important;
+  font-size: 16px;
+}
+
+.docs-content {
+  padding-bottom: 60px;
+}
+
+.docs-section {
+  margin-bottom: 32px;
+}
+
+.docs-section h4 {
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.docs-section h4 .anticon {
+  color: #6366f1;
+}
+
+.quick-start-card {
+  border-radius: 16px;
+}
+
+.quick-start-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.quick-start-icon {
+  width: 40px;
+  height: 40px;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 18px;
+}
+
+.quick-start-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.quick-start-steps {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.quick-start-steps li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.quick-start-steps li:last-child {
+  border-bottom: none;
+}
+
+.step-num {
+  width: 28px;
+  height: 28px;
+  background: #f3f4f6;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  color: #6366f1;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.step-text {
+  color: #4b5563;
+}
+
+.tutorial-category-card {
+  height: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.category-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px;
+  margin: -12px -12px 12px;
+  border-radius: 12px 12px 0 0;
+}
+
+.category-title {
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.tutorial-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tutorial-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  background: #f9fafb;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tutorial-item:hover {
+  background: #f3f4f6;
+}
+
+.tutorial-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.tutorial-title {
+  font-weight: 500;
+  color: #1f2937;
+}
+
+.tutorial-desc {
+  font-size: 12px;
+}
+
+.tutorial-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.tutorial-duration {
+  font-size: 12px;
+}
+
+.concept-card {
+  border-radius: 12px;
+}
+
+.concept-icon {
+  width: 40px;
+  height: 40px;
+  background: linear-gradient(135deg, #6366f11a 0%, #8b5cf61a 100%);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6366f1;
+  font-size: 18px;
+}
+
+.contact-card {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border: none;
+  text-align: center;
+}
+
+.contact-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+@media (max-width: 768px) {
+  .docs-header {
+    padding: 24px 0;
+  }
+
+  .quick-start-steps li {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .step-num {
+    width: 24px;
+    height: 24px;
+    font-size: 12px;
+  }
+}

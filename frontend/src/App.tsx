@@ -8,6 +8,7 @@ import Creator from './pages/Creator'
 import History from './pages/History'
 import Pricing from './pages/Pricing'
 import Profile from './pages/Profile'
+import Docs from './pages/Docs'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import ProjectChat from './pages/ProjectChat'
@@ -36,6 +37,7 @@ export default function App() {
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/docs" element={<Docs />} />
         
         <Route element={<PrivateRoute><MainLayout /></PrivateRoute>}>
           <Route path="/creator" element={<Creator />} />

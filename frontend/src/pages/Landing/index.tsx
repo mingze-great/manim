@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { Button, Card, Row, Col, Badge, Avatar, Tag } from 'antd'
 import {
   PlayCircleOutlined, CodeOutlined, ThunderboltOutlined,
@@ -336,12 +337,12 @@ export default function Landing() {
                 <h4>产品</h4>
                 <a href="#features">功能介绍</a>
                 <a href="#pricing">价格方案</a>
-                <a href="#">模板中心</a>
+                <Link to="/docs">使用文档</Link>
               </div>
               <div className="link-group">
                 <h4>支持</h4>
-                <a href="#">使用文档</a>
-                <a href="#">常见问题</a>
+                <Link to="/docs">帮助中心</Link>
+                <Link to="/docs">常见问题</Link>
                 <a href="#">联系我们</a>
               </div>
               <div className="link-group">
