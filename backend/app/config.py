@@ -44,6 +44,12 @@ class Settings(BaseSettings):
     OSS_BUCKET_NAME: str = "manim-videos"
     OSS_ENDPOINT: str = "oss-cn-hangzhou.aliyuncs.com"
     
+    # WeChat Pay Configuration
+    WX_MCH_ID: str = ""
+    WX_APP_ID: str = ""
+    WX_API_KEY: str = ""
+    WX_NOTIFY_URL: str = "https://your-domain.com/api/payment/wx/notify"
+    
     CORS_ORIGINS: str = "*"
     VITE_API_BASE_URL: str = ""
 

@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text
+from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base
 
@@ -13,6 +14,9 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    
+    orders = relationship("Order", back_populates="user")
+    subscription = relationship("Subscription", back_populates="user", uselist=False)
     
     def to_dict(self):
         return {

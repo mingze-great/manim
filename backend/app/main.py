@@ -11,7 +11,7 @@ from datetime import datetime
 
 from app.config import get_settings
 from app.database import engine, Base
-from app.api import auth, projects, tasks, templates, admin
+from app.api import auth, projects, tasks, templates, admin, payment
 
 settings = get_settings()
 
@@ -25,6 +25,7 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     from app.models.template import Template
     from app.models.user import User
+    from app.models.subscription import Order, Subscription
     from app.database import SessionLocal
     
     db = SessionLocal()
@@ -166,6 +167,7 @@ app.include_router(projects.router, prefix="/api")
 app.include_router(tasks.router, prefix="/api")
 app.include_router(templates.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
+app.include_router(payment.router, prefix="/api")
 
 
 @app.get("/")
