@@ -37,13 +37,6 @@ export default function MainLayout() {
     },
     { type: 'divider' as const },
     {
-      key: 'admin-panel',
-      icon: <SafetyOutlined />,
-      label: '管理后台',
-      onClick: () => navigate('/admin'),
-    },
-    { type: 'divider' as const },
-    {
       key: 'logout',
       icon: <LogoutOutlined />,
       label: '退出登录',
@@ -56,7 +49,7 @@ export default function MainLayout() {
   ]
 
   const userMenu: MenuProps = {
-    items: user?.is_admin ? userMenuItems : userMenuItems.filter(item => item.key !== 'admin-panel'),
+    items: userMenuItems,
   }
 
   const handleMenuClick = (key: string) => {

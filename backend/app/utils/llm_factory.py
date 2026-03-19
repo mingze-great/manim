@@ -48,9 +48,12 @@ class GeminiAdapter(LLMAdapter):
         system_content = ""
         
         for msg in messages:
-            if msg["role"] == "system":
+            role = msg.get("role", "")
+            if role == "system":
                 system_content = msg["content"]
-            else:
+            elif role == "user":
+                gemini_messages.append(msg)
+            elif role == "assistant":
                 gemini_messages.append(msg)
         
         # 使用最新的 gemini 模型
@@ -60,7 +63,7 @@ class GeminiAdapter(LLMAdapter):
         )
         
         # 转换最后一条用户消息
-        if gemini_messages and gemini_messages[-1]["role"] == "user":
+        if gemini_messages and gemini_messages[-1].get("role") == "user":
             user_content = gemini_messages[-1]["content"]
             response = await gemini_model.generate_content_async(user_content)
             return response.text
