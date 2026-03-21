@@ -1,6 +1,7 @@
-from typing import Annotated, List
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Annotated
+from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
 
 from app.database import get_db
 from app.models.user import User
@@ -9,6 +10,13 @@ from app.schemas.template import TemplateCreate, TemplateResponse, TemplateListR
 from app.api.auth import get_current_user
 
 router = APIRouter(prefix="/templates", tags=["templates"])
+
+
+class TemplateUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    code: str | None = None
+    thumbnail: str | None = None
 
 
 @router.get("", response_model=TemplateListResponse)
@@ -62,6 +70,35 @@ def create_template(
     db.commit()
     db.refresh(new_template)
     return new_template
+
+
+@router.put("/{template_id}", response_model=TemplateResponse)
+def update_template(
+    template_id: int,
+    update_data: TemplateUpdate,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)]
+):
+    template = db.query(Template).filter(
+        Template.id == template_id
+    ).first()
+    
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    if template.is_system:
+        raise HTTPException(status_code=403, detail="Cannot modify system template")
+    
+    if template.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    for field, value in update_data.model_dump(exclude_unset=True).items():
+        if value is not None:
+            setattr(template, field, value)
+    
+    db.commit()
+    db.refresh(template)
+    return template
 
 
 @router.delete("/{template_id}")
