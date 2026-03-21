@@ -89,15 +89,22 @@ export default function ProjectTask() {
 
     try {
       const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
-      const response = await fetch(
-        `${API_BASE}/api/tasks/${id}/generate-code${templateId ? `?template_id=${templateId}` : ''}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('auth-token')}`
-          }
-        }
-      )
+      const token = (useAuthStore.getState().token) || ''
+      let streamUrl = `${API_BASE}/api/tasks/${id}/generate-code${templateId ? `?template_id=${templateId}` : ''}`
+      let headers: any = {
+        'Content-Type': 'application/json'
+      }
+      if (token) headers['Authorization'] = `Bearer ${token}`
 
+      let response = await fetch(streamUrl, {
+        headers
+      })
+      // 回退策略：如果首路由返回 404，尝试 /api/projects/{id}/generate-code
+      if (response.status === 404) {
+        streamUrl = `${API_BASE}/api/projects/${id}/generate-code${templateId ? `?template_id=${templateId}` : ''}`
+        response = await fetch(streamUrl, { headers })
+      }
+      
       if (!response.ok) {
         const err = await response.text()
         throw new Error(err || '请求失败')
