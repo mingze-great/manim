@@ -179,6 +179,8 @@ async def chat_stream(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
+    theme = str(project.theme)
+    
     user_message = Conversation(
         project_id=project_id,
         role="user",
@@ -196,7 +198,7 @@ async def chat_stream(
         
         try:
             async for chunk in chat_service.stream_process_message(
-                project_id, str(project.theme), message.content
+                project_id, theme, message.content
             ):
                 chunk_type = chunk.get("type")
                 
@@ -216,10 +218,12 @@ async def chat_stream(
                     )
                     db.add(ai_msg)
                     
-                    if chunk.get("is_final"):
-                        project.status = "chatting_completed"
-                    if chunk.get("final_script"):
-                        project.final_script = chunk["final_script"]
+                    proj = db.query(Project).filter(Project.id == project_id).first()
+                    if proj:
+                        if chunk.get("is_final"):
+                            proj.status = "chatting_completed"
+                        if chunk.get("final_script"):
+                            proj.final_script = chunk["final_script"]
                     
                     db.commit()
                     
