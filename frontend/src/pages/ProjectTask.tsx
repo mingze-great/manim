@@ -104,6 +104,12 @@ export default function ProjectTask() {
         streamUrl = `${API_BASE}/api/projects/${id}/generate-code${templateId ? `?template_id=${templateId}` : ''}`
         response = await fetch(streamUrl, { headers })
       }
+
+      if (response.status === 401) {
+        message.error('未通过身份验证，请重新登录后再试')
+        setLoading(false)
+        return
+      }
       
       if (!response.ok) {
         const err = await response.text()
