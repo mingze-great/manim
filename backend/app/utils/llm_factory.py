@@ -80,6 +80,27 @@ class GeminiAdapter(LLMAdapter):
             return response.text
         
         return ""
+    
+    async def stream_chat(self, messages: list[dict], model: str = None, **kwargs):
+        """流式聊天 - Gemini 暂不支持流式，回退到普通聊天"""
+        content = await self.chat(messages, model, **kwargs)
+        
+        class FakeStream:
+            def __init__(self, content):
+                self.content = content
+                self._done = False
+            
+            async def __aiter__(self):
+                if not self._done:
+                    class FakeChunk:
+                        class FakeDelta:
+                            content = self.content
+                            reasoning_content = None
+                        choices = [type('obj', (object,), {'delta': self.FakeDelta()})]
+                    yield FakeChunk()
+                    self._done = True
+        
+        return FakeStream(content)
 
 
 class OpenAIAdapter(LLMAdapter):
@@ -100,6 +121,17 @@ class OpenAIAdapter(LLMAdapter):
             **kwargs
         )
         return response.choices[0].message.content
+    
+    async def stream_chat(self, messages: list[dict], model: str = None, **kwargs):
+        """流式聊天 - 返回生成器"""
+        model = model or settings.OPENAI_MODEL
+        response = await self.client.chat.completions.create(
+            model=model,
+            messages=messages,
+            stream=True,
+            **kwargs
+        )
+        return response
 
 
 class QwenAdapter(LLMAdapter):
@@ -121,6 +153,17 @@ class QwenAdapter(LLMAdapter):
             **kwargs
         )
         return response.choices[0].message.content
+    
+    async def stream_chat(self, messages: list[dict], model: str = None, **kwargs):
+        """流式聊天 - 返回生成器"""
+        model = model or "qwen-plus"
+        response = await self.client.chat.completions.create(
+            model=model,
+            messages=messages,
+            stream=True,
+            **kwargs
+        )
+        return response
 
 
 class LLMFactory:
