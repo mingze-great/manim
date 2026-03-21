@@ -1,6 +1,8 @@
 from typing import Annotated, List
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.database import get_db
 from app.models.user import User
@@ -15,6 +17,7 @@ from app.api.auth import get_current_user
 from app.services.chat import ChatService
 
 router = APIRouter(prefix="/projects", tags=["projects"])
+limiter = Limiter(key_func=get_remote_address)
 
 
 @router.post("", response_model=ProjectResponse)
@@ -120,7 +123,9 @@ def get_conversations(
 
 
 @router.post("/{project_id}/chat", response_model=ConversationResponse)
+@limiter.limit("10/minute")
 async def send_message(
+    request: Request,
     project_id: int,
     message: ConversationCreate,
     current_user: Annotated[User, Depends(get_current_user)],
