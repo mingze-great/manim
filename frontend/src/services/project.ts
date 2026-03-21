@@ -45,4 +45,7 @@ export const projectApi = {
   generateVideo: (id: number, templateId?: number) => 
     api.post<Task>(`/tasks/${id}/generate`, {}, { params: { template_id: templateId } }),
   getTask: (id: number) => api.get<Task>(`/tasks/${id}`),
+  regenerateCode: (id: number) => api.post(`/projects/${id}/regenerate-code`),
+  optimizeCode: (id: number, feedback: string) => 
+    api.post(`/projects/${id}/optimize-code`, { feedback }),
 }

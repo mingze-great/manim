@@ -65,17 +65,15 @@ class ManimService:
                 template.usage_count += 1
                 self.db.commit()
         
-        # 添加文本-only说明以防止触发多模态处理
-        text_only_prefix = "重要提示：此任务基于纯文本输入。请勿处理或期望任何图像输入。仅根据文本描述生成Manim代码。\n\n"
-        
-        # 构建参考代码部分
         reference_parts = []
         if custom_code:
             reference_parts.append(f"【用户代码模板】以下代码是你的模板，生成的代码必须完全遵循其风格、结构、动画模式、配色方案：\n```python\n{custom_code}\n```")
         if template_code:
             reference_parts.append(f"【系统模板参考】：\n```python\n{template_code}\n```")
         
-        user_message = f"""## 内容要点（你需要为每个要点生成动画）
+        reference_section = "\n\n".join(reference_parts) if reference_parts else "无模板"
+        
+        user_message = f"""## 参考代码（必须严格遵循）
 {reference_section}
 
 ## 用户确定的内容
@@ -88,6 +86,56 @@ class ManimService:
         content = await self.client.chat(
             messages=[
                 {"role": "system", "content": MANIM_SYSTEM_PROMPT},
+                {"role": "user", "content": user_message}
+            ],
+            temperature=0.3,
+            max_tokens=4000
+        )
+        
+        if "```python" in content:
+            start = content.find("```python") + len("```python")
+            end = content.find("```", start)
+            code = content[start:end].strip()
+        else:
+            code = content.strip()
+        
+        return code
+    
+    async def optimize_code(self, current_code: str, final_script: str, feedback: str) -> str:
+        """根据用户反馈优化现有代码"""
+        OPTIMIZE_PROMPT = """你是一个专业的Manim动画代码优化专家。
+用户对现有代码有修改意见，请根据反馈优化代码。
+
+## 技术约束
+- 使用Manim 0.18.x版本
+- 代码必须可以直接运行
+
+## 优化要求
+1. 仔细理解用户的反馈
+2. 只修改需要调整的部分
+3. 保持其他部分不变
+4. 确保修改后代码仍能正常运行
+
+请直接输出修改后的完整代码，不要包含任何解释！
+"""
+        
+        user_message = f"""## 现有代码
+```python
+{current_code}
+```
+
+## 内容要点
+{final_script}
+
+## 用户反馈
+{feedback}
+
+请根据以上反馈修改代码，保持其他部分不变。
+"""
+        
+        content = await self.client.chat(
+            messages=[
+                {"role": "system", "content": OPTIMIZE_PROMPT},
                 {"role": "user", "content": user_message}
             ],
             temperature=0.3,

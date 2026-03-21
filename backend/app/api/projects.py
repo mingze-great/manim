@@ -15,6 +15,7 @@ from app.schemas.project import (
 from app.schemas.task import TaskCreate, TaskResponse
 from app.api.auth import get_current_user
 from app.services.chat import ChatService
+from app.services.manim import ManimService
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 limiter = Limiter(key_func=get_remote_address)
@@ -160,8 +161,95 @@ async def send_message(
     if response.get("is_final"):
         project.final_script = response.get("final_script")
         project.status = "chatting"
+        # 同时生成代码
+        from app.services.manim import ManimService
+        manim_service = ChatService(db)
+        
+        template_code = ""
+        if project.template_id:
+            from app.models.template import Template
+            template = db.query(Template).filter(Template.id == project.template_id).first()
+            if template:
+                template_code = template.code
+        
+        manim_service_async = ManimService(db)
+        manim_code = await manim_service_async.generate_code(
+            response.get("final_script") or "",
+            custom_code=project.custom_code or None
+        )
+        project.manim_code = manim_code
+        db.commit()
     
     db.commit()
     db.refresh(assistant_message)
     
     return assistant_message
+
+
+@router.post("/{project_id}/regenerate-code")
+async def regenerate_code(
+    project_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)]
+):
+    """重新生成代码（基于最新的final_script）"""
+    project = db.query(Project).filter(
+        Project.id == project_id,
+        Project.user_id == current_user.id
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    if not project.final_script:
+        raise HTTPException(status_code=400, detail="No final script to generate code from")
+    
+    manim_service = ManimService(db)
+    template_code = ""
+    if project.template_id:
+        from app.models.template import Template
+        template = db.query(Template).filter(Template.id == project.template_id).first()
+        if template:
+            template_code = template.code
+    
+    manim_code = await manim_service.generate_code(
+        project.final_script,
+        custom_code=project.custom_code or None
+    )
+    
+    project.manim_code = manim_code
+    project.status = "chatting"
+    db.commit()
+    
+    return {"message": "代码已重新生成", "code_updated": True}
+
+
+@router.post("/{project_id}/optimize-code")
+async def optimize_code(
+    project_id: int,
+    feedback: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)]
+):
+    """根据用户反馈优化代码"""
+    project = db.query(Project).filter(
+        Project.id == project_id,
+        Project.user_id == current_user.id
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    if not project.manim_code:
+        raise HTTPException(status_code=400, detail="No code to optimize")
+    
+    # 使用AI根据反馈优化代码
+    manim_service = ManimService(db)
+    optimized_code = await manim_service.optimize_code(
+        project.manim_code,
+        project.final_script or "",
+        feedback
+    )
+    
+    project.manim_code = optimized_code
+    db.commit()
+    
+    return {"message": "代码已根据反馈优化", "code_updated": True}
