@@ -79,3 +79,6 @@ class SystemStats(BaseModel):
     total_projects: int
     total_videos: int
     api_calls_today: int
+    cpu_usage: float = 0.0
+    memory_usage: float = 0.0
+    disk_usage: float = 0.0

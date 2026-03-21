@@ -10,6 +10,7 @@ from app.models.project import Project
 from app.models.task import Task
 from app.schemas.user import UserResponse, UserUpdate, UserStats, AuditLogResponse, SystemStats
 from app.api.auth import get_current_user, get_current_admin_user
+import psutil
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -186,7 +187,10 @@ async def get_system_stats(
         "active_users": active_users,
         "total_projects": total_projects,
         "total_videos": total_videos,
-        "api_calls_today": api_calls_today
+        "api_calls_today": api_calls_today,
+        "cpu_usage": psutil.cpu_percent(),
+        "memory_usage": psutil.virtual_memory().percent,
+        "disk_usage": psutil.disk_usage('/').percent
     }
 
 

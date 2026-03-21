@@ -187,7 +187,9 @@ export default function AdminDashboard() {
                   <VideoCameraOutlined style={{ color: '#8b5cf6' }} />
                   <span style={{ color: '#6b7280' }}>CPU 使用率</span>
                 </Space>
-                <Tag color="processing">45%</Tag>
+                <Tag color={stats?.cpu_usage && stats.cpu_usage > 80 ? "error" : "processing"}>
+                  {stats?.cpu_usage?.toFixed(1) || 0}%
+                </Tag>
               </div>
               
               <div className="flex justify-between items-center">
@@ -195,7 +197,19 @@ export default function AdminDashboard() {
                   <ProjectOutlined style={{ color: '#f59e0b' }} />
                   <span style={{ color: '#6b7280' }}>内存使用率</span>
                 </Space>
-                <Tag color="warning">62%</Tag>
+                <Tag color={stats?.memory_usage && stats.memory_usage > 80 ? "error" : "warning"}>
+                  {stats?.memory_usage?.toFixed(1) || 0}%
+                </Tag>
+              </div>
+              
+              <div className="flex justify-between items-center">
+                <Space>
+                  <VideoCameraOutlined style={{ color: '#ef4444' }} />
+                  <span style={{ color: '#6b7280' }}>磁盘使用率</span>
+                </Space>
+                <Tag color={stats?.disk_usage && stats.disk_usage > 80 ? "error" : "default"}>
+                  {stats?.disk_usage?.toFixed(1) || 0}%
+                </Tag>
               </div>
             </Space>
           </Card>

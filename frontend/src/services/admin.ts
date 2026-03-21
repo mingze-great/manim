@@ -61,6 +61,9 @@ export interface SystemStats {
   total_projects: number
   total_videos: number
   api_calls_today: number
+  cpu_usage: number
+  memory_usage: number
+  disk_usage: number
 }
 
 export const adminApi = {
