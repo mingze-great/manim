@@ -53,6 +53,8 @@ export default function Creator() {
   const [templates, setTemplates] = useState<Template[]>([])
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null)
   const [templateModalVisible, setTemplateModalVisible] = useState(false)
+  const [codeInputModalVisible, setCodeInputModalVisible] = useState(false)
+  const [tempCodeInput, setTempCodeInput] = useState('')
   const chatEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
 
@@ -671,15 +673,8 @@ export default function Creator() {
               type="primary" 
               icon={<FileTextOutlined />}
               onClick={() => {
-                setTemplateModalVisible(false)
-                // Navigate to paste code - we'll use a prompt for now
-                const code = prompt('请粘贴你的Manim代码作为模板:')
-                if (code) {
-                  setSelectedTemplate(null)
-                  setEditableCode(code)
-                  setGeneratedCode(code)
-                  message.success('已设置自定义模板代码')
-                }
+                setTempCodeInput('')
+                setCodeInputModalVisible(true)
               }}
             >
               粘贴代码
@@ -719,6 +714,57 @@ export default function Creator() {
               ))}
             </div>
           )}
+        </div>
+      </Modal>
+
+      {/* 代码输入弹窗 */}
+      <Modal
+        title={
+          <div className="flex items-center gap-2">
+            <FileTextOutlined className="text-[#6366f1]" />
+            <span>粘贴代码模板</span>
+          </div>
+        }
+        open={codeInputModalVisible}
+        onCancel={() => setCodeInputModalVisible(false)}
+        onOk={() => {
+          if (tempCodeInput.trim()) {
+            setSelectedTemplate(null)
+            setEditableCode(tempCodeInput)
+            setGeneratedCode(tempCodeInput)
+            message.success('已设置自定义模板代码')
+            setCodeInputModalVisible(false)
+          } else {
+            message.warning('请粘贴代码')
+          }
+        }}
+        okText="确认"
+        width={800}
+      >
+        <div className="py-4">
+          <div className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+            请在下方粘贴你的Manim代码，AI将完全按照这个风格生成内容代码
+          </div>
+          <div className="bg-gray-900 rounded-lg p-4">
+            <TextArea
+              value={tempCodeInput}
+              onChange={(e) => setTempCodeInput(e.target.value)}
+              placeholder={`\`\`\`python
+from manim import *
+
+class MyScene(Scene):
+    def construct(self):
+        # 粘贴你的代码模板...
+\`\`\``}
+              rows={18}
+              className="!bg-gray-800 !text-green-400 !border-gray-700"
+              style={{ 
+                fontFamily: "'Fira Code', 'Consolas', monospace",
+                fontSize: '13px',
+                lineHeight: '1.6',
+              }}
+            />
+          </div>
         </div>
       </Modal>
     </div>

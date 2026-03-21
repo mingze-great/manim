@@ -365,7 +365,6 @@ export default function ProjectChat() {
               type="primary"
               icon={<PlayCircleOutlined />}
               onClick={handleGenerateVideo}
-              disabled={!project?.final_script}
               block
               className="btn-gradient"
             >
