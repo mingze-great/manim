@@ -51,7 +51,11 @@ export default function ProjectTask() {
       if (!project?.id) return
       const tasksRes = await projectApi.getTask(project.id)
       setTask(tasksRes.data)
-    } catch (error) {
+    } catch (error: any) {
+      // Ignore 404 because it's expected that there might be no task yet
+      if (error.response?.status !== 404) {
+        console.error('获取任务失败:', error)
+      }
       // 可能还没有任务
     } finally {
       setLoading(false)
@@ -99,18 +103,13 @@ export default function ProjectTask() {
       let response = await fetch(streamUrl, {
         headers
       })
-      // 回退策略：如果首路由返回 404，尝试 /api/projects/{id}/generate-code
-      if (response.status === 404) {
-        streamUrl = `${API_BASE}/api/projects/${id}/generate-code${templateId ? `?template_id=${templateId}` : ''}`
-        response = await fetch(streamUrl, { headers })
-      }
 
       if (response.status === 401) {
         message.error('未通过身份验证，请重新登录后再试')
         setLoading(false)
         return
       }
-      
+
       if (!response.ok) {
         const err = await response.text()
         throw new Error(err || '请求失败')
