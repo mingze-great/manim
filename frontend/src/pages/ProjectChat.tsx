@@ -99,11 +99,14 @@ export default function ProjectChat() {
           
           if (data.status === 'completed' && data.response) {
             // 添加 AI 回复
-            setConversations(prev => [...prev, {
-              ...data.response,
+            const aiMsg: Conversation = {
               id: data.response.id || Date.now() + 1,
-              role: 'assistant' as const
-            }])
+              project_id: data.response.project_id,
+              role: 'assistant' as const,
+              content: data.response.content,
+              created_at: data.response.created_at
+            }
+            setConversations(prev => [...prev, aiMsg])
             await fetchProject()
             setAiThinking(false)
             
