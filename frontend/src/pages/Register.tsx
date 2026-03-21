@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { Form, Input, Button, message } from 'antd'
-import { UserOutlined, LockOutlined, MailOutlined, RocketOutlined, KeyOutlined } from '@ant-design/icons'
+import { UserOutlined, LockOutlined, MailOutlined, RocketOutlined } from '@ant-design/icons'
 import { authApi } from '@/services/auth'
 import { motion } from 'framer-motion'
 
@@ -9,16 +9,11 @@ export default function Register() {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
 
-  const onFinish = async (values: { username: string; email: string; password: string; invitation_code: string }) => {
-    if (!values.invitation_code) {
-      message.error('请输入邀请码')
-      return
-    }
-    
+  const onFinish = async (values: { username: string; email: string; password: string }) => {
     setLoading(true)
     try {
       await authApi.register(values)
-      message.success('注册成功，请等待管理员审核')
+      message.success('注册成功，请等待管理员审核后登录')
       navigate('/login')
     } catch (error: any) {
       message.error(error.response?.data?.detail || '注册失败')
@@ -52,7 +47,7 @@ export default function Register() {
               <RocketOutlined className="text-3xl text-white" />
             </motion.div>
             <h1 className="text-2xl font-bold text-gray-800 dark:text-white mb-2">
-              加入 Manim 平台
+              加入 AI视频 平台
             </h1>
             <p className="text-gray-500 dark:text-gray-400 text-sm">
               创建账号，开启动画创作之旅
@@ -95,17 +90,6 @@ export default function Register() {
               <Input.Password 
                 prefix={<LockOutlined className="text-gray-400" />} 
                 placeholder="密码"
-                className="rounded-lg"
-              />
-            </Form.Item>
-            <Form.Item
-              name="invitation_code"
-              rules={[{ required: true, message: '请输入邀请码' }]}
-              extra="请输入管理员提供的邀请码"
-            >
-              <Input 
-                prefix={<KeyOutlined className="text-gray-400" />} 
-                placeholder="邀请码"
                 className="rounded-lg"
               />
             </Form.Item>

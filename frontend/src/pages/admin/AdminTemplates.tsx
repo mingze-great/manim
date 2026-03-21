@@ -175,13 +175,13 @@ export default function AdminTemplates() {
           
           <Form.Item
             name="code"
-            label="Manim 代码"
+            label="AI视频 代码"
             rules={[{ required: true, message: '请输入代码' }]}
           >
             <TextArea
               rows={16}
               className="font-mono text-sm"
-              placeholder={`from manim import *
+              placeholder={`from AI视频 import *
 
 class MyScene(Scene):
     def construct(self):

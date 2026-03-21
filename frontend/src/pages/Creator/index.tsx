@@ -20,20 +20,11 @@ export default function Creator() {
 
     setLoading(true)
     try {
-      // 创建项目
       const { data: project } = await projectApi.create({ 
         title: `视频创作-${Date.now()}`,
         theme: theme 
       })
       
-      // 立即发送第一条消息给AI
-      try {
-        await projectApi.sendMessage(project.id, theme)
-      } catch (e) {
-        console.error('发送消息失败:', e)
-      }
-      
-      message.success('正在生成内容...')
       navigate(`/project/${project.id}/chat`)
     } catch (error) {
       message.error('创建失败')
@@ -86,7 +77,7 @@ export default function Creator() {
               block
               className="btn-gradient"
             >
-              {loading ? '正在生成...' : '开始创作'}
+              开始创作
             </Button>
 
             <p className="text-gray-500 text-sm text-center mt-4">

@@ -32,7 +32,7 @@ def generate_video(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    if not project.final_script:
+    if not project.final_script and not project.manim_code:
         raise HTTPException(status_code=400, detail="Script not confirmed yet")
     
     task = Task(
@@ -74,7 +74,7 @@ async def generate_code_stream(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    if not project.final_script:
+    if not project.final_script and not project.manim_code:
         raise HTTPException(status_code=400, detail="Script not confirmed yet")
     
     async def event_generator():
@@ -134,6 +134,23 @@ async def generate_code_stream(
             "Connection": "keep-alive",
         }
     )
+
+
+@router.get("/project/{project_id}", response_model=TaskResponse)
+def get_project_task(
+    project_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)]
+):
+    """获取项目的最新任务"""
+    task = db.query(Task).filter(
+        Task.project_id == project_id,
+        Project.user_id == current_user.id
+    ).order_by(Task.created_at.desc()).first()
+    
+    if not task:
+        raise HTTPException(status_code=404, detail="No task found for this project")
+    return task
 
 
 @router.get("/{task_id}", response_model=TaskResponse)

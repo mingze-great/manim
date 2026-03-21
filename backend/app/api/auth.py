@@ -91,7 +91,7 @@ def authenticate_user(db: Session, username: str, password: str):
         return None, "密码错误"
     if not user.is_active:
         return None, "账号已被禁用"
-    if not user.is_approved:
+    if not user.is_approved and not user.is_admin:
         return None, "账号正在等待审核，请联系管理员"
     if user.is_expired():
         return None, "账号已过期，请联系续费"
@@ -150,22 +150,12 @@ def register(
     username = user_data.get("username")
     email = user_data.get("email")
     password = user_data.get("password")
-    invitation_code = user_data.get("invitation_code")
     
-    if not all([username, email, password, invitation_code]):
-        raise HTTPException(status_code=400, detail="缺少必填信息：用户名、邮箱、密码、邀请码")
+    if not all([username, email, password]):
+        raise HTTPException(status_code=400, detail="缺少必填信息：用户名、邮箱、密码")
     
     if not check_rate_limit(f"register:{request.client.host}", max_requests=5, window_seconds=3600):
         raise HTTPException(status_code=429, detail="注册过于频繁，请稍后再试")
-    
-    # 验证邀请码
-    code = db.query(InvitationCode).filter(
-        InvitationCode.code == invitation_code,
-        InvitationCode.is_used == False
-    ).first()
-    
-    if not code:
-        raise HTTPException(status_code=400, detail="邀请码无效或已被使用")
     
     # 检查用户名和邮箱
     db_user = db.query(User).filter(User.username == username).first()
@@ -180,25 +170,14 @@ def register(
         username=username,
         email=email,
         hashed_password=hashed_password,
-        is_approved=False  # 默认未审核
+        is_approved=False  # 默认未审核，需要管理员审批
     )
     db.add(new_user)
-    db.flush()  # 获取用户ID
-    
-    # 标记邀请码已使用
-    code.is_used = True
-    code.used_by = new_user.id
-    code.used_at = datetime.utcnow()
-    
-    # 如果邀请码设置了有效期，设置用户有效期
-    if code.expires_at:
-        new_user.expires_at = code.expires_at
-    
     db.commit()
     db.refresh(new_user)
     
     log_audit(db, new_user.id, new_user.username, "USER_REGISTER", 
-              details=f"新用户注册，使用邀请码: {invitation_code}", request=request)
+              details=f"新用户注册，等待管理员审批", request=request)
     
     return new_user
 

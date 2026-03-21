@@ -4,6 +4,7 @@ import { Card, Button, Modal, Form, Input, message, Popconfirm, Empty } from 'an
 import { PlusOutlined, EditOutlined, DeleteOutlined, PlayCircleOutlined, RocketOutlined, SunOutlined, MoonOutlined } from '@ant-design/icons'
 import { projectApi, Project } from '@/services/project'
 import { useThemeStore } from '@/stores/themeStore'
+import { useAuthStore } from '@/stores/authStore'
 import { motion, AnimatePresence } from 'framer-motion'
 
 const statusMap: Record<string, { text: string; className: string }> = {
@@ -21,6 +22,7 @@ export default function Dashboard() {
   const [modalVisible, setModalVisible] = useState(false)
   const [form] = Form.useForm()
   const { mode, toggleTheme } = useThemeStore()
+  const { isAuthenticated } = useAuthStore()
 
   const fetchProjects = async () => {
     try {
@@ -92,7 +94,19 @@ export default function Dashboard() {
           <Button 
             type="primary" 
             icon={<PlusOutlined />} 
-            onClick={() => setModalVisible(true)}
+            onClick={() => {
+              if (!isAuthenticated) {
+                Modal.confirm({
+                  title: '请先登录',
+                  content: '该功能需要登录后才能使用，是否前往登录？',
+                  okText: '去登录',
+                  cancelText: '取消',
+                  onOk: () => navigate('/login'),
+                })
+                return
+              }
+              setModalVisible(true)
+            }}
             className="btn-gradient h-10 px-6"
           >
             新建项目

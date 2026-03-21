@@ -32,6 +32,13 @@ export interface Task {
   created_at: string
 }
 
+export interface PendingResponse {
+  status: 'no_message' | 'pending' | 'completed' | 'error'
+  response?: Conversation
+  has_final_script?: boolean
+  error?: string
+}
+
 export const projectApi = {
   list: () => api.get<Project[]>('/projects'),
   get: (id: number) => api.get<Project>(`/projects/${id}`),
@@ -40,11 +47,12 @@ export const projectApi = {
   delete: (id: number) => api.delete(`/projects/${id}`),
   getConversations: (id: number) => api.get<Conversation[]>(`/projects/${id}/conversations`),
   sendMessage: (id: number, content: string) => api.post<Conversation>(`/projects/${id}/chat`, { content }),
+  getPendingResponse: (id: number) => api.get<PendingResponse>(`/projects/${id}/chat/pending`),
   generateCode: (id: number, templateId?: number) => 
     api.get(`/tasks/${id}/generate-code`, { params: { template_id: templateId } }),
   generateVideo: (id: number, templateId?: number) => 
     api.post<Task>(`/tasks/${id}/generate`, {}, { params: { template_id: templateId } }),
-  getTask: (id: number) => api.get<Task>(`/tasks/${id}`),
+  getTask: (projectId: number) => api.get<Task>(`/tasks/project/${projectId}`),
   regenerateCode: (id: number) => api.post(`/projects/${id}/regenerate-code`),
   optimizeCode: (id: number, feedback: string) => 
     api.post(`/projects/${id}/optimize-code`, { feedback }),

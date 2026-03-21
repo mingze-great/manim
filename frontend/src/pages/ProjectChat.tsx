@@ -3,8 +3,6 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { Input, Button, message, Modal } from 'antd'
 import { SendOutlined, PlayCircleOutlined, RobotOutlined, UserOutlined, ReloadOutlined } from '@ant-design/icons'
 import { projectApi, Conversation, Project } from '@/services/project'
-import { templateApi, Template } from '@/services/template'
-import { motion } from 'framer-motion'
 
 const { TextArea } = Input
 
@@ -25,30 +23,26 @@ export default function ProjectChat() {
   const [loading, setLoading] = useState(false)
   const [project, setProject] = useState<Project | null>(null)
   const [conversations, setConversations] = useState<Conversation[]>([])
-  const [templates, setTemplates] = useState<Template[]>([])
-  const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null)
   const [aiThinking, setAiThinking] = useState(false)
-  const [showTemplateModal, setShowTemplateModal] = useState(false)
+  const [lastMsgCount, setLastMsgCount] = useState(0)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     fetchProject()
     fetchConversations()
-    fetchTemplates()
   }, [id])
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [conversations])
+    if (conversations.length > lastMsgCount) {
+      setLastMsgCount(conversations.length)
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [conversations, lastMsgCount])
 
   const fetchProject = async () => {
     try {
       const { data } = await projectApi.get(Number(id))
       setProject(data)
-      if (data.template_id && templates.length > 0) {
-        const t = templates.find(t => t.id === data.template_id)
-        if (t) setSelectedTemplate(t)
-      }
     } catch (error) {
       message.error('获取项目失败')
     }
@@ -59,268 +53,228 @@ export default function ProjectChat() {
       const { data } = await projectApi.getConversations(Number(id))
       setConversations(data)
     } catch (error) {
-      message.error('获取对话失败')
-    }
-  }
-
-  const fetchTemplates = async () => {
-    try {
-      const { data } = await templateApi.list()
-      setTemplates([...data.system_templates, ...data.user_templates])
-    } catch (error) {
-      message.error('获取模板失败')
+      console.error('获取对话失败')
     }
   }
 
   const handleSend = async () => {
     if (!input.trim() || loading) return
 
+    const userMessage = input.trim()
+    const tempId = Date.now()
     setLoading(true)
     setAiThinking(true)
+    
+    const userMsg = {
+      id: tempId,
+      project_id: Number(id),
+      role: 'user' as const,
+      content: userMessage,
+      created_at: new Date().toISOString()
+    }
+    setConversations(prev => [...prev, userMsg])
+    setInput('')
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }, 100)
+    
     try {
-      await projectApi.sendMessage(Number(id), input)
-      setInput('')
-      await fetchConversations()
-      await fetchProject()
+      // 发送用户消息（立即返回）
+      await projectApi.sendMessage(Number(id), userMessage)
+      
+      // 轮询获取AI响应
+      let pollCount = 0
+      const maxPolls = 150 // 最多轮询150次（5分钟）
+      
+      const pollForResponse = async () => {
+        if (pollCount >= maxPolls) {
+          setAiThinking(false)
+          message.error('AI响应超时，请重试')
+          return
+        }
+        
+        pollCount++
+        try {
+          const { data } = await projectApi.getPendingResponse(Number(id))
+          
+          if (data.status === 'completed' && data.response) {
+            // 添加 AI 回复
+            setConversations(prev => [...prev, {
+              ...data.response,
+              id: data.response.id || Date.now() + 1,
+              role: 'assistant' as const
+            }])
+            await fetchProject()
+            setAiThinking(false)
+            
+            // 滚动到底部
+            setTimeout(() => {
+              messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+            }, 100)
+            
+            const shouldGenerate = ['满意', '可以', '好了', '没问题', 'ok', 'OK', '好的', '可以了'].some(k => userMessage.includes(k))
+            if (shouldGenerate) {
+              Modal.confirm({
+                title: '内容确认',
+                content: '你已确认内容满意，现在开始生成代码和视频？',
+                okText: '开始生成',
+                cancelText: '继续对话',
+                onOk: () => navigate(`/project/${id}/task?autoGenerate=true`)
+              })
+            }
+          } else if (data.status === 'error') {
+            setAiThinking(false)
+            message.error(data.error || 'AI响应失败')
+          } else {
+            // 继续轮询
+            setTimeout(pollForResponse, 2000)
+          }
+        } catch (error) {
+          // 网络错误，继续重试
+          setTimeout(pollForResponse, 3000)
+        }
+      }
+      
+      // 延迟一下开始轮询，确保用户消息已保存
+      setTimeout(pollForResponse, 1000)
+      
     } catch (error: any) {
+      // 移除用户消息
+      setConversations(prev => prev.filter(c => c.id !== tempId))
+      setAiThinking(false)
       message.error(error.response?.data?.detail || '发送失败')
     } finally {
       setLoading(false)
-      setAiThinking(false)
     }
   }
 
-  const handleSelectTemplate = async () => {
-    if (!selectedTemplate) {
-      message.warning('请选择模板')
-      return
-    }
-    try {
-      await projectApi.update(Number(id), { template_id: selectedTemplate.id })
-      setShowTemplateModal(false)
-      message.success(`已选择模板: ${selectedTemplate.name}`)
-      await fetchProject()
-    } catch (error) {
-      message.error('选择模板失败')
-    }
-  }
-
-  const handleGenerateVideo = () => {
-    if (!project?.manim_code) {
-      message.warning('请先在对话中确认内容，AI会自动生成代码')
-      return
-    }
+  const handleGenerateCode = () => {
     navigate(`/project/${id}/task`)
   }
 
-  const handleRegenerateCode = async () => {
-    if (!project?.final_script) {
-      message.warning('没有可重新生成的内容')
-      return
-    }
-    try {
-      await projectApi.regenerateCode(Number(id))
-      message.success('代码已重新生成')
-    } catch (error) {
-      message.error('重新生成失败')
-    }
+  const handleGenerateVideo = () => {
+    navigate(`/project/${id}/task`)
   }
 
-  const canGenerateVideo = project?.manim_code && project?.status !== 'draft'
-
   return (
-    <div className="h-[calc(100vh-140px)] flex gap-4 p-4">
-      {/* 聊天区域 */}
-      <motion.div 
-        initial={{ opacity: 0, x: -20 }}
-        animate={{ opacity: 1, x: 0 }}
-        className="flex-1 flex flex-col"
-      >
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm flex-1 flex flex-col overflow-hidden">
-          {/* 聊天头部 */}
-          <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-            <h2 className="text-lg font-semibold">{project?.theme || '项目对话'}</h2>
-            <p className="text-sm text-gray-500 mt-1">输入主题内容，AI将为你策划动画</p>
-          </div>
-
-          {/* 消息列表 */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {conversations.length === 0 && (
-              <div className="text-center text-gray-400 py-12">
-                <RobotOutlined className="text-4xl mb-4" />
-                <p>开始输入你的主题内容吧</p>
-                <p className="text-sm mt-2">例如：世界十大顶级思维：1.刻意练习 2.复利思维 3.终身学习...</p>
-              </div>
-            )}
-            
-            {conversations.map((conv) => (
-              <motion.div
-                key={conv.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={`flex gap-3 ${conv.role === 'user' ? 'flex-row-reverse' : ''}`}
-              >
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                  conv.role === 'user' ? 'bg-indigo-500' : 'bg-emerald-500'
-                } text-white`}>
-                  {conv.role === 'user' ? <UserOutlined /> : <RobotOutlined />}
-                </div>
-                <div className={`max-w-[70%] rounded-lg p-3 ${
-                  conv.role === 'user' 
-                    ? 'bg-indigo-500 text-white' 
-                    : 'bg-gray-100 dark:bg-gray-700'
-                }`}>
-                  <pre className="whitespace-pre-wrap text-sm font-sans" style={{ fontFamily: 'inherit' }}>
-                    {conv.content}
-                  </pre>
-                </div>
-              </motion.div>
-            ))}
-
-            {aiThinking && (
-              <div className="flex gap-3">
-                <div className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center">
-                  <RobotOutlined />
-                </div>
-                <div className="bg-gray-100 dark:bg-gray-700 rounded-lg p-3">
-                  <div className="flex gap-1">
-                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* 输入区域 */}
-          <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-            <div className="flex gap-3">
-              <TextArea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onPressEnter={(e) => !e.shiftKey && handleSend()}
-                placeholder="输入主题内容，如：世界十大顶级思维，包括刻意练习、复利思维..."
-                autoSize={{ minRows: 1, maxRows: 4 }}
-                className="flex-1"
-              />
-              <Button 
-                type="primary" 
-                icon={<SendOutlined />} 
-                onClick={handleSend}
-                loading={loading}
-                className="btn-gradient"
-              >
-                发送
-              </Button>
-            </div>
-          </div>
+    <div className="h-full flex flex-col bg-white dark:bg-gray-800">
+      {/* 头部 */}
+      <div className="p-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+        <div>
+          <h2 className="text-base font-semibold">{project?.theme || '项目对话'}</h2>
+          <span className="text-xs px-2 py-0.5 rounded" style={{ 
+            backgroundColor: `${statusBadgeMap[project?.status || 'draft']?.color}20`,
+            color: statusBadgeMap[project?.status || 'draft']?.color 
+          }}>
+            {statusBadgeMap[project?.status || 'draft']?.text}
+          </span>
         </div>
-      </motion.div>
+        <Button icon={<ReloadOutlined />} size="small" onClick={fetchConversations} />
+      </div>
 
-      {/* 侧边栏 */}
-      <motion.div
-        initial={{ opacity: 0, x: 20 }}
-        animate={{ opacity: 1, x: 0 }}
-        className="w-80 flex-shrink-0"
-      >
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4 space-y-4">
-          <h3 className="font-bold">操作面板</h3>
-          
-          <div>
-            <div className="text-gray-500 text-sm mb-2">当前模板</div>
-            <Button block onClick={() => setShowTemplateModal(true)}>
-              {selectedTemplate ? selectedTemplate.name : '选择模板'}
-            </Button>
-          </div>
-
-          <div>
-            <div className="text-gray-500 text-sm mb-2">状态</div>
-            <span 
-              className="inline-block px-2 py-1 rounded text-xs"
-              style={{ 
-                backgroundColor: `${statusBadgeMap[project?.status || 'draft']?.color}20`,
-                color: statusBadgeMap[project?.status || 'draft']?.color 
-              }}
-            >
-              {statusBadgeMap[project?.status || 'draft']?.text}
-            </span>
-          </div>
-
-          {project?.manim_code && (
-            <div>
-              <Button 
-                icon={<ReloadOutlined />} 
-                onClick={handleRegenerateCode}
-                block
-              >
-                重新生成代码
-              </Button>
+      {/* 消息列表 */}
+      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+        {conversations.length === 0 && (
+          <div className="text-center text-gray-400 py-8 px-4">
+            <RobotOutlined className="text-3xl mb-3 block" />
+            <p className="text-sm mb-4">欢迎使用 AI 视频创作助手</p>
+            <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-lg p-4 text-left text-xs">
+              <p className="font-semibold mb-2">使用方法：</p>
+              <p className="mb-1">1. 输入你想要的视频主题</p>
+              <p className="mb-1">2. AI 会生成完整内容</p>
+              <p className="mb-1">3. 满意后输入"满意"</p>
+              <p>4. 开始生成视频</p>
             </div>
-          )}
-
-          <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-            <Button
-              type="primary"
-              icon={<PlayCircleOutlined />}
-              onClick={handleGenerateVideo}
-              disabled={!canGenerateVideo}
-              block
-              size="large"
-              className="btn-gradient"
-            >
-              生成视频
-            </Button>
-            {canGenerateVideo && (
-              <p className="text-xs text-gray-500 text-center mt-2">
-                点击使用最新代码生成视频
-              </p>
-            )}
+            <p className="text-xs mt-4 text-gray-500">例如：世界十大顶级思维：刻意练习、复利思维...</p>
           </div>
+        )}
+        
+        {conversations.map((conv) => (
+          <div key={conv.id} className={`flex gap-2 ${conv.role === 'user' ? 'flex-row-reverse' : ''}`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+              conv.role === 'user' ? 'bg-indigo-500' : 'bg-emerald-500'
+            } text-white text-sm`}>
+              {conv.role === 'user' ? <UserOutlined /> : <RobotOutlined />}
+            </div>
+            <div className={`max-w-[75%] rounded-lg p-2 text-sm ${
+              conv.role === 'user' 
+                ? 'bg-indigo-500 text-white' 
+                : 'bg-gray-100 dark:bg-gray-700'
+            }`}>
+              <pre className="whitespace-pre-wrap text-inherit" style={{ fontFamily: 'inherit' }}>
+                {conv.content}
+              </pre>
+            </div>
+          </div>
+        ))}
 
-          {project?.final_script && (
-            <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-              <div className="text-gray-500 text-sm mb-2">内容摘要</div>
-              <div className="bg-gray-50 dark:bg-gray-700/50 p-2 rounded text-xs max-h-32 overflow-y-auto">
-                <pre className="whitespace-pre-wrap">{project.final_script.slice(0, 200)}...</pre>
+        {aiThinking && (
+          <div className="flex gap-2">
+            <div className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center">
+              <RobotOutlined />
+            </div>
+            <div className="bg-gray-100 dark:bg-gray-700 rounded-lg p-3">
+              <div className="flex gap-1">
+                <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
               </div>
             </div>
-          )}
-        </div>
-      </motion.div>
+          </div>
+        )}
 
-      {/* 模板选择弹窗 */}
-      <Modal
-        title="选择代码模板"
-        open={showTemplateModal}
-        onOk={handleSelectTemplate}
-        onCancel={() => setShowTemplateModal(false)}
-        okText="确认选择"
-      >
-        <div className="py-4">
-          <p className="text-gray-500 mb-4">
-            选择一个模板，AI将按照该模板的风格生成动画代码
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* 操作按钮 */}
+      <div className="px-3 py-2 border-t border-gray-200 dark:border-gray-700">
+        {project?.final_script && !project?.manim_code ? (
+          <Button
+            type="primary"
+            icon={<PlayCircleOutlined />}
+            onClick={handleGenerateCode}
+            block
+            className="btn-gradient"
+          >
+            生成代码和视频
+          </Button>
+        ) : project?.manim_code ? (
+          <Button
+            type="primary"
+            icon={<PlayCircleOutlined />}
+            onClick={handleGenerateVideo}
+            block
+            className="btn-gradient"
+          >
+            生成视频
+          </Button>
+        ) : (
+          <p className="text-xs text-gray-400 text-center">
+            输入"满意"确认内容，开始生成视频
           </p>
-          <div className="space-y-2">
-            {templates.map((template) => (
-              <div
-                key={template.id}
-                className={`p-3 border-2 rounded-lg cursor-pointer transition-all ${
-                  selectedTemplate?.id === template.id
-                    ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20'
-                    : 'border-gray-200 dark:border-gray-700 hover:border-indigo-300'
-                }`}
-                onClick={() => setSelectedTemplate(template)}
-              >
-                <div className="font-medium">{template.name}</div>
-                <div className="text-sm text-gray-500">{template.description}</div>
-              </div>
-            ))}
-          </div>
+        )}
+      </div>
+
+      {/* 输入区域 */}
+      <div className="p-3 border-t border-gray-200 dark:border-gray-700">
+        <div className="flex gap-2">
+          <TextArea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onPressEnter={(e) => !e.shiftKey && handleSend()}
+            placeholder="输入内容..."
+            autoSize={{ minRows: 1, maxRows: 3 }}
+            className="flex-1 text-sm"
+          />
+          <Button 
+            type="primary" 
+            icon={<SendOutlined />} 
+            onClick={handleSend}
+            loading={loading}
+            className="btn-gradient"
+          />
         </div>
-      </Modal>
+      </div>
     </div>
   )
 }

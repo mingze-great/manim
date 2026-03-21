@@ -65,6 +65,17 @@ export default function ProjectTask() {
     }
   }, [project])
 
+  useEffect(() => {
+    if (project && searchParams.get('autoGenerate') === 'true') {
+      const timer = setTimeout(() => {
+        if (!generatedCode && project.final_script) {
+          handleGenerateCode()
+        }
+      }, 500)
+      return () => clearTimeout(timer)
+    }
+  }, [project, generatedCode])
+
   const handleGenerateCode = async () => {
     const templateId = searchParams.get('templateId')
     setGeneratingCode(true)
@@ -152,7 +163,6 @@ export default function ProjectTask() {
     
     const templateId = searchParams.get('templateId')
     setGeneratingVideo(true)
-    message.info('正在创建渲染任务...', 0)
     
     try {
       const { data } = await projectApi.generateVideo(Number(id), templateId ? Number(templateId) : undefined)
@@ -163,17 +173,12 @@ export default function ProjectTask() {
           const { data: updatedTask } = await projectApi.getTask(data.id)
           setTask(updatedTask)
           
-          if (updatedTask.progress === 10) {
-            message.loading('正在渲染视频...', 0)
-          } else if (updatedTask.progress === 50) {
-            message.loading('视频渲染中...', 0)
-          } else if (updatedTask.progress === 80) {
-            message.loading('上传视频中...', 0)
+          if (updatedTask.status === 'processing') {
+            // 渲染中会自动更新进度条
           }
           
           if (updatedTask.status !== 'processing' && updatedTask.status !== 'pending') {
             clearInterval(pollInterval)
-            message.destroy()
             setGeneratingVideo(false)
             if (updatedTask.status === 'completed') {
               message.success('视频生成完成！')
@@ -186,7 +191,6 @@ export default function ProjectTask() {
         }
       }, 2000)
     } catch (error: any) {
-      message.destroy()
       message.error(error.response?.data?.detail || '生成失败')
       setGeneratingVideo(false)
     }
@@ -213,7 +217,7 @@ export default function ProjectTask() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `manim_scene_${id}.py`
+      a.download = `AI视频_scene_${id}.py`
       a.click()
       URL.revokeObjectURL(url)
     }
@@ -320,7 +324,7 @@ export default function ProjectTask() {
                         header={
                           <div className="flex items-center gap-2">
                             <CodeOutlined className="text-[#0066FF]" />
-                            <span>生成的 Manim 代码</span>
+                            <span>生成的 AI视频 代码</span>
                           </div>
                         } 
                         key="code"

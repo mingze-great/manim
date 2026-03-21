@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react'
 import {
   Table, Card, Input, Button, Space, Tag, Popconfirm,
-  Modal, Descriptions, message, Row, Col, Avatar, Badge
+  Modal, Descriptions, message, Row, Col, Avatar, Badge, List, InputNumber
 } from 'antd'
 import {
   ReloadOutlined, DeleteOutlined, SearchOutlined,
   LockOutlined, UnlockOutlined, EyeOutlined, UserOutlined,
-  ProjectOutlined, VideoCameraOutlined, CheckCircleOutlined, CloseCircleOutlined
+  ProjectOutlined, VideoCameraOutlined, CheckCircleOutlined, CloseCircleOutlined,
+  PlusOutlined, CopyOutlined, KeyOutlined, EditOutlined
 } from '@ant-design/icons'
-import { adminApi, User, UserStats } from '../../services/admin'
+import { adminApi, User, UserStats, InvitationCode } from '../../services/admin'
 
 export default function AdminUsers() {
   const [users, setUsers] = useState<User[]>([])
@@ -16,10 +17,60 @@ export default function AdminUsers() {
   const [searchText, setSearchText] = useState('')
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [userStats, setUserStats] = useState<UserStats | null>(null)
+  const [invitationCodes, setInvitationCodes] = useState<InvitationCode[]>([])
+  const [generateCount, setGenerateCount] = useState(1)
+  const [resetPasswordModalVisible, setResetPasswordModalVisible] = useState(false)
+  const [newPassword, setNewPassword] = useState('')
+  const [resetLoading, setResetLoading] = useState(false)
 
   useEffect(() => {
     fetchUsers()
+    fetchInvitationCodes()
   }, [])
+
+  const fetchInvitationCodes = async () => {
+    try {
+      const res = await adminApi.getInvitationCodes()
+      setInvitationCodes(res.data as any)
+    } catch (err) {
+      console.error('获取邀请码失败', err)
+    }
+  }
+
+  const handleGenerateCodes = async () => {
+    try {
+      const res = await adminApi.generateInvitationCodes(generateCount)
+      message.success(`成功生成 ${res.data.codes.length} 个邀请码`)
+      fetchInvitationCodes()
+    } catch (err: any) {
+      message.error(err.response?.data?.detail || '生成失败')
+    }
+  }
+
+  const handleCopyCode = (code: string) => {
+    navigator.clipboard.writeText(code)
+    message.success('已复制到剪贴板')
+  }
+
+  const handleResetPassword = async () => {
+    if (!selectedUser || !newPassword) return
+    setResetLoading(true)
+    try {
+      await (adminApi as any).resetPassword(selectedUser.id, newPassword)
+      message.success('密码重置成功')
+      setResetPasswordModalVisible(false)
+      setNewPassword('')
+    } catch (err: any) {
+      message.error(err.response?.data?.detail || '重置失败')
+    } finally {
+      setResetLoading(false)
+    }
+  }
+
+  const openResetPassword = (user: User) => {
+    setSelectedUser(user)
+    setResetPasswordModalVisible(true)
+  }
 
   const fetchUsers = async (search?: string) => {
     setLoading(true)
@@ -188,6 +239,72 @@ export default function AdminUsers() {
         />
       </Card>
 
+      <Card className="mt-4 hover-lift" style={{ borderRadius: '16px' }}>
+        <Row gutter={16} align="middle" className="mb-4">
+          <Col>
+            <Space>
+              <KeyOutlined style={{ fontSize: '20px', color: '#6366f1' }} />
+              <span className="text-lg font-semibold">邀请码管理</span>
+            </Space>
+          </Col>
+          <Col flex="auto" />
+          <Col>
+            <Space>
+              <InputNumber 
+                min={1} 
+                max={20} 
+                value={generateCount} 
+                onChange={(v) => setGenerateCount(v || 1)}
+                style={{ width: 80 }}
+              />
+              <Button 
+                type="primary" 
+                icon={<PlusOutlined />}
+                onClick={handleGenerateCodes}
+              >
+                生成邀请码
+              </Button>
+            </Space>
+          </Col>
+        </Row>
+        <List
+          grid={{ gutter: 12, xs: 1, sm: 2, md: 3, lg: 4 }}
+          dataSource={invitationCodes}
+          renderItem={(item) => (
+            <List.Item>
+              <Card 
+                size="small" 
+                className="text-center hover-lift"
+                style={{ 
+                  borderRadius: '12px',
+                  background: item.is_used ? '#f3f4f6' : '#f0fdf4'
+                }}
+                bodyStyle={{ padding: '12px' }}
+              >
+                <div className="font-mono text-lg font-bold mb-1" style={{ color: item.is_used ? '#9ca3af' : '#10b981' }}>
+                  {item.code}
+                </div>
+                <div className="text-xs text-gray-500">
+                  {item.is_used ? '已使用' : '未使用'}
+                </div>
+                {!item.is_used && (
+                  <Button 
+                    type="link" 
+                    size="small" 
+                    icon={<CopyOutlined />}
+                    onClick={() => handleCopyCode(item.code)}
+                    className="mt-1"
+                  >
+                    复制
+                  </Button>
+                )}
+              </Card>
+            </List.Item>
+          )}
+          locale={{ emptyText: '暂无邀请码，点击上方按钮生成' }}
+        />
+      </Card>
+
       <Modal
         title={
           <Space>
@@ -220,6 +337,15 @@ export default function AdminUsers() {
                 </Descriptions.Item>
                 <Descriptions.Item label="注册时间">
                   {new Date(selectedUser.created_at).toLocaleString('zh-CN')}
+                </Descriptions.Item>
+                <Descriptions.Item label="操作">
+                  <Button 
+                    size="small" 
+                    icon={<EditOutlined />}
+                    onClick={() => openResetPassword(selectedUser)}
+                  >
+                    重置密码
+                  </Button>
                 </Descriptions.Item>
               </Descriptions>
             </Card>
@@ -258,6 +384,30 @@ export default function AdminUsers() {
             )}
           </>
         )}
+      </Modal>
+
+      <Modal
+        title="重置密码"
+        open={resetPasswordModalVisible}
+        onCancel={() => {
+          setResetPasswordModalVisible(false)
+          setNewPassword('')
+        }}
+        onOk={handleResetPassword}
+        confirmLoading={resetLoading}
+        okText="确认重置"
+        cancelText="取消"
+      >
+        <div className="py-4">
+          <p className="mb-4">为用户 <strong>{selectedUser?.username}</strong> 设置新密码：</p>
+          <Input.Password
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            placeholder="输入新密码"
+            minLength={8}
+          />
+          <p className="text-xs text-gray-500 mt-2">密码至少8位，需包含字母和数字</p>
+        </div>
       </Modal>
     </div>
   )

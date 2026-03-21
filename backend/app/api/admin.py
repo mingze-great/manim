@@ -220,6 +220,37 @@ async def toggle_user_active(
     return {"message": f"用户已{action_text}", "is_active": user.is_active}
 
 
+@router.post("/users/{user_id}/reset-password")
+async def reset_user_password(
+    user_id: int,
+    password: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+    request: Request = None
+):
+    """重置用户密码"""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    
+    if len(password) < 8:
+        raise HTTPException(status_code=400, detail="密码至少8位")
+    
+    from passlib.context import CryptContext
+    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+    user.hashed_password = pwd_context.hash(password)
+    
+    db.commit()
+    
+    from app.api.auth import log_audit
+    log_audit(db, current_user.id, current_user.username, "PASSWORD_RESET",
+              resource="user", resource_id=user_id,
+              details=f"重置用户密码: {user.username}",
+              request=request)
+    
+    return {"message": "密码重置成功"}
+
+
 @router.post("/users/{user_id}/approve")
 async def approve_user(
     user_id: int,

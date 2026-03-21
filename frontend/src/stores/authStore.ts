@@ -16,6 +16,7 @@ interface AuthState {
   token: string | null
   user: User | null
   lastActivity: number
+  isAuthenticated: () => boolean
   login: (token: string, user: User) => void
   logout: () => void
   updateActivity: () => void
@@ -28,6 +29,7 @@ export const useAuthStore = create<AuthState>()(
       token: null,
       user: null,
       lastActivity: Date.now(),
+      isAuthenticated: () => !!get().token,
       login: (token, user) => set({ token, user, lastActivity: Date.now() }),
       logout: () => set({ token: null, user: null, lastActivity: Date.now() }),
       updateActivity: () => set({ lastActivity: Date.now() }),

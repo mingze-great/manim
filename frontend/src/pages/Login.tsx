@@ -17,12 +17,12 @@ export default function Login() {
       const { data: loginData } = await authApi.login(values)
       const { data: userData } = await authApi.me()
       
-      // 检查账号状态
+      // 检查账号状态（管理员跳过审批检查）
       if (userData.is_expired) {
         message.error('账号已过期，请联系管理员续费')
         return
       }
-      if (!userData.is_approved) {
+      if (!userData.is_approved && !userData.is_admin) {
         message.error('账号正在等待审核，请联系管理员')
         return
       }
@@ -83,7 +83,7 @@ export default function Login() {
               <RocketOutlined className="text-3xl text-white" />
             </motion.div>
             <h1 className="text-2xl font-bold text-gray-800 dark:text-white mb-2">
-              Manim 视频平台
+              AI视频 视频平台
             </h1>
             <p className="text-gray-500 dark:text-gray-400 text-sm">
               智能生成精彩动画视频

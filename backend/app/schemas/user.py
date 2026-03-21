@@ -31,6 +31,7 @@ class UserResponse(UserBase):
     id: int
     is_active: bool
     is_admin: bool = False
+    is_approved: bool = True
     created_at: datetime
     
     class Config:

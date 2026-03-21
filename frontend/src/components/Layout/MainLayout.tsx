@@ -19,8 +19,9 @@ export default function MainLayout() {
   const [isAdminMode, setIsAdminMode] = useState(false)
 
   useEffect(() => {
-    setIsAdminMode(sessionStorage.getItem('admin_mode') === 'true')
-  }, [])
+    const isAdmin = user?.is_admin || sessionStorage.getItem('admin_mode') === 'true'
+    setIsAdminMode(!!isAdmin)
+  }, [user])
 
   const menuItems: MenuProps['items'] = [
     { key: '/creator', icon: <PlusOutlined />, label: '开始创作' },
@@ -61,7 +62,7 @@ export default function MainLayout() {
     const item = menuItems.find(m => m && 'key' in m && m.key === location.pathname)
     if (item && 'label' in item) return item.label as string
     if (location.pathname.startsWith('/creator')) return '创作工作台'
-    return 'Manim 视频平台'
+    return 'AI视频 视频平台'
   }
 
   return (
@@ -79,7 +80,7 @@ export default function MainLayout() {
               <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
             </svg>
           </div>
-          <span className="logo-text">Manim</span>
+          <span className="logo-text">AI视频</span>
         </div>
         <Menu
           mode="inline"
@@ -112,7 +113,7 @@ export default function MainLayout() {
                 <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
               </svg>
             </div>
-            <span>Manim</span>
+            <span>AI视频</span>
           </div>
         }
         placement="left"

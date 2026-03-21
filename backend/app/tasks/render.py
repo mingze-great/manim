@@ -90,9 +90,24 @@ class {scene_name}(Scene):
             
             update_task_progress(task_id, 50, "processing")
             
+            # 检查 manim 是否可用
+            manim_path = "/opt/miniconda3/envs/manim/bin/manim"
+            manim_check = subprocess.run(
+                [manim_path, "--version"],
+                capture_output=True,
+                text=True
+            )
+            
+            if manim_check.returncode != 0:
+                print("manim not installed, skipping video rendering")
+                project.status = "code_generated"
+                db.commit()
+                update_task_progress(task_id, 100, "completed", video_url=None)
+                return
+            
             # 使用 manim 的 -o 指定输出目录
             cmd = [
-                "manim",
+                manim_path,
                 "-ql",
                 "--disable_caching",
                 "--media_dir", temp_dir,

@@ -27,6 +27,15 @@ def create_project(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)]
 ):
+    MAX_PROJECTS = 3
+    if not current_user.is_admin:
+        project_count = db.query(Project).filter(Project.user_id == current_user.id).count()
+        if project_count >= MAX_PROJECTS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"作品数量已达上限({MAX_PROJECTS}个)，请下载后删除旧作品"
+            )
+    
     new_project = Project(
         user_id=current_user.id,
         title=project.title,
@@ -132,6 +141,7 @@ async def send_message(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)]
 ):
+    """发送消息 - 立即返回，不等待AI响应"""
     project = db.query(Project).filter(
         Project.id == project_id,
         Project.user_id == current_user.id
@@ -148,42 +158,76 @@ async def send_message(
     db.commit()
     db.refresh(user_message)
     
-    chat_service = ChatService(db)
-    response = await chat_service.process_message(project_id, project.theme, message.content)
+    # 立即返回用户消息
+    return user_message
+
+
+@router.get("/{project_id}/chat/pending")
+async def get_pending_response(
+    project_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)]
+):
+    """获取AI响应 - 前端轮询此接口"""
+    project = db.query(Project).filter(
+        Project.id == project_id,
+        Project.user_id == current_user.id
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
     
-    assistant_message = Conversation(
-        project_id=project_id,
-        role="assistant",
-        content=response["content"]
-    )
-    db.add(assistant_message)
+    # 获取最新的用户消息
+    last_user = db.query(Conversation).filter(
+        Conversation.project_id == project_id,
+        Conversation.role == "user"
+    ).order_by(Conversation.created_at.desc()).first()
     
-    if response.get("is_final"):
-        project.final_script = response.get("final_script")
-        project.status = "chatting"
-        # 同时生成代码
-        from app.services.manim import ManimService
-        manim_service = ChatService(db)
+    if not last_user:
+        return {"status": "no_message"}
+    
+    # 检查是否已有AI回复
+    last_ai = db.query(Conversation).filter(
+        Conversation.project_id == project_id,
+        Conversation.role == "assistant",
+        Conversation.created_at > last_user.created_at
+    ).order_by(Conversation.created_at.asc()).first()
+    
+    if last_ai:
+        # 已处理过，返回已有回复
+        if last_ai.content.startswith("【"):
+            return {
+                "status": "completed",
+                "response": last_ai,
+                "has_final_script": True
+            }
+        return {"status": "completed", "response": last_ai}
+    
+    # 生成AI响应
+    try:
+        chat_service = ChatService(db)
+        response = await chat_service.process_message(project_id, project.theme, last_user.content)
         
-        template_code = ""
-        if project.template_id:
-            from app.models.template import Template
-            template = db.query(Template).filter(Template.id == project.template_id).first()
-            if template:
-                template_code = template.code
-        
-        manim_service_async = ManimService(db)
-        manim_code = await manim_service_async.generate_code(
-            response.get("final_script") or "",
-            custom_code=project.custom_code or None
+        assistant_message = Conversation(
+            project_id=project_id,
+            role="assistant",
+            content=response["content"]
         )
-        project.manim_code = manim_code
+        db.add(assistant_message)
+        
+        if response.get("is_final"):
+            project.final_script = response.get("final_script")
+            project.status = "chatting_completed"
+        
         db.commit()
-    
-    db.commit()
-    db.refresh(assistant_message)
-    
-    return assistant_message
+        db.refresh(assistant_message)
+        
+        return {
+            "status": "completed",
+            "response": assistant_message,
+            "has_final_script": response.get("is_final", False)
+        }
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
 
 
 @router.post("/{project_id}/regenerate-code")

@@ -66,6 +66,15 @@ export interface SystemStats {
   disk_usage: number
 }
 
+export interface InvitationCode {
+  code: string
+  expires_at: string | null
+  is_used: boolean
+  used_by: number | null
+  used_at: string | null
+  created_at: string
+}
+
 export const adminApi = {
   getUsers: (params?: { skip?: number; limit?: number; search?: string }) =>
     api.get<{ users: User[]; total: number }>('/admin/users', { params }),
@@ -88,6 +97,16 @@ export const adminApi = {
     api.get<AuditLog[]>('/admin/audit-logs', { params }),
 
   getSystemStats: () => api.get<SystemStats>('/admin/stats'),
+
+  getInvitationCodes: () => api.get<InvitationCode[]>('/admin/invitation-codes'),
+
+  generateInvitationCodes: (count: number = 1, daysValid?: number) =>
+    api.get<{ codes: InvitationCode[] }>('/auth/invitation-codes/generate', { 
+      params: { count, days_valid: daysValid } 
+    }),
+
+  resetPassword: (userId: number, newPassword: string) =>
+    api.post(`/admin/users/${userId}/reset-password`, { password: newPassword }),
 }
 
 export default api

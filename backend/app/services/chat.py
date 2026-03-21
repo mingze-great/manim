@@ -7,28 +7,40 @@ from app.utils.llm_factory import LLMFactory
 SYSTEM_PROMPT = """你是一个专业的动画内容策划专家。
 
 ## 你的任务
-根据用户给定的视频主题，列出各个要点的内容摘要和动态图描述。
+根据用户给定的视频主题，直接生成完整的视频内容脚本，包括各个要点的详细内容。
+
+## 工作流程（重要）
+1. 用户输入主题后，**直接生成完整内容**，不要询问用户要补充什么
+2. 根据主题自己扩展3-5个要点，生成完整内容
+3. 列出内容后，**自动确认**，不需要再问用户是否满意
+4. 只有当用户明确要求调整某个部分时，才进行修改
 
 ## 输出格式要求
-请用简洁的结构化格式输出：
+请用结构化格式输出，结尾必须包含下一步指引：
+
+【视频内容】
 
 ### 第1点：[标题]
-- 内容：[核心文字内容，20-50字]
-- 动态图：[1-2句话描述动态效果]
+- 内容：[完整文字内容，30-80字，充实有内涵]
+- 动态图：[描述动画效果]
 
 ### 第2点：[标题]
-- 内容：[核心文字内容]
-- 动态图：[描述动态效果]
+- 内容：[完整文字内容]
+- 动态图：[描述动画效果]
 
 ...（以此类推）
 
+---
+
+💡 **下一步**：如果你对以上内容满意，请输入「满意」，我将为你生成视频代码和预览。
+
 ## 重要规则
-1. 内容要精炼，每个要点20-50字
-2. 动态图描述要具体：如"圆形展开→文字淡入→箭头指示"
-3. 只列出用户给定的主题要点，不要自己添加
-4. 列出后询问用户是否满意，或需要调整哪些内容
-5. 当用户说"可以了"或"开始生成"或"确认生成"时，设置 is_final=true
-6. 当用户要求调整某些内容时，根据反馈修改对应要点
+1. **不要询问用户补充信息**，直接生成
+2. 内容要充实，每个要点30-80字
+3. 动态图描述要具体可执行
+4. 生成内容后，在结尾添加「下一步」指引
+5. 当用户说"可以"、"满意"、"开始生成"、"确认"时，直接设置 is_final=true 并生成代码
+6. 如果用户要求调整某部分，只修改指定内容，不要重新生成全部
 """
 
 
@@ -54,43 +66,47 @@ class ChatService:
         
         messages.append({"role": "user", "content": user_message})
         
+        # 检查是否确认生成
+        confirm_keywords = ["满意", "可以了", "开始生成", "确认生成", "好的", "开始吧"]
+        user_confirmed = any(keyword in user_message for keyword in confirm_keywords)
+        
+        # 如果用户确认，使用之前生成的完整内容
+        if user_confirmed and project.final_script:
+            # 用户确认，保存状态
+            project.status = "chatting_completed"
+            self.db.commit()
+            
+            return {
+                "content": f"✅ 内容已确认！\n\n{project.final_script}\n\n⏳ 现在点击下方「生成代码和视频」按钮开始生成。",
+                "is_final": True,
+                "final_script": project.final_script
+            }
+        
+        # 正常对话流程 - AI生成内容后自动保存为草稿
         content = await self.client.chat(
             messages=messages,
             temperature=0.7,
             max_tokens=3000
         )
         
-        # 检查是否确认生成
-        confirm_keywords = ["可以了", "开始生成", "确认生成", "开始吧", "好的"]
-        is_final = any(keyword in content for keyword in confirm_keywords)
-        
-        # 如果确认生成，同时生成代码并存入项目
-        if is_final:
-            from app.services.manim import ManimService
-            manim_service = ManimService(self.db)
-            
-            # 获取项目关联的模板代码
-            template_code = ""
-            if project.template_id:
-                from app.models.template import Template
-                template = self.db.query(Template).filter(Template.id == project.template_id).first()
-                if template:
-                    template_code = template.code
-            
-            # 获取用户自定义代码（如果有）
-            custom_code = project.custom_code or ""
-            
-            # 生成代码
-            manim_code = await manim_service.generate_code(content, custom_code=custom_code or None)
-            
-            # 保存代码到项目（但不包含在返回给用户的内容中）
-            project.manim_code = manim_code
+        # 如果对话已经有内容了，保存为最终脚本（第一轮对话后自动生成）
+        if not project.final_script and len(conversations) == 0:
             project.final_script = content
-            project.status = "chatting"
+            self.db.commit()
+            return {
+                "content": content,
+                "is_final": False,
+                "final_script": content
+            }
+        
+        # 后续对话中，如果AI说"确认"则更新final_script
+        is_final = any(keyword in content for keyword in confirm_keywords)
+        if is_final:
+            project.final_script = content
             self.db.commit()
         
         return {
             "content": content,
             "is_final": is_final,
-            "final_script": content if is_final else None
+            "final_script": content if is_final else project.final_script
         }
