@@ -3,7 +3,7 @@ import { Layout, Menu, Avatar, Dropdown, Space, Button, Drawer, FloatButton } fr
 import type { MenuProps } from 'antd'
 import {
   PlusOutlined, HistoryOutlined, UserOutlined,
-  CrownOutlined, LogoutOutlined, MenuOutlined, BellOutlined, BookOutlined, SafetyOutlined
+  LogoutOutlined, MenuOutlined, BellOutlined, BookOutlined, SafetyOutlined
 } from '@ant-design/icons'
 import { useAuthStore } from '@/stores/authStore'
 import { useState, useEffect } from 'react'
@@ -26,7 +26,6 @@ export default function MainLayout() {
     { key: '/creator', icon: <PlusOutlined />, label: '开始创作' },
     { key: '/history', icon: <HistoryOutlined />, label: '我的作品' },
     { key: '/docs', icon: <BookOutlined />, label: '帮助中心' },
-    { key: '/pricing', icon: <CrownOutlined />, label: '会员中心' },
   ]
 
   const userMenuItems = [
@@ -102,13 +101,6 @@ export default function MainLayout() {
               管理后台
             </Button>
           )}
-          <div className="user-quota">
-            <div className="quota-label">今日剩余额度</div>
-            <div className="quota-value">50 / 100</div>
-            <div className="quota-bar">
-              <div className="quota-fill" style={{ width: '50%' }} />
-            </div>
-          </div>
         </div>
       </Sider>
 

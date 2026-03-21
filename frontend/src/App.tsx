@@ -6,7 +6,6 @@ import AdminLayout from './components/Layout/AdminLayout'
 import Landing from './pages/Landing'
 import Creator from './pages/Creator'
 import History from './pages/History'
-import Pricing from './pages/Pricing'
 import Profile from './pages/Profile'
 import Docs from './pages/Docs'
 import Login from './pages/Login'
@@ -45,7 +44,6 @@ export default function App() {
           <Route path="/project/:id/chat" element={<ProjectChat />} />
           <Route path="/project/:id/task" element={<ProjectTask />} />
           <Route path="/history" element={<History />} />
-          <Route path="/pricing" element={<Pricing />} />
           <Route path="/profile" element={<Profile />} />
         </Route>
 
