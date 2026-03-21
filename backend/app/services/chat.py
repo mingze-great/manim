@@ -113,6 +113,8 @@ class ChatService:
     
     async def stream_process_message(self, project_id: int, theme: str, user_message: str):
         """流式处理消息 - 返回 SSE 生成器"""
+        print(f"[DEBUG] stream_process_message called: project_id={project_id}, theme={theme}, message={user_message[:50]}...")
+        
         conversations = self.db.query(Conversation).filter(
             Conversation.project_id == project_id
         ).order_by(Conversation.created_at).all()
@@ -148,27 +150,34 @@ class ChatService:
         reasoning_content = ""
         
         try:
+            print(f"[DEBUG] Calling stream_chat with {len(messages)} messages")
             response = await self.client.stream_chat(
                 messages=messages,
                 temperature=0.7,
                 max_tokens=3000
             )
+            print(f"[DEBUG] Got response, starting iteration")
             
             async for chunk in response:
                 delta = chunk.choices[0].delta
                 
-                if delta.reasoning_content:
-                    reasoning_content += delta.reasoning_content
+                # 只有 DeepSeek 支持 reasoning_content
+                reasoning = getattr(delta, 'reasoning_content', None)
+                if reasoning:
+                    reasoning_content += reasoning
                     yield {
                         "type": "reasoning",
-                        "content": delta.reasoning_content
+                        "content": reasoning
                     }
-                elif delta.content:
+                
+                if delta.content:
                     content += delta.content
                     yield {
                         "type": "content",
                         "content": delta.content
                     }
+            
+            print(f"[DEBUG] Stream finished, content length: {len(content)}")
             
             is_first_response = len(conversations) == 0
             if is_first_response and content:
@@ -193,6 +202,9 @@ class ChatService:
                 }
                 
         except Exception as e:
+            print(f"[ERROR] Exception in stream_process_message: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
             yield {
                 "type": "error",
                 "error": str(e)
