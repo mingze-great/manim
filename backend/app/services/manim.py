@@ -4,25 +4,29 @@ from app.models.template import Template
 from app.utils.llm_factory import LLMFactory
 
 MANIM_SYSTEM_PROMPT = """你是一个专业的Manim动画代码生成专家。
-你的任务是将已确定的视频脚本转换为可执行的Manim Python代码。
+你的任务是将用户确定的内容要点转换为可执行的Manim Python代码。
 
-## 核心要求
-当你看到"## 参考代码"部分时，必须严格遵循该代码的：
+## 核心任务
+用户会给你：
+1. 一个结构化的内容列表（各要点的主题和动态图描述）
+2. 一个代码模板（你必须完全遵循其风格）
+
+**你只需要严格按照模板代码的风格，为每个内容要点生成对应的动画代码！**
+
+## 参考代码（必须严格遵循）
+参考代码是你的模板，必须完全复制其：
 1. 整体结构（class定义方式、函数组织）
 2. 动画风格（使用的动画类型、过渡效果）
 3. 代码模式（常见的代码写法、习惯用法）
 4. 配色方案（使用的颜色常量）
-5. 注释风格（如果有的话）
-
-**重要：参考代码是你的模板，必须完全遵循其风格！**
 
 ## 技术约束
 - 使用Manim 0.18.x版本（Manim Community Edition）
-- 场景分辨率：1920x1080 (DEFAULT: 1920x1080)
-- 使用ManimCE (Manim Community Edition) 语法
+- 场景分辨率：1920x1080
+- 使用ManimCE语法
 - 代码必须可以直接运行
 
-## 代码结构要求
+## 代码结构
 ```python
 from manim import *
 
@@ -31,24 +35,14 @@ class SceneName(Scene):
         # 动画代码
 ```
 
-## 常用动画模式
-- 文字显示：Text(), MathTex()
-- 图形绘制：Circle(), Square(), Line(), Polygon()
-- 变换：Transform(), ReplacementTransform(), TransformFromCopy()
-- 运动：MoveAlongPath(), Rotate(), FadeIn(), FadeOut(), Write()
-- 组合：VGroup(), Group()
-- 颜色：RED, BLUE, GREEN, YELLOW, WHITE, BLACK等
-- 动画：self.play(), self.wait()
-
 ## 质量要求
 1. 代码语法正确，可直接运行
 2. 动画流畅自然
-3. 适当添加camera运动增加动感
-4. 颜色搭配美观
-5. 确保代码在标准配置下可运行
-6. **必须完全遵循参考代码的风格！**
+3. **必须完全遵循参考代码的风格！**
+4. 每个要点对应一个独立的动画片段
+5. 使用 self.play(), self.wait() 组织动画
 
-请直接输出代码，不要包含解释说明。
+请直接输出代码，不要包含任何解释！
 """
 
 
@@ -81,23 +75,15 @@ class ManimService:
         if template_code:
             reference_parts.append(f"【系统模板参考】：\n```python\n{template_code}\n```")
         
-        reference_section = "\n\n".join(reference_parts) if reference_parts else "无"
-        
-        user_message = f"""{text_only_prefix}## 参考代码（必须严格遵循）
+        user_message = f"""## 内容要点（你需要为每个要点生成动画）
 {reference_section}
 
-## 视频脚本
+## 用户确定的内容
 {script}
 
-## 任务要求
-请严格按照"参考代码"的风格生成Manim代码！要求：
-1. 完全复制参考代码的整体结构
-2. 使用相同的动画模式和技术
-3. 遵循相同的代码风格和习惯
-4. 保持一致的配色方案
-5. 只替换主题相关的内容（文字、图形等）
-
-请直接输出代码，不要包含任何解释！"""
+## 任务
+请严格按照"参考代码"的风格，为上面的每个内容要点生成对应的Manim动画代码。每个要点对应一个独立的动画片段。
+"""
 
         content = await self.client.chat(
             messages=[
