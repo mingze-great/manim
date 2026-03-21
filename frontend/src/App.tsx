@@ -17,6 +17,7 @@ import AdminDashboard from './pages/admin/AdminDashboard'
 import AdminUsers from './pages/admin/AdminUsers'
 import AdminLogs from './pages/admin/AdminLogs'
 import AdminSettings from './pages/admin/AdminSettings'
+import AdminTemplates from './pages/admin/AdminTemplates'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { token } = useAuthStore()
@@ -53,6 +54,7 @@ export default function App() {
           <Route path="/admin/users" element={<AdminUsers />} />
           <Route path="/admin/logs" element={<AdminLogs />} />
           <Route path="/admin/settings" element={<AdminSettings />} />
+          <Route path="/admin/templates" element={<AdminTemplates />} />
         </Route>
       </Routes>
     </AntApp>

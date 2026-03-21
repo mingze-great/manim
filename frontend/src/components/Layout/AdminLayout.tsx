@@ -3,8 +3,8 @@ import { Layout, Menu, Avatar, Dropdown, Space, Badge, Button, Drawer, Tag, Tool
 import type { MenuProps } from 'antd'
 import {
   DashboardOutlined, UserOutlined, LogoutOutlined, SafetyOutlined,
-  TeamOutlined, FileTextOutlined, BarChartOutlined, SettingOutlined, 
-  MenuOutlined, SwapOutlined, HomeOutlined
+  TeamOutlined, FileTextOutlined, SettingOutlined, 
+  MenuOutlined, SwapOutlined, HomeOutlined, CodeOutlined
 } from '@ant-design/icons'
 import { useAuthStore } from '@/stores/authStore'
 import { useEffect } from 'react'
@@ -28,8 +28,8 @@ export default function AdminLayout() {
   const menuItems: MenuProps['items'] = [
     { key: '/admin', icon: <DashboardOutlined />, label: '仪表盘' },
     { key: '/admin/users', icon: <TeamOutlined />, label: '用户管理' },
+    { key: '/admin/templates', icon: <CodeOutlined />, label: '代码模板' },
     { key: '/admin/logs', icon: <FileTextOutlined />, label: '操作日志' },
-    { key: '/admin/stats', icon: <BarChartOutlined />, label: '数据统计' },
     { type: 'divider' as const },
     { key: '/admin/settings', icon: <SettingOutlined />, label: '系统设置' },
   ]

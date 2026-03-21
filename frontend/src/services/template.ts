@@ -21,7 +21,9 @@ export interface TemplateList {
 export const templateApi = {
   list: () => api.get<TemplateList>('/templates'),
   get: (id: number) => api.get<Template>(`/templates/${id}`),
-  create: (data: Omit<Template, 'id' | 'is_system' | 'user_id' | 'usage_count' | 'created_at'>) =>
+  create: (data: { name: string; description: string; category: string; code: string; thumbnail?: string }) =>
     api.post<Template>('/templates', data),
+  update: (id: number, data: Partial<{ name: string; description: string; code: string; thumbnail: string }>) =>
+    api.put<Template>(`/templates/${id}`, data),
   delete: (id: number) => api.delete(`/templates/${id}`),
 }

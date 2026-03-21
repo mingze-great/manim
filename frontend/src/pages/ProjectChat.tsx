@@ -188,8 +188,7 @@ export default function ProjectChat() {
         name,
         description: '用户保存的模板',
         category: 'custom',
-        code: project.manim_code,
-        thumbnail: null,
+        code: project.manim_code || '',
       })
       message.success('模板保存成功')
       fetchTemplates()
