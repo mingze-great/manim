@@ -48,7 +48,7 @@ export const projectApi = {
   getConversations: (id: number) => api.get<Conversation[]>(`/projects/${id}/conversations`),
   sendMessage: (id: number, content: string) => api.post<Conversation>(`/projects/${id}/chat`, { content }),
   getPendingResponse: (id: number) => api.get<PendingResponse>(`/projects/${id}/chat/pending`),
-  sendMessageStream: (id: number, _content: string) => `/projects/${id}/chat/stream`,
+  sendMessageStream: (id: number, _content: string) => `/api/projects/${id}/chat/stream`,
   generateCode: (id: number, templateId?: number) => 
     api.get(`/tasks/${id}/generate-code`, { params: { template_id: templateId } }),
   generateVideo: (id: number, templateId?: number) => 
