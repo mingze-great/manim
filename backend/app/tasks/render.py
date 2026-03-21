@@ -44,15 +44,18 @@ def render_video_task(task_id: int, project_id: int, template_id: int = None, cu
             update_task_progress(task_id, 0, "failed", error_message="Project not found")
             return
         
-        update_task_progress(task_id, 10, "processing")
+        update_task_progress(task_id, 5, "processing")
+        print(f"[Task {task_id}] 开始生成视频...")
         
         import asyncio
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         
+        update_task_progress(task_id, 10, "processing")
+        print(f"[Task {task_id}] 正在生成 Manim 代码...")
+        
         manim_service = ManimService(db)
         script = project.final_script
-        # 优先使用传入的custom_code，否则使用项目的custom_code
         code_ref = custom_code or project.custom_code
         manim_code = loop.run_until_complete(
             manim_service.generate_code(script, template_id, code_ref)
@@ -62,9 +65,9 @@ def render_video_task(task_id: int, project_id: int, template_id: int = None, cu
         db.commit()
         
         update_task_progress(task_id, 30, "processing")
+        print(f"[Task {task_id}] 代码生成完成，准备渲染...")
         
         with tempfile.TemporaryDirectory() as temp_dir:
-            # 从生成的代码中提取类名
             scene_name = "Scene"
             if manim_code:
                 import re
@@ -88,9 +91,9 @@ class {scene_name}(Scene):
             output_dir = os.path.join(temp_dir, "output")
             os.makedirs(output_dir, exist_ok=True)
             
-            update_task_progress(task_id, 50, "processing")
+            update_task_progress(task_id, 40, "processing")
+            print(f"[Task {task_id}] 正在初始化渲染器...")
             
-            # 检查 manim 是否可用
             manim_path = "/opt/miniconda3/envs/manim/bin/manim"
             manim_check = subprocess.run(
                 [manim_path, "--version"],
@@ -99,13 +102,15 @@ class {scene_name}(Scene):
             )
             
             if manim_check.returncode != 0:
-                print("manim not installed, skipping video rendering")
+                print(f"[Task {task_id}] Manim 未安装，跳过视频渲染")
                 project.status = "code_generated"
                 db.commit()
                 update_task_progress(task_id, 100, "completed", video_url=None)
                 return
             
-            # 使用 manim 的 -o 指定输出目录
+            update_task_progress(task_id, 50, "processing")
+            print(f"[Task {task_id}] 开始渲染视频...")
+            
             cmd = [
                 manim_path,
                 "-ql",
@@ -122,9 +127,9 @@ class {scene_name}(Scene):
                 text=True
             )
             
-            update_task_progress(task_id, 80, "processing")
+            update_task_progress(task_id, 75, "processing")
+            print(f"[Task {task_id}] 视频渲染完成，正在处理文件...")
             
-            # 在 temp_dir 中查找生成的视频
             video_files = []
             for root, dirs, files in os.walk(temp_dir):
                 for file in files:
@@ -134,7 +139,6 @@ class {scene_name}(Scene):
             if video_files:
                 video_path = video_files[0]
                 
-                # 创建videos目录
                 backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
                 videos_dir = os.path.join(backend_dir, "videos")
                 os.makedirs(videos_dir, exist_ok=True)
@@ -142,22 +146,24 @@ class {scene_name}(Scene):
                 video_filename = f"{project_id}_{uuid.uuid4().hex[:8]}.mp4"
                 local_video_path = os.path.join(videos_dir, video_filename)
                 
-                # 复制视频到videos目录
                 import shutil
                 shutil.copy2(video_path, local_video_path)
-                print(f"视频已保存到: {local_video_path}")
+                print(f"[Task {task_id}] 视频已保存到: {local_video_path}")
                 
-                # 更新任务为完成，使用本地路径
+                update_task_progress(task_id, 90, "processing")
+                
                 video_url = f"/api/videos/{video_filename}"
                 project.status = "completed"
                 db.commit()
                 update_task_progress(task_id, 100, "completed", video_url=video_url)
+                print(f"[Task {task_id}] 任务完成！")
             else:
                 error_output = result.stdout + result.stderr
-                print(f"渲染错误: {error_output}")
+                print(f"[Task {task_id}] 渲染错误: {error_output}")
                 update_task_progress(task_id, 80, "failed", error_message=f"Render failed: {error_output[:500]}")
     
     except Exception as e:
+        print(f"[Task {task_id}] 任务异常: {e}")
         update_task_progress(task_id, 0, "failed", error_message=str(e))
     finally:
         db.close()

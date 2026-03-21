@@ -3,6 +3,7 @@ import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { Card, Progress, Button, Space, message, Spin, Tabs, Collapse } from 'antd'
 import { DownloadOutlined, PlayCircleOutlined, CodeOutlined, CloudUploadOutlined, CopyOutlined, CheckOutlined } from '@ant-design/icons'
 import { projectApi, Task, Project } from '@/services/project'
+import { useAuthStore } from '@/stores/authStore'
 import { motion } from 'framer-motion'
 
 const { Panel } = Collapse
@@ -26,6 +27,8 @@ export default function ProjectTask() {
   const [generatingVideo, setGeneratingVideo] = useState(false)
   const [codeProgress, setCodeProgress] = useState(0)
   const [codeMessage, setCodeMessage] = useState('')
+  const [videoProgress, setVideoProgress] = useState(0)
+  const [videoMessage, setVideoMessage] = useState('')
   const [generatedCode, setGeneratedCode] = useState('')
   const [activeTab, setActiveTab] = useState('code')
   const [copied, setCopied] = useState(false)
@@ -163,35 +166,85 @@ export default function ProjectTask() {
     
     const templateId = searchParams.get('templateId')
     setGeneratingVideo(true)
+    setVideoProgress(0)
+    setVideoMessage('正在准备渲染...')
     
     try {
-      const { data } = await projectApi.generateVideo(Number(id), templateId ? Number(templateId) : undefined)
-      setTask(data)
+      // 先创建任务
+      const { data: taskData } = await projectApi.generateVideo(Number(id), templateId ? Number(templateId) : undefined)
+      setTask(taskData)
       
-      const pollInterval = setInterval(async () => {
-        try {
-          const { data: updatedTask } = await projectApi.getTask(data.id)
-          setTask(updatedTask)
-          
-          if (updatedTask.status === 'processing') {
-            // 渲染中会自动更新进度条
-          }
-          
-          if (updatedTask.status !== 'processing' && updatedTask.status !== 'pending') {
-            clearInterval(pollInterval)
-            setGeneratingVideo(false)
-            if (updatedTask.status === 'completed') {
-              message.success('视频生成完成！')
-            } else if (updatedTask.status === 'failed') {
-              message.error(`生成失败：${updatedTask.error_message}`)
+      // 使用 SSE 流式获取进度
+      const token = useAuthStore.getState().token
+      const streamUrl = `/api/tasks/${taskData.id}/stream`
+      
+      const response = await fetch(streamUrl, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      
+      if (!response.ok) {
+        throw new Error('无法获取渲染进度')
+      }
+      
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder()
+      
+      if (!reader) {
+        throw new Error('无法读取响应流')
+      }
+      
+      let buffer = ''
+      
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6)
+            
+            try {
+              const parsed = JSON.parse(data)
+              
+              setVideoProgress(parsed.progress || 0)
+              setTask(prev => prev ? { ...prev, ...parsed } : null)
+              
+              // 根据进度设置消息
+              if (parsed.progress <= 10) {
+                setVideoMessage('正在准备渲染环境...')
+              } else if (parsed.progress <= 30) {
+                setVideoMessage('正在生成 Manim 代码...')
+              } else if (parsed.progress <= 50) {
+                setVideoMessage('正在初始化渲染器...')
+              } else if (parsed.progress <= 80) {
+                setVideoMessage('正在渲染视频...')
+              } else if (parsed.progress < 100) {
+                setVideoMessage('正在处理视频文件...')
+              }
+              
+              if (parsed.status === 'completed') {
+                setVideoMessage('视频渲染完成！')
+                message.success('视频生成完成！')
+              } else if (parsed.status === 'failed') {
+                setVideoMessage(`渲染失败: ${parsed.error_message || '未知错误'}`)
+                message.error(`生成失败：${parsed.error_message}`)
+              }
+            } catch (e) {
+              console.error('解析进度数据失败:', e)
             }
           }
-        } catch (e) {
-          console.error('获取任务状态失败', e)
         }
-      }, 2000)
+      }
+      
     } catch (error: any) {
-      message.error(error.response?.data?.detail || '生成失败')
+      message.error(error.response?.data?.detail || error.message || '生成失败')
+    } finally {
       setGeneratingVideo(false)
     }
   }
@@ -346,6 +399,28 @@ export default function ProjectTask() {
 
             <Tabs.TabPane tab={<span><CloudUploadOutlined /> 视频渲染</span>} key="video">
               <div className="space-y-4">
+                {/* 渲染进度显示 */}
+                {generatingVideo && (
+                  <motion.div 
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 p-4 rounded-xl border border-purple-100 dark:border-purple-800"
+                  >
+                    <div className="flex items-center gap-3 mb-3">
+                      <Spin />
+                      <span className="text-purple-600 dark:text-purple-400 font-medium">{videoMessage}</span>
+                    </div>
+                    <Progress 
+                      percent={videoProgress} 
+                      status="active"
+                      strokeColor={{
+                        '0%': '#722ed1',
+                        '100%': '#eb2f96',
+                      }}
+                    />
+                  </motion.div>
+                )}
+
                 {/* 任务状态 */}
                 {task ? (
                   <motion.div 
