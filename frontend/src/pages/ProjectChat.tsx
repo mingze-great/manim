@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Input, Button, Space, message, Modal } from 'antd'
-import { SendOutlined, PlayCircleOutlined, SaveOutlined, RobotOutlined, UserOutlined, CodeOutlined } from '@ant-design/icons'
+import { Input, Button, Space, message, Modal, Empty } from 'antd'
+import { SendOutlined, PlayCircleOutlined, SaveOutlined, RobotOutlined, UserOutlined, CodeOutlined, FileTextOutlined } from '@ant-design/icons'
 import { projectApi, Conversation, Project } from '@/services/project'
 import { templateApi, Template } from '@/services/template'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -388,59 +388,115 @@ export default function ProjectChat() {
         title={
           <div className="flex items-center gap-2">
             <CodeOutlined className="text-[#0066FF]" />
-            <span>选择模板或粘贴代码</span>
+            <span>生成设置</span>
           </div>
         }
         open={templateModalVisible}
         onCancel={() => setTemplateModalVisible(false)}
         onOk={handleConfirmTemplate}
         okText="确认生成"
-        width={800}
+        width={900}
       >
-        <div className="mb-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="font-medium">自定义代码参考</span>
-            <Button size="small" type="link" onClick={() => setCustomCodeModalVisible(true)}>
-              {customCode ? '已设置，点击修改' : '粘贴你的代码'}
+        {/* 自定义代码模板 - 更突出显示 */}
+        <div className="mb-6 p-4 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 rounded-xl border-2 border-purple-200 dark:border-purple-800">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <div className="font-medium text-base flex items-center gap-2">
+                <span className="text-2xl">📋</span>
+                <span className="text-purple-700 dark:text-purple-300">粘贴你的代码作为模板</span>
+              </div>
+              <div className="text-xs text-gray-500 mt-1">AI将完全按照你粘贴的代码风格生成新代码</div>
+            </div>
+            <Button 
+              type="primary" 
+              danger={!customCode}
+              onClick={() => setCustomCodeModalVisible(true)}
+              icon={<FileTextOutlined />}
+            >
+              {customCode ? '✅ 已设置' : '➕ 粘贴代码'}
             </Button>
           </div>
           {customCode && (
-            <div className="bg-gray-50 dark:bg-gray-800/50 p-2 rounded text-xs max-h-20 overflow-y-auto">
-              <pre className="whitespace-pre-wrap">{customCode.slice(0, 150)}...</pre>
+            <div className="bg-white/50 dark:bg-gray-800/50 p-3 rounded-lg max-h-32 overflow-y-auto border border-purple-100 dark:border-purple-900">
+              <pre className="text-xs font-mono whitespace-pre-wrap text-gray-700 dark:text-gray-300">{customCode.slice(0, 300)}{customCode.length > 300 ? '...' : ''}</pre>
+            </div>
+          )}
+          {!customCode && (
+            <div className="text-center py-4 text-gray-400 text-sm">
+              暂未粘贴代码，系统将使用默认风格
             </div>
           )}
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          {templates.map((template) => (
-            <div
-              key={template.id}
-              className={`p-3 border-2 rounded-xl cursor-pointer transition-all ${
-                selectedTemplate?.id === template.id
-                  ? 'border-[#0066FF] bg-blue-50 dark:bg-blue-900/20'
-                  : 'border-gray-200 dark:border-gray-700 hover:border-[#0066FF]'
-              }`}
-              onClick={() => setSelectedTemplate(template)}
-            >
-              <div className="font-medium text-sm">{template.name}</div>
-              <div className="text-xs text-gray-500">{template.description}</div>
+        
+        {/* 系统模板选择 */}
+        <div className="mb-4">
+          <div className="font-medium mb-3 flex items-center gap-2">
+            <span className="text-lg">🎨</span>
+            <span>或选择系统模板</span>
+          </div>
+          {templates.length === 0 ? (
+            <Empty description="暂无可用模板" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              {templates.map((template) => (
+                <div
+                  key={template.id}
+                  className={`p-3 border-2 rounded-xl cursor-pointer transition-all ${
+                    selectedTemplate?.id === template.id
+                      ? 'border-[#0066FF] bg-blue-50 dark:bg-blue-900/20'
+                      : 'border-gray-200 dark:border-gray-700 hover:border-[#0066FF]'
+                  }`}
+                  onClick={() => setSelectedTemplate(template)}
+                >
+                  <div className="font-medium text-sm">{template.name}</div>
+                  <div className="text-xs text-gray-500">{template.description}</div>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
+        </div>
+        
+        {/* 提示信息 */}
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 p-3 rounded-lg border border-yellow-200 dark:border-yellow-800">
+          <div className="text-sm text-yellow-800 dark:text-yellow-200">
+            <strong>💡 提示：</strong>粘贴你的代码后，AI会完全按照该代码的风格（结构、动画、配色）生成新的动画。如果不粘贴，系统将使用默认风格。
+          </div>
         </div>
       </Modal>
 
       <Modal
-        title="粘贴你的Manim代码作为参考"
+        title={
+          <div className="flex items-center gap-2">
+            <FileTextOutlined className="text-purple-500" />
+            <span>粘贴你的代码作为模板</span>
+          </div>
+        }
         open={customCodeModalVisible}
         onCancel={() => setCustomCodeModalVisible(false)}
         onOk={handleSaveCustomCode}
-        okText="保存"
-        width={700}
+        okText="保存并使用此模板"
+        width={800}
       >
+        <div className="mb-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+          <div className="text-sm text-blue-700 dark:text-blue-300">
+            <strong>📌 使用说明：</strong>粘贴你的Manim代码后，AI会分析并完全遵循该代码的风格来生成新内容。
+          </div>
+        </div>
         <TextArea
           value={customCode}
           onChange={(e) => setCustomCode(e.target.value)}
-          placeholder="在这里粘贴你的Manim代码"
-          rows={15}
+          placeholder={`请在这里粘贴你的Manim代码，例如：
+
+from manim import *
+
+class MyScene(Scene):
+    def construct(self):
+        # 你的代码风格将被完全复制
+        text = Text("示例")
+        self.play(Write(text))
+        self.wait()
+`}
+          rows={20}
           className="font-mono text-sm rounded-lg"
         />
       </Modal>
