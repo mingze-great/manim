@@ -504,7 +504,20 @@ export default function Creator() {
                           )}
                         </>
                       ) : (
-                        <Empty description="代码将在对话后自动生成" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                        <div className="text-center py-8">
+                          <Empty description="点击下方按钮生成代码" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                          <Button 
+                            type="primary" 
+                            icon={<CodeOutlined />}
+                            onClick={() => {
+                              setTemplateModalVisible(true)
+                            }}
+                            size="large"
+                            className="mt-4"
+                          >
+                            生成代码
+                          </Button>
+                        </div>
                       )}
                       {(editableCode || generatedCode) && !videoUrl && (
                         <div className="code-actions">
@@ -636,13 +649,47 @@ export default function Creator() {
       </Modal>
 
       <Modal
-        title="选择代码模板"
+        title={
+          <div className="flex items-center gap-2">
+            <CodeOutlined className="text-[#6366f1]" />
+            <span>生成代码</span>
+          </div>
+        }
         open={templateModalVisible}
         onCancel={() => setTemplateModalVisible(false)}
         footer={null}
-        width={800}
+        width={900}
       >
-        <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+        {/* 粘贴自定义代码 */}
+        <Card className="mb-4" style={{ background: 'linear-gradient(135deg, #667eea20, #764ba220)' }}>
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="font-medium">📋 粘贴你的代码作为模板</div>
+              <div className="text-xs text-gray-500">AI将完全按照你粘贴的代码风格生成</div>
+            </div>
+            <Button 
+              type="primary" 
+              icon={<FileTextOutlined />}
+              onClick={() => {
+                setTemplateModalVisible(false)
+                // Navigate to paste code - we'll use a prompt for now
+                const code = prompt('请粘贴你的Manim代码作为模板:')
+                if (code) {
+                  setSelectedTemplate(null)
+                  setEditableCode(code)
+                  setGeneratedCode(code)
+                  message.success('已设置自定义模板代码')
+                }
+              }}
+            >
+              粘贴代码
+            </Button>
+          </div>
+        </Card>
+        
+        {/* 或选择模板 */}
+        <div className="text-gray-500 mb-3">或选择系统模板：</div>
+        <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
           {templates.length === 0 ? (
             <Empty description="暂无可用模板" />
           ) : (
