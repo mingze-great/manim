@@ -395,22 +395,31 @@ export default function ProjectChat() {
         width={800}
       >
         <div className="py-4">
-          <div className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-xl mb-4">
-            <div className="font-medium mb-2">📋 粘贴你的代码作为模板</div>
-            <div className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-              将你的Manim代码粘贴到下方，AI将完全按照这个风格生成内容代码
+          <div className="bg-gray-900 dark:bg-gray-800 p-4 rounded-xl mb-4">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-lg">📋</span>
+              <span className="text-white font-medium">粘贴你的代码模板</span>
+            </div>
+            <div className="text-gray-400 text-sm mb-3">
+              AI将完全按照你粘贴的代码风格生成内容代码
             </div>
             <TextArea
               value={customCode}
               onChange={(e) => setCustomCode(e.target.value)}
-              placeholder={`from manim import *
+              placeholder={`\`\`\`python
+from manim import *
 
 class MyScene(Scene):
     def construct(self):
-        # 粘贴你的代码风格...
-`}
-              rows={12}
-              className="font-mono text-sm"
+        # 粘贴你的代码风格模板...
+        pass
+\`\`\``}
+              rows={16}
+              className="font-mono text-sm !bg-gray-800 !text-green-400 !border-gray-700"
+              style={{ 
+                fontFamily: "'Fira Code', 'Consolas', monospace",
+                lineHeight: '1.6',
+              }}
             />
           </div>
           
