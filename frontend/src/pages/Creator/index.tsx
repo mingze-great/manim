@@ -20,13 +20,21 @@ export default function Creator() {
 
     setLoading(true)
     try {
-      const { data } = await projectApi.create({ 
+      // 创建项目
+      const { data: project } = await projectApi.create({ 
         title: `视频创作-${Date.now()}`,
         theme: theme 
       })
       
-      message.success('项目创建成功，正在进入创作...')
-      navigate(`/project/${data.id}/chat`)
+      // 立即发送第一条消息给AI
+      try {
+        await projectApi.sendMessage(project.id, theme)
+      } catch (e) {
+        console.error('发送消息失败:', e)
+      }
+      
+      message.success('正在生成内容...')
+      navigate(`/project/${project.id}/chat`)
     } catch (error) {
       message.error('创建失败')
     } finally {
@@ -64,8 +72,7 @@ export default function Creator() {
 例如：
 • 世界十大顶级思维：刻意练习、复利思维、终身学习...
 • 勾股定理的证明过程
-• 人生三件事：运动、阅读、赚钱
-• 如何高效学习：专注、练习、复盘...`}
+• 人生三件事：运动、阅读、赚钱`}
               rows={6}
               className="theme-input mb-4"
             />
@@ -79,11 +86,11 @@ export default function Creator() {
               block
               className="btn-gradient"
             >
-              {loading ? '正在创建项目...' : '开始创作'}
+              {loading ? '正在生成...' : '开始创作'}
             </Button>
 
             <p className="text-gray-500 text-sm text-center mt-4">
-              AI 会根据你的主题生成内容，你可以随时调整修改
+              AI 会根据你的主题生成内容，询问是否满意后可随时调整
             </p>
           </div>
         </Card>
