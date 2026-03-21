@@ -27,10 +27,16 @@ export default function ProjectChat() {
   const [aiThinking, setAiThinking] = useState(false)
   const [lastMsgCount, setLastMsgCount] = useState(0)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     fetchProject()
     fetchConversations()
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+    }
   }, [id])
 
   useEffect(() => {
@@ -82,6 +88,12 @@ export default function ProjectChat() {
     let aiContent = ''
     let aiTempId = tempId + 1
     
+    // 取消之前的请求
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+    abortControllerRef.current = new AbortController()
+    
     try {
       const token = useAuthStore.getState().token
       const streamUrl = projectApi.sendMessageStream(Number(id), userMessage)
@@ -92,7 +104,8 @@ export default function ProjectChat() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ content: userMessage })
+        body: JSON.stringify({ content: userMessage }),
+        signal: abortControllerRef.current.signal
       })
       
       if (!response.ok) {
@@ -169,6 +182,10 @@ export default function ProjectChat() {
       }
       
     } catch (error: any) {
+      if (error.name === 'AbortError') {
+        console.log('Request aborted')
+        return
+      }
       setConversations(prev => prev.filter(c => c.id !== tempId && c.id !== aiTempId))
       setAiThinking(false)
       message.error(error.message || '发送失败')
