@@ -16,7 +16,25 @@ export default function Login() {
     try {
       const { data: loginData } = await authApi.login(values)
       const { data: userData } = await authApi.me()
-      login(loginData.access_token, { id: userData.id, username: userData.username, email: userData.email, is_admin: userData.is_admin })
+      
+      // 检查账号状态
+      if (userData.is_expired) {
+        message.error('账号已过期，请联系管理员续费')
+        return
+      }
+      if (!userData.is_approved) {
+        message.error('账号正在等待审核，请联系管理员')
+        return
+      }
+      
+      login(loginData.access_token, { 
+        id: userData.id, 
+        username: userData.username, 
+        email: userData.email, 
+        is_admin: userData.is_admin,
+        is_approved: userData.is_approved,
+        expires_at: userData.expires_at
+      })
       message.success('登录成功')
       if (userData.is_admin) {
         navigate('/admin')
@@ -24,7 +42,14 @@ export default function Login() {
         navigate('/')
       }
     } catch (error: any) {
-      message.error(error.response?.data?.detail || '登录失败')
+      const detail = error.response?.data?.detail
+      if (detail === '账号已过期，请联系续费') {
+        message.error('账号已过期，请联系管理员续费')
+      } else if (detail === '账号正在等待审核，请联系管理员') {
+        message.error('账号正在等待审核，请联系管理员')
+      } else {
+        message.error(detail || '登录失败')
+      }
     } finally {
       setLoading(false)
     }

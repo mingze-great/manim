@@ -25,6 +25,7 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     from app.models.template import Template
     from app.models.user import User
+    from app.models.invitation import InvitationCode
     from app.models.subscription import Order, Subscription
     from app.database import SessionLocal
     

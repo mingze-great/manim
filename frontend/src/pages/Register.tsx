@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { Form, Input, Button, message } from 'antd'
-import { UserOutlined, LockOutlined, MailOutlined, RocketOutlined } from '@ant-design/icons'
+import { UserOutlined, LockOutlined, MailOutlined, RocketOutlined, KeyOutlined } from '@ant-design/icons'
 import { authApi } from '@/services/auth'
 import { motion } from 'framer-motion'
 
@@ -9,11 +9,16 @@ export default function Register() {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
 
-  const onFinish = async (values: { username: string; email: string; password: string }) => {
+  const onFinish = async (values: { username: string; email: string; password: string; invitation_code: string }) => {
+    if (!values.invitation_code) {
+      message.error('请输入邀请码')
+      return
+    }
+    
     setLoading(true)
     try {
       await authApi.register(values)
-      message.success('注册成功，请登录')
+      message.success('注册成功，请等待管理员审核')
       navigate('/login')
     } catch (error: any) {
       message.error(error.response?.data?.detail || '注册失败')
@@ -24,14 +29,12 @@ export default function Register() {
 
   return (
     <div className="auth-page">
-      {/* 背景几何图形 */}
       <div className="auth-background-shapes">
         <div className="auth-shape auth-shape-1" />
         <div className="auth-shape auth-shape-2" />
         <div className="auth-shape auth-shape-3" />
       </div>
 
-      {/* 注册卡片 */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -39,7 +42,6 @@ export default function Register() {
         className="w-full max-w-md px-4"
       >
         <div className="glass-card p-8">
-          {/* Logo 和标题 */}
           <div className="text-center mb-8">
             <motion.div
               initial={{ scale: 0 }}
@@ -57,7 +59,6 @@ export default function Register() {
             </p>
           </div>
 
-          {/* 注册表单 */}
           <Form
             onFinish={onFinish}
             layout="vertical"
@@ -97,6 +98,17 @@ export default function Register() {
                 className="rounded-lg"
               />
             </Form.Item>
+            <Form.Item
+              name="invitation_code"
+              rules={[{ required: true, message: '请输入邀请码' }]}
+              extra="请输入管理员提供的邀请码"
+            >
+              <Input 
+                prefix={<KeyOutlined className="text-gray-400" />} 
+                placeholder="邀请码"
+                className="rounded-lg"
+              />
+            </Form.Item>
             <Form.Item className="mb-4">
               <Button
                 type="primary"
@@ -110,7 +122,6 @@ export default function Register() {
             </Form.Item>
           </Form>
 
-          {/* 登录链接 */}
           <div className="text-center text-gray-500 dark:text-gray-400">
             已有账号？{' '}
             <Link 

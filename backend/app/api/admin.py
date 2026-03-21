@@ -218,3 +218,107 @@ async def toggle_user_active(
               details=f"{action_text}用户: {user.username}", request=request)
     
     return {"message": f"用户已{action_text}", "is_active": user.is_active}
+
+
+@router.post("/users/{user_id}/approve")
+async def approve_user(
+    user_id: int,
+    days_valid: int = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+    request: Request = None
+):
+    """审核通过用户，可设置有效期"""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    
+    user.is_approved = True
+    if days_valid:
+        user.expires_at = datetime.utcnow() + timedelta(days=days_valid)
+    
+    db.commit()
+    
+    from app.api.auth import log_audit
+    log_audit(db, current_user.id, current_user.username, "USER_APPROVED", 
+              resource="user", resource_id=user_id,
+              details=f"审核通过用户: {user.username}, 有效期: {days_valid}天" if days_valid else f"审核通过用户: {user.username}",
+              request=request)
+    
+    return {"message": "用户已审核通过", "expires_at": user.expires_at}
+
+
+@router.post("/users/{user_id}/reject")
+async def reject_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+    request: Request = None
+):
+    """拒绝用户"""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    
+    user.is_approved = False
+    db.commit()
+    
+    from app.api.auth import log_audit
+    log_audit(db, current_user.id, current_user.username, "USER_REJECTED", 
+              resource="user", resource_id=user_id,
+              details=f"拒绝用户: {user.username}", request=request)
+    
+    return {"message": "用户已拒绝"}
+
+
+@router.post("/users/{user_id}/extend")
+async def extend_user(
+    user_id: int,
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+    request: Request = None
+):
+    """延长用户有效期"""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    
+    now = datetime.utcnow()
+    if user.expires_at and user.expires_at > now:
+        user.expires_at = user.expires_at + timedelta(days=days)
+    else:
+        user.expires_at = now + timedelta(days=days)
+    
+    user.is_approved = True
+    db.commit()
+    
+    from app.api.auth import log_audit
+    log_audit(db, current_user.id, current_user.username, "USER_EXTENDED", 
+              resource="user", resource_id=user_id,
+              details=f"延长用户有效期: {user.username} +{days}天, 新到期: {user.expires_at}",
+              request=request)
+    
+    return {"message": f"已延长{days}天", "expires_at": user.expires_at}
+
+
+@router.get("/pending-users", response_model=List[UserResponse])
+async def list_pending_users(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """获取待审核用户列表"""
+    users = db.query(User).filter(User.is_approved == False).order_by(User.created_at.desc()).all()
+    return users
+
+
+@router.get("/invitation-codes")
+async def list_invitation_codes(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """获取邀请码列表"""
+    from app.models.invitation import InvitationCode
+    codes = db.query(InvitationCode).order_by(InvitationCode.created_at.desc()).all()
+    return [{"id": c.id, "code": c.code, "is_used": c.is_used, "used_by": c.used_by, 
+             "used_at": c.used_at, "created_at": c.created_at, "expires_at": c.expires_at} for c in codes]

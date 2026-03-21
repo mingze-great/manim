@@ -7,11 +7,12 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from collections import defaultdict
 import time
-import re
+import secrets
 
 from app.database import get_db
 from app.config import get_settings
 from app.models.user import User, AuditLog
+from app.models.invitation import InvitationCode
 from app.schemas.user import UserCreate, UserResponse, Token
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -85,12 +86,16 @@ def log_audit(db: Session, user_id: Optional[int], username: Optional[str],
 def authenticate_user(db: Session, username: str, password: str):
     user = db.query(User).filter(User.username == username).first()
     if not user:
-        return False
+        return None, "用户不存在"
     if not verify_password(password, user.hashed_password):
-        return False
+        return None, "密码错误"
     if not user.is_active:
-        return False
-    return user
+        return None, "账号已被禁用"
+    if not user.is_approved:
+        return None, "账号正在等待审核，请联系管理员"
+    if user.is_expired():
+        return None, "账号已过期，请联系续费"
+    return user, None
 
 
 async def get_current_user(
@@ -119,6 +124,9 @@ async def get_current_user(
     user = db.query(User).filter(User.username == username).first()
     if user is None:
         raise credentials_exception
+    
+    # 检查过期状态，但不阻止访问（允许渲染任务继续）
+    # 前端会根据 can_use 状态显示提示
     return user
 
 
@@ -134,28 +142,63 @@ async def get_current_admin_user(
 
 
 @router.post("/register", response_model=UserResponse)
-def register(user: UserCreate, db: Annotated[Session, Depends(get_db)], request: Request):
-    if not check_rate_limit(f"register:{request.client.host}", max_requests=5, window_seconds=3600):
-        raise HTTPException(status_code=429, detail="Too many registration attempts. Please try again later.")
+def register(
+    user_data: dict,
+    db: Annotated[Session, Depends(get_db)],
+    request: Request
+):
+    username = user_data.get("username")
+    email = user_data.get("email")
+    password = user_data.get("password")
+    invitation_code = user_data.get("invitation_code")
     
-    db_user = db.query(User).filter(User.username == user.username).first()
+    if not all([username, email, password, invitation_code]):
+        raise HTTPException(status_code=400, detail="缺少必填信息：用户名、邮箱、密码、邀请码")
+    
+    if not check_rate_limit(f"register:{request.client.host}", max_requests=5, window_seconds=3600):
+        raise HTTPException(status_code=429, detail="注册过于频繁，请稍后再试")
+    
+    # 验证邀请码
+    code = db.query(InvitationCode).filter(
+        InvitationCode.code == invitation_code,
+        InvitationCode.is_used == False
+    ).first()
+    
+    if not code:
+        raise HTTPException(status_code=400, detail="邀请码无效或已被使用")
+    
+    # 检查用户名和邮箱
+    db_user = db.query(User).filter(User.username == username).first()
     if db_user:
         raise HTTPException(status_code=400, detail="用户名已存在")
-    db_user = db.query(User).filter(User.email == user.email).first()
+    db_user = db.query(User).filter(User.email == email).first()
     if db_user:
         raise HTTPException(status_code=400, detail="邮箱已被注册")
     
-    hashed_password = get_password_hash(user.password)
+    hashed_password = get_password_hash(password)
     new_user = User(
-        username=user.username,
-        email=user.email,
-        hashed_password=hashed_password
+        username=username,
+        email=email,
+        hashed_password=hashed_password,
+        is_approved=False  # 默认未审核
     )
     db.add(new_user)
+    db.flush()  # 获取用户ID
+    
+    # 标记邀请码已使用
+    code.is_used = True
+    code.used_by = new_user.id
+    code.used_at = datetime.utcnow()
+    
+    # 如果邀请码设置了有效期，设置用户有效期
+    if code.expires_at:
+        new_user.expires_at = code.expires_at
+    
     db.commit()
     db.refresh(new_user)
     
-    log_audit(db, new_user.id, new_user.username, "USER_REGISTER", details=f"新用户注册: {user.username}", request=request)
+    log_audit(db, new_user.id, new_user.username, "USER_REGISTER", 
+              details=f"新用户注册，使用邀请码: {invitation_code}", request=request)
     
     return new_user
 
@@ -169,12 +212,12 @@ def login(
     if not check_rate_limit(f"login:{form_data.username}", max_requests=10, window_seconds=60):
         raise HTTPException(status_code=429, detail="登录尝试过于频繁，请稍后再试")
     
-    user = authenticate_user(db, form_data.username, form_data.password)
-    if not user:
-        log_audit(db, None, form_data.username, "LOGIN_FAILED", details="登录失败", request=request)
+    user, error = authenticate_user(db, form_data.username, form_data.password)
+    if error:
+        log_audit(db, None, form_data.username, "LOGIN_FAILED", details=error, request=request)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="用户名或密码错误",
+            detail=error,
             headers={"WWW-Authenticate": "Bearer"},
         )
     
@@ -203,3 +246,34 @@ async def logout(
 @router.get("/me", response_model=UserResponse)
 async def read_users_me(current_user: Annotated[User, Depends(get_current_user)]):
     return current_user
+
+
+@router.get("/invitation-codes/generate")
+async def generate_invitation_codes(
+    current_user: Annotated[User, Depends(get_current_admin_user)],
+    db: Annotated[Session, Depends(get_db)],
+    count: int = 1,
+    days_valid: int = None
+):
+    """管理员生成邀请码"""
+    codes = []
+    for _ in range(count):
+        code = secrets.token_urlsafe(8)[:16]  # 生成16位邀请码
+        expires_at = None
+        if days_valid:
+            expires_at = datetime.utcnow() + timedelta(days=days_valid)
+        
+        inv_code = InvitationCode(
+            code=code,
+            created_by=current_user.id,
+            expires_at=expires_at
+        )
+        db.add(inv_code)
+        codes.append({
+            "code": code,
+            "expires_at": expires_at.isoformat() if expires_at else None,
+            "note": f"有效期{days_valid}天" if days_valid else "永久有效"
+        })
+    
+    db.commit()
+    return {"codes": codes}

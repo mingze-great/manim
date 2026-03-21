@@ -13,10 +13,20 @@ class User(Base):
     hashed_password = Column(String(255), nullable=False)
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
+    is_approved = Column(Boolean, default=False, comment="是否审核通过")
+    expires_at = Column(DateTime, nullable=True, comment="账号有效期")
     created_at = Column(DateTime, default=datetime.utcnow)
     
     orders = relationship("Order", back_populates="user")
     subscription = relationship("Subscription", back_populates="user", uselist=False)
+    
+    def is_expired(self):
+        if self.expires_at is None:
+            return False
+        return datetime.utcnow() > self.expires_at
+    
+    def can_use(self):
+        return self.is_approved and not self.is_expired()
     
     def to_dict(self):
         return {
@@ -25,6 +35,10 @@ class User(Base):
             "email": self.email,
             "is_active": self.is_active,
             "is_admin": self.is_admin,
+            "is_approved": self.is_approved,
+            "expires_at": self.expires_at.isoformat() if self.expires_at else None,
+            "is_expired": self.is_expired(),
+            "can_use": self.can_use(),
             "created_at": self.created_at.isoformat() if self.created_at else None
         }
 
