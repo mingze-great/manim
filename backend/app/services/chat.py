@@ -110,3 +110,90 @@ class ChatService:
             "is_final": is_final,
             "final_script": content if is_final else project.final_script
         }
+    
+    async def stream_process_message(self, project_id: int, theme: str, user_message: str):
+        """流式处理消息 - 返回 SSE 生成器"""
+        conversations = self.db.query(Conversation).filter(
+            Conversation.project_id == project_id
+        ).order_by(Conversation.created_at).all()
+        
+        project = self.db.query(Project).filter(Project.id == project_id).first()
+        
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": f"视频主题：{theme}"}
+        ]
+        
+        for conv in conversations:
+            messages.append({"role": conv.role, "content": conv.content})
+        
+        messages.append({"role": "user", "content": user_message})
+        
+        confirm_keywords = ["满意", "可以了", "开始生成", "确认生成", "好的", "开始吧"]
+        user_confirmed = any(keyword in user_message for keyword in confirm_keywords)
+        
+        if user_confirmed and project.final_script:
+            project.status = "chatting_completed"
+            self.db.commit()
+            
+            yield {
+                "type": "final",
+                "content": f"✅ 内容已确认！\n\n{project.final_script}\n\n⏳ 现在点击下方「生成代码和视频」按钮开始生成。",
+                "is_final": True,
+                "final_script": project.final_script
+            }
+            return
+        
+        content = ""
+        reasoning_content = ""
+        
+        try:
+            response = await self.client.stream_chat(
+                messages=messages,
+                temperature=0.7,
+                max_tokens=3000
+            )
+            
+            async for chunk in response:
+                delta = chunk.choices[0].delta
+                
+                if delta.reasoning_content:
+                    reasoning_content += delta.reasoning_content
+                    yield {
+                        "type": "reasoning",
+                        "content": delta.reasoning_content
+                    }
+                elif delta.content:
+                    content += delta.content
+                    yield {
+                        "type": "content",
+                        "content": delta.content
+                    }
+            
+            is_first_response = len(conversations) == 0
+            if is_first_response and content:
+                project.final_script = content
+                self.db.commit()
+                yield {
+                    "type": "done",
+                    "content": content,
+                    "is_final": False,
+                    "final_script": content
+                }
+            else:
+                is_final = any(keyword in content for keyword in confirm_keywords)
+                if is_final:
+                    project.final_script = content
+                    self.db.commit()
+                yield {
+                    "type": "done",
+                    "content": content,
+                    "is_final": is_final,
+                    "final_script": content if is_final else project.final_script
+                }
+                
+        except Exception as e:
+            yield {
+                "type": "error",
+                "error": str(e)
+            }

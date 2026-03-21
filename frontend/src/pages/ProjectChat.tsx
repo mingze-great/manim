@@ -78,74 +78,99 @@ export default function ProjectChat() {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, 100)
     
+    let aiContent = ''
+    let aiTempId = tempId + 1
+    
     try {
-      // 发送用户消息（立即返回）
-      await projectApi.sendMessage(Number(id), userMessage)
+      const token = localStorage.getItem('token')
+      const streamUrl = projectApi.sendMessageStream(Number(id), userMessage)
       
-      // 轮询获取AI响应
-      let pollCount = 0
-      const maxPolls = 150 // 最多轮询150次（5分钟）
+      const response = await fetch(streamUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ content: userMessage })
+      })
       
-      const pollForResponse = async () => {
-        if (pollCount >= maxPolls) {
-          setAiThinking(false)
-          message.error('AI响应超时，请重试')
-          return
-        }
+      if (!response.ok) {
+        throw new Error('请求失败')
+      }
+      
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder()
+      
+      if (!reader) {
+        throw new Error('无法读取响应流')
+      }
+      
+      let buffer = ''
+      
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
         
-        pollCount++
-        try {
-          const { data } = await projectApi.getPendingResponse(Number(id))
-          
-          if (data.status === 'completed' && data.response) {
-            // 添加 AI 回复
-            const aiMsg: Conversation = {
-              id: data.response.id || Date.now() + 1,
-              project_id: data.response.project_id,
-              role: 'assistant' as const,
-              content: data.response.content,
-              created_at: data.response.created_at
-            }
-            setConversations(prev => [...prev, aiMsg])
-            await fetchProject()
-            setAiThinking(false)
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6)
+            if (data === '[DONE]') continue
             
-            // 滚动到底部
-            setTimeout(() => {
-              messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-            }, 100)
-            
-            const shouldGenerate = ['满意', '可以', '好了', '没问题', 'ok', 'OK', '好的', '可以了'].some(k => userMessage.includes(k))
-            if (shouldGenerate) {
-              Modal.confirm({
-                title: '内容确认',
-                content: '你已确认内容满意，现在开始生成代码和视频？',
-                okText: '开始生成',
-                cancelText: '继续对话',
-                onOk: () => navigate(`/project/${id}/task?autoGenerate=true`)
-              })
+            try {
+              const parsed = JSON.parse(data)
+              
+              if (parsed.type === 'reasoning' || parsed.type === 'content') {
+                aiContent += parsed.content
+                setConversations(prev => {
+                  const existing = prev.find(c => c.id === aiTempId)
+                  if (existing) {
+                    return prev.map(c => c.id === aiTempId ? { ...c, content: aiContent } : c)
+                  } else {
+                    return [...prev, {
+                      id: aiTempId,
+                      project_id: Number(id),
+                      role: 'assistant' as const,
+                      content: aiContent,
+                      created_at: new Date().toISOString()
+                    }]
+                  }
+                })
+                setTimeout(() => {
+                  messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+                }, 10)
+              } else if (parsed.type === 'done') {
+                await fetchProject()
+                setAiThinking(false)
+                
+                const shouldGenerate = ['满意', '可以', '好了', '没问题', 'ok', 'OK', '好的', '可以了'].some(k => userMessage.includes(k))
+                if (shouldGenerate) {
+                  Modal.confirm({
+                    title: '内容确认',
+                    content: '你已确认内容满意，现在开始生成代码和视频？',
+                    okText: '开始生成',
+                    cancelText: '继续对话',
+                    onOk: () => navigate(`/project/${id}/task?autoGenerate=true`)
+                  })
+                }
+              } else if (parsed.type === 'error') {
+                message.error(parsed.error || 'AI响应失败')
+                setAiThinking(false)
+              }
+            } catch (e) {
+              console.error('解析SSE数据失败:', e)
             }
-          } else if (data.status === 'error') {
-            setAiThinking(false)
-            message.error(data.error || 'AI响应失败')
-          } else {
-            // 继续轮询
-            setTimeout(pollForResponse, 2000)
           }
-        } catch (error) {
-          // 网络错误，继续重试
-          setTimeout(pollForResponse, 3000)
         }
       }
       
-      // 延迟一下开始轮询，确保用户消息已保存
-      setTimeout(pollForResponse, 1000)
-      
     } catch (error: any) {
-      // 移除用户消息
-      setConversations(prev => prev.filter(c => c.id !== tempId))
+      setConversations(prev => prev.filter(c => c.id !== tempId && c.id !== aiTempId))
       setAiThinking(false)
-      message.error(error.response?.data?.detail || '发送失败')
+      message.error(error.message || '发送失败')
     } finally {
       setLoading(false)
     }

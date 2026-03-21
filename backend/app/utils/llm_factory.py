@@ -32,6 +32,17 @@ class DeepSeekAdapter(LLMAdapter):
             **kwargs
         )
         return response.choices[0].message.content
+    
+    async def stream_chat(self, messages: list[dict], model: str = None, **kwargs):
+        """流式聊天 - 返回生成器"""
+        model = model or settings.DEEPSEEK_MODEL
+        response = await self.client.chat.completions.create(
+            model=model,
+            messages=messages,
+            stream=True,
+            **kwargs
+        )
+        return response
 
 
 class GeminiAdapter(LLMAdapter):

@@ -1,8 +1,11 @@
 from typing import Annotated, List
 from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+import json
+import asyncio
 
 from app.database import get_db
 from app.models.user import User
@@ -158,8 +161,87 @@ async def send_message(
     db.commit()
     db.refresh(user_message)
     
-    # 立即返回用户消息
     return user_message
+
+
+@router.post("/{project_id}/chat/stream")
+async def chat_stream(
+    project_id: int,
+    message: ConversationCreate,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)]
+):
+    """流式聊天 - SSE 输出"""
+    project = db.query(Project).filter(
+        Project.id == project_id,
+        Project.user_id == current_user.id
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    user_message = Conversation(
+        project_id=project_id,
+        role="user",
+        content=message.content
+    )
+    db.add(user_message)
+    db.commit()
+    db.refresh(user_message)
+    
+    async def event_generator():
+        chat_service = ChatService(db)
+        
+        full_content = ""
+        reasoning_content = ""
+        
+        try:
+            async for chunk in chat_service.stream_process_message(
+                project_id, str(project.theme), message.content
+            ):
+                chunk_type = chunk.get("type")
+                
+                if chunk_type == "reasoning":
+                    reasoning_content += chunk["content"]
+                    yield f"data: {json.dumps({'type': 'reasoning', 'content': chunk['content']})}\n\n"
+                elif chunk_type == "content":
+                    full_content += chunk["content"]
+                    yield f"data: {json.dumps({'type': 'content', 'content': chunk['content']})}\n\n"
+                elif chunk_type == "final":
+                    yield f"data: {json.dumps({'type': 'done', 'content': chunk['content'], 'is_final': True})}\n\n"
+                elif chunk_type == "done":
+                    ai_msg = Conversation(
+                        project_id=project_id,
+                        role="assistant",
+                        content=full_content
+                    )
+                    db.add(ai_msg)
+                    
+                    if chunk.get("is_final"):
+                        project.status = "chatting_completed"
+                    if chunk.get("final_script"):
+                        project.final_script = chunk["final_script"]
+                    
+                    db.commit()
+                    
+                    yield f"data: {json.dumps({'type': 'done', 'content': full_content, 'is_final': chunk.get('is_final', False)})}\n\n"
+                elif chunk_type == "error":
+                    yield f"data: {json.dumps({'type': 'error', 'error': chunk['error']})}\n\n"
+                
+                await asyncio.sleep(0.01)
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+        finally:
+            yield "data: [DONE]\n\n"
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+    )
 
 
 @router.get("/{project_id}/chat/pending")
