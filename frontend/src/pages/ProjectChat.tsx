@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { Input, Button, message, Modal } from 'antd'
 import { SendOutlined, PlayCircleOutlined, RobotOutlined, UserOutlined, ReloadOutlined } from '@ant-design/icons'
 import { projectApi, Conversation, Project } from '@/services/project'
+import { useAuthStore } from '@/stores/authStore'
 
 const { TextArea } = Input
 
@@ -82,7 +83,7 @@ export default function ProjectChat() {
     let aiTempId = tempId + 1
     
     try {
-      const token = localStorage.getItem('token')
+      const token = useAuthStore.getState().token
       const streamUrl = projectApi.sendMessageStream(Number(id), userMessage)
       
       const response = await fetch(streamUrl, {
