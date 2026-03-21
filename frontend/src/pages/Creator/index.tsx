@@ -26,8 +26,10 @@ export default function Creator() {
       })
       
       navigate(`/project/${project.id}/chat`)
-    } catch (error) {
-      message.error('创建失败')
+    } catch (error: any) {
+      const detail = error.response?.data?.detail || error.message || '创建失败'
+      message.error(detail)
+      console.error('创建项目失败:', error)
     } finally {
       setLoading(false)
     }

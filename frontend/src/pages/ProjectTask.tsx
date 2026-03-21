@@ -94,7 +94,14 @@ export default function ProjectTask() {
     try {
       const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
       const token = (useAuthStore.getState().token) || ''
-      let streamUrl = `${API_BASE}/api/tasks/${id}/generate-code${templateId ? `?template_id=${templateId}` : ''}`
+      console.log('[generateCode] API_BASE:', API_BASE)
+      console.log('[generateCode] id:', id)
+      console.log('[generateCode] templateId:', templateId)
+      let streamUrl = `${API_BASE}/api/tasks/${id}/generate-code`
+      if (templateId) {
+        streamUrl += `?template_id=${templateId}`
+      }
+      console.log('[generateCode] streamUrl:', streamUrl)
       let headers: any = {
         'Content-Type': 'application/json'
       }
