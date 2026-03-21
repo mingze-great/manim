@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 env:
-  DEPLOY_HOST: 8.136.60.253
+  DEPLOY_HOST: 106.52.166.109
   DEPLOY_USER: root
   DEPLOY_PATH: /opt/manim
 
