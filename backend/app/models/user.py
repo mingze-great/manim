@@ -15,6 +15,9 @@ class User(Base):
     is_admin = Column(Boolean, default=False)
     is_approved = Column(Boolean, default=False, comment="是否审核通过")
     expires_at = Column(DateTime, nullable=True, comment="账号有效期")
+    api_calls_count = Column(Integer, default=0, comment="API调用次数")
+    videos_count = Column(Integer, default=0, comment="生成视频数量")
+    last_active_at = Column(DateTime, nullable=True, comment="最后活跃时间")
     created_at = Column(DateTime, default=datetime.utcnow)
     
     orders = relationship("Order", back_populates="user")
@@ -39,6 +42,9 @@ class User(Base):
             "expires_at": self.expires_at.isoformat() if self.expires_at else None,
             "is_expired": self.is_expired(),
             "can_use": self.can_use(),
+            "api_calls_count": self.api_calls_count,
+            "videos_count": self.videos_count,
+            "last_active_at": self.last_active_at.isoformat() if self.last_active_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None
         }
 

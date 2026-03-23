@@ -12,7 +12,6 @@ import secrets
 from app.database import get_db
 from app.config import get_settings
 from app.models.user import User, AuditLog
-from app.models.invitation import InvitationCode
 from app.schemas.user import UserCreate, UserResponse, Token
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -170,7 +169,7 @@ def register(
         username=username,
         email=email,
         hashed_password=hashed_password,
-        is_approved=False  # 默认未审核，需要管理员审批
+        is_approved=True
     )
     db.add(new_user)
     db.commit()
@@ -225,34 +224,3 @@ async def logout(
 @router.get("/me", response_model=UserResponse)
 async def read_users_me(current_user: Annotated[User, Depends(get_current_user)]):
     return current_user
-
-
-@router.get("/invitation-codes/generate")
-async def generate_invitation_codes(
-    current_user: Annotated[User, Depends(get_current_admin_user)],
-    db: Annotated[Session, Depends(get_db)],
-    count: int = 1,
-    days_valid: int = None
-):
-    """管理员生成邀请码"""
-    codes = []
-    for _ in range(count):
-        code = secrets.token_urlsafe(8)[:16]  # 生成16位邀请码
-        expires_at = None
-        if days_valid:
-            expires_at = datetime.utcnow() + timedelta(days=days_valid)
-        
-        inv_code = InvitationCode(
-            code=code,
-            created_by=current_user.id,
-            expires_at=expires_at
-        )
-        db.add(inv_code)
-        codes.append({
-            "code": code,
-            "expires_at": expires_at.isoformat() if expires_at else None,
-            "note": f"有效期{days_valid}天" if days_valid else "永久有效"
-        })
-    
-    db.commit()
-    return {"codes": codes}

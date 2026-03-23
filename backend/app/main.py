@@ -22,12 +22,27 @@ start_time = time.time()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    Base.metadata.create_all(bind=engine)
+    from sqlalchemy import text
+    from app.database import engine, SessionLocal
     from app.models.template import Template
     from app.models.user import User
-    from app.models.invitation import InvitationCode
     from app.models.subscription import Order, Subscription
-    from app.database import SessionLocal
+    
+    Base.metadata.create_all(bind=engine)
+    
+    with engine.connect() as conn:
+        result = conn.execute(text("PRAGMA table_info(templates)"))
+        columns = [row[1] for row in result.fetchall()]
+        
+        if 'is_active' not in columns:
+            conn.execute(text("ALTER TABLE templates ADD COLUMN is_active BOOLEAN DEFAULT 1"))
+            conn.commit()
+            print("Added is_active column to templates")
+        
+        if 'updated_at' not in columns:
+            conn.execute(text("ALTER TABLE templates ADD COLUMN updated_at DATETIME"))
+            conn.commit()
+            print("Added updated_at column to templates")
     
     db = SessionLocal()
     system_templates = [
@@ -149,7 +164,15 @@ class TheoremScene(Scene):
     db.commit()
     db.close()
     
+    from app.tasks.cleanup import start_scheduler
+    start_scheduler()
+    print("[Startup] Cleanup scheduler started")
+    
     yield
+    
+    from app.tasks.cleanup import shutdown_scheduler
+    shutdown_scheduler()
+    print("[Shutdown] Cleanup scheduler stopped")
 
 
 app = FastAPI(title="Manim Video Platform API", version="2.0.0", lifespan=lifespan)

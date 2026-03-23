@@ -1,9 +1,8 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
-import { Input, Button, message, Modal, Spin, Card, Radio, Space, Alert } from 'antd'
+import { Input, Button, message, Modal, Alert } from 'antd'
 import { SendOutlined, PlayCircleOutlined, RobotOutlined, UserOutlined, ReloadOutlined, CheckCircleOutlined, StopOutlined } from '@ant-design/icons'
 import { projectApi, Conversation, Project } from '@/services/project'
-import { templateApi, Template } from '@/services/template'
 import { useAuthStore } from '@/stores/authStore'
 
 const { TextArea } = Input
@@ -30,16 +29,12 @@ export default function ProjectChat() {
   const [lastMsgCount, setLastMsgCount] = useState(0)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
-  const [templateModalOpen, setTemplateModalOpen] = useState(false)
-  const [templates, setTemplates] = useState<Template[]>([])
-  const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null)
-  const [loadingTemplates, setLoadingTemplates] = useState(false)
   const [lastAiCode, setLastAiCode] = useState<string | null>(null)
   const [showUseCodeButton, setShowUseCodeButton] = useState(false)
   const [errorFromRender, setErrorFromRender] = useState<string | null>(null)
   const [pendingCode, setPendingCode] = useState<string | null>(null)
   const [showCodeConfirm, setShowCodeConfirm] = useState(false)
-  const [hasTemplate, setHasTemplate] = useState(false)
+  const [fixingCode, setFixingCode] = useState<string | null>(null)
 
   useEffect(() => {
     fetchProject()
@@ -59,7 +54,17 @@ export default function ProjectChat() {
   }, [conversations, lastMsgCount])
 
   useEffect(() => {
-    if (location.state?.errorLog && location.state?.fromRender) {
+    if (location.state?.renderErrorLog && location.state?.fromRender) {
+      const errorLog = location.state.renderErrorLog as string
+      const currentCode = location.state.currentCode as string
+      setErrorFromRender(errorLog)
+      if (currentCode) {
+        setFixingCode(currentCode)
+      }
+      const fixMessage = `渲染遇到以下错误，请基于当前代码修复：\n\n错误信息：\n\`\`\`\n${errorLog.substring(0, 1500)}\n\`\`\`\n\n请给出修复后的完整代码。`
+      setInput(fixMessage)
+      window.history.replaceState({}, document.title)
+    } else if (location.state?.errorLog && location.state?.fromRender) {
       const errorLog = location.state.errorLog as string
       setErrorFromRender(errorLog)
       setInput(`渲染遇到以下错误，请帮我修复代码：\n\`\`\`\n${errorLog.substring(0, 2000)}\n\`\`\``)
@@ -85,28 +90,25 @@ export default function ProjectChat() {
     }
   }
 
-  const fetchTemplates = async () => {
-    setLoadingTemplates(true)
-    try {
-      const { data } = await templateApi.list()
-      const allTemplates = [...data.system_templates, ...data.user_templates]
-      setTemplates(allTemplates)
-    } catch (error) {
-      message.error('获取模板失败')
-    } finally {
-      setLoadingTemplates(false)
-    }
-  }
-
   const handleSend = async () => {
     if (!input.trim() || loading) return
 
     const userMessage = input.trim()
-    const isFixRequest = errorFromRender || userMessage.includes('修复') || userMessage.includes('错误')
+    const isFixRequest = errorFromRender || fixingCode || userMessage.includes('修复') || userMessage.includes('错误')
     const tempId = Date.now()
     setLoading(true)
     setAiThinking(true)
     setErrorFromRender(null)
+    
+    // 如果是修复请求且有临时代码，先保存到数据库
+    if (isFixRequest && fixingCode) {
+      try {
+        await projectApi.update(Number(id), { manim_code: fixingCode })
+        setFixingCode(null)
+      } catch (error) {
+        console.error('保存代码失败')
+      }
+    }
     
     const userMsg = {
       id: tempId,
@@ -191,20 +193,24 @@ export default function ProjectChat() {
                 setTimeout(() => {
                   messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
                 }, 10)
+              } else if (parsed.type === 'final') {
+                await fetchProject()
+                setAiThinking(false)
+                
+                if (parsed.generated_code) {
+                  setPendingCode(parsed.generated_code)
+                  setShowCodeConfirm(true)
+                }
               } else if (parsed.type === 'done') {
                 await fetchProject()
                 setAiThinking(false)
                 
                 if (parsed.code_updated && parsed.updated_code) {
                   setPendingCode(parsed.updated_code)
-                  setHasTemplate(parsed.has_template || false)
                   setShowCodeConfirm(true)
                 }
-                
-                const shouldGenerate = ['满意', '可以', '好了', '没问题', 'ok', 'OK', '好的', '可以了'].some(k => userMessage.includes(k))
-                if (shouldGenerate && !isFixRequest && !parsed.code_updated) {
-                  handleOpenTemplateModal()
-                }
+              } else if (parsed.type === 'status') {
+                // 状态更新，不做特殊处理
               } else if (parsed.type === 'error') {
                 message.error(parsed.error || 'AI响应失败')
                 setAiThinking(false)
@@ -229,20 +235,6 @@ export default function ProjectChat() {
     }
   }
 
-  const handleOpenTemplateModal = () => {
-    fetchTemplates()
-    setTemplateModalOpen(true)
-  }
-
-  const handleConfirmTemplate = () => {
-    setTemplateModalOpen(false)
-    navigate(`/project/${id}/task${selectedTemplateId ? `?templateId=${selectedTemplateId}` : ''}`)
-  }
-
-  const handleGenerateCode = () => {
-    navigate(`/project/${id}/task`)
-  }
-
   const handleGenerateVideo = () => {
     navigate(`/project/${id}/task`)
   }
@@ -265,10 +257,10 @@ export default function ProjectChat() {
     if (!pendingCode) return
     try {
       await projectApi.update(Number(id), { manim_code: pendingCode, status: 'code_generated' })
-      message.success('代码已保存')
+      message.success('代码已保存，跳转到渲染页面')
       setShowCodeConfirm(false)
       setPendingCode(null)
-      fetchProject()
+      setTimeout(() => navigate(`/project/${id}/task`), 500)
     } catch (error) {
       message.error('保存代码失败')
     }
@@ -301,7 +293,7 @@ export default function ProjectChat() {
               <p className="mb-1">1. 输入你想要的视频主题</p>
               <p className="mb-1">2. AI 会生成完整内容</p>
               <p className="mb-1">3. 满意后输入"满意"</p>
-              <p>4. 选择模板生成视频</p>
+              <p>4. 系统自动生成视频代码</p>
             </div>
           </div>
         )}
@@ -391,17 +383,7 @@ export default function ProjectChat() {
           </div>
         )}
         
-        {project?.final_script && !project?.manim_code ? (
-          <Button
-            type="primary"
-            icon={<PlayCircleOutlined />}
-            onClick={handleGenerateCode}
-            block
-            className="btn-gradient"
-          >
-            生成代码和视频
-          </Button>
-        ) : project?.manim_code ? (
+        {project?.manim_code ? (
           <Button
             type="primary"
             icon={<PlayCircleOutlined />}
@@ -409,11 +391,11 @@ export default function ProjectChat() {
             block
             className="btn-gradient"
           >
-            生成视频
+            渲染视频
           </Button>
         ) : (
           <p className="text-xs text-gray-400 text-center">
-            输入"满意"确认内容，开始生成视频
+            输入"满意"确认内容，AI 将自动生成代码
           </p>
         )}
       </div>
@@ -455,80 +437,17 @@ export default function ProjectChat() {
         footer={null}
         width={700}
       >
-        {hasTemplate && (
-          <Alert
-            type="warning"
-            message="你之前选择了模板，使用新代码将覆盖模板风格"
-            className="mb-3"
-          />
-        )}
-        <div className="text-xs text-gray-500 mb-2">预览前10行：</div>
-        <pre className="text-xs bg-gray-900 text-green-400 p-3 rounded-lg mb-4 overflow-auto max-h-48">
-          {pendingCode?.split('\n').slice(0, 10).join('\n')}
-          {pendingCode && pendingCode.split('\n').length > 10 && '\n...'}
+        <div className="text-xs text-gray-500 mb-2">代码预览（共 {pendingCode?.split('\n').length || 0} 行）：</div>
+        <pre className="text-xs bg-gray-900 text-green-400 p-3 rounded-lg mb-4 overflow-auto max-h-64">
+          {pendingCode?.split('\n').slice(0, 30).join('\n')}
+          {pendingCode && pendingCode.split('\n').length > 30 && '\n...'}
         </pre>
         <div className="flex gap-2 justify-end">
           <Button onClick={() => { setShowCodeConfirm(false); setPendingCode(null); }}>
-            忽略
+            重新生成
           </Button>
           <Button type="primary" icon={<CheckCircleOutlined />} onClick={handleConfirmCode}>
-            使用此代码并保存
-          </Button>
-        </div>
-      </Modal>
-
-      {/* 模板选择弹窗 */}
-      <Modal
-        title="选择模板（可选）"
-        open={templateModalOpen}
-        onCancel={() => setTemplateModalOpen(false)}
-        footer={null}
-        width={600}
-      >
-        <div className="mb-4">
-          <p className="text-gray-500 text-sm mb-2">选择一个模板可以让AI生成更符合你需求的代码风格，也可以跳过直接生成。</p>
-        </div>
-        
-        {loadingTemplates ? (
-          <div className="flex justify-center py-8">
-            <Spin />
-          </div>
-        ) : (
-          <Radio.Group 
-            value={selectedTemplateId} 
-            onChange={(e) => setSelectedTemplateId(e.target.value)}
-            className="w-full"
-          >
-            <Space direction="vertical" className="w-full" style={{ gap: 12 }}>
-              {templates.map((template) => (
-                <Card 
-                  key={template.id}
-                  size="small"
-                  className={`cursor-pointer transition-all ${selectedTemplateId === template.id ? 'border-blue-500 bg-blue-50' : 'hover:border-gray-300'}`}
-                  onClick={() => setSelectedTemplateId(template.id)}
-                >
-                  <div className="flex items-start gap-3">
-                    <Radio value={template.id} />
-                    <div className="flex-1">
-                      <div className="font-medium flex items-center gap-2">
-                        {template.name}
-                        {template.is_system && <span className="text-xs bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded">系统</span>}
-                      </div>
-                      <div className="text-gray-500 text-sm mt-1">{template.description}</div>
-                    </div>
-                  </div>
-                </Card>
-              ))}
-            </Space>
-          </Radio.Group>
-        )}
-        
-        <div className="flex justify-end gap-2 mt-4 pt-4 border-t">
-          <Button onClick={() => navigate(`/project/${id}/task`)}>
-            跳过，直接生成
-          </Button>
-          <Button type="primary" onClick={handleConfirmTemplate}>
-            {selectedTemplateId ? '使用选中模板生成' : '直接生成代码'}
+            使用此代码并渲染
           </Button>
         </div>
       </Modal>

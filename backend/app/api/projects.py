@@ -190,6 +190,10 @@ async def chat_stream(
         if template:
             template_code = template.code
     
+    # 提取数据，避免会话问题
+    project_manim_code = str(project.manim_code) if project.manim_code else None
+    project_final_script = str(project.final_script) if project.final_script else None
+    
     user_message = Conversation(
         project_id=project_id,
         role="user",
@@ -208,9 +212,9 @@ async def chat_stream(
         try:
             async for chunk in chat_service.stream_process_message(
                 project_id, theme, message.content,
-                manim_code=project.manim_code,
+                manim_code=project_manim_code,
                 template_code=template_code,
-                final_script=project.final_script
+                final_script=project_final_script
             ):
                 chunk_type = chunk.get("type")
                 
@@ -313,7 +317,8 @@ async def get_pending_response(
     # 生成AI响应
     try:
         chat_service = ChatService(db)
-        response = await chat_service.process_message(project_id, project.theme, last_user.content)
+        project_theme = str(project.theme)
+        response = await chat_service.process_message(project_id, project_theme, last_user.content)
         
         assistant_message = Conversation(
             project_id=project_id,
@@ -425,6 +430,10 @@ async def optimize_code_stream(
     if not project.manim_code:
         raise HTTPException(status_code=400, detail="No code to optimize")
     
+    # 在生成器外部提取数据，避免会话问题
+    current_code = str(project.manim_code)
+    current_final_script = str(project.final_script or "")
+    
     async def event_generator():
         manim_service = ManimService(db)
         
@@ -435,8 +444,8 @@ async def optimize_code_stream(
             yield f"data: {json.dumps({'type': 'progress', 'message': '正在修复代码...'})}\n\n"
             
             optimized_code = await manim_service.optimize_code(
-                str(project.manim_code),
-                str(project.final_script or ""),
+                current_code,
+                current_final_script,
                 feedback
             )
             

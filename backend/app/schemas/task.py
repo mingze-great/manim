@@ -15,6 +15,7 @@ class TaskResponse(BaseModel):
     progress: int
     video_url: Optional[str]
     error_message: Optional[str]
+    log: Optional[str]
     started_at: Optional[datetime]
     completed_at: Optional[datetime]
     created_at: datetime
@@ -28,3 +29,4 @@ class TaskStatusResponse(BaseModel):
     progress: int
     video_url: Optional[str] = None
     error_message: Optional[str] = None
+    log: Optional[str] = None

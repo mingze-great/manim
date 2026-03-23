@@ -25,6 +25,9 @@ class Project(Base):
     custom_code = Column(Text, nullable=True)  # 用户自定义参考代码
     status = Column(String(20), default=ProjectStatus.DRAFT.value)
     template_id = Column(Integer, ForeignKey("templates.id"), nullable=True)
+    video_url = Column(String(500), nullable=True)
+    video_created_at = Column(DateTime, nullable=True, comment="视频创建时间，用于定时清理")
+    error_message = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

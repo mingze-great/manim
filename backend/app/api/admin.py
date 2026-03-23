@@ -343,13 +343,27 @@ async def list_pending_users(
     return users
 
 
-@router.get("/invitation-codes")
-async def list_invitation_codes(
+@router.get("/user-stats")
+async def get_all_user_stats(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user)
 ):
-    """获取邀请码列表"""
-    from app.models.invitation import InvitationCode
-    codes = db.query(InvitationCode).order_by(InvitationCode.created_at.desc()).all()
-    return [{"id": c.id, "code": c.code, "is_used": c.is_used, "used_by": c.used_by, 
-             "used_at": c.used_at, "created_at": c.created_at, "expires_at": c.expires_at} for c in codes]
+    """获取所有用户统计信息"""
+    users = db.query(User).order_by(User.last_active_at.desc().nullslast()).all()
+    result = []
+    for user in users:
+        total_projects = db.query(Project).filter(Project.user_id == user.id).count()
+        result.append({
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "is_active": user.is_active,
+            "is_approved": user.is_approved,
+            "expires_at": user.expires_at.isoformat() if user.expires_at else None,
+            "api_calls_count": user.api_calls_count or 0,
+            "videos_count": user.videos_count or 0,
+            "last_active_at": user.last_active_at.isoformat() if user.last_active_at else None,
+            "total_projects": total_projects,
+            "created_at": user.created_at.isoformat() if user.created_at else None
+        })
+    return result

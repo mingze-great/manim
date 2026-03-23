@@ -17,9 +17,11 @@ class ProjectUpdate(BaseModel):
     theme: Optional[str] = None
     final_script: Optional[str] = None
     manim_code: Optional[str] = None
-    custom_code: Optional[str] = None  # 用户自定义参考代码
+    custom_code: Optional[str] = None
     status: Optional[str] = None
     template_id: Optional[int] = None
+    video_url: Optional[str] = None
+    error_message: Optional[str] = None
 
 
 class ProjectResponse(ProjectBase):
@@ -27,9 +29,11 @@ class ProjectResponse(ProjectBase):
     user_id: int
     final_script: Optional[str]
     manim_code: Optional[str]
-    custom_code: Optional[str]  # 用户自定义参考代码
+    custom_code: Optional[str]
     status: str
     template_id: Optional[int]
+    video_url: Optional[str]
+    error_message: Optional[str]
     created_at: datetime
     updated_at: datetime
     

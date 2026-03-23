@@ -107,6 +107,7 @@ export default function Register() {
           </Form>
 
           <div className="text-center text-gray-500 dark:text-gray-400">
+            <p className="text-xs mb-2">注册后需管理员审核才能使用</p>
             已有账号？{' '}
             <Link 
               to="/login" 

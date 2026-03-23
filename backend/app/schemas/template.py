@@ -12,7 +12,15 @@ class TemplateBase(BaseModel):
 
 
 class TemplateCreate(TemplateBase):
-    pass
+    is_system: bool = False
+
+
+class TemplateUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    category: Optional[str] = None
+    code: Optional[str] = None
+    thumbnail: Optional[str] = None
 
 
 class TemplateResponse(TemplateBase):

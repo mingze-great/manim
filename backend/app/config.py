@@ -5,7 +5,7 @@ import os
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env"),
+        env_file=os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".env"),
         extra="ignore"
     )
     
@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     OPENAI_BASE_URL: str = "https://api.openai.com/v1"
     OPENAI_MODEL: str = "gpt-4o"
+    
+    # GLM (智谱AI)
+    GLM_API_KEY: str = ""
+    GLM_BASE_URL: str = "https://code.coolyeah.net"
+    GLM_MODEL: str = "glm-5"
     
     # Legacy support
     LLM_MODEL: str = ""

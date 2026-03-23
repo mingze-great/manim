@@ -20,6 +20,7 @@ class Task(Base):
     progress = Column(Integer, default=0)
     video_url = Column(Text, nullable=True)
     error_message = Column(Text, nullable=True)
+    log = Column(Text, nullable=True)
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

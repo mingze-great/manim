@@ -32,6 +32,10 @@ class UserResponse(UserBase):
     is_active: bool
     is_admin: bool = False
     is_approved: bool = True
+    expires_at: Optional[datetime] = None
+    api_calls_count: int = 0
+    videos_count: int = 0
+    last_active_at: Optional[datetime] = None
     created_at: datetime
     
     class Config:

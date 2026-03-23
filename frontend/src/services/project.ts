@@ -9,6 +9,8 @@ export interface Project {
   manim_code: string | null
   custom_code: string | null
   status: string
+  video_url: string | null
+  error_message: string | null
   template_id: number | null
   created_at: string
   updated_at: string
@@ -49,12 +51,10 @@ export const projectApi = {
   sendMessage: (id: number, content: string) => api.post<Conversation>(`/projects/${id}/chat`, { content }),
   getPendingResponse: (id: number) => api.get<PendingResponse>(`/projects/${id}/chat/pending`),
   sendMessageStream: (id: number, _content: string) => `/api/projects/${id}/chat/stream`,
-  generateCode: (id: number, templateId?: number) => 
-    api.get(`/tasks/${id}/generate-code`, { params: { template_id: templateId } }),
-  generateVideo: (id: number, templateId?: number) => 
-    api.post<Task>(`/tasks/${id}/generate`, {}, { params: { template_id: templateId } }),
+  generateCodeStream: (id: number, templateId?: number) => 
+    `/api/projects/${id}/generate-code/stream${templateId ? `?template_id=${templateId}` : ''}`,
+  optimizeCodeStream: (id: number, feedback: string) => 
+    `/api/projects/${id}/optimize-code/stream?feedback=${encodeURIComponent(feedback)}`,
   getTask: (projectId: number) => api.get<Task>(`/tasks/project/${projectId}`),
   regenerateCode: (id: number) => api.post(`/projects/${id}/regenerate-code`),
-  optimizeCode: (id: number, feedback: string) => 
-    api.post(`/projects/${id}/optimize-code`, { feedback }),
 }

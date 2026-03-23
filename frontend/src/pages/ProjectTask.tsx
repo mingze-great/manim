@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
-import { Card, Progress, Button, Space, message, Spin, Tabs, Collapse, Modal, Alert } from 'antd'
-import { DownloadOutlined, PlayCircleOutlined, CodeOutlined, CloudUploadOutlined, CopyOutlined, CheckOutlined, ToolOutlined, CheckCircleOutlined } from '@ant-design/icons'
+import { Card, Progress, Button, Space, message, Spin, Tabs, Collapse } from 'antd'
+import { DownloadOutlined, PlayCircleOutlined, CodeOutlined, CloudUploadOutlined, CopyOutlined, CheckOutlined } from '@ant-design/icons'
 import { projectApi, Task, Project } from '@/services/project'
 import { useAuthStore } from '@/stores/authStore'
 import { motion } from 'framer-motion'
@@ -39,9 +39,6 @@ export default function ProjectTask() {
   const terminalRef = useRef<HTMLDivElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const readerRef = useRef<ReadableStreamDefaultReader | null>(null)
-  const [fixing, setFixing] = useState(false)
-  const [pendingCode, setPendingCode] = useState<string | null>(null)
-  const [showCodeConfirm, setShowCodeConfirm] = useState(false)
 
   const fetchProject = async () => {
     try {
@@ -319,7 +316,8 @@ export default function ProjectTask() {
     const errorLog = terminalLog ? terminalLog.split('\n').slice(-100).join('\n') : ''
     navigate(`/project/${id}/chat`, { 
       state: { 
-        errorLog: errorLog,
+        renderErrorLog: errorLog,
+        currentCode: generatedCode,
         fromRender: true 
       } 
     })
@@ -343,82 +341,6 @@ export default function ProjectTask() {
       a.download = `AI视频_scene_${id}.py`
       a.click()
       URL.revokeObjectURL(url)
-    }
-  }
-
-  const handleAiFix = async () => {
-    if (!generatedCode) {
-      message.warning('没有可修复的代码')
-      return
-    }
-    
-    setFixing(true)
-    const errorLog = terminalLog.split('\n').slice(-50).join('\n')
-    
-    try {
-      const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
-      const token = useAuthStore.getState().token
-      const streamUrl = `${API_BASE}/api/projects/${id}/optimize-code/stream?feedback=${encodeURIComponent(errorLog)}`
-      
-      const response = await fetch(streamUrl, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
-      
-      if (!response.ok) {
-        throw new Error('请求失败')
-      }
-      
-      const reader = response.body?.getReader()
-      const decoder = new TextDecoder()
-      let buffer = ''
-      let newCode = ''
-      
-      while (reader) {
-        const { done, value } = await reader.read()
-        if (done) break
-        
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        buffer = lines.pop() || ''
-        
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6)
-            if (data === '[DONE]') continue
-            try {
-              const parsed = JSON.parse(data)
-              if (parsed.code) {
-                newCode = parsed.code
-              }
-            } catch (e) {}
-          }
-        }
-      }
-      
-      if (newCode) {
-        setPendingCode(newCode)
-        setShowCodeConfirm(true)
-      } else {
-        message.warning('AI 未能生成修复后的代码')
-      }
-    } catch (error: any) {
-      message.error('修复请求失败: ' + error.message)
-    } finally {
-      setFixing(false)
-    }
-  }
-
-  const handleConfirmFixedCode = async () => {
-    if (!pendingCode) return
-    try {
-      await projectApi.update(Number(id), { manim_code: pendingCode })
-      setGeneratedCode(pendingCode)
-      setShowCodeConfirm(false)
-      setPendingCode(null)
-      setRenderError(null)
-      message.success('代码已更新，可以重新渲染')
-    } catch (error) {
-      message.error('保存代码失败')
     }
   }
 
@@ -629,20 +551,10 @@ export default function ProjectTask() {
                 {/* 渲染失败时的返回按钮 */}
                 {renderError && (
                   <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200">
-                    <p className="text-red-600 mb-3">渲染失败，可以尝试让 AI 自动修复代码。</p>
-                    <div className="flex gap-2">
-                      <Button 
-                        type="primary" 
-                        icon={<ToolOutlined />}
-                        onClick={handleAiFix} 
-                        loading={fixing}
-                      >
-                        AI 自动修复代码
-                      </Button>
-                      <Button onClick={handleBackToEdit}>
-                        返回对话调整
-                      </Button>
-                    </div>
+                    <p className="text-red-600 mb-3">渲染失败，返回对话让 AI 修复代码。</p>
+                    <Button type="primary" onClick={handleBackToEdit}>
+                      返回对话修复
+                    </Button>
                   </div>
                 )}
 
@@ -695,34 +607,6 @@ export default function ProjectTask() {
           </Tabs>
         </Card>
       </motion.div>
-
-      {/* 代码确认弹窗 */}
-      <Modal
-        title={
-          <div className="flex items-center gap-2">
-            <CheckCircleOutlined className="text-green-500" />
-            <span>AI 修复了代码</span>
-          </div>
-        }
-        open={showCodeConfirm}
-        onCancel={() => { setShowCodeConfirm(false); setPendingCode(null); }}
-        footer={null}
-        width={700}
-      >
-        <div className="text-xs text-gray-500 mb-2">预览前10行：</div>
-        <pre className="text-xs bg-gray-900 text-green-400 p-3 rounded-lg mb-4 overflow-auto max-h-48">
-          {pendingCode?.split('\n').slice(0, 10).join('\n')}
-          {pendingCode && pendingCode.split('\n').length > 10 && '\n...'}
-        </pre>
-        <div className="flex gap-2 justify-end">
-          <Button onClick={() => { setShowCodeConfirm(false); setPendingCode(null); }}>
-            忽略
-          </Button>
-          <Button type="primary" icon={<CheckCircleOutlined />} onClick={handleConfirmFixedCode}>
-            使用修复后的代码
-          </Button>
-        </div>
-      </Modal>
     </div>
   )
 }

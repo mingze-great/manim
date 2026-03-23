@@ -166,6 +166,36 @@ class QwenAdapter(LLMAdapter):
         return response
 
 
+class GLMAdapter(LLMAdapter):
+    """GLM (智谱AI) 适配器 - 兼容 OpenAI 格式"""
+    
+    def __init__(self):
+        from openai import AsyncOpenAI
+        self.client = AsyncOpenAI(
+            api_key=settings.GLM_API_KEY,
+            base_url=settings.GLM_BASE_URL
+        )
+    
+    async def chat(self, messages: list[dict], model: str = None, **kwargs) -> str:
+        model = model or settings.GLM_MODEL
+        response = await self.client.chat.completions.create(
+            model=model,
+            messages=messages,
+            **kwargs
+        )
+        return response.choices[0].message.content
+    
+    async def stream_chat(self, messages: list[dict], model: str = None, **kwargs):
+        model = model or settings.GLM_MODEL
+        response = await self.client.chat.completions.create(
+            model=model,
+            messages=messages,
+            stream=True,
+            **kwargs
+        )
+        return response
+
+
 class LLMFactory:
     """LLM 工厂类 - 自动选择可用的 LLM 提供商"""
     
@@ -184,7 +214,9 @@ class LLMFactory:
         
         # 自动选择模式
         if provider == "auto":
-            if settings.DEEPSEEK_API_KEY:
+            if settings.GLM_API_KEY:
+                cls._client_cache = GLMAdapter()
+            elif settings.DEEPSEEK_API_KEY:
                 cls._client_cache = DeepSeekAdapter()
             elif settings.GEMINI_API_KEY:
                 cls._client_cache = GeminiAdapter()
@@ -194,11 +226,16 @@ class LLMFactory:
                 raise ValueError(
                     "未配置任何 LLM API Key。\n"
                     "请在 .env 中配置以下任一API Key:\n"
-                    "  - DEEPSEEK_API_KEY (推荐)\n"
+                    "  - GLM_API_KEY (推荐)\n"
+                    "  - DEEPSEEK_API_KEY\n"
                     "  - GEMINI_API_KEY\n"
                     "  - OPENAI_API_KEY"
                 )
         # 指定提供商
+        elif provider == "glm":
+            if not settings.GLM_API_KEY:
+                raise ValueError("未配置 GLM_API_KEY")
+            cls._client_cache = GLMAdapter()
         elif provider == "deepseek":
             if not settings.DEEPSEEK_API_KEY:
                 raise ValueError("未配置 DEEPSEEK_API_KEY")
@@ -226,12 +263,16 @@ class LLMFactory:
         provider = settings.LLM_PROVIDER.lower()
         
         if provider == "auto":
-            if settings.DEEPSEEK_API_KEY:
+            if settings.GLM_API_KEY:
+                return settings.GLM_MODEL
+            elif settings.DEEPSEEK_API_KEY:
                 return settings.DEEPSEEK_MODEL
             elif settings.GEMINI_API_KEY:
                 return settings.GEMINI_MODEL
             elif settings.OPENAI_API_KEY:
                 return settings.OPENAI_MODEL
+        elif provider == "glm":
+            return settings.GLM_MODEL
         elif provider == "deepseek":
             return settings.DEEPSEEK_MODEL
         elif provider == "gemini":
