@@ -169,7 +169,7 @@ def register(
         username=username,
         email=email,
         hashed_password=hashed_password,
-        is_approved=True
+        is_approved=False
     )
     db.add(new_user)
     db.commit()

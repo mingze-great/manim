@@ -267,7 +267,10 @@ def metrics():
 
 
 @app.get("/api/videos/{filename}")
-def download_video(filename: str):
+def download_video(
+    filename: str,
+    current_user = Depends(lambda: None)
+):
     safe_filename = pathlib.Path(filename).name
     
     if not re.match(r'^[\w\-\.]+\.mp4$', safe_filename):
