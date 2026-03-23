@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
-import { Card, Progress, Button, Space, message, Spin, Tabs, Collapse } from 'antd'
-import { DownloadOutlined, PlayCircleOutlined, CodeOutlined, CloudUploadOutlined, CopyOutlined, CheckOutlined } from '@ant-design/icons'
+import { Card, Progress, Button, Space, message, Spin, Tabs, Collapse, Modal, Alert } from 'antd'
+import { DownloadOutlined, PlayCircleOutlined, CodeOutlined, CloudUploadOutlined, CopyOutlined, CheckOutlined, ToolOutlined, CheckCircleOutlined } from '@ant-design/icons'
 import { projectApi, Task, Project } from '@/services/project'
 import { useAuthStore } from '@/stores/authStore'
 import { motion } from 'framer-motion'
@@ -32,7 +32,16 @@ export default function ProjectTask() {
   const [generatedCode, setGeneratedCode] = useState('')
   const [activeTab, setActiveTab] = useState('code')
   const [copied, setCopied] = useState(false)
+  const [terminalLog, setTerminalLog] = useState('')
+  const [showTerminal, setShowTerminal] = useState(false)
+  const [renderError, setRenderError] = useState<string | null>(null)
   const codeRef = useRef<HTMLPreElement>(null)
+  const terminalRef = useRef<HTMLDivElement>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
+  const readerRef = useRef<ReadableStreamDefaultReader | null>(null)
+  const [fixing, setFixing] = useState(false)
+  const [pendingCode, setPendingCode] = useState<string | null>(null)
+  const [showCodeConfirm, setShowCodeConfirm] = useState(false)
 
   const fetchProject = async () => {
     try {
@@ -183,36 +192,46 @@ export default function ProjectTask() {
       return
     }
     
-    const templateId = searchParams.get('templateId')
     setGeneratingVideo(true)
     setVideoProgress(0)
     setVideoMessage('正在准备渲染...')
+    setTerminalLog('')
+    setShowTerminal(true)
+    setRenderError(null)
+    
+    abortControllerRef.current = new AbortController()
     
     try {
-      // 先创建任务
-      const { data: taskData } = await projectApi.generateVideo(Number(id), templateId ? Number(templateId) : undefined)
-      setTask(taskData)
-      
-      // 使用 SSE 流式获取进度
+      const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
       const token = useAuthStore.getState().token
-      const streamUrl = `/api/tasks/${taskData.id}/stream`
+      const streamUrl = `${API_BASE}/api/tasks/${id}/render`
       
       const response = await fetch(streamUrl, {
         headers: {
           'Authorization': `Bearer ${token}`
-        }
+        },
+        signal: abortControllerRef.current.signal
       })
       
+      if (response.status === 401) {
+        message.error('登录已过期，请重新登录')
+        setGeneratingVideo(false)
+        setTerminalLog(prev => prev + '\n❌ 登录已过期，请重新登录\n')
+        return
+      }
+      
       if (!response.ok) {
-        throw new Error('无法获取渲染进度')
+        throw new Error(`请求失败 (${response.status})`)
       }
       
       const reader = response.body?.getReader()
       const decoder = new TextDecoder()
       
       if (!reader) {
-        throw new Error('无法读取响应流')
+        throw new Error('无法读取服务器响应')
       }
+      
+      readerRef.current = reader
       
       let buffer = ''
       
@@ -221,57 +240,89 @@ export default function ProjectTask() {
         if (done) break
         
         buffer += decoder.decode(value, { stream: true })
+        
         const lines = buffer.split('\n')
         buffer = lines.pop() || ''
         
         for (const line of lines) {
           if (line.startsWith('data: ')) {
             const data = line.slice(6)
-            
             try {
               const parsed = JSON.parse(data)
               
-              setVideoProgress(parsed.progress || 0)
-              setTask(prev => prev ? { ...prev, ...parsed } : null)
-              
-              // 根据进度设置消息
-              if (parsed.progress <= 10) {
-                setVideoMessage('正在准备渲染环境...')
-              } else if (parsed.progress <= 30) {
-                setVideoMessage('正在生成 Manim 代码...')
-              } else if (parsed.progress <= 50) {
-                setVideoMessage('正在初始化渲染器...')
-              } else if (parsed.progress <= 80) {
-                setVideoMessage('正在渲染视频...')
-              } else if (parsed.progress < 100) {
-                setVideoMessage('正在处理视频文件...')
+              if (parsed.type === 'error') {
+                setTerminalLog(prev => prev + `\n❌ ${parsed.content}\n`)
+                setRenderError(parsed.content)
+                message.error(parsed.content)
+              } else if (parsed.type === 'success') {
+                setTerminalLog(prev => prev + `\n✅ ${parsed.content}\n`)
+                if (parsed.video_url) {
+                  setProject(prev => prev ? { ...prev, video_url: parsed.video_url } : null)
+                }
+                message.success('视频渲染完成！')
+              } else if (parsed.type === 'info' || parsed.type === 'output') {
+                setTerminalLog(prev => prev + parsed.content + '\n')
               }
               
-              if (parsed.status === 'completed') {
-                setVideoMessage('视频渲染完成！')
-                message.success('视频生成完成！')
-              } else if (parsed.status === 'failed') {
-                setVideoMessage(`渲染失败: ${parsed.error_message || '未知错误'}`)
-                message.error(`生成失败：${parsed.error_message}`)
-              }
+              setTimeout(() => {
+                terminalRef.current?.scrollTo({ top: terminalRef.current.scrollHeight, behavior: 'smooth' })
+              }, 50)
             } catch (e) {
-              console.error('解析进度数据失败:', e)
+              console.error('Parse error:', e)
             }
           }
         }
       }
-      
     } catch (error: any) {
-      message.error(error.response?.data?.detail || error.message || '生成失败')
+      const errorMsg = error.message || '未知错误'
+      message.error('渲染失败: ' + errorMsg)
+      setRenderError(errorMsg)
+      setTerminalLog(prev => prev + `\n❌ 渲染失败: ${errorMsg}\n`)
     } finally {
       setGeneratingVideo(false)
     }
   }
 
-  const handleDownloadVideo = () => {
-    if (task?.video_url) {
-      window.open(task.video_url, '_blank')
+  const handleDownloadVideo = async () => {
+    const videoUrl = task?.video_url || project?.video_url
+    if (videoUrl) {
+      try {
+        const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
+        const token = useAuthStore.getState().token
+        const fullUrl = videoUrl.startsWith('http') ? videoUrl : `${API_BASE}${videoUrl}`
+        
+        const response = await fetch(fullUrl, {
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+        })
+        
+        if (!response.ok) {
+          throw new Error('下载失败')
+        }
+        
+        const blob = await response.blob()
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `video_${id}_${Date.now()}.mp4`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+        message.success('视频下载成功')
+      } catch (error) {
+        message.error('视频下载失败，请重试')
+      }
     }
+  }
+
+  const handleBackToEdit = () => {
+    const errorLog = terminalLog ? terminalLog.split('\n').slice(-100).join('\n') : ''
+    navigate(`/project/${id}/chat`, { 
+      state: { 
+        errorLog: errorLog,
+        fromRender: true 
+      } 
+    })
   }
 
   const handleCopyCode = () => {
@@ -292,6 +343,82 @@ export default function ProjectTask() {
       a.download = `AI视频_scene_${id}.py`
       a.click()
       URL.revokeObjectURL(url)
+    }
+  }
+
+  const handleAiFix = async () => {
+    if (!generatedCode) {
+      message.warning('没有可修复的代码')
+      return
+    }
+    
+    setFixing(true)
+    const errorLog = terminalLog.split('\n').slice(-50).join('\n')
+    
+    try {
+      const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
+      const token = useAuthStore.getState().token
+      const streamUrl = `${API_BASE}/api/projects/${id}/optimize-code/stream?feedback=${encodeURIComponent(errorLog)}`
+      
+      const response = await fetch(streamUrl, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      
+      if (!response.ok) {
+        throw new Error('请求失败')
+      }
+      
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let newCode = ''
+      
+      while (reader) {
+        const { done, value } = await reader.read()
+        if (done) break
+        
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6)
+            if (data === '[DONE]') continue
+            try {
+              const parsed = JSON.parse(data)
+              if (parsed.code) {
+                newCode = parsed.code
+              }
+            } catch (e) {}
+          }
+        }
+      }
+      
+      if (newCode) {
+        setPendingCode(newCode)
+        setShowCodeConfirm(true)
+      } else {
+        message.warning('AI 未能生成修复后的代码')
+      }
+    } catch (error: any) {
+      message.error('修复请求失败: ' + error.message)
+    } finally {
+      setFixing(false)
+    }
+  }
+
+  const handleConfirmFixedCode = async () => {
+    if (!pendingCode) return
+    try {
+      await projectApi.update(Number(id), { manim_code: pendingCode })
+      setGeneratedCode(pendingCode)
+      setShowCodeConfirm(false)
+      setPendingCode(null)
+      setRenderError(null)
+      message.success('代码已更新，可以重新渲染')
+    } catch (error) {
+      message.error('保存代码失败')
     }
   }
 
@@ -460,22 +587,62 @@ export default function ProjectTask() {
                       </span>
                     </div>
                     <Progress 
-                      percent={task.progress} 
-                      status={task.status === 'failed' ? 'exception' : task.status === 'completed' ? 'success' : 'active'}
+                      percent={task.progress || videoProgress} 
+                      status={task.status === 'failed' || renderError ? 'exception' : task.status === 'completed' ? 'success' : 'active'}
                       strokeColor={{
                         '0%': '#0066FF',
                         '100%': '#00CCFF',
                       }}
                     />
-                    {task.error_message && (
+                    {renderError && (
                       <div className="text-red-500 mt-3 text-sm bg-red-50 dark:bg-red-900/20 p-3 rounded-lg">
-                        错误: {task.error_message}
+                        错误: {renderError}
                       </div>
                     )}
                   </motion.div>
                 ) : (
                   <div className="text-center py-12 text-gray-400">
                     尚未开始渲染
+                  </div>
+                )}
+
+                {/* 终端输出 */}
+                {(showTerminal || terminalLog) && (
+                  <div className="mt-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-medium">终端输出</span>
+                      <Button size="small" onClick={() => setShowTerminal(!showTerminal)}>
+                        {showTerminal ? '收起' : '展开'}
+                      </Button>
+                    </div>
+                    {showTerminal && (
+                      <div 
+                        ref={terminalRef}
+                        className="bg-gray-900 text-gray-100 p-4 rounded-lg text-xs font-mono max-h-64 overflow-auto"
+                      >
+                        {terminalLog || '等待渲染开始...\n'}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 渲染失败时的返回按钮 */}
+                {renderError && (
+                  <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200">
+                    <p className="text-red-600 mb-3">渲染失败，可以尝试让 AI 自动修复代码。</p>
+                    <div className="flex gap-2">
+                      <Button 
+                        type="primary" 
+                        icon={<ToolOutlined />}
+                        onClick={handleAiFix} 
+                        loading={fixing}
+                      >
+                        AI 自动修复代码
+                      </Button>
+                      <Button onClick={handleBackToEdit}>
+                        返回对话调整
+                      </Button>
+                    </div>
                   </div>
                 )}
 
@@ -493,7 +660,7 @@ export default function ProjectTask() {
                     {task?.status === 'completed' ? '重新渲染' : '开始渲染视频'}
                   </Button>
 
-                  {task?.video_url && (
+                  {project?.video_url && (
                     <Button 
                       type="primary"
                       icon={<DownloadOutlined />}
@@ -507,14 +674,14 @@ export default function ProjectTask() {
                 </div>
 
                 {/* 视频预览 */}
-                {task?.video_url && (
+                {project?.video_url && (
                   <motion.div
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     className="mt-6"
                   >
                     <video
-                      src={task.video_url}
+                      src={project.video_url.startsWith('http') ? project.video_url : `${import.meta.env.VITE_API_BASE_URL || ''}${project.video_url}`}
                       controls
                       className="w-full rounded-xl shadow-lg"
                       style={{ maxHeight: '60vh' }}
@@ -528,6 +695,34 @@ export default function ProjectTask() {
           </Tabs>
         </Card>
       </motion.div>
+
+      {/* 代码确认弹窗 */}
+      <Modal
+        title={
+          <div className="flex items-center gap-2">
+            <CheckCircleOutlined className="text-green-500" />
+            <span>AI 修复了代码</span>
+          </div>
+        }
+        open={showCodeConfirm}
+        onCancel={() => { setShowCodeConfirm(false); setPendingCode(null); }}
+        footer={null}
+        width={700}
+      >
+        <div className="text-xs text-gray-500 mb-2">预览前10行：</div>
+        <pre className="text-xs bg-gray-900 text-green-400 p-3 rounded-lg mb-4 overflow-auto max-h-48">
+          {pendingCode?.split('\n').slice(0, 10).join('\n')}
+          {pendingCode && pendingCode.split('\n').length > 10 && '\n...'}
+        </pre>
+        <div className="flex gap-2 justify-end">
+          <Button onClick={() => { setShowCodeConfirm(false); setPendingCode(null); }}>
+            忽略
+          </Button>
+          <Button type="primary" icon={<CheckCircleOutlined />} onClick={handleConfirmFixedCode}>
+            使用修复后的代码
+          </Button>
+        </div>
+      </Modal>
     </div>
   )
 }

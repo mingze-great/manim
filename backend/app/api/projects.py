@@ -6,6 +6,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 import json
 import asyncio
+import re
 
 from app.database import get_db
 from app.models.user import User
@@ -181,6 +182,14 @@ async def chat_stream(
     
     theme = str(project.theme)
     
+    # 获取模板代码
+    template_code = None
+    if project.template_id:
+        from app.models.template import Template
+        template = db.query(Template).filter(Template.id == project.template_id).first()
+        if template:
+            template_code = template.code
+    
     user_message = Conversation(
         project_id=project_id,
         role="user",
@@ -198,7 +207,10 @@ async def chat_stream(
         
         try:
             async for chunk in chat_service.stream_process_message(
-                project_id, theme, message.content
+                project_id, theme, message.content,
+                manim_code=project.manim_code,
+                template_code=template_code,
+                final_script=project.final_script
             ):
                 chunk_type = chunk.get("type")
                 
@@ -227,7 +239,17 @@ async def chat_stream(
                     
                     db.commit()
                     
-                    yield f"data: {json.dumps({'type': 'done', 'content': full_content, 'is_final': chunk.get('is_final', False)})}\n\n"
+                    result = {
+                        'type': 'done', 
+                        'content': full_content, 
+                        'is_final': chunk.get('is_final', False)
+                    }
+                    if chunk.get("code_updated"):
+                        result['code_updated'] = True
+                        result['updated_code'] = chunk['updated_code']
+                        result['has_template'] = project.template_id is not None
+                    
+                    yield f"data: {json.dumps(result)}\n\n"
                 elif chunk_type == "error":
                     yield f"data: {json.dumps({'type': 'error', 'error': chunk['error']})}\n\n"
                 
@@ -383,3 +405,56 @@ async def optimize_code(
     db.commit()
     
     return {"message": "代码已根据反馈优化", "code_updated": True}
+
+
+@router.post("/{project_id}/optimize-code/stream")
+async def optimize_code_stream(
+    project_id: int,
+    feedback: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)]
+):
+    """流式优化代码 - 用于渲染失败后的一键修复"""
+    project = db.query(Project).filter(
+        Project.id == project_id,
+        Project.user_id == current_user.id
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    if not project.manim_code:
+        raise HTTPException(status_code=400, detail="No code to optimize")
+    
+    async def event_generator():
+        manim_service = ManimService(db)
+        
+        try:
+            yield f"data: {json.dumps({'type': 'progress', 'message': '正在分析错误...'})}\n\n"
+            await asyncio.sleep(0.3)
+            
+            yield f"data: {json.dumps({'type': 'progress', 'message': '正在修复代码...'})}\n\n"
+            
+            optimized_code = await manim_service.optimize_code(
+                str(project.manim_code),
+                str(project.final_script or ""),
+                feedback
+            )
+            
+            yield f"data: {json.dumps({'type': 'code', 'code': optimized_code})}\n\n"
+            
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+        finally:
+            yield "data: [DONE]\n\n"
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+    )
