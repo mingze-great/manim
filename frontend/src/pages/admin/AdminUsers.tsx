@@ -7,7 +7,7 @@ import {
   ReloadOutlined, DeleteOutlined, SearchOutlined,
   LockOutlined, UnlockOutlined, EyeOutlined, UserOutlined,
   ProjectOutlined, VideoCameraOutlined, CheckCircleOutlined, CloseCircleOutlined,
-  PlusOutlined, CopyOutlined, KeyOutlined, EditOutlined
+  PlusOutlined, CopyOutlined, KeyOutlined, EditOutlined, ClockCircleOutlined
 } from '@ant-design/icons'
 import { adminApi, User, UserStats, InvitationCode } from '../../services/admin'
 
@@ -104,6 +104,36 @@ export default function AdminUsers() {
     }
   }
 
+  const handleApproveUser = async (userId: number) => {
+    try {
+      await adminApi.approveUser(userId)
+      message.success('用户已审核通过')
+      fetchUsers()
+    } catch (err: any) {
+      message.error(err.response?.data?.detail || '审核失败')
+    }
+  }
+
+  const handleRejectUser = async (userId: number) => {
+    try {
+      await adminApi.rejectUser(userId)
+      message.success('用户已拒绝')
+      fetchUsers()
+    } catch (err: any) {
+      message.error(err.response?.data?.detail || '操作失败')
+    }
+  }
+
+  const handleExtendUser = async (userId: number, days: number = 30) => {
+    try {
+      await adminApi.extendUser(userId, days)
+      message.success(`已延长${days}天`)
+      fetchUsers()
+    } catch (err: any) {
+      message.error(err.response?.data?.detail || '操作失败')
+    }
+  }
+
   const handleViewUser = async (user: User) => {
     setSelectedUser(user)
     try {
@@ -142,6 +172,17 @@ export default function AdminUsers() {
       ),
     },
     {
+      title: '审核',
+      dataIndex: 'is_approved',
+      key: 'is_approved',
+      width: 100,
+      render: (isApproved: boolean) => (
+        isApproved 
+          ? <Tag color="green">已通过</Tag>
+          : <Tag color="orange">待审核</Tag>
+      ),
+    },
+    {
       title: '角色',
       dataIndex: 'is_admin',
       key: 'is_admin',
@@ -149,6 +190,14 @@ export default function AdminUsers() {
       render: (isAdmin: boolean) => (
         isAdmin ? <Tag color="gold">管理员</Tag> : <Tag color="default">用户</Tag>
       ),
+    },
+    {
+      title: '有效期',
+      dataIndex: 'expires_at',
+      key: 'expires_at',
+      width: 120,
+      render: (expiresAt: string) => 
+        expiresAt ? new Date(expiresAt).toLocaleDateString('zh-CN') : '-',
     },
     {
       title: '注册时间',
@@ -160,9 +209,38 @@ export default function AdminUsers() {
     {
       title: '操作',
       key: 'action',
-      width: 220,
+      width: 320,
       render: (_: any, record: User) => (
-        <Space>
+        <Space wrap>
+          {!record.is_approved && (
+            <>
+              <Button
+                type="primary"
+                size="small"
+                icon={<CheckCircleOutlined />}
+                onClick={() => handleApproveUser(record.id)}
+              >
+                通过
+              </Button>
+              <Button
+                danger
+                size="small"
+                icon={<CloseCircleOutlined />}
+                onClick={() => handleRejectUser(record.id)}
+              >
+                拒绝
+              </Button>
+            </>
+          )}
+          {record.is_approved && (
+            <Button
+              size="small"
+              icon={<ClockCircleOutlined />}
+              onClick={() => handleExtendUser(record.id, 30)}
+            >
+              延期
+            </Button>
+          )}
           <Button 
             type="primary" 
             ghost

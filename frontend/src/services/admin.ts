@@ -33,6 +33,8 @@ export interface User {
   email: string
   is_active: boolean
   is_admin: boolean
+  is_approved: boolean
+  expires_at?: string
   created_at: string
 }
 
@@ -107,6 +109,15 @@ export const adminApi = {
 
   resetPassword: (userId: number, newPassword: string) =>
     api.post(`/admin/users/${userId}/reset-password`, { password: newPassword }),
+
+  approveUser: (userId: number) =>
+    api.post<{ message: string }>(`/admin/users/${userId}/approve`),
+
+  rejectUser: (userId: number) =>
+    api.post<{ message: string }>(`/admin/users/${userId}/reject`),
+
+  extendUser: (userId: number, days: number = 30) =>
+    api.post<{ message: string; expires_at: string }>(`/admin/users/${userId}/extend`, null, { params: { days } }),
 }
 
 export default api
