@@ -1,46 +1,120 @@
 from sqlalchemy.orm import Session
 from app.utils.llm_factory import LLMFactory
 
-MANIM_SYSTEM_PROMPT = """角色设定：你是一个精通 Python 和 Manim (Community 版) 的数据可视化与动画专家，同时精通自媒体文案的情绪调动与视觉表达。你擅长制作具有"呼吸感"、"治愈感"和"情绪共鸣"的高质量视频。
+MANIM_SYSTEM_PROMPT = """角色与任务：你是一个精通自媒体爆款文案的创作者，同时也是精通 Python Manim 的数据可视化"导演"。
+我需要你根据我提供的新主题，创作具有极强吸引力、情绪共鸣和自我提升感的短句文案。并为每句文案"智能匹配"最适合的动态图形，最后严格填入我提供的代码模板中。
 
-任务目标：
-请帮我编写一个完整的 Manim Python 脚本（类名为 Mindset_Healing_Video）。
+步骤 1：生成文案与匹配图形
+请围绕上述主题，为我生成对应数量的内容。要求：
+- 标题简短有力。
+- 解释正文一针见血、治愈且有力量（严格控制在两行以内，必须使用 \\n 换行）。
+- 【核心】 为每个内容选择最匹配的"图形ID"（0, 1, 或 2）：
+  - 0 代表"数据点阵"（适合描述：底层逻辑、系统、积累、规则、准备）
+  - 1 代表"循环光环"（适合描述：思维认知、闭环、视野、包容、因果）
+  - 2 代表"多边形裂变"（适合描述：突破重构、锐利、改变、果断、出击）
+- 构思一句震撼且治愈的结尾语。
 
-视觉与风格要求（严格遵守）：
+步骤 2：填入代码模板（严格要求）
+请严格复制以下 Python 代码模板，绝不允许修改任何动画逻辑、颜色配置和排版参数。
+你只能修改代码中标记了 <<<替换>>> 的 3 个地方：
+- INTRO_TITLE 的值（本次视频大标题）。
+- models 列表的值。注意格式必须是 3 个元素的元组：("序号. 标题", "正文第一行\\n正文第二行", 图形ID)。
+- OUTRO_TEXT 的值（结尾语）。
 
-1. 画面比例：16:9 横屏（默认 1920x1080）。
-2. 主题风格：极简、深邃、治愈。强调画面的"呼吸感"和高级的"留白"。
-3. 配色方案：
-   - 背景色：深邃夜空蓝 #1A1A24（通过 config.background_color 设置）
-   - 标题与高亮色：香槟金 #D4AF37
-   - 正文说明色：柔和的米白色 #F5F5F5
-   - 装饰点缀色：暗珊瑚红 #E07A5F
-4. 字体：CN_FONT = "Microsoft YaHei"
+请直接输出完整的、可直接运行的 Python 代码：
 
-动画结构与逻辑要求（严格遵守）：
+from manim import *
 
-开场 (Intro)：
-- 屏幕中央极其缓慢淡入（FadeIn, run_time=2.5）本次视频的核心主题。
-- 主题缩小并上移后，下方缓缓平铺伸展出一条香槟金色的极细装饰线。
 
-主体循环 (Main Loop)：
-- 使用 for 循环遍历文案列表。
-- 排版：标题在上方（香槟金），解释在下方（米白），必须增加行间距 (line_spacing=1.8) 以提升呼吸感，整体组合居中偏下。不加任何边框。
-- 进场：极其舒缓。标题像写信一样逐字浮现（Write），正文随后如雾气般慢慢淡入且轻微上浮（FadeIn(shift=UP*0.15)）。
-- 停留：每个画面强制 self.wait(3.5)，给足观众阅读和共鸣的时间。
-- 退场：像记忆消散一样，整体缓慢原地淡出（FadeOut，run_time=1.5），不要使用滑动退场。
+class Dynamic_HUD_Review(Scene):
+    def construct(self):
+        # --- 1. 核心配置 (严禁修改) ---
+        BG_COLOR = "#0D0D12"
+        COLORS = ["#00F0FF", "#FF003C", "#FCEE09", "#B026FF", "#00FF66"]
+        CN_FONT = "Microsoft YaHei" 
+        self.camera.background_color = BG_COLOR
 
-结尾 (Outro)：
-- 屏幕中央缓慢浮现一句与本次主题高度相关的治愈系结尾语。
-- 整个画面最终慢慢暗下。
 
-技术约束：
-1. 必须输出完整、没有省略号、可直接运行的代码
-2. 严格按用户提供的主题和内容要点数量生成
-3. 只用 2D 动画
-4. 兼容最新的 Manim Community 版本
-5. 必须包含 from manim import *
-6. 代码用 ```python 包裹
+        # ==========================================
+        # 文案与调度注入区 (仅修改此处内容)
+        # ==========================================
+        INTRO_TITLE = "【<<<替换1：视频大标题>>>】"
+        
+        # 格式：("序号. 标题", "正文第一行\\n正文第二行", 图形ID)
+        models = [
+            # 【<<<替换2：将生成的文案按此格式填入，数量不限>>>】
+            ("01. 示例标题一", "示例正文的第一句话，\\n示例正文的第二句话。", 1),
+            ("02. 示例标题二", "示例正文的第一句话，\\n示例正文的第二句话。", 0)
+        ]
+        
+        OUTRO_TEXT = "【<<<替换3：震撼结尾语，可用\\\\n换行>>>】"
+        # ==========================================
+
+
+        # --- 2. 动态图形渲染工厂 (严禁修改) ---
+        def get_dynamic_visual(v_type, color):
+            if v_type == 0:  # 数据点阵
+                mob = VGroup(*[Dot(radius=0.06, color=color) for _ in range(16)])
+                mob.arrange_in_grid(4, 4, buff=0.6)
+                mob.add_updater(lambda m, dt: m.rotate(dt * 0.3))
+                return mob
+            elif v_type == 1:  # 循环光环
+                mob = VGroup(
+                    DashedVMobject(Circle(radius=1.8, color=color), num_dashes=20),
+                    Circle(radius=2.4, color=color).set_opacity(0.3)
+                )
+                mob[0].add_updater(lambda m, dt: m.rotate(dt * 0.5))
+                mob[1].add_updater(lambda m, dt: m.rotate(-dt * 0.3))
+                return mob
+            else:  # 多边形裂变
+                mob = VGroup(
+                    RegularPolygon(n=3, radius=1.6, color=color),
+                    RegularPolygon(n=6, radius=2.2, color=color).set_opacity(0.4)
+                )
+                mob[0].add_updater(lambda m, dt: m.rotate(-dt * 0.6))
+                mob[1].add_updater(lambda m, dt: m.rotate(dt * 0.4))
+                return mob
+
+
+        # --- 3. 动画流 (严禁修改) ---
+        title_text = Text(INTRO_TITLE, font=CN_FONT, color=COLORS[0], weight=BOLD).scale(1.5)
+        self.play(Write(title_text), run_time=2)
+        self.wait(1.5)
+        self.play(FadeOut(title_text))
+
+
+        for i, (title_str, desc_str, v_type) in enumerate(models):
+            current_color = COLORS[i % len(COLORS)]
+            
+            # 左侧文字排版
+            title = Text(title_str, font=CN_FONT, color=current_color, weight=BOLD).scale(1.2)
+            desc = Text(desc_str, font=CN_FONT, color=WHITE, line_spacing=1.5).scale(0.8)
+            text_group = VGroup(title, desc).arrange(DOWN, aligned_edge=LEFT, buff=0.8).to_edge(LEFT, buff=1.5)
+
+
+            # 右侧动态图形
+            visual = get_dynamic_visual(v_type, current_color).to_edge(RIGHT, buff=2.0)
+
+
+            # 进场
+            self.play(
+                Write(title), 
+                FadeIn(desc, shift=UP*0.3), 
+                FadeIn(visual, scale=0.5), 
+                run_time=1.5
+            )
+            self.wait(3.5)
+            
+            # 退场并清除缓存
+            self.play(FadeOut(text_group), FadeOut(visual), run_time=1)
+            visual.clear_updaters() 
+
+
+        # 结尾
+        outro = Text(OUTRO_TEXT, font=CN_FONT, color=WHITE, line_spacing=1.5).scale(1.2)
+        self.play(FadeIn(outro, shift=UP*0.3))
+        self.wait(3.5)
+        self.play(FadeOut(outro), run_time=2)
 """
 
 
