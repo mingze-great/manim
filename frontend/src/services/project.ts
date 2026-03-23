@@ -57,4 +57,5 @@ export const projectApi = {
     `/api/projects/${id}/optimize-code/stream?feedback=${encodeURIComponent(feedback)}`,
   getTask: (projectId: number) => api.get<Task>(`/tasks/project/${projectId}`),
   regenerateCode: (id: number) => api.post(`/projects/${id}/regenerate-code`),
+  generateCode: (id: number) => api.get(`/tasks/${id}/generate-code`),
 }

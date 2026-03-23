@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { Input, Button, message, Modal, Alert } from 'antd'
-import { SendOutlined, PlayCircleOutlined, RobotOutlined, UserOutlined, ReloadOutlined, CheckCircleOutlined, StopOutlined } from '@ant-design/icons'
+import { SendOutlined, PlayCircleOutlined, RobotOutlined, UserOutlined, ReloadOutlined, CheckCircleOutlined, StopOutlined, CodeOutlined } from '@ant-design/icons'
 import { projectApi, Conversation, Project } from '@/services/project'
 import { useAuthStore } from '@/stores/authStore'
 
@@ -94,7 +94,28 @@ export default function ProjectChat() {
     if (!input.trim() || loading) return
 
     const userMessage = input.trim()
+    const isSatisfied = userMessage.includes('满意') || userMessage.includes('好了') || userMessage.includes('可以了')
     const isFixRequest = errorFromRender || fixingCode || userMessage.includes('修复') || userMessage.includes('错误')
+    
+    // 如果用户说满意，先自动生成代码
+    if (isSatisfied && !project?.manim_code) {
+      try {
+        message.info('正在生成代码...')
+        await projectApi.generateCode(Number(id))
+        await fetchProject()
+        message.success('代码已生成，正在跳转...')
+        setTimeout(() => navigate(`/project/${id}/task`), 500)
+        return
+      } catch (error) {
+        message.error('生成代码失败，请重试')
+      }
+    }
+    
+    // 如果用户说满意且已有代码，直接跳转渲染
+    if (isSatisfied && project?.manim_code) {
+      navigate(`/project/${id}/task`)
+      return
+    }
     const tempId = Date.now()
     setLoading(true)
     setAiThinking(true)
@@ -383,19 +404,40 @@ export default function ProjectChat() {
           </div>
         )}
         
-        {project?.manim_code ? (
+        {/* 操作按钮 - 始终显示 */}
+        <div className="flex gap-2 mb-3">
+          {!project?.manim_code && (
+            <Button
+              icon={<CodeOutlined />}
+              onClick={async () => {
+                try {
+                  await projectApi.generateCode(Number(id))
+                  message.success('代码已生成')
+                  fetchProject()
+                } catch (error: any) {
+                  message.error(error.response?.data?.detail || '生成失败')
+                }
+              }}
+              block
+            >
+              生成代码
+            </Button>
+          )}
           <Button
             type="primary"
             icon={<PlayCircleOutlined />}
             onClick={handleGenerateVideo}
             block
             className="btn-gradient"
+            disabled={!project?.manim_code}
           >
             渲染视频
           </Button>
-        ) : (
+        </div>
+        
+        {!project?.manim_code && (
           <p className="text-xs text-gray-400 text-center">
-            输入"满意"确认内容，AI 将自动生成代码
+            或输入"满意"自动生成代码
           </p>
         )}
       </div>
