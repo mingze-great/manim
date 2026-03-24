@@ -87,8 +87,8 @@ jobs:
     steps:
       - name: Check API health
         run: |
-          curl -s http://${{ env.DEPLOY_HOST }}/health || exit 1
+          curl -sk https://${{ env.DEPLOY_HOST }}/health || exit 1
           
       - name: Check frontend
         run: |
-          curl -s http://${{ env.DEPLOY_HOST }}/ | grep -q "Manim" || exit 1
+          curl -sk https://${{ env.DEPLOY_HOST }}/ | grep -q "AI" || exit 1
