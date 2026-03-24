@@ -70,6 +70,7 @@ async def generate_code_stream(
             yield f"data: {json.dumps({'step': 'prepare', 'progress': 10, 'message': '准备提示词...'})}\n\n"
             await asyncio.sleep(0.1)
             
+            template = None
             if template_id:
                 template = db_session.query(Template).filter(Template.id == template_id).first()
                 if template:
@@ -78,11 +79,8 @@ async def generate_code_stream(
             yield f"data: {json.dumps({'step': 'generate', 'progress': 20, 'message': 'AI正在生成代码...'})}\n\n"
             
             manim_service = ManimService(db_session)
-            manim_code = await manim_service.generate_code(
-                project_local.final_script,
-                template_id=template_id,
-                custom_code=project_local.custom_code
-            )
+            template_prompt = template.prompt if template else None
+            manim_code = await manim_service.generate_code(project_local.final_script, template_prompt)
             
             fixed_code, warnings = manim_service.validate_code(manim_code)
             

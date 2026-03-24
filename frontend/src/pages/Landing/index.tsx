@@ -12,13 +12,13 @@ import './Landing.css'
 const features = [
   {
     icon: <RobotOutlined />,
-    title: 'AI 智能对话',
+    title: '智能对话',
     desc: '与大模型多轮对话，不断优化视频主题与内容',
   },
   {
     icon: <CodeOutlined />,
     title: '自动代码生成',
-    desc: '一键生成专业级 AI视频 动画代码，无需编程基础',
+    desc: '一键生成专业级 Manim 动画代码，无需编程基础',
   },
   {
     icon: <ThunderboltOutlined />,
@@ -36,12 +36,12 @@ const steps = [
   {
     num: '01',
     title: '输入主题',
-    desc: '告诉 AI 你想要的视频内容',
+    desc: '输入你想要的视频内容',
   },
   {
     num: '02',
-    title: 'AI 生成',
-    desc: 'AI 根据主题生成完整内容',
+    title: '智能生成',
+    desc: '根据主题生成完整内容',
   },
   {
     num: '03',
@@ -79,7 +79,7 @@ export default function Landing() {
                   <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
                 </svg>
               </div>
-              <span>AI视频</span>
+              <span>思维可视化</span>
             </div>
             <nav className="header-nav">
               <a href="#features">功能</a>
@@ -109,11 +109,11 @@ export default function Landing() {
         <div className="container">
           <div className="hero-content">
             <h1 className="hero-title">
-              用 AI 轻松创作<br />
+              轻松创作<br />
               <span className="gradient-text">思维可视化动画</span>
             </h1>
             <p className="hero-desc">
-              输入视频主题，AI 帮你完成创意策划、代码生成、视频渲染全流程。
+              输入视频主题，帮你完成创意策划、代码生成、视频渲染全流程。
               无需编程基础，人人都能制作专业的思维可视化动画。
             </p>
             <div className="hero-actions">
@@ -136,7 +136,7 @@ export default function Landing() {
         <div className="container">
           <div className="section-header">
             <h2>强大的功能，让创作更简单</h2>
-            <p>一站式 AI 动画创作平台</p>
+            <p>一站式思维可视化创作平台</p>
           </div>
           <Row gutter={[24, 24]}>
             {features.map((f, i) => (
@@ -177,7 +177,7 @@ export default function Landing() {
         <div className="container">
           <div className="cta-content">
             <h2>准备好开始创作了吗？</h2>
-            <p>注册账号，立即体验 AI 动画创作</p>
+            <p>注册账号，立即体验思维可视化创作</p>
             <Button type="primary" size="large" onClick={handleStart}>
               立即开始
               <ArrowRightOutlined />
@@ -197,9 +197,9 @@ export default function Landing() {
                     <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
                   </svg>
                 </div>
-                <span>AI视频</span>
+                <span>思维可视化</span>
               </div>
-              <p>用 AI 赋能思维可视化动画创作</p>
+              <p>赋能思维可视化动画创作</p>
             </div>
             <div className="footer-links">
               <div className="link-group">
@@ -215,7 +215,7 @@ export default function Landing() {
             </div>
           </div>
           <div className="footer-bottom">
-            <p>&copy; 2024 AI视频 Video Platform. All rights reserved.</p>
+            <p>&copy; 2024 思维可视化平台. All rights reserved.</p>
           </div>
         </div>
       </footer>

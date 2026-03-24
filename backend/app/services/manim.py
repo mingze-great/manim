@@ -128,7 +128,9 @@ class ManimService:
         import asyncio
         return asyncio.run(self.generate_code(script))
     
-    async def generate_code(self, script: str) -> str:
+    async def generate_code(self, script: str, template_prompt: str = None) -> str:
+        system_prompt = template_prompt if template_prompt else MANIM_SYSTEM_PROMPT
+        
         user_message = f"""请根据以下主题和内容生成 Manim 动画代码：
 
 {script}
@@ -141,7 +143,7 @@ class ManimService:
 
         content = await self.client.chat(
             messages=[
-                {"role": "system", "content": MANIM_SYSTEM_PROMPT},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_message}
             ],
             temperature=0.7,

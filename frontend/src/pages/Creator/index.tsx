@@ -41,10 +41,10 @@ export default function Creator() {
         <div className="hero-content">
           <h1 className="hero-title">
             <RocketOutlined className="mr-3" />
-            AI 视频创作助手
+            视频创作助手
           </h1>
           <p className="hero-subtitle">
-            输入你的主题，AI 将为你生成精彩的动画视频
+            输入你的主题，智能生成精彩的动画视频
           </p>
         </div>
       </div>
@@ -83,7 +83,7 @@ export default function Creator() {
             </Button>
 
             <p className="text-gray-500 text-sm text-center mt-4">
-              AI 会根据你的主题生成内容，询问是否满意后可随时调整
+              智能助手会根据你的主题生成内容，询问是否满意后可随时调整
             </p>
           </div>
         </Card>
@@ -95,9 +95,9 @@ export default function Creator() {
           </h3>
           <ul>
             <li>直接输入你想要的视频主题内容</li>
-            <li>AI 会自动规划每个要点的内容和动态效果</li>
+            <li>智能助手会自动规划每个要点的内容和动态效果</li>
             <li>你可以审核调整内容，直到满意</li>
-            <li>满意后 AI 自动生成代码，一键生成视频</li>
+            <li>满意后自动生成代码，一键生成视频</li>
           </ul>
         </div>
       </div>

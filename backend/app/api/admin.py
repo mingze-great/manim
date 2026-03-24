@@ -367,3 +367,138 @@ async def get_all_user_stats(
             "created_at": user.created_at.isoformat() if user.created_at else None
         })
     return result
+
+
+@router.get("/statistics/overview")
+async def get_statistics_overview(
+    period: str = Query("day", regex="^(day|week|month)$"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """获取统计概览"""
+    from datetime import date, timedelta
+    from app.models.statistics import DailyStatistics
+    from sqlalchemy import func as sql_func
+    
+    today = date.today()
+    
+    if period == "day":
+        start_date = today
+    elif period == "week":
+        start_date = today - timedelta(days=7)
+    else:
+        start_date = today - timedelta(days=30)
+    
+    stats = db.query(DailyStatistics).filter(
+        DailyStatistics.date >= start_date
+    ).all()
+    
+    total_conversations = sum(s.conversations_count or 0 for s in stats)
+    total_api_calls = sum(s.api_calls_count or 0 for s in stats)
+    total_videos = sum(s.videos_count or 0 for s in stats)
+    total_projects = sum(s.projects_count or 0 for s in stats)
+    
+    active_users = db.query(User).filter(
+        User.last_active_at >= datetime.utcnow() - timedelta(days=1 if period == "day" else 7 if period == "week" else 30)
+    ).count()
+    
+    return {
+        "conversations_count": total_conversations,
+        "api_calls_count": total_api_calls,
+        "videos_count": total_videos,
+        "projects_count": total_projects,
+        "active_users": active_users
+    }
+
+
+@router.get("/statistics/trend")
+async def get_statistics_trend(
+    period: str = Query("day", regex="^(day|week|month)$"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """获取趋势数据"""
+    from datetime import date, timedelta
+    from app.models.statistics import DailyStatistics
+    
+    today = date.today()
+    
+    if period == "day":
+        days = 7
+    elif period == "week":
+        days = 28
+    else:
+        days = 30
+    
+    start_date = today - timedelta(days=days)
+    
+    stats = db.query(DailyStatistics).filter(
+        DailyStatistics.date >= start_date
+    ).order_by(DailyStatistics.date).all()
+    
+    stats_map = {s.date: s for s in stats}
+    
+    result = []
+    for i in range(days + 1):
+        d = start_date + timedelta(days=i)
+        s = stats_map.get(d)
+        result.append({
+            "date": d.isoformat(),
+            "conversations_count": s.conversations_count if s else 0,
+            "api_calls_count": s.api_calls_count if s else 0,
+            "videos_count": s.videos_count if s else 0,
+            "projects_count": s.projects_count if s else 0
+        })
+    
+    return result
+
+
+def update_daily_statistics():
+    """更新每日统计数据（定时任务调用）"""
+    from datetime import date
+    from app.models.statistics import DailyStatistics
+    from app.models.conversation import Conversation
+    
+    db = SessionLocal()
+    try:
+        today = date.today()
+        
+        existing = db.query(DailyStatistics).filter(DailyStatistics.date == today).first()
+        if not existing:
+            existing = DailyStatistics(date=today)
+            db.add(existing)
+        
+        existing.conversations_count = db.query(Conversation).filter(
+            Conversation.created_at >= datetime.combine(today, datetime.min.time()),
+            Conversation.created_at < datetime.combine(today + timedelta(days=1), datetime.min.time())
+        ).count()
+        
+        existing.videos_count = db.query(Task).filter(
+            Task.status == "completed",
+            Task.created_at >= datetime.combine(today, datetime.min.time()),
+            Task.created_at < datetime.combine(today + timedelta(days=1), datetime.min.time())
+        ).count()
+        
+        existing.projects_count = db.query(Project).filter(
+            Project.created_at >= datetime.combine(today, datetime.min.time()),
+            Project.created_at < datetime.combine(today + timedelta(days=1), datetime.min.time())
+        ).count()
+        
+        existing.active_users_count = db.query(User).filter(
+            User.last_active_at >= datetime.combine(today, datetime.min.time())
+        ).count()
+        
+        total_api_calls = db.query(User).filter(
+            User.last_active_at >= datetime.combine(today, datetime.min.time())
+        ).with_entities(sql_func.sum(User.api_calls_count)).scalar() or 0
+        
+        existing.api_calls_count = total_api_calls
+        
+        db.commit()
+        print(f"[Statistics] Updated daily statistics for {today}")
+        
+    except Exception as e:
+        print(f"[Statistics Error] Failed to update: {e}")
+        db.rollback()
+    finally:
+        db.close()

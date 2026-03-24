@@ -47,7 +47,7 @@ export default function Register() {
               <RocketOutlined className="text-3xl text-white" />
             </motion.div>
             <h1 className="text-2xl font-bold text-gray-800 dark:text-white mb-2">
-              加入 AI视频 平台
+              加入思维可视化平台
             </h1>
             <p className="text-gray-500 dark:text-gray-400 text-sm">
               创建账号，开启动画创作之旅

@@ -4,7 +4,7 @@ import type { MenuProps } from 'antd'
 import {
   DashboardOutlined, UserOutlined, LogoutOutlined, SafetyOutlined,
   TeamOutlined, FileTextOutlined, SettingOutlined, 
-  MenuOutlined, SwapOutlined, HomeOutlined, CodeOutlined
+  MenuOutlined, SwapOutlined, HomeOutlined, CodeOutlined, BarChartOutlined
 } from '@ant-design/icons'
 import { useAuthStore } from '@/stores/authStore'
 import { useEffect } from 'react'
@@ -27,6 +27,7 @@ export default function AdminLayout() {
 
   const menuItems: MenuProps['items'] = [
     { key: '/admin', icon: <DashboardOutlined />, label: '仪表盘' },
+    { key: '/admin/statistics', icon: <BarChartOutlined />, label: '数据统计' },
     { key: '/admin/users', icon: <TeamOutlined />, label: '用户管理' },
     { key: '/admin/templates', icon: <CodeOutlined />, label: '代码模板' },
     { key: '/admin/logs', icon: <FileTextOutlined />, label: '操作日志' },

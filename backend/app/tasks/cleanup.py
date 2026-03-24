@@ -109,6 +109,36 @@ def cleanup_temp_files():
         print(f"[Cleanup Error] Temp cleanup failed: {e}")
 
 
+def cleanup_expired_users():
+    """检查并禁用过期用户"""
+    print(f"[Cleanup] Checking expired users at {datetime.utcnow()}")
+    db = SessionLocal()
+    try:
+        now = datetime.utcnow()
+        
+        expired_users = db.query(User).filter(
+            User.expires_at.isnot(None),
+            User.expires_at < now,
+            User.is_active == True
+        ).all()
+        
+        disabled_count = 0
+        for user in expired_users:
+            user.is_active = False
+            disabled_count += 1
+            print(f"[Cleanup] Disabled expired user: {user.username} (expired at {user.expires_at})")
+        
+        db.commit()
+        if disabled_count > 0:
+            print(f"[Cleanup] Disabled {disabled_count} expired users")
+        
+    except Exception as e:
+        print(f"[Cleanup Error] Expired users check failed: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+
 def init_scheduler():
     """初始化定时任务"""
     scheduler.add_job(
@@ -129,6 +159,21 @@ def init_scheduler():
         cleanup_temp_files,
         IntervalTrigger(minutes=10),
         id="cleanup_temp_files",
+        replace_existing=True
+    )
+    
+    scheduler.add_job(
+        cleanup_expired_users,
+        IntervalTrigger(hours=1),
+        id="cleanup_expired_users",
+        replace_existing=True
+    )
+    
+    from app.api.admin import update_daily_statistics
+    scheduler.add_job(
+        update_daily_statistics,
+        IntervalTrigger(hours=1),
+        id="update_daily_statistics",
         replace_existing=True
     )
     

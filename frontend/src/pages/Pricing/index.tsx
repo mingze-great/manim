@@ -189,7 +189,7 @@ export default function Pricing() {
         <h3 className="section-title">所有方案都包含</h3>
         <Row gutter={[24, 24]}>
           {[
-            { icon: <VideoCameraOutlined />, title: 'AI 对话生成', desc: '智能脚本策划' },
+            { icon: <VideoCameraOutlined />, title: '智能对话生成', desc: '智能脚本策划' },
             { icon: <HddOutlined />, title: '云端渲染', desc: '强大算力支持' },
             { icon: <ToolOutlined />, title: '代码编辑器', desc: '在线修改代码' },
             { icon: <CustomerServiceOutlined />, title: '技术支持', desc: '专业客服帮助' },
@@ -207,7 +207,7 @@ export default function Pricing() {
 
       <div className="pricing-cta">
         <h3>准备好开始创作了吗？</h3>
-        <p>加入 thousands of creators，使用 AI 轻松制作数学动画</p>
+        <p>加入 thousands of creators，轻松制作思维可视化动画</p>
         <Button 
           type="primary" 
           size="large" 

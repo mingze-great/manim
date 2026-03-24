@@ -117,6 +117,32 @@ def delete_project(
     return {"message": "Project deleted"}
 
 
+@router.post("/batch-delete")
+def batch_delete_projects(
+    data: dict,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)]
+):
+    project_ids = data.get("project_ids", [])
+    if not project_ids:
+        raise HTTPException(status_code=400, detail="No project IDs provided")
+    
+    deleted_count = 0
+    for project_id in project_ids:
+        project = db.query(Project).filter(
+            Project.id == project_id,
+            Project.user_id == current_user.id
+        ).first()
+        if project:
+            db.query(Conversation).filter(Conversation.project_id == project_id).delete()
+            db.query(Task).filter(Task.project_id == project_id).delete()
+            db.delete(project)
+            deleted_count += 1
+    
+    db.commit()
+    return {"message": f"Deleted {deleted_count} projects", "deleted_count": deleted_count}
+
+
 @router.get("/{project_id}/conversations", response_model=List[ConversationResponse])
 def get_conversations(
     project_id: int,

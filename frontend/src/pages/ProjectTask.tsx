@@ -1,8 +1,9 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
-import { Card, Progress, Button, Space, message, Spin, Tabs, Collapse } from 'antd'
-import { DownloadOutlined, PlayCircleOutlined, CodeOutlined, CloudUploadOutlined, CopyOutlined, CheckOutlined } from '@ant-design/icons'
+import { Card, Progress, Button, Space, message, Spin, Tabs, Collapse, Select } from 'antd'
+import { DownloadOutlined, PlayCircleOutlined, CodeOutlined, CloudUploadOutlined } from '@ant-design/icons'
 import { projectApi, Task, Project } from '@/services/project'
+import { templateApi, Template } from '@/services/template'
 import { useAuthStore } from '@/stores/authStore'
 import { motion } from 'framer-motion'
 
@@ -31,10 +32,11 @@ export default function ProjectTask() {
   const [videoMessage, setVideoMessage] = useState('')
   const [generatedCode, setGeneratedCode] = useState('')
   const [activeTab, setActiveTab] = useState('code')
-  const [copied, setCopied] = useState(false)
   const [terminalLog, setTerminalLog] = useState('')
   const [showTerminal, setShowTerminal] = useState(false)
   const [renderError, setRenderError] = useState<string | null>(null)
+  const [templates, setTemplates] = useState<Template[]>([])
+  const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null)
   const codeRef = useRef<HTMLPreElement>(null)
   const terminalRef = useRef<HTMLDivElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
@@ -58,18 +60,27 @@ export default function ProjectTask() {
       const tasksRes = await projectApi.getTask(project.id)
       setTask(tasksRes.data)
     } catch (error: any) {
-      // Ignore 404 because it's expected that there might be no task yet
       if (error.response?.status !== 404) {
         console.error('获取任务失败:', error)
       }
-      // 可能还没有任务
     } finally {
       setLoading(false)
     }
   }
 
+  const fetchTemplates = async () => {
+    try {
+      const { data } = await templateApi.list()
+      const allTemplates = [...data.system_templates, ...data.user_templates]
+      setTemplates(allTemplates.filter(t => t.is_active !== false))
+    } catch (error) {
+      console.error('获取模板失败:', error)
+    }
+  }
+
   useEffect(() => {
     fetchProject()
+    fetchTemplates()
   }, [id])
 
   useEffect(() => {
@@ -90,7 +101,6 @@ export default function ProjectTask() {
   }, [project, generatedCode])
 
   const handleGenerateCode = async () => {
-    const templateId = searchParams.get('templateId')
     setGeneratingCode(true)
     setCodeProgress(0)
     setCodeMessage('正在开始生成...')
@@ -102,10 +112,10 @@ export default function ProjectTask() {
       const token = (useAuthStore.getState().token) || ''
       console.log('[generateCode] API_BASE:', API_BASE)
       console.log('[generateCode] id:', id)
-      console.log('[generateCode] templateId:', templateId)
+      console.log('[generateCode] templateId:', selectedTemplateId)
       let streamUrl = `${API_BASE}/api/tasks/${id}/generate-code`
-      if (templateId) {
-        streamUrl += `?template_id=${templateId}`
+      if (selectedTemplateId) {
+        streamUrl += `?template_id=${selectedTemplateId}`
       }
       console.log('[generateCode] streamUrl:', streamUrl)
       let headers: any = {
@@ -190,11 +200,12 @@ export default function ProjectTask() {
     }
     
     setGeneratingVideo(true)
-    setVideoProgress(0)
+    setVideoProgress(5)
     setVideoMessage('正在准备渲染...')
     setTerminalLog('')
     setShowTerminal(true)
     setRenderError(null)
+    setTask(null)
     
     abortControllerRef.current = new AbortController()
     
@@ -253,12 +264,25 @@ export default function ProjectTask() {
                 message.error(parsed.content)
               } else if (parsed.type === 'success') {
                 setTerminalLog(prev => prev + `\n✅ ${parsed.content}\n`)
+                setVideoProgress(100)
+                setVideoMessage('渲染完成！')
                 if (parsed.video_url) {
-                  setProject(prev => prev ? { ...prev, video_url: parsed.video_url } : null)
+                  setProject(prev => prev ? { ...prev, video_url: parsed.video_url, status: 'completed' } : null)
                 }
                 message.success('视频渲染完成！')
               } else if (parsed.type === 'info' || parsed.type === 'output') {
                 setTerminalLog(prev => prev + parsed.content + '\n')
+                const content = parsed.content.toLowerCase()
+                if (content.includes('animation') || content.includes('rendering')) {
+                  setVideoProgress(prev => Math.min(prev + 2, 90))
+                  setVideoMessage('正在渲染动画...')
+                } else if (content.includes('combining') || content.includes('writing')) {
+                  setVideoProgress(prev => Math.min(prev + 3, 95))
+                  setVideoMessage('正在合成视频...')
+                } else if (content.includes('file')) {
+                  setVideoProgress(15)
+                  setVideoMessage('准备渲染环境...')
+                }
               }
               
               setTimeout(() => {
@@ -275,8 +299,10 @@ export default function ProjectTask() {
       message.error('渲染失败: ' + errorMsg)
       setRenderError(errorMsg)
       setTerminalLog(prev => prev + `\n❌ 渲染失败: ${errorMsg}\n`)
+      setVideoProgress(0)
     } finally {
       setGeneratingVideo(false)
+      await fetchProject()
     }
   }
 
@@ -321,27 +347,6 @@ export default function ProjectTask() {
         fromRender: true 
       } 
     })
-  }
-
-  const handleCopyCode = () => {
-    if (generatedCode) {
-      navigator.clipboard.writeText(generatedCode)
-      setCopied(true)
-      message.success('代码已复制到剪贴板')
-      setTimeout(() => setCopied(false), 2000)
-    }
-  }
-
-  const handleDownloadCode = () => {
-    if (generatedCode) {
-      const blob = new Blob([generatedCode], { type: 'text/plain' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `AI视频_scene_${id}.py`
-      a.click()
-      URL.revokeObjectURL(url)
-    }
   }
 
   if (loading) {
@@ -400,6 +405,22 @@ export default function ProjectTask() {
                   </motion.div>
                 )}
 
+                {/* 模板选择 */}
+                <div className="mb-4">
+                  <label className="block text-sm text-gray-500 mb-2">选择代码模板</label>
+                  <Select
+                    style={{ width: '100%', maxWidth: 300 }}
+                    placeholder="默认模板"
+                    allowClear
+                    value={selectedTemplateId}
+                    onChange={setSelectedTemplateId}
+                    options={templates.map(t => ({
+                      label: t.name,
+                      value: t.id
+                    }))}
+                  />
+                </div>
+
                 {/* 生成代码按钮 */}
                 <div className="flex gap-3">
                   <Button 
@@ -412,26 +433,6 @@ export default function ProjectTask() {
                   >
                     {generatedCode ? '重新生成代码' : '生成代码'}
                   </Button>
-                  
-                  {generatedCode && (
-                    <>
-                      <Button 
-                        icon={<DownloadOutlined />}
-                        onClick={handleDownloadCode}
-                        size="large"
-                      >
-                        下载代码
-                      </Button>
-                      <Button 
-                        icon={copied ? <CheckOutlined /> : <CopyOutlined />}
-                        onClick={handleCopyCode}
-                        size="large"
-                        type={copied ? 'primary' : 'default'}
-                      >
-                        {copied ? '已复制' : '复制代码'}
-                      </Button>
-                    </>
-                  )}
                 </div>
 
                 {/* 代码显示 */}
@@ -445,7 +446,7 @@ export default function ProjectTask() {
                         header={
                           <div className="flex items-center gap-2">
                             <CodeOutlined className="text-[#0066FF]" />
-                            <span>生成的 AI视频 代码</span>
+                            <span>生成的 Manim 代码</span>
                           </div>
                         } 
                         key="code"
@@ -490,7 +491,7 @@ export default function ProjectTask() {
                 )}
 
                 {/* 任务状态 */}
-                {task ? (
+                {(task || generatingVideo || project?.video_url) ? (
                   <motion.div 
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
@@ -501,16 +502,16 @@ export default function ProjectTask() {
                       <span 
                         className="status-badge"
                         style={{ 
-                          backgroundColor: `${statusMap[task.status]?.color}20`,
-                          color: statusMap[task.status]?.color 
+                          backgroundColor: `${statusMap[task?.status || (generatingVideo ? 'processing' : 'completed')]?.color}20`,
+                          color: statusMap[task?.status || (generatingVideo ? 'processing' : 'completed')]?.color 
                         }}
                       >
-                        {statusMap[task.status]?.text}
+                        {statusMap[task?.status || (generatingVideo ? 'processing' : 'completed')]?.text}
                       </span>
                     </div>
                     <Progress 
-                      percent={task.progress || videoProgress} 
-                      status={task.status === 'failed' || renderError ? 'exception' : task.status === 'completed' ? 'success' : 'active'}
+                      percent={task?.progress || videoProgress} 
+                      status={task?.status === 'failed' || renderError ? 'exception' : task?.status === 'completed' || project?.video_url ? 'success' : 'active'}
                       strokeColor={{
                         '0%': '#0066FF',
                         '100%': '#00CCFF',
@@ -551,7 +552,7 @@ export default function ProjectTask() {
                 {/* 渲染失败时的返回按钮 */}
                 {renderError && (
                   <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200">
-                    <p className="text-red-600 mb-3">渲染失败，返回对话让 AI 修复代码。</p>
+                    <p className="text-red-600 mb-3">渲染失败，返回对话让智能助手修复代码。</p>
                     <Button type="primary" onClick={handleBackToEdit}>
                       返回对话修复
                     </Button>

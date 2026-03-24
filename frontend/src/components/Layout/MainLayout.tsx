@@ -62,7 +62,7 @@ export default function MainLayout() {
     const item = menuItems.find(m => m && 'key' in m && m.key === location.pathname)
     if (item && 'label' in item) return item.label as string
     if (location.pathname.startsWith('/creator')) return '创作工作台'
-    return 'AI视频 视频平台'
+    return '思维可视化 视频平台'
   }
 
   return (
@@ -80,7 +80,7 @@ export default function MainLayout() {
               <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
             </svg>
           </div>
-          <span className="logo-text">AI视频</span>
+          <span className="logo-text">思维可视化</span>
         </div>
         <Menu
           mode="inline"
@@ -113,7 +113,7 @@ export default function MainLayout() {
                 <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
               </svg>
             </div>
-            <span>AI视频</span>
+            <span>思维可视化</span>
           </div>
         }
         placement="left"

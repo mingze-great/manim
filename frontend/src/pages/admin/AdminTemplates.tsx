@@ -174,14 +174,26 @@ export default function AdminTemplates() {
           </Form.Item>
           
           <Form.Item
+            name="prompt"
+            label="生成提示词 (可选)"
+            extra="选择此模板时使用的自定义 AI 提示词，留空则使用默认提示词"
+          >
+            <TextArea
+              rows={6}
+              className="font-mono text-sm"
+              placeholder="输入自定义的 AI 提示词，用于指导代码生成风格..."
+            />
+          </Form.Item>
+          
+          <Form.Item
             name="code"
-            label="AI视频 代码"
+            label="Manim 代码模板"
             rules={[{ required: true, message: '请输入代码' }]}
           >
             <TextArea
-              rows={16}
+              rows={12}
               className="font-mono text-sm"
-              placeholder={`from AI视频 import *
+              placeholder={`from manim import *
 
 class MyScene(Scene):
     def construct(self):
@@ -191,7 +203,7 @@ class MyScene(Scene):
           </Form.Item>
           
           <div className="bg-yellow-50 p-3 rounded-lg text-sm text-yellow-700">
-            <strong>💡 提示：</strong>用户选择此模板后，AI将完全按照此代码的风格（结构、动画、配色）生成新内容。
+            <strong>💡 提示：</strong>用户选择此模板后，将完全按照此代码的风格（结构、动画、配色）生成新内容。
           </div>
         </Form>
       </Modal>

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from contextlib import asynccontextmanager
@@ -43,6 +43,11 @@ async def lifespan(app: FastAPI):
             conn.execute(text("ALTER TABLE templates ADD COLUMN updated_at DATETIME"))
             conn.commit()
             print("Added updated_at column to templates")
+        
+        if 'prompt' not in columns:
+            conn.execute(text("ALTER TABLE templates ADD COLUMN prompt TEXT"))
+            conn.commit()
+            print("Added prompt column to templates")
     
     db = SessionLocal()
     system_templates = [
