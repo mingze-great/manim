@@ -15,17 +15,16 @@ const formatDateTime = (dateStr: string | null | undefined, showTime: boolean = 
     if (!dateStr) return '-'
     try {
       const date = new Date(dateStr.endsWith('Z') ? dateStr : dateStr + 'Z')
+      const year = date.getFullYear()
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      const hours = String(date.getHours()).padStart(2, '0')
+      const minutes = String(date.getMinutes()).padStart(2, '0')
+      const seconds = String(date.getSeconds()).padStart(2, '0')
       if (showTime) {
-        return date.toLocaleString('zh-CN', { 
-          timeZone: 'Asia/Shanghai',
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-          hour: '2-digit',
-          minute: '2-digit'
-        })
+        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
       }
-      return date.toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' })
+      return `${year}-${month}-${day}`
     } catch {
       return '-'
     }
@@ -218,8 +217,8 @@ export default function AdminUsers() {
       title: '有效期',
       dataIndex: 'expires_at',
       key: 'expires_at',
-      width: 120,
-      render: (expiresAt: string) => formatDateTime(expiresAt, false),
+      width: 170,
+      render: (expiresAt: string) => formatDateTime(expiresAt),
     },
     {
       title: '注册时间',

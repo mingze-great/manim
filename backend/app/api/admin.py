@@ -330,7 +330,7 @@ async def extend_user(
               details=f"延长用户有效期: {user.username} +{days}天, 新到期: {user.expires_at}",
               request=request)
     
-    return {"message": f"已延长{days}天", "expires_at": user.expires_at}
+    return {"message": f"已延长{days}天", "expires_at": user.expires_at.strftime('%Y-%m-%d %H:%M:%S') if user.expires_at else None}
 
 
 @router.get("/pending-users", response_model=List[UserResponse])
