@@ -118,6 +118,24 @@ export const adminApi = {
 
   extendUser: (userId: number, days: number = 30) =>
     api.post<{ message: string; expires_at: string }>(`/admin/users/${userId}/extend`, null, { params: { days } }),
+
+  getStatisticsOverview: (period: string = 'day') =>
+    api.get<{
+      conversations_count: number
+      api_calls_count: number
+      videos_count: number
+      projects_count: number
+      active_users: number
+    }>('/admin/statistics/overview', { params: { period } }),
+
+  getStatisticsTrend: (period: string = 'day') =>
+    api.get<{
+      date: string
+      conversations_count: number
+      api_calls_count: number
+      videos_count: number
+      projects_count: number
+    }[]>('/admin/statistics/trend', { params: { period } }),
 }
 
 export default api

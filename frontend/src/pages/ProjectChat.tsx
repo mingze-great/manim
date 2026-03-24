@@ -235,6 +235,10 @@ export default function ProjectChat() {
     }
   }
 
+  const handleGenerateCode = () => {
+    navigate(`/project/${id}/task`)
+  }
+
   const handleGenerateVideo = () => {
     navigate(`/project/${id}/task`)
   }
@@ -383,7 +387,17 @@ export default function ProjectChat() {
           </div>
         )}
         
-        {project?.manim_code ? (
+        {project?.final_script && !project?.manim_code ? (
+          <Button
+            type="primary"
+            icon={<PlayCircleOutlined />}
+            onClick={handleGenerateCode}
+            block
+            className="btn-gradient"
+          >
+            生成代码和视频
+          </Button>
+        ) : project?.manim_code ? (
           <Button
             type="primary"
             icon={<PlayCircleOutlined />}

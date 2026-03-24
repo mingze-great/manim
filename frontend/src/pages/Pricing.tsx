@@ -5,7 +5,7 @@ const { Title, Text } = Typography
 
 export default function Pricing() {
   const features = [
-    'AI 内容生成',
+    '智能内容生成',
     '视频渲染服务',
     '最多3个项目保存',
     '项目下载到本地',

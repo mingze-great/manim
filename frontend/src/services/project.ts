@@ -47,6 +47,7 @@ export const projectApi = {
   create: (data: { title: string; theme: string }) => api.post<Project>('/projects', data),
   update: (id: number, data: Partial<Project>) => api.put<Project>(`/projects/${id}`, data),
   delete: (id: number) => api.delete(`/projects/${id}`),
+  batchDelete: (ids: number[]) => api.post('/projects/batch-delete', { project_ids: ids }),
   getConversations: (id: number) => api.get<Conversation[]>(`/projects/${id}/conversations`),
   sendMessage: (id: number, content: string) => api.post<Conversation>(`/projects/${id}/chat`, { content }),
   getPendingResponse: (id: number) => api.get<PendingResponse>(`/projects/${id}/chat/pending`),

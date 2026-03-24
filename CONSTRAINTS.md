@@ -90,6 +90,7 @@
 |---|------|--------|------|
 | 1 | 完整流程测试 | 高 | 待测试 |
 | 2 | 代码模板功能完整测试 | 中 | 待测试 |
+| 3 | 服务器数据库迁移（添加 statistics 表） | 中 | 待执行 |
 
 ---
 
@@ -102,7 +103,8 @@ frontend/src/pages/
 ├── ProjectTask.tsx      # 任务页面，代码生成/视频渲染
 ├── admin/
 │   ├── AdminUsers.tsx   # 用户管理
-│   └── AdminTemplates.tsx # 模板管理
+│   ├── AdminTemplates.tsx # 模板管理
+│   └── AdminStatistics.tsx # 数据统计
 └── History/index.tsx    # 作品列表，批量删除
 ```
 
@@ -121,7 +123,8 @@ backend/app/
 │   └── cleanup.py       # 定时任务
 └── models/
     ├── user.py          # 用户模型
-    └── template.py      # 模板模型
+    ├── template.py      # 模板模型
+    └── statistics.py    # 统计数据模型
 ```
 
 ---
@@ -164,6 +167,8 @@ backend/app/
 | 2026-03-24 | 修复数据库连接问题（manim.db vs manim_platform.db） |
 | 2026-03-24 | 修复 CI/CD health-check HTTPS 问题 |
 | 2026-03-24 | 添加"生成代码和视频"按钮 |
+| 2026-03-24 | 合并本地开发修改到 feature-global-constraints 分支 |
+| 2026-03-24 | 添加统计数据模型和页面 |
 
 ---
 

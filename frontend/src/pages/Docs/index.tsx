@@ -16,13 +16,13 @@ export default function Docs() {
       icon: <PlayCircleOutlined />,
     },
     {
-      title: 'AI 生成内容',
-      description: 'AI 根据你的主题生成内容要点和动态描述',
+      title: '智能生成内容',
+      description: '根据你的主题生成内容要点和动态描述',
       icon: <MessageOutlined />,
     },
     {
       title: '审核调整',
-      description: '查看 AI 生成的内容，有需要可以调整修改',
+      description: '查看生成的内容，有需要可以调整修改',
       icon: <VideoCameraOutlined />,
     },
     {

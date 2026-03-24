@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Card, Row, Col, Button, Empty, Tabs, Typography, Progress, Space, Modal, message, Popconfirm } from 'antd'
+import { Card, Row, Col, Button, Empty, Tabs, Typography, Progress, Space, Modal, message, Popconfirm, Checkbox } from 'antd'
 import { 
   VideoCameraOutlined, EditOutlined, DeleteOutlined, 
   CopyOutlined, DownloadOutlined, PlayCircleOutlined,
@@ -37,6 +37,8 @@ export default function History() {
   const [activeTab, setActiveTab] = useState('all')
   const [viewModalVisible, setViewModalVisible] = useState(false)
   const [selectedProject, setSelectedProject] = useState<Project | null>(null)
+  const [selectedKeys, setSelectedKeys] = useState<number[]>([])
+  const [batchDeleting, setBatchDeleting] = useState(false)
 
   useEffect(() => {
     fetchProjects()
@@ -77,6 +79,40 @@ export default function History() {
     }
   }
 
+  const handleBatchDelete = async () => {
+    if (selectedKeys.length === 0) {
+      message.warning('请选择要删除的项目')
+      return
+    }
+    setBatchDeleting(true)
+    try {
+      await projectApi.batchDelete(selectedKeys)
+      message.success(`已删除 ${selectedKeys.length} 个项目`)
+      setSelectedKeys([])
+      fetchProjects()
+    } catch (error) {
+      message.error('批量删除失败')
+    } finally {
+      setBatchDeleting(false)
+    }
+  }
+
+  const handleSelectAll = () => {
+    setSelectedKeys(filteredProjects.map(p => p.id))
+  }
+
+  const handleSelectNone = () => {
+    setSelectedKeys([])
+  }
+
+  const toggleSelect = (projectId: number) => {
+    setSelectedKeys(prev => 
+      prev.includes(projectId) 
+        ? prev.filter(id => id !== projectId)
+        : [...prev, projectId]
+    )
+  }
+
   const handleContinueProject = (project: Project) => {
     navigate(`/project/${project.id}/chat`)
   }
@@ -105,6 +141,19 @@ export default function History() {
           <Text type="secondary">共 {projects.length} 个项目</Text>
         </div>
         <Space>
+          {selectedKeys.length > 0 && (
+            <Popconfirm
+              title={`确定删除选中的 ${selectedKeys.length} 个项目？`}
+              description="删除后无法恢复"
+              onConfirm={handleBatchDelete}
+              okText="确定"
+              cancelText="取消"
+            >
+              <Button danger loading={batchDeleting} icon={<DeleteOutlined />}>
+                删除选中 ({selectedKeys.length})
+              </Button>
+            </Popconfirm>
+          )}
           <Button icon={<ReloadOutlined />} onClick={fetchProjects} loading={loading}>
             刷新
           </Button>
@@ -154,7 +203,7 @@ export default function History() {
 
       <Tabs 
         activeKey={activeTab}
-        onChange={setActiveTab}
+        onChange={(key) => { setActiveTab(key); setSelectedKeys([]) }}
         items={[
           { key: 'all', label: `全部 (${projects.length})`, children: (
             projects.length === 0 ? (
@@ -162,59 +211,75 @@ export default function History() {
                 <Button type="primary" onClick={() => navigate('/creator')}>创建第一个项目</Button>
               </Empty>
             ) : (
-              <div className="projects-grid">
-                {filteredProjects.map((project) => {
-                  const statusConfig = getStatusConfig(project.status)
-                  const task = tasks[project.id]
-                  return (
-                    <Card key={project.id} className="project-card hover-lift">
-                      <div className="project-thumbnail" onClick={() => handleViewProject(project)}>
-                        <VideoCameraOutlined className="thumbnail-icon" />
-                        {project.status === 'rendering' && task && (
-                          <div className="progress-overlay">
-                            <Progress type="circle" percent={task.progress || 0} size={60} strokeColor="#6366f1" />
+              <>
+                <div className="mb-3 flex gap-2">
+                  <Button size="small" onClick={handleSelectAll}>全选</Button>
+                  <Button size="small" onClick={handleSelectNone}>取消选择</Button>
+                </div>
+                <div className="projects-grid">
+                  {filteredProjects.map((project) => {
+                    const statusConfig = getStatusConfig(project.status)
+                    const task = tasks[project.id]
+                    const isSelected = selectedKeys.includes(project.id)
+                    return (
+                      <Card 
+                        key={project.id} 
+                        className={`project-card hover-lift ${isSelected ? 'selected-card' : ''}`}
+                      >
+                        <div className="project-select">
+                          <Checkbox 
+                            checked={isSelected}
+                            onChange={() => toggleSelect(project.id)}
+                          />
+                        </div>
+                        <div className="project-thumbnail" onClick={() => handleViewProject(project)}>
+                          <VideoCameraOutlined className="thumbnail-icon" />
+                          {project.status === 'rendering' && task && (
+                            <div className="progress-overlay">
+                              <Progress type="circle" percent={task.progress || 0} size={60} strokeColor="#6366f1" />
+                            </div>
+                          )}
+                          <div className={`status-badge ${statusConfig.color}`}>
+                            {statusConfig.icon} {statusConfig.text}
                           </div>
-                        )}
-                        <div className={`status-badge ${statusConfig.color}`}>
-                          {statusConfig.icon} {statusConfig.text}
                         </div>
-                      </div>
-                      <div className="project-info">
-                        <Title level={5} className="project-name">{project.title}</Title>
-                        <div className="project-meta">
-                          <Text type="secondary" className="project-date">
-                            {new Date(project.created_at).toLocaleDateString('zh-CN')}
-                          </Text>
-                          {project.theme && (
-                            <Text type="secondary" ellipsis style={{ maxWidth: 100 }}>
-                              {project.theme}
+                        <div className="project-info">
+                          <Title level={5} className="project-name">{project.title}</Title>
+                          <div className="project-meta">
+                            <Text type="secondary" className="project-date">
+                              {new Date(project.created_at).toLocaleDateString('zh-CN')}
                             </Text>
-                          )}
+                            {project.theme && (
+                              <Text type="secondary" ellipsis style={{ maxWidth: 100 }}>
+                                {project.theme}
+                              </Text>
+                            )}
+                          </div>
+                          <div className="project-actions">
+                            {project.status === 'completed' ? (
+                              <>
+                                <Button type="text" size="small" icon={<PlayCircleOutlined />} onClick={() => handleViewProject(project)}>播放</Button>
+                                <Button type="text" size="small" icon={<CopyOutlined />} onClick={() => navigate(`/project/${project.id}/chat`)}>复用</Button>
+                              </>
+                            ) : (
+                              <Button type="text" size="small" icon={<EditOutlined />} onClick={() => handleContinueProject(project)}>继续编辑</Button>
+                            )}
+                            <Popconfirm
+                              title="确定删除此项目？"
+                              description="删除后无法恢复"
+                              onConfirm={() => handleDeleteProject(project.id)}
+                              okText="确定"
+                              cancelText="取消"
+                            >
+                              <Button type="text" size="small" danger icon={<DeleteOutlined />} />
+                            </Popconfirm>
+                          </div>
                         </div>
-                        <div className="project-actions">
-                          {project.status === 'completed' ? (
-                            <>
-                              <Button type="text" size="small" icon={<PlayCircleOutlined />} onClick={() => handleViewProject(project)}>播放</Button>
-                              <Button type="text" size="small" icon={<CopyOutlined />} onClick={() => navigate(`/project/${project.id}/chat`)}>复用</Button>
-                            </>
-                          ) : (
-                            <Button type="text" size="small" icon={<EditOutlined />} onClick={() => handleContinueProject(project)}>继续编辑</Button>
-                          )}
-                          <Popconfirm
-                            title="确定删除此项目？"
-                            description="删除后无法恢复"
-                            onConfirm={() => handleDeleteProject(project.id)}
-                            okText="确定"
-                            cancelText="取消"
-                          >
-                            <Button type="text" size="small" danger icon={<DeleteOutlined />} />
-                          </Popconfirm>
-                        </div>
-                      </div>
-                    </Card>
-                  )
-                })}
-              </div>
+                      </Card>
+                    )
+                  })}
+                </div>
+              </>
             )
           )},
           { key: 'completed', label: `已完成 (${completedCount})`, children: (
