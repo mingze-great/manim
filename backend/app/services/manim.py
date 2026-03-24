@@ -31,7 +31,6 @@ class Dynamic_HUD_Review(Scene):
         # --- 1. 核心配置 (严禁修改) ---
         BG_COLOR = "#0D0D12"
         COLORS = ["#00F0FF", "#FF003C", "#FCEE09", "#B026FF", "#00FF66"]
-        CN_FONT = "Microsoft YaHei" 
         self.camera.background_color = BG_COLOR
 
 
@@ -77,7 +76,7 @@ class Dynamic_HUD_Review(Scene):
 
 
         # --- 3. 动画流 (严禁修改) ---
-        title_text = Text(INTRO_TITLE, font=CN_FONT, color=COLORS[0], weight=BOLD).scale(1.5)
+        title_text = Text(INTRO_TITLE, color=COLORS[0], weight=BOLD).scale(1.5)
         self.play(Write(title_text), run_time=2)
         self.wait(1.5)
         self.play(FadeOut(title_text))
@@ -87,8 +86,8 @@ class Dynamic_HUD_Review(Scene):
             current_color = COLORS[i % len(COLORS)]
             
             # 左侧文字排版
-            title = Text(title_str, font=CN_FONT, color=current_color, weight=BOLD).scale(1.2)
-            desc = Text(desc_str, font=CN_FONT, color=WHITE, line_spacing=1.5).scale(0.8)
+            title = Text(title_str, color=current_color, weight=BOLD).scale(1.2)
+            desc = Text(desc_str, color=WHITE, line_spacing=1.5).scale(0.8)
             text_group = VGroup(title, desc).arrange(DOWN, aligned_edge=LEFT, buff=0.8).to_edge(LEFT, buff=1.5)
 
 
@@ -111,7 +110,7 @@ class Dynamic_HUD_Review(Scene):
 
 
         # 结尾
-        outro = Text(OUTRO_TEXT, font=CN_FONT, color=WHITE, line_spacing=1.5).scale(1.2)
+        outro = Text(OUTRO_TEXT, color=WHITE, line_spacing=1.5).scale(1.2)
         self.play(FadeIn(outro, shift=UP*0.3))
         self.wait(3.5)
         self.play(FadeOut(outro), run_time=2)
