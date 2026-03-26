@@ -1,11 +1,12 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
-import { Input, Button, message, Modal, Alert } from 'antd'
-import { SendOutlined, PlayCircleOutlined, RobotOutlined, UserOutlined, ReloadOutlined, CheckCircleOutlined, StopOutlined } from '@ant-design/icons'
+import { Input, Button, message, Modal, Alert, Collapse } from 'antd'
+import { SendOutlined, PlayCircleOutlined, RobotOutlined, UserOutlined, ReloadOutlined, CheckCircleOutlined, StopOutlined, LoadingOutlined, BulbOutlined } from '@ant-design/icons'
 import { projectApi, Conversation, Project } from '@/services/project'
 import { useAuthStore } from '@/stores/authStore'
 
 const { TextArea } = Input
+const { Panel } = Collapse
 
 const statusBadgeMap: Record<string, { text: string; color: string }> = {
   draft: { text: '草稿', color: '#faad14' },
@@ -35,6 +36,8 @@ export default function ProjectChat() {
   const [pendingCode, setPendingCode] = useState<string | null>(null)
   const [showCodeConfirm, setShowCodeConfirm] = useState(false)
   const [fixingCode, setFixingCode] = useState<string | null>(null)
+  const [reasoningContent, setReasoningContent] = useState<string>('')
+  const [currentContent, setCurrentContent] = useState<string>('')
 
   useEffect(() => {
     fetchProject()
@@ -61,13 +64,13 @@ export default function ProjectChat() {
       if (currentCode) {
         setFixingCode(currentCode)
       }
-      const fixMessage = `渲染遇到以下错误，请基于当前代码修复：\n\n错误信息：\n\`\`\`\n${errorLog.substring(0, 1500)}\n\`\`\`\n\n请给出修复后的完整代码。`
+      const fixMessage = `渲染遇到以下错误，请基于当前代码修复：\n\n错误信息：\n\`\`\`\n${errorLog.slice(-1500)}\n\`\`\`\n\n请给出修复后的完整代码。`
       setInput(fixMessage)
       window.history.replaceState({}, document.title)
     } else if (location.state?.errorLog && location.state?.fromRender) {
       const errorLog = location.state.errorLog as string
       setErrorFromRender(errorLog)
-      setInput(`渲染遇到以下错误，请帮我修复代码：\n\`\`\`\n${errorLog.substring(0, 2000)}\n\`\`\``)
+      setInput(`渲染遇到以下错误，请帮我修复代码：\n\`\`\`\n${errorLog.slice(-2000)}\n\`\`\``)
       window.history.replaceState({}, document.title)
     }
   }, [location.state])
@@ -174,7 +177,10 @@ export default function ProjectChat() {
             try {
               const parsed = JSON.parse(data)
               
-              if (parsed.type === 'reasoning' || parsed.type === 'content') {
+              if (parsed.type === 'reasoning') {
+                setReasoningContent(prev => prev + parsed.content)
+              } else if (parsed.type === 'content') {
+                setCurrentContent(prev => prev + parsed.content)
                 aiContent += parsed.content
                 setConversations(prev => {
                   const existing = prev.find(c => c.id === aiTempId)
@@ -196,6 +202,8 @@ export default function ProjectChat() {
               } else if (parsed.type === 'final') {
                 await fetchProject()
                 setAiThinking(false)
+                setReasoningContent('')
+                setCurrentContent('')
                 
                 if (parsed.generated_code) {
                   setPendingCode(parsed.generated_code)
@@ -204,6 +212,8 @@ export default function ProjectChat() {
               } else if (parsed.type === 'done') {
                 await fetchProject()
                 setAiThinking(false)
+                setReasoningContent('')
+                setCurrentContent('')
                 
                 if (parsed.code_updated && parsed.updated_code) {
                   setPendingCode(parsed.updated_code)
@@ -214,6 +224,8 @@ export default function ProjectChat() {
               } else if (parsed.type === 'error') {
                 message.error(parsed.error || 'AI响应失败')
                 setAiThinking(false)
+                setReasoningContent('')
+                setCurrentContent('')
               }
             } catch (e) {
               console.error('解析SSE数据失败:', e)
@@ -302,51 +314,85 @@ export default function ProjectChat() {
           </div>
         )}
         
-        {conversations.map((conv) => (
-          <div key={conv.id} className={`flex gap-2 ${conv.role === 'user' ? 'flex-row-reverse' : ''}`}>
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-              conv.role === 'user' ? 'bg-indigo-500' : 'bg-emerald-500'
-            } text-white text-sm`}>
-              {conv.role === 'user' ? <UserOutlined /> : <RobotOutlined />}
-            </div>
-            <div className={`max-w-[75%] rounded-lg p-2 text-sm ${
-              conv.role === 'user' 
-                ? 'bg-indigo-500 text-white' 
-                : 'bg-gray-100 dark:bg-gray-700'
-            }`}>
-              <pre className="whitespace-pre-wrap text-inherit" style={{ fontFamily: 'inherit' }}>
-                {conv.content}
-              </pre>
-            </div>
-          </div>
-        ))}
+        {conversations.map((conv, index) => {
+            // 如果 AI 正在生成且这是最后一条 assistant 消息，跳过显示（避免重复）
+            if (aiThinking && conv.role === 'assistant' && index === conversations.length - 1) {
+              return null
+            }
+            return (
+              <div key={conv.id} className={`flex gap-2 ${conv.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                  conv.role === 'user' ? 'bg-indigo-500' : 'bg-emerald-500'
+                } text-white text-sm`}>
+                  {conv.role === 'user' ? <UserOutlined /> : <RobotOutlined />}
+                </div>
+                <div className={`max-w-[75%] rounded-lg p-2 text-sm ${
+                  conv.role === 'user' 
+                    ? 'bg-indigo-500 text-white' 
+                    : 'bg-gray-100 dark:bg-gray-700'
+                }`}>
+                  <pre className="whitespace-pre-wrap text-inherit" style={{ fontFamily: 'inherit' }}>
+                    {conv.content}
+                  </pre>
+                </div>
+              </div>
+            )
+          })}
 
         {aiThinking && (
           <div className="flex gap-2 items-end">
             <div className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center">
               <RobotOutlined />
             </div>
-            <div className="bg-gray-100 dark:bg-gray-700 rounded-lg p-3 flex items-center gap-3">
-              <div className="flex gap-1">
-                <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-              </div>
-              <Button 
-                size="small" 
-                danger 
-                icon={<StopOutlined />}
-                onClick={() => {
-                  if (abortControllerRef.current) {
-                    abortControllerRef.current.abort()
-                    setAiThinking(false)
-                    setLoading(false)
-                    message.info('已中止生成')
-                  }
-                }}
-              >
-                中止
-              </Button>
+            <div className="bg-gray-100 dark:bg-gray-700 rounded-lg p-3 max-w-[75%]">
+              {reasoningContent && (
+                <Collapse className="mb-2" size="small">
+                  <Panel 
+                    header={
+                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                        <BulbOutlined />
+                        <span>思考过程</span>
+                        <LoadingOutlined className="text-emerald-500" />
+                      </div>
+                    } 
+                    key="reasoning"
+                  >
+                    <pre className="whitespace-pre-wrap text-xs text-gray-600" style={{ fontFamily: 'inherit' }}>
+                      {reasoningContent}
+                    </pre>
+                  </Panel>
+                </Collapse>
+              )}
+              {currentContent ? (
+                <pre className="whitespace-pre-wrap text-inherit" style={{ fontFamily: 'inherit' }}>
+                  {currentContent}
+                </pre>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <div className="flex gap-1">
+                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  </div>
+                  <Button 
+                    size="small" 
+                    danger 
+                    icon={<StopOutlined />}
+                    onClick={() => {
+                      if (abortControllerRef.current) {
+                        abortControllerRef.current.abort()
+                        setAiThinking(false)
+                        setLoading(false)
+                        setReasoningContent('')
+                        setCurrentContent('')
+                        message.info('已中止生成')
+                      }
+                    }}
+                  >
+                    中止
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -407,11 +453,7 @@ export default function ProjectChat() {
           >
             渲染视频
           </Button>
-        ) : (
-          <p className="text-xs text-gray-400 text-center">
-            输入"满意"确认内容，AI 将自动生成代码
-          </p>
-        )}
+        ) : null}
       </div>
 
       {/* 输入区域 */}

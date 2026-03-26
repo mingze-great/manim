@@ -81,6 +81,7 @@ class ManimService:
         code = re.sub(r'Circle\s*\(\s*([\d.]+)\s*,\s*(\w+)\s*\)', r'Circle(radius=\1, color=\2)', code)
         code = re.sub(r'Dot\s*\(\s*([\d.]+)\s*,\s*(\w+)\s*\)', r'Dot(radius=\1, color=\2)', code)
         code = re.sub(r'Square\s*\(\s*([\d.]+)\s*,\s*(\w+)\s*\)', r'Square(side_length=\1, color=\2)', code)
+        code = re.sub(r'Rectangle\s*\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*(\w+)\s*\)', r'Rectangle(width=\1, height=\2, color=\3)', code)
         
         # 5. 修复 Sector 参数
         code = re.sub(r'Sector\s*\(\s*outer_radius\s*=\s*([^,\)]+)', r'Sector(radius=\1', code)

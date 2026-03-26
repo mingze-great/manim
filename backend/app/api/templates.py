@@ -21,23 +21,26 @@ def get_templates(
 ):
     current_user_obj = current_user
     
-    # 构建基础查询
-    base_query = db.query(Template).filter(Template.is_active.is_(True))
-    
-    # 应用筛选条件  
-    if category:
-        base_query = base_query.filter(Template.category == category)
-    
-    # 获取系统模板
-    system_query_result = db.query(Template).filter(
-        Template.is_active.is_(True),
-        Template.is_system.is_(True)
-    ).offset(skip).limit(limit).all()
-    
     # 获取当前用户权限并执行查询
-    user_is_admin = bool(current_user_obj.is_admin)  # 转换为原生Python bool类型
+    user_is_admin = bool(current_user_obj.is_admin)
     current_user_id = current_user_obj.id
     
+    # 获取系统模板
+    if user_is_admin:
+        # 管理员能看到所有系统模板
+        system_query_result = db.query(Template).filter(
+            Template.is_active.is_(True),
+            Template.is_system.is_(True)
+        ).offset(skip).limit(limit).all()
+    else:
+        # 普通用户只能看到 is_visible=True 或 NULL 的系统模板
+        system_query_result = db.query(Template).filter(
+            Template.is_active.is_(True),
+            Template.is_system.is_(True),
+            (Template.is_visible.is_(True) | Template.is_visible.is_(None))
+        ).offset(skip).limit(limit).all()
+    
+    # 获取用户模板
     if user_is_admin:
         # 管理员能看到所有非系统模板
         user_query_result = db.query(Template).filter(
@@ -132,9 +135,11 @@ def create_template(
         category=template.category,
         code=template.code,
         thumbnail=template.thumbnail,
+        prompt=template.prompt,
         is_system=template_is_system_bool,
         user_id=current_user_id if not template_is_system_bool else None,
-        is_active=True
+        is_active=True,
+        is_visible=True
     )
     db.add(new_template)
     db.commit()
