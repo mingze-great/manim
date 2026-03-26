@@ -1,120 +1,6 @@
 from sqlalchemy.orm import Session
 from app.utils.llm_factory import LLMFactory
-
-MANIM_SYSTEM_PROMPT = """角色与任务：你是一个精通自媒体爆款文案的创作者，同时也是精通 Python Manim 的数据可视化"导演"。
-我需要你根据我提供的新主题，创作具有极强吸引力、情绪共鸣和自我提升感的短句文案。并为每句文案"智能匹配"最适合的动态图形，最后严格填入我提供的代码模板中。
-
-步骤 1：生成文案与匹配图形
-请围绕上述主题，为我生成对应数量的内容。要求：
-- 标题简短有力。
-- 解释正文一针见血、治愈且有力量（严格控制在两行以内，必须使用 \\n 换行）。
-- 【核心】 为每个内容选择最匹配的"图形ID"（0, 1, 或 2）：
-  - 0 代表"数据点阵"（适合描述：底层逻辑、系统、积累、规则、准备）
-  - 1 代表"循环光环"（适合描述：思维认知、闭环、视野、包容、因果）
-  - 2 代表"多边形裂变"（适合描述：突破重构、锐利、改变、果断、出击）
-- 构思一句震撼且治愈的结尾语。
-
-步骤 2：填入代码模板（严格要求）
-请严格复制以下 Python 代码模板，绝不允许修改任何动画逻辑、颜色配置和排版参数。
-你只能修改代码中标记了 <<<替换>>> 的 3 个地方：
-- INTRO_TITLE 的值（本次视频大标题）。
-- models 列表的值。注意格式必须是 3 个元素的元组：("序号. 标题", "正文第一行\\n正文第二行", 图形ID)。
-- OUTRO_TEXT 的值（结尾语）。
-
-请直接输出完整的、可直接运行的 Python 代码：
-
-from manim import *
-
-
-class Dynamic_HUD_Review(Scene):
-    def construct(self):
-        # --- 1. 核心配置 (严禁修改) ---
-        BG_COLOR = "#0D0D12"
-        COLORS = ["#00F0FF", "#FF003C", "#FCEE09", "#B026FF", "#00FF66"]
-        self.camera.background_color = BG_COLOR
-
-
-        # ==========================================
-        # 文案与调度注入区 (仅修改此处内容)
-        # ==========================================
-        INTRO_TITLE = "【<<<替换1：视频大标题>>>】"
-        
-        # 格式：("序号. 标题", "正文第一行\\n正文第二行", 图形ID)
-        models = [
-            # 【<<<替换2：将生成的文案按此格式填入，数量不限>>>】
-            ("01. 示例标题一", "示例正文的第一句话，\\n示例正文的第二句话。", 1),
-            ("02. 示例标题二", "示例正文的第一句话，\\n示例正文的第二句话。", 0)
-        ]
-        
-        OUTRO_TEXT = "【<<<替换3：震撼结尾语，可用\\\\n换行>>>】"
-        # ==========================================
-
-
-        # --- 2. 动态图形渲染工厂 (严禁修改) ---
-        def get_dynamic_visual(v_type, color):
-            if v_type == 0:  # 数据点阵
-                mob = VGroup(*[Dot(radius=0.06, color=color) for _ in range(16)])
-                mob.arrange_in_grid(4, 4, buff=0.6)
-                mob.add_updater(lambda m, dt: m.rotate(dt * 0.3))
-                return mob
-            elif v_type == 1:  # 循环光环
-                mob = VGroup(
-                    DashedVMobject(Circle(radius=1.8, color=color), num_dashes=20),
-                    Circle(radius=2.4, color=color).set_opacity(0.3)
-                )
-                mob[0].add_updater(lambda m, dt: m.rotate(dt * 0.5))
-                mob[1].add_updater(lambda m, dt: m.rotate(-dt * 0.3))
-                return mob
-            else:  # 多边形裂变
-                mob = VGroup(
-                    RegularPolygon(n=3, radius=1.6, color=color),
-                    RegularPolygon(n=6, radius=2.2, color=color).set_opacity(0.4)
-                )
-                mob[0].add_updater(lambda m, dt: m.rotate(-dt * 0.6))
-                mob[1].add_updater(lambda m, dt: m.rotate(dt * 0.4))
-                return mob
-
-
-        # --- 3. 动画流 (严禁修改) ---
-        title_text = Text(INTRO_TITLE, color=COLORS[0], weight=BOLD).scale(1.5)
-        self.play(Write(title_text), run_time=2)
-        self.wait(1.5)
-        self.play(FadeOut(title_text))
-
-
-        for i, (title_str, desc_str, v_type) in enumerate(models):
-            current_color = COLORS[i % len(COLORS)]
-            
-            # 左侧文字排版
-            title = Text(title_str, color=current_color, weight=BOLD).scale(1.2)
-            desc = Text(desc_str, color=WHITE, line_spacing=1.5).scale(0.8)
-            text_group = VGroup(title, desc).arrange(DOWN, aligned_edge=LEFT, buff=0.8).to_edge(LEFT, buff=1.5)
-
-
-            # 右侧动态图形
-            visual = get_dynamic_visual(v_type, current_color).to_edge(RIGHT, buff=2.0)
-
-
-            # 进场
-            self.play(
-                Write(title), 
-                FadeIn(desc, shift=UP*0.3), 
-                FadeIn(visual, scale=0.5), 
-                run_time=1.5
-            )
-            self.wait(3.5)
-            
-            # 退场并清除缓存
-            self.play(FadeOut(text_group), FadeOut(visual), run_time=1)
-            visual.clear_updaters() 
-
-
-        # 结尾
-        outro = Text(OUTRO_TEXT, color=WHITE, line_spacing=1.5).scale(1.2)
-        self.play(FadeIn(outro, shift=UP*0.3))
-        self.wait(3.5)
-        self.play(FadeOut(outro), run_time=2)
-"""
+from app.models.template import Template
 
 
 class ManimService:
@@ -122,13 +8,20 @@ class ManimService:
         self.db = db
         self.client = LLMFactory.get_client()
     
+    def _get_default_template_prompt(self) -> str:
+        """获取默认模板（ID=1）的prompt"""
+        template = self.db.query(Template).filter(Template.id == 1).first()
+        if template and template.prompt:
+            return template.prompt
+        return ""
+    
     def generate_code_sync(self, script: str) -> str:
         """同步版本的代码生成"""
         import asyncio
         return asyncio.run(self.generate_code(script))
     
     async def generate_code(self, script: str, template_prompt: str = None) -> str:
-        system_prompt = template_prompt if template_prompt else MANIM_SYSTEM_PROMPT
+        system_prompt = template_prompt if template_prompt else self._get_default_template_prompt()
         
         user_message = f"""请根据以下主题和内容生成 Manim 动画代码：
 
@@ -210,6 +103,55 @@ class ManimService:
         code = code.replace('.point_at_proportion', '.point_from_proportion')
         code = code.replace('.n2p(', '.number_to_point(')
         code = re.sub(r'(\w+)\.length(?!\()', r'\1.get_length()', code)
+        
+        # 10. 修复颜色函数 - interpolate_color 需要ManimColor对象
+        def replace_interpolate_color(match):
+            color1 = match.group(1)
+            color2 = match.group(2)
+            rest = match.group(3) if match.lastindex >= 3 else ''
+            return f'interpolate_color(ManimColor("{color1}"), ManimColor("{color2}"){rest}'
+        
+        code = re.sub(
+            r'interpolate_color\s*\(\s*["\']([^"\']+)["\']\s*,\s*["\']([^"\']+)["\']([^)]*)\)',
+            replace_interpolate_color,
+            code
+        )
+        
+        # 11. 修复 color_to_rgb, rgb_to_color 等颜色函数
+        code = re.sub(
+            r'color_to_rgb\s*\(\s*["\']([^"\']+)["\']\s*\)',
+            r'color_to_rgb(ManimColor("\1"))',
+            code
+        )
+        code = re.sub(
+            r'rgb_to_color\s*\(\s*([^)]+)\s*\)',
+            r'rgb_to_color(\1)',
+            code
+        )
+        
+        # 12. 修复 average_color 函数
+        def replace_average_color(match):
+            colors = match.group(1)
+            colors_list = re.findall(r'["\']([^"\']+)["\']', colors)
+            if colors_list:
+                new_colors = ', '.join([f'ManimColor("{c}")' for c in colors_list])
+                return f'average_color({new_colors})'
+            return match.group(0)
+        
+        code = re.sub(
+            r'average_color\s*\(([^)]+)\)',
+            replace_average_color,
+            code
+        )
+        
+        # 13. 确保 ManimColor 被导入
+        if 'ManimColor' in code and 'from manim import *' in code:
+            pass
+        elif 'ManimColor' in code:
+            if 'from manim import' in code:
+                code = code.replace('from manim import', 'from manim import ManimColor, ', 1)
+            else:
+                code = 'from manim import ManimColor\n' + code
         
         return code
     

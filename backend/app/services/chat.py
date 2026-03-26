@@ -71,6 +71,24 @@ import numpy as np  # 如果使用 numpy
 ```
 
 ## Manim 0.20.1 兼容
+
+### 颜色函数（重要！）
+- 颜色常量直接使用：WHITE, BLUE, YELLOW, GREEN, RED, PURPLE, ORANGE 等
+- **interpolate_color 必须使用 ManimColor 对象**：
+  ```python
+  # 正确写法
+  interpolate_color(ManimColor("#FF0000"), ManimColor("#00FF00"), 0.5)
+  interpolate_color(RED, BLUE, 0.5)
+  
+  # 错误写法（会报错）
+  interpolate_color("#FF0000", "#00FF00", 0.5)
+  ```
+- **average_color 也需要 ManimColor 对象**：
+  ```python
+  average_color(ManimColor(RED), ManimColor(BLUE))
+  ```
+
+### 其他兼容性
 - 使用 Text() 不是 TextMobject()
 - 使用 Paragraph() 显示多行文字
 - 颜色使用：WHITE, BLUE, YELLOW, GREEN, RED 等
@@ -101,11 +119,25 @@ CODE_FIX_PROMPT = """你是 Manim 代码修复专家。
 - 常见缺失：`import random`, `import numpy as np`
 - 修复时在代码开头添加缺失的 import
 
-### 2. 只修复错误行
+### 2. 颜色函数错误（重要！）
+- AttributeError: 'str' object has no attribute 'interpolate'
+- **原因**：interpolate_color 需要传 ManimColor 对象，不能传字符串
+- **修复方法**：
+  ```python
+  # 错误
+  interpolate_color("#FF0000", "#00FF00", 0.5)
+  # 正确
+  interpolate_color(ManimColor("#FF0000"), ManimColor("#00FF00"), 0.5)
+  # 或使用颜色常量
+  interpolate_color(RED, BLUE, 0.5)
+  ```
+- 同样适用于 average_color 等颜色函数
+
+### 3. 只修复错误行
 - 找到错误日志中的行号
 - 只修改报错的那一行，其他代码不要动
 
-### 3. Manim 0.20.1 兼容性
+### 4. Manim 0.20.1 兼容性
 - AttributeError → 检查方法是否存在
 - Cube 没有 get_front/get_back/get_top/get_bottom 方法
 
@@ -294,6 +326,9 @@ class ChatService:
             print(f"[DEBUG] Got response, starting iteration")
             
             async for chunk in response:
+                if not chunk.choices:
+                    continue
+                
                 delta = chunk.choices[0].delta
                 
                 # 只有 DeepSeek 支持 reasoning_content
@@ -417,6 +452,9 @@ class ChatService:
             )
             
             async for chunk in response:
+                if not chunk.choices:
+                    continue
+                
                 delta = chunk.choices[0].delta
                 
                 reasoning = getattr(delta, 'reasoning_content', None)
