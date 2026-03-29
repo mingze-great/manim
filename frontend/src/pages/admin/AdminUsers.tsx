@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Table, Card, Input, Button, Space, Tag, Popconfirm,
-  Modal, Descriptions, message, Row, Col, Avatar, Badge, Radio, InputNumber
+  Modal, message, Row, Col, Avatar, Badge, Radio, InputNumber
 } from 'antd'
 import {
   ReloadOutlined, DeleteOutlined, SearchOutlined,
   LockOutlined, UnlockOutlined, EyeOutlined, UserOutlined,
-  ProjectOutlined, VideoCameraOutlined, CheckCircleOutlined, CloseCircleOutlined,
-  EditOutlined, ClockCircleOutlined
+  CheckCircleOutlined, CloseCircleOutlined,
+  ClockCircleOutlined
 } from '@ant-design/icons'
-import { adminApi, User, UserStats } from '../../services/admin'
+import { adminApi, User } from '../../services/admin'
 
 const formatDateTime = (dateStr: string | null | undefined, showTime: boolean = true) => {
     if (!dateStr) return '-'
@@ -31,14 +32,10 @@ const formatDateTime = (dateStr: string | null | undefined, showTime: boolean = 
   }
 
 export default function AdminUsers() {
+  const navigate = useNavigate()
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(false)
   const [searchText, setSearchText] = useState('')
-  const [selectedUser, setSelectedUser] = useState<User | null>(null)
-  const [userStats, setUserStats] = useState<UserStats | null>(null)
-  const [resetPasswordModalVisible, setResetPasswordModalVisible] = useState(false)
-  const [newPassword, setNewPassword] = useState('')
-  const [resetLoading, setResetLoading] = useState(false)
   const [durationModalVisible, setDurationModalVisible] = useState(false)
   const [durationUser, setDurationUser] = useState<User | null>(null)
   const [durationType, setDurationType] = useState<string>('1m')
@@ -48,26 +45,6 @@ export default function AdminUsers() {
   useEffect(() => {
     fetchUsers()
   }, [])
-
-  const handleResetPassword = async () => {
-    if (!selectedUser || !newPassword) return
-    setResetLoading(true)
-    try {
-      await (adminApi as any).resetPassword(selectedUser.id, newPassword)
-      message.success('密码重置成功')
-      setResetPasswordModalVisible(false)
-      setNewPassword('')
-    } catch (err: any) {
-      message.error(err.response?.data?.detail || '重置失败')
-    } finally {
-      setResetLoading(false)
-    }
-  }
-
-  const openResetPassword = (user: User) => {
-    setSelectedUser(user)
-    setResetPasswordModalVisible(true)
-  }
 
   const fetchUsers = async (search?: string) => {
     setLoading(true)
@@ -127,6 +104,8 @@ export default function AdminUsers() {
 
   const getDurationDays = (type: string): number => {
     switch (type) {
+      case '30min': return 30 / 1440
+      case '1h': return 60 / 1440
       case '1w': return 7
       case '1m': return 30
       case '3m': return 90
@@ -153,16 +132,6 @@ export default function AdminUsers() {
       message.error(err.response?.data?.detail || '操作失败')
     } finally {
       setDurationLoading(false)
-    }
-  }
-
-  const handleViewUser = async (user: User) => {
-    setSelectedUser(user)
-    try {
-      const res = await adminApi.getUserStats(user.id)
-      setUserStats(res.data)
-    } catch (err) {
-      setUserStats(null)
     }
   }
 
@@ -267,7 +236,7 @@ export default function AdminUsers() {
             ghost
             size="small"
             icon={<EyeOutlined />} 
-            onClick={() => handleViewUser(record)}
+            onClick={() => navigate(`/admin/users/${record.id}`)}
           >
             详情
           </Button>
@@ -339,111 +308,6 @@ export default function AdminUsers() {
       </Card>
 
       <Modal
-        title={
-          <Space>
-            <Avatar style={{ backgroundColor: '#6366f1' }} icon={<UserOutlined />} />
-            <span>用户详情</span>
-          </Space>
-        }
-        open={!!selectedUser}
-        onCancel={() => setSelectedUser(null)}
-        footer={[
-          <Button key="close" onClick={() => setSelectedUser(null)}>
-            关闭
-          </Button>
-        ]}
-        width="90vw"
-        style={{ maxWidth: 600 }}
-      >
-        {selectedUser && (
-          <>
-            <Card size="small" className="mb-4" style={{ background: '#f9fafb', borderRadius: '12px' }}>
-              <Descriptions bordered column={1} size="small">
-                <Descriptions.Item label="用户ID">{selectedUser.id}</Descriptions.Item>
-                <Descriptions.Item label="用户名">{selectedUser.username}</Descriptions.Item>
-                <Descriptions.Item label="邮箱">{selectedUser.email}</Descriptions.Item>
-                <Descriptions.Item label="状态">
-                  <Badge status={selectedUser.is_active ? 'success' : 'error'} text={selectedUser.is_active ? '正常' : '已禁用'} />
-                </Descriptions.Item>
-                <Descriptions.Item label="角色">
-                  {selectedUser.is_admin ? <Tag color="gold">管理员</Tag> : <Tag color="default">普通用户</Tag>}
-                </Descriptions.Item>
-                <Descriptions.Item label="注册时间">
-                  {new Date(selectedUser.created_at).toLocaleString('zh-CN')}
-                </Descriptions.Item>
-                <Descriptions.Item label="操作">
-                  <Button 
-                    size="small" 
-                    icon={<EditOutlined />}
-                    onClick={() => openResetPassword(selectedUser)}
-                  >
-                    重置密码
-                  </Button>
-                </Descriptions.Item>
-              </Descriptions>
-            </Card>
-            
-            {userStats && (
-              <Row gutter={[12, 12]}>
-                <Col span={6}>
-                  <Card size="small" className="text-center" style={{ borderRadius: '12px' }}>
-                    <ProjectOutlined style={{ fontSize: '24px', color: '#6366f1' }} />
-                    <div className="text-2xl font-bold mt-2" style={{ color: '#6366f1' }}>{userStats.total_projects}</div>
-                    <div className="text-gray-500 text-sm">项目数</div>
-                  </Card>
-                </Col>
-                <Col span={6}>
-                  <Card size="small" className="text-center" style={{ borderRadius: '12px' }}>
-                    <VideoCameraOutlined style={{ fontSize: '24px', color: '#8b5cf6' }} />
-                    <div className="text-2xl font-bold mt-2" style={{ color: '#8b5cf6' }}>{userStats.total_tasks}</div>
-                    <div className="text-gray-500 text-sm">任务数</div>
-                  </Card>
-                </Col>
-                <Col span={6}>
-                  <Card size="small" className="text-center" style={{ borderRadius: '12px' }}>
-                    <CheckCircleOutlined style={{ fontSize: '24px', color: '#10b981' }} />
-                    <div className="text-2xl font-bold mt-2" style={{ color: '#10b981' }}>{userStats.completed_tasks}</div>
-                    <div className="text-gray-500 text-sm">成功</div>
-                  </Card>
-                </Col>
-                <Col span={6}>
-                  <Card size="small" className="text-center" style={{ borderRadius: '12px' }}>
-                    <CloseCircleOutlined style={{ fontSize: '24px', color: '#ef4444' }} />
-                    <div className="text-2xl font-bold mt-2" style={{ color: '#ef4444' }}>{userStats.failed_tasks}</div>
-                    <div className="text-gray-500 text-sm">失败</div>
-                  </Card>
-                </Col>
-              </Row>
-            )}
-          </>
-        )}
-      </Modal>
-
-      <Modal
-        title="重置密码"
-        open={resetPasswordModalVisible}
-        onCancel={() => {
-          setResetPasswordModalVisible(false)
-          setNewPassword('')
-        }}
-        onOk={handleResetPassword}
-        confirmLoading={resetLoading}
-        okText="确认重置"
-        cancelText="取消"
-      >
-        <div className="py-4">
-          <p className="mb-4">为用户 <strong>{selectedUser?.username}</strong> 设置新密码：</p>
-          <Input.Password
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            placeholder="输入新密码"
-            minLength={8}
-          />
-          <p className="text-xs text-gray-500 mt-2">密码至少8位，需包含字母和数字</p>
-        </div>
-      </Modal>
-
-      <Modal
         title={durationUser?.is_approved ? "设置使用时长" : "审核通过并设置时长"}
         open={durationModalVisible}
         onCancel={() => setDurationModalVisible(false)}
@@ -460,6 +324,8 @@ export default function AdminUsers() {
             className="w-full"
           >
             <Space direction="vertical" className="w-full">
+              <Radio value="30min">30 分钟</Radio>
+              <Radio value="1h">1 小时</Radio>
               <Radio value="1w">1 周</Radio>
               <Radio value="1m">1 个月（推荐）</Radio>
               <Radio value="3m">3 个月</Radio>

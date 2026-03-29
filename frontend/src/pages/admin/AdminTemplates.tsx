@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Table, Button, Space, Tag, Modal, Form, Input, message, Popconfirm } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
+import { Table, Button, Space, Tag, Modal, Form, Input, message, Popconfirm, Switch } from 'antd'
+import { PlusOutlined, EditOutlined, DeleteOutlined, EyeOutlined, EyeInvisibleOutlined } from '@ant-design/icons'
 import { templateApi, Template } from '@/services/template'
 
 const { TextArea } = Input
@@ -35,7 +35,10 @@ export default function AdminTemplates() {
 
   const handleEdit = (template: Template) => {
     setEditingTemplate(template)
-    form.setFieldsValue(template)
+    form.setFieldsValue({
+      ...template,
+      is_visible: template.is_visible ?? true
+    })
     setModalVisible(true)
   }
 
@@ -46,6 +49,16 @@ export default function AdminTemplates() {
       fetchTemplates()
     } catch (err) {
       message.error('删除失败')
+    }
+  }
+
+  const handleToggleVisible = async (template: Template) => {
+    try {
+      await templateApi.update(template.id, { is_visible: !template.is_visible })
+      message.success(template.is_visible ? '已对用户隐藏' : '已对用户显示')
+      fetchTemplates()
+    } catch (err) {
+      message.error('操作失败')
     }
   }
 
@@ -99,6 +112,23 @@ export default function AdminTemplates() {
         <span className="text-xs text-gray-500">
           {code?.slice(0, 50)}...
         </span>
+      ),
+    },
+    {
+      title: '用户可见',
+      dataIndex: 'is_visible',
+      key: 'is_visible',
+      render: (isVisible: boolean, record: Template) => (
+        <Space>
+          <Tag color={isVisible ? 'green' : 'default'} icon={isVisible ? <EyeOutlined /> : <EyeInvisibleOutlined />}>
+            {isVisible ? '可见' : '隐藏'}
+          </Tag>
+          <Switch
+            size="small"
+            checked={isVisible}
+            onChange={() => handleToggleVisible(record)}
+          />
+        </Space>
       ),
     },
     {
@@ -174,37 +204,40 @@ export default function AdminTemplates() {
           </Form.Item>
           
           <Form.Item
-            name="prompt"
-            label="生成提示词 (可选)"
-            extra="选择此模板时使用的自定义 AI 提示词，留空则使用默认提示词"
+            name="is_visible"
+            label="用户可见"
+            valuePropName="checked"
+            extra="开启后，普通用户可以在模板列表中看到此模板"
           >
-            <TextArea
-              rows={6}
-              className="font-mono text-sm"
-              placeholder="输入自定义的 AI 提示词，用于指导代码生成风格..."
-            />
+            <Switch checkedChildren="可见" unCheckedChildren="隐藏" />
           </Form.Item>
           
           <Form.Item
-            name="code"
-            label="Manim 代码模板"
-            rules={[{ required: true, message: '请输入代码' }]}
+            name="prompt"
+            label="生成提示词"
+            rules={[{ required: true, message: '请输入生成提示词' }]}
+            extra="包含 AI 指令和代码模板，用户选择此模板后将按照此内容生成视频代码"
           >
             <TextArea
-              rows={12}
+              rows={20}
               className="font-mono text-sm"
-              placeholder={`from manim import *
+              placeholder={`角色与任务：
+你是一个精通自媒体爆款文案的创作者...
+
+步骤 1：生成文案与匹配图形
+...
+
+步骤 2：填入代码模板
+...
+
+from manim import *
 
 class MyScene(Scene):
     def construct(self):
-        # 在这里编写你的代码模板...
+        # 代码模板...
 `}
             />
           </Form.Item>
-          
-          <div className="bg-yellow-50 p-3 rounded-lg text-sm text-yellow-700">
-            <strong>💡 提示：</strong>用户选择此模板后，将完全按照此代码的风格（结构、动画、配色）生成新内容。
-          </div>
         </Form>
       </Modal>
     </div>

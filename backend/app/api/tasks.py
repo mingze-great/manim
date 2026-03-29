@@ -18,8 +18,10 @@ from app.models.project import Project
 from app.models.task import Task
 from app.models.template import Template
 from app.api.auth import get_current_user
-from app.services.manim import ManimService
+from app.services.manim import ManimService, ManimFixService
+from app.services.code_cache import CodeCache
 from app.config import get_settings
+from app.schemas.task import FixCodeRequest, FixCodeResponse
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 settings = get_settings()
@@ -38,6 +40,7 @@ async def generate_code_stream(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
     template_id: Optional[int] = Query(None),
+    model: Optional[str] = Query(None),
 ):
     """生成Manim代码，流式返回进度"""
     project = db.query(Project).filter(
@@ -80,9 +83,22 @@ async def generate_code_stream(
             
             manim_service = ManimService(db_session)
             template_prompt = template.prompt if template else None
-            manim_code = await manim_service.generate_code(project_local.final_script, template_prompt)
+            manim_code = await manim_service.generate_code(project_local.final_script, template_prompt, model)
             
             fixed_code, warnings = manim_service.validate_code(manim_code)
+            
+            if project_local.theme:
+                import re
+                fixed_code = re.sub(
+                    r'INTRO_TITLE\s*=\s*"[^"]*"',
+                    f'INTRO_TITLE = "{project_local.theme}"',
+                    fixed_code
+                )
+                fixed_code = re.sub(
+                    r'TITLE_TEXT\s*=\s*"[^"]*"',
+                    f'TITLE_TEXT = "{project_local.theme}"',
+                    fixed_code
+                )
             
             yield f"data: {json.dumps({'step': 'validate', 'progress': 80, 'message': '代码验证中...'})}\n\n"
             await asyncio.sleep(0.1)
@@ -93,6 +109,9 @@ async def generate_code_stream(
             project_local.manim_code = fixed_code
             project_local.status = "code_generated"
             db_session.commit()
+            
+            # 保存代码到缓存，用于后续增量修复
+            CodeCache.save(project_id, fixed_code)
             
             yield f"data: {json.dumps({'step': 'done', 'progress': 100, 'message': '代码生成完成！', 'code': fixed_code})}\n\n"
             
@@ -236,19 +255,31 @@ async def render_video_stream(
                             
                             project_local.status = "completed"
                             project_local.video_url = video_url
+                            project_local.render_fail_count = 0
                             db_session.commit()
+                            
+                            # 渲染成功，清除代码缓存
+                            CodeCache.delete(project_id)
                             
                             yield f"data: {json.dumps({'type': 'success', 'content': f'渲染完成！', 'video_url': video_url})}\n\n"
                         else:
+                            project_local.render_fail_count = (project_local.render_fail_count or 0) + 1
+                            db_session.commit()
                             yield f"data: {json.dumps({'type': 'error', 'content': '未找到视频文件'})}\n\n"
                     else:
+                        project_local.render_fail_count = (project_local.render_fail_count or 0) + 1
+                        db_session.commit()
                         yield f"data: {json.dumps({'type': 'error', 'content': f'渲染失败 (code: {result})'})}\n\n"
                         
                 except subprocess.TimeoutExpired:
                     if process:
                         process.kill()
+                    project_local.render_fail_count = (project_local.render_fail_count or 0) + 1
+                    db_session.commit()
                     yield f"data: {json.dumps({'type': 'error', 'content': '渲染超时 (10分钟)'})}\n\n"
                 except Exception as e:
+                    project_local.render_fail_count = (project_local.render_fail_count or 0) + 1
+                    db_session.commit()
                     yield f"data: {json.dumps({'type': 'error', 'content': f'渲染异常: {e}'})}\n\n"
         except Exception as e:
             import traceback
@@ -275,3 +306,68 @@ def get_project_task(
 ):
     task = db.query(Task).filter(Task.project_id == project_id).order_by(Task.created_at.desc()).first()
     return task
+
+
+@router.post("/{project_id}/fix-code", response_model=FixCodeResponse)
+async def fix_code(
+    project_id: int,
+    request: FixCodeRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)]
+):
+    """根据错误信息增量修复代码"""
+    project = db.query(Project).filter(
+        Project.id == project_id,
+        Project.user_id == current_user.id
+    ).first()
+    
+    if not project:
+        raise HTTPException(status_code=404, detail="项目不存在")
+    
+    # 从缓存获取代码，如果没有则使用请求中的代码
+    cached_code = CodeCache.load(project_id)
+    current_code = cached_code or request.current_code
+    
+    if not current_code:
+        return FixCodeResponse(
+            success=False,
+            message="没有可修复的代码"
+        )
+    
+    try:
+        # 调用增量修复服务
+        fix_service = ManimFixService(db)
+        fixed_code, fix_desc = await fix_service.fix_code_incremental(
+            current_code,
+            request.error_message,
+            user_id=current_user.id
+        )
+        
+        # 更新缓存
+        CodeCache.save(project_id, fixed_code)
+        
+        # 更新项目代码
+        project.manim_code = fixed_code
+        db.commit()
+        
+        return FixCodeResponse(
+            success=True,
+            fixed_code=fixed_code,
+            fix_description=fix_desc
+        )
+        
+    except Exception as e:
+        return FixCodeResponse(
+            success=False,
+            message=f"修复失败: {str(e)}"
+        )
+
+
+@router.delete("/{project_id}/code-cache")
+def clear_code_cache(
+    project_id: int,
+    current_user: Annotated[User, Depends(get_current_user)]
+):
+    """清除代码缓存（渲染成功后调用）"""
+    CodeCache.delete(project_id)
+    return {"message": "缓存已清除"}

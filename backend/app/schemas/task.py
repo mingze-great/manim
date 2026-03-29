@@ -30,3 +30,15 @@ class TaskStatusResponse(BaseModel):
     video_url: Optional[str] = None
     error_message: Optional[str] = None
     log: Optional[str] = None
+
+
+class FixCodeRequest(BaseModel):
+    error_message: str
+    current_code: str
+
+
+class FixCodeResponse(BaseModel):
+    success: bool
+    fixed_code: Optional[str] = None
+    fix_description: Optional[str] = None
+    message: Optional[str] = None

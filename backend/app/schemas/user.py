@@ -87,3 +87,66 @@ class SystemStats(BaseModel):
     cpu_usage: float = 0.0
     memory_usage: float = 0.0
     disk_usage: float = 0.0
+
+
+class ProjectStatus(BaseModel):
+    project_id: int
+    project_title: str
+    status: str
+    status_text: str
+    updated_at: Optional[datetime] = None
+
+
+class RecentProject(BaseModel):
+    id: int
+    title: str
+    status: str
+    status_text: str
+    created_at: datetime
+    has_video: bool = False
+    error_message: Optional[str] = None
+
+
+class TaskLog(BaseModel):
+    project_id: int
+    project_title: str
+    status: str
+    error_message: Optional[str] = None
+    log: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+
+class UserDetail(BaseModel):
+    id: int
+    username: str
+    email: str
+    is_active: bool
+    is_admin: bool = False
+    is_approved: bool = True
+    expires_at: Optional[datetime] = None
+    created_at: datetime
+    last_active_at: Optional[datetime] = None
+    
+    total_projects: int = 0
+    videos_count: int = 0
+    token_usage: int = 0
+    
+    current_status: Optional[ProjectStatus] = None
+    recent_projects: list[RecentProject] = []
+    latest_task: Optional[TaskLog] = None
+
+
+class TokenUsageItem(BaseModel):
+    id: int
+    username: str
+    chat_token_usage: int
+    code_token_usage: int
+    total_token_usage: int
+    rank: int
+
+
+class TokenUsageResponse(BaseModel):
+    users: list[TokenUsageItem]
+    total_chat_tokens: int
+    total_code_tokens: int
+    total_tokens: int

@@ -17,6 +17,9 @@ class User(Base):
     expires_at = Column(DateTime, nullable=True, comment="账号有效期")
     api_calls_count = Column(Integer, default=0, comment="API调用次数")
     videos_count = Column(Integer, default=0, comment="生成视频数量")
+    token_usage = Column(Integer, default=0, comment="Token使用量")
+    chat_token_usage = Column(Integer, default=0, comment="对话Token使用量")
+    code_token_usage = Column(Integer, default=0, comment="代码生成Token使用量")
     last_active_at = Column(DateTime, nullable=True, comment="最后活跃时间")
     created_at = Column(DateTime, default=datetime.utcnow)
     

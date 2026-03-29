@@ -14,10 +14,12 @@ import ProjectChat from './pages/ProjectChat'
 import ProjectTask from './pages/ProjectTask'
 import AdminDashboard from './pages/admin/AdminDashboard'
 import AdminUsers from './pages/admin/AdminUsers'
+import AdminUserDetail from './pages/admin/AdminUserDetail'
 import AdminLogs from './pages/admin/AdminLogs'
 import AdminSettings from './pages/admin/AdminSettings'
 import AdminTemplates from './pages/admin/AdminTemplates'
 import AdminStatistics from './pages/admin/AdminStatistics'
+import AdminTokenUsage from './pages/admin/AdminTokenUsage'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { token } = useAuthStore()
@@ -51,10 +53,12 @@ export default function App() {
         <Route element={<AdminRoute><AdminLayout /></AdminRoute>}>
           <Route path="/admin" element={<AdminDashboard />} />
           <Route path="/admin/users" element={<AdminUsers />} />
+          <Route path="/admin/users/:id" element={<AdminUserDetail />} />
           <Route path="/admin/logs" element={<AdminLogs />} />
           <Route path="/admin/settings" element={<AdminSettings />} />
           <Route path="/admin/templates" element={<AdminTemplates />} />
           <Route path="/admin/statistics" element={<AdminStatistics />} />
+          <Route path="/admin/token-usage" element={<AdminTokenUsage />} />
         </Route>
       </Routes>
     </AntApp>

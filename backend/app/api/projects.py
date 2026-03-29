@@ -56,7 +56,7 @@ def list_projects(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)]
 ):
-    projects = db.query(Project).filter(Project.user_id == current_user.id).all()
+    projects = db.query(Project).filter(Project.user_id == current_user.id).order_by(Project.created_at.desc()).all()
     return projects
 
 

@@ -17,19 +17,28 @@ class Settings(BaseSettings):
     # Admin
     ADMIN_EMAIL: str = ""
     
-    # LLM Provider Configuration (auto/deepseek/gemini/openai)
+    # LLM Provider Configuration (auto/deepseek/gemini/openai/dashscope)
     LLM_PROVIDER: str = "auto"
     
-    # DeepSeek (Priority 1)
+    # 阿里云百炼（优先级1）
+    DASHSCOPE_API_KEY: str = ""
+    DASHSCOPE_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    DASHSCOPE_MODELS: str = "deepseek-v3.2,glm-5"
+    DASHSCOPE_CHAT_MODEL: str = "deepseek-v3.2"
+    DASHSCOPE_CODE_MODEL: str = "glm-5"
+    DASHSCOPE_AVAILABLE_MODELS: str = "deepseek-v3.2,glm-5"
+    DASHSCOPE_ENABLE_THINKING: bool = False
+    
+    # DeepSeek (Priority 2)
     DEEPSEEK_API_KEY: str = ""
     DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
     DEEPSEEK_MODEL: str = "deepseek-chat"
     
-    # Gemini (Priority 2)
+    # Gemini (Priority 3)
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-2.0-flash"
     
-    # OpenAI (Priority 3)
+    # OpenAI (Priority 4)
     OPENAI_API_KEY: str = ""
     OPENAI_BASE_URL: str = "https://api.openai.com/v1"
     OPENAI_MODEL: str = "gpt-4o"

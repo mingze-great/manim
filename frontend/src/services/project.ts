@@ -12,6 +12,7 @@ export interface Project {
   video_url: string | null
   error_message: string | null
   template_id: number | null
+  render_fail_count: number
   created_at: string
   updated_at: string
 }
@@ -58,4 +59,9 @@ export const projectApi = {
     `/api/projects/${id}/optimize-code/stream?feedback=${encodeURIComponent(feedback)}`,
   getTask: (projectId: number) => api.get<Task>(`/tasks/project/${projectId}`),
   regenerateCode: (id: number) => api.post(`/projects/${id}/regenerate-code`),
+  fixCode: (projectId: number, data: { error_message: string; current_code: string }) =>
+    api.post<{ success: boolean; fixed_code?: string; fix_description?: string; message?: string }>(
+      `/tasks/${projectId}/fix-code`,
+      data
+    ),
 }

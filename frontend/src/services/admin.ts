@@ -68,6 +68,51 @@ export interface SystemStats {
   disk_usage: number
 }
 
+export interface ProjectStatus {
+  project_id: number
+  project_title: string
+  status: string
+  status_text: string
+  updated_at: string | null
+}
+
+export interface RecentProject {
+  id: number
+  title: string
+  status: string
+  status_text: string
+  created_at: string
+  has_video: boolean
+  error_message: string | null
+}
+
+export interface TaskLog {
+  project_id: number
+  project_title: string
+  status: string
+  error_message: string | null
+  log: string | null
+  created_at: string | null
+}
+
+export interface UserDetail {
+  id: number
+  username: string
+  email: string
+  is_active: boolean
+  is_admin: boolean
+  is_approved: boolean
+  expires_at: string | null
+  created_at: string
+  last_active_at: string | null
+  total_projects: number
+  videos_count: number
+  token_usage: number
+  current_status: ProjectStatus | null
+  recent_projects: RecentProject[]
+  latest_task: TaskLog | null
+}
+
 export interface InvitationCode {
   code: string
   expires_at: string | null
@@ -136,6 +181,31 @@ export const adminApi = {
       videos_count: number
       projects_count: number
     }[]>('/admin/statistics/trend', { params: { period } }),
+
+  getAvailableModels: () =>
+    api.get<{ models: { value: string; label: string }[] }>('/admin/available-models'),
+
+  getUserDetail: (userId: number) =>
+    api.get<UserDetail>(`/admin/users/${userId}/detail`),
+
+  getTokenUsage: (period: 'day' | 'week' | 'month' = 'day') =>
+    api.get<TokenUsageResponse>('/admin/token-usage', { params: { period } }),
+}
+
+export interface TokenUsageItem {
+  id: number
+  username: string
+  chat_token_usage: number
+  code_token_usage: number
+  total_token_usage: number
+  rank: number
+}
+
+export interface TokenUsageResponse {
+  users: TokenUsageItem[]
+  total_chat_tokens: number
+  total_code_tokens: number
+  total_tokens: number
 }
 
 export default api

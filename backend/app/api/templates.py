@@ -48,9 +48,11 @@ def get_templates(
             Template.is_system.is_(False)
         ).offset(skip).limit(limit).all()
     else:
-        # 普通用户只能看到自己创建的模板
+        # 普通用户只能看到 is_visible=True 的用户模板
         user_query_result = db.query(Template).filter(
             Template.is_active.is_(True),
+            Template.is_system.is_(False),
+            (Template.is_visible.is_(True) | Template.is_visible.is_(None)),
             Template.user_id == current_user_id
         ).offset(skip).limit(limit).all()
     
@@ -133,7 +135,7 @@ def create_template(
         name=template.name,
         description=template.description,
         category=template.category,
-        code=template.code,
+        code=template.code or "",
         thumbnail=template.thumbnail,
         prompt=template.prompt,
         is_system=template_is_system_bool,

@@ -14,6 +14,66 @@ class LLMAdapter(ABC):
         pass
 
 
+class DashScopeAdapter(LLMAdapter):
+    """阿里云百炼适配器 - 支持模型降级"""
+    
+    def __init__(self):
+        from openai import AsyncOpenAI
+        self.client = AsyncOpenAI(
+            api_key=settings.DASHSCOPE_API_KEY,
+            base_url=settings.DASHSCOPE_BASE_URL
+        )
+        self.models = [m.strip() for m in settings.DASHSCOPE_MODELS.split(",")]
+        self.current_model_index = 0
+        self.enable_thinking = settings.DASHSCOPE_ENABLE_THINKING
+    
+    def _get_extra_body(self):
+        if self.enable_thinking:
+            return {"enable_thinking": True}
+        return {}
+    
+    async def chat(self, messages: list[dict], model: str = None, **kwargs) -> str:
+        model = model or self.models[self.current_model_index]
+        extra_body = self._get_extra_body()
+        try:
+            response = await self.client.chat.completions.create(
+                model=model,
+                messages=messages,
+                extra_body=extra_body,
+                **kwargs
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            if self.current_model_index < len(self.models) - 1:
+                self.current_model_index += 1
+                print(f"[DashScope] 模型 {model} 调用失败，降级到 {self.models[self.current_model_index]}")
+                return await self.chat(messages, **kwargs)
+            raise e
+    
+    async def stream_chat(self, messages: list[dict], model: str = None, **kwargs):
+        model = model or self.models[self.current_model_index]
+        extra_body = self._get_extra_body()
+        try:
+            response = await self.client.chat.completions.create(
+                model=model,
+                messages=messages,
+                stream=True,
+                stream_options={"include_usage": True},
+                extra_body=extra_body,
+                **kwargs
+            )
+            return response
+        except Exception as e:
+            if self.current_model_index < len(self.models) - 1:
+                self.current_model_index += 1
+                print(f"[DashScope] 模型 {model} 调用失败，降级到 {self.models[self.current_model_index]}")
+                return await self.stream_chat(messages, **kwargs)
+            raise e
+    
+    def get_current_model(self) -> str:
+        return self.models[self.current_model_index]
+
+
 class DeepSeekAdapter(LLMAdapter):
     """DeepSeek 适配器 - 兼容 OpenAI 格式"""
     
@@ -214,7 +274,9 @@ class LLMFactory:
         
         # 自动选择模式
         if provider == "auto":
-            if settings.GLM_API_KEY:
+            if settings.DASHSCOPE_API_KEY:
+                cls._client_cache = DashScopeAdapter()
+            elif settings.GLM_API_KEY:
                 cls._client_cache = GLMAdapter()
             elif settings.DEEPSEEK_API_KEY:
                 cls._client_cache = DeepSeekAdapter()
@@ -226,12 +288,17 @@ class LLMFactory:
                 raise ValueError(
                     "未配置任何 LLM API Key。\n"
                     "请在 .env 中配置以下任一API Key:\n"
-                    "  - GLM_API_KEY (推荐)\n"
+                    "  - DASHSCOPE_API_KEY (推荐)\n"
+                    "  - GLM_API_KEY\n"
                     "  - DEEPSEEK_API_KEY\n"
                     "  - GEMINI_API_KEY\n"
                     "  - OPENAI_API_KEY"
                 )
         # 指定提供商
+        elif provider == "dashscope":
+            if not settings.DASHSCOPE_API_KEY:
+                raise ValueError("未配置 DASHSCOPE_API_KEY")
+            cls._client_cache = DashScopeAdapter()
         elif provider == "glm":
             if not settings.GLM_API_KEY:
                 raise ValueError("未配置 GLM_API_KEY")
@@ -263,7 +330,11 @@ class LLMFactory:
         provider = settings.LLM_PROVIDER.lower()
         
         if provider == "auto":
-            if settings.GLM_API_KEY:
+            if settings.DASHSCOPE_API_KEY:
+                if isinstance(cls._client_cache, DashScopeAdapter):
+                    return cls._client_cache.get_current_model()
+                return settings.DASHSCOPE_MODELS.split(",")[0].strip()
+            elif settings.GLM_API_KEY:
                 return settings.GLM_MODEL
             elif settings.DEEPSEEK_API_KEY:
                 return settings.DEEPSEEK_MODEL
@@ -271,6 +342,10 @@ class LLMFactory:
                 return settings.GEMINI_MODEL
             elif settings.OPENAI_API_KEY:
                 return settings.OPENAI_MODEL
+        elif provider == "dashscope":
+            if isinstance(cls._client_cache, DashScopeAdapter):
+                return cls._client_cache.get_current_model()
+            return settings.DASHSCOPE_MODELS.split(",")[0].strip()
         elif provider == "glm":
             return settings.GLM_MODEL
         elif provider == "deepseek":
@@ -281,3 +356,17 @@ class LLMFactory:
             return settings.OPENAI_MODEL
         
         return "unknown"
+    
+    @classmethod
+    def get_chat_model(cls) -> str:
+        """获取对话模型名称"""
+        if settings.DASHSCOPE_API_KEY and settings.DASHSCOPE_CHAT_MODEL:
+            return settings.DASHSCOPE_CHAT_MODEL
+        return cls.get_model_name()
+    
+    @classmethod
+    def get_code_model(cls) -> str:
+        """获取代码生成模型名称"""
+        if settings.DASHSCOPE_API_KEY and settings.DASHSCOPE_CODE_MODEL:
+            return settings.DASHSCOPE_CODE_MODEL
+        return cls.get_model_name()

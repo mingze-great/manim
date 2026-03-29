@@ -4,7 +4,8 @@ import type { MenuProps } from 'antd'
 import {
   DashboardOutlined, UserOutlined, LogoutOutlined, SafetyOutlined,
   TeamOutlined, FileTextOutlined, SettingOutlined, 
-  MenuOutlined, SwapOutlined, HomeOutlined, CodeOutlined, BarChartOutlined
+  MenuOutlined, SwapOutlined, HomeOutlined, CodeOutlined, BarChartOutlined,
+  DollarOutlined
 } from '@ant-design/icons'
 import { useAuthStore } from '@/stores/authStore'
 import { useEffect } from 'react'
@@ -30,6 +31,7 @@ export default function AdminLayout() {
     { key: '/admin/statistics', icon: <BarChartOutlined />, label: '数据统计' },
     { key: '/admin/users', icon: <TeamOutlined />, label: '用户管理' },
     { key: '/admin/templates', icon: <CodeOutlined />, label: '代码模板' },
+    { key: '/admin/token-usage', icon: <DollarOutlined />, label: 'Token统计' },
     { key: '/admin/logs', icon: <FileTextOutlined />, label: '操作日志' },
     { type: 'divider' as const },
     { key: '/admin/settings', icon: <SettingOutlined />, label: '系统设置' },

@@ -7,7 +7,8 @@ class TemplateBase(BaseModel):
     name: str
     description: Optional[str] = None
     category: Optional[str] = None
-    code: str
+    code: Optional[str] = ""
+    prompt: Optional[str] = None
     thumbnail: Optional[str] = None
 
 
@@ -20,12 +21,15 @@ class TemplateUpdate(BaseModel):
     description: Optional[str] = None
     category: Optional[str] = None
     code: Optional[str] = None
+    prompt: Optional[str] = None
     thumbnail: Optional[str] = None
+    is_visible: Optional[bool] = None
 
 
 class TemplateResponse(TemplateBase):
     id: int
     is_system: bool
+    is_visible: bool
     user_id: Optional[int]
     usage_count: int
     created_at: datetime

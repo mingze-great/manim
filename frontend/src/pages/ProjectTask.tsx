@@ -1,9 +1,10 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { Card, Progress, Button, Space, message, Spin, Tabs, Collapse, Select } from 'antd'
-import { DownloadOutlined, PlayCircleOutlined, CodeOutlined, CloudUploadOutlined } from '@ant-design/icons'
+import { DownloadOutlined, PlayCircleOutlined, CodeOutlined, CloudUploadOutlined, CopyOutlined, DownOutlined, UpOutlined } from '@ant-design/icons'
 import { projectApi, Task, Project } from '@/services/project'
 import { templateApi, Template } from '@/services/template'
+import { adminApi } from '@/services/admin'
 import { useAuthStore } from '@/stores/authStore'
 import { motion } from 'framer-motion'
 
@@ -21,6 +22,8 @@ export default function ProjectTask() {
   const { id } = useParams<{ id: string }>()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
+  const { user } = useAuthStore()
+  const isAdmin = user?.is_admin
   const [project, setProject] = useState<Project | null>(null)
   const [task, setTask] = useState<Task | null>(null)
   const [loading, setLoading] = useState(true)
@@ -37,6 +40,10 @@ export default function ProjectTask() {
   const [renderError, setRenderError] = useState<string | null>(null)
   const [templates, setTemplates] = useState<Template[]>([])
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null)
+  const [availableModels, setAvailableModels] = useState<{ value: string; label: string }[]>([])
+  const [selectedModel, setSelectedModel] = useState<string | null>(null)
+  const [showFullCode, setShowFullCode] = useState(false)
+  const [fixingCode, setFixingCode] = useState(false)
   const codeRef = useRef<HTMLPreElement>(null)
   const terminalRef = useRef<HTMLDivElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
@@ -78,9 +85,19 @@ export default function ProjectTask() {
     }
   }
 
+  const fetchAvailableModels = async () => {
+    try {
+      const { data } = await adminApi.getAvailableModels()
+      setAvailableModels(data.models)
+    } catch (error) {
+      console.error('获取模型列表失败:', error)
+    }
+  }
+
   useEffect(() => {
     fetchProject()
     fetchTemplates()
+    fetchAvailableModels()
   }, [id])
 
   useEffect(() => {
@@ -113,9 +130,18 @@ export default function ProjectTask() {
       console.log('[generateCode] API_BASE:', API_BASE)
       console.log('[generateCode] id:', id)
       console.log('[generateCode] templateId:', selectedTemplateId)
+      console.log('[generateCode] model:', selectedModel)
+      
       let streamUrl = `${API_BASE}/api/tasks/${id}/generate-code`
+      const params: string[] = []
       if (selectedTemplateId) {
-        streamUrl += `?template_id=${selectedTemplateId}`
+        params.push(`template_id=${selectedTemplateId}`)
+      }
+      if (selectedModel) {
+        params.push(`model=${selectedModel}`)
+      }
+      if (params.length > 0) {
+        streamUrl += `?${params.join('&')}`
       }
       console.log('[generateCode] streamUrl:', streamUrl)
       let headers: any = {
@@ -191,6 +217,12 @@ export default function ProjectTask() {
     } finally {
       setGeneratingCode(false)
     }
+  }
+
+  const handleCopyCode = () => {
+    if (!generatedCode) return
+    navigator.clipboard.writeText(generatedCode)
+    message.success('代码已复制到剪贴板')
   }
 
   const handleGenerateVideo = async () => {
@@ -349,6 +381,32 @@ export default function ProjectTask() {
     })
   }
 
+  const handleAutoFix = async () => {
+    if (!generatedCode || !renderError) return
+    
+    setFixingCode(true)
+    try {
+      const errorLog = terminalLog ? terminalLog.slice(-2000) : renderError
+      const { data } = await projectApi.fixCode(Number(id), {
+        error_message: errorLog,
+        current_code: generatedCode
+      })
+      
+      if (data.success && data.fixed_code) {
+        setGeneratedCode(data.fixed_code)
+        setRenderError(null)
+        setTerminalLog('')
+        message.success(data.fix_description || '代码已自动修复，请重新渲染')
+      } else {
+        message.error(data.message || '自动修复失败，请尝试返回对话修复')
+      }
+    } catch (error: any) {
+      message.error(error.response?.data?.message || '自动修复失败')
+    } finally {
+      setFixingCode(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -419,7 +477,24 @@ export default function ProjectTask() {
                       value: t.id
                     }))}
                   />
+                  <p className="text-xs text-gray-400 mt-1">视频风格模板。高定版效果更好但可能出错，若首次出错建议换其他模板</p>
                 </div>
+
+                {/* 模型选择 */}
+                {availableModels.length > 0 && (
+                  <div className="mb-4">
+                    <label className="block text-sm text-gray-500 mb-2">选择生成模型</label>
+                    <Select
+                      style={{ width: '100%', maxWidth: 300 }}
+                      placeholder="默认模型"
+                      allowClear
+                      value={selectedModel}
+                      onChange={setSelectedModel}
+                      options={availableModels}
+                    />
+                    <p className="text-xs text-gray-400 mt-1">均可使用。若首次出错可选择 glm-5 重试</p>
+                  </div>
+                )}
 
                 {/* 生成代码按钮 */}
                 <div className="flex gap-3">
@@ -441,23 +516,52 @@ export default function ProjectTask() {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                   >
+                    <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 rounded-lg p-3 mb-4">
+                      <p className="text-sm text-green-700">✅ 代码生成完成！请点击上方「渲染视频」按钮开始渲染</p>
+                    </div>
                     <Collapse defaultActiveKey={['code']}>
                       <Panel 
                         header={
                           <div className="flex items-center gap-2">
                             <CodeOutlined className="text-[#0066FF]" />
-                            <span>生成的 Manim 代码</span>
+                            <span>生成的 Manim 代码 ({generatedCode.split('\n').length} 行)</span>
                           </div>
                         } 
                         key="code"
                       >
                         <div className="code-block relative">
+                          {isAdmin && (
+                            <div className="flex justify-end gap-2 mb-2">
+                              <Button 
+                                size="small" 
+                                icon={<CopyOutlined />}
+                                onClick={handleCopyCode}
+                              >
+                                复制代码
+                              </Button>
+                              {generatedCode.split('\n').length > 10 && (
+                                <Button 
+                                  size="small" 
+                                  icon={showFullCode ? <UpOutlined /> : <DownOutlined />}
+                                  onClick={() => setShowFullCode(!showFullCode)}
+                                >
+                                  {showFullCode ? '收起' : '展开全部'}
+                                </Button>
+                              )}
+                            </div>
+                          )}
                           <pre 
                             ref={codeRef}
                             className="text-sm max-h-96 overflow-y-auto"
                           >
-                            {generatedCode}
+                            {isAdmin && showFullCode ? generatedCode : generatedCode.split('\n').slice(0, 10).join('\n')}
+                            {(!isAdmin || !showFullCode) && generatedCode.split('\n').length > 10 && '\n...'}
                           </pre>
+                          {(!isAdmin || !showFullCode) && generatedCode.split('\n').length > 10 && (
+                            <div className="text-xs text-gray-400 mt-2 text-center">
+                              共 {generatedCode.split('\n').length} 行代码
+                            </div>
+                          )}
                         </div>
                       </Panel>
                     </Collapse>
@@ -552,10 +656,35 @@ export default function ProjectTask() {
                 {/* 渲染失败时的返回按钮 */}
                 {renderError && (
                   <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200">
-                    <p className="text-red-600 mb-3">渲染失败，返回对话让智能助手修复代码。</p>
-                    <Button type="primary" onClick={handleBackToEdit}>
-                      返回对话修复
-                    </Button>
+                    {(project?.render_fail_count || 0) >= 3 ? (
+                      <>
+                        <p className="text-red-600 font-semibold mb-2">渲染已失败 {project?.render_fail_count} 次，建议：</p>
+                        <ul className="text-sm text-gray-600 mb-3 list-disc pl-4">
+                          <li>重新创建一个项目（推荐）</li>
+                          <li>及时向我反馈，我会根据问题修复</li>
+                        </ul>
+                        <p className="text-orange-500 text-xs mb-3">⚠️ 请不要一直重试，会导致 Token 耗光</p>
+                      </>
+                    ) : (
+                      <p className="text-red-600 mb-3">渲染失败，您可以选择：</p>
+                    )}
+                    <div className="flex gap-3 flex-wrap">
+                      {(project?.render_fail_count || 0) < 3 && (
+                        <>
+                          <Button type="primary" onClick={handleAutoFix} loading={fixingCode}>
+                            自动修复
+                          </Button>
+                          <Button onClick={handleBackToEdit}>
+                            返回对话修复
+                          </Button>
+                        </>
+                      )}
+                      {(project?.render_fail_count || 0) >= 3 && (
+                        <Button type="primary" onClick={() => navigate('/creator')}>
+                          创建新项目
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 )}
 
@@ -596,6 +725,11 @@ export default function ProjectTask() {
                     <video
                       src={project.video_url.startsWith('http') ? project.video_url : `${import.meta.env.VITE_API_BASE_URL || ''}${project.video_url}`}
                       controls
+                      playsInline
+                      webkit-playsinline="true"
+                      x5-video-player-type="h5"
+                      x5-video-player-fullscreen="true"
+                      preload="metadata"
                       className="w-full rounded-xl shadow-lg"
                       style={{ maxHeight: '60vh' }}
                     >

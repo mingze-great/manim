@@ -20,7 +20,7 @@ class ManimService:
         import asyncio
         return asyncio.run(self.generate_code(script))
     
-    async def generate_code(self, script: str, template_prompt: str = None) -> str:
+    async def generate_code(self, script: str, template_prompt: str = None, model: str = None, user_id: int = None) -> str:
         system_prompt = template_prompt if template_prompt else self._get_default_template_prompt()
         
         user_message = f"""请根据以下主题和内容生成 Manim 动画代码：
@@ -33,14 +33,36 @@ class ManimService:
 3. 代码必须完整可运行
 """
 
-        content = await self.client.chat(
+        response = await self.client.chat(
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_message}
             ],
+            model=model or LLMFactory.get_code_model(),
             temperature=0.7,
             max_tokens=30000
         )
+        
+        # 统计 token 使用量
+        tokens_used = 0
+        try:
+            if hasattr(response, 'usage') and response.usage:
+                tokens_used = response.usage.total_tokens
+                if user_id:
+                    from app.models.user import User
+                    user_obj = self.db.query(User).filter(User.id == user_id).first()
+                    if user_obj:
+                        user_obj.code_token_usage = (user_obj.code_token_usage or 0) + tokens_used
+                        self.db.commit()
+                        print(f"[DEBUG] Code token usage updated: +{tokens_used}")
+        except Exception as e:
+            print(f"[DEBUG] Failed to update code token usage: {e}")
+        
+        # 获取 content
+        if hasattr(response, 'choices') and response.choices:
+            content = response.choices[0].message.content
+        else:
+            content = response
         
         if "```python" in content:
             start = content.find("```python") + len("```python")
@@ -82,6 +104,15 @@ class ManimService:
         code = re.sub(r'Dot\s*\(\s*([\d.]+)\s*,\s*(\w+)\s*\)', r'Dot(radius=\1, color=\2)', code)
         code = re.sub(r'Square\s*\(\s*([\d.]+)\s*,\s*(\w+)\s*\)', r'Square(side_length=\1, color=\2)', code)
         code = re.sub(r'Rectangle\s*\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*(\w+)\s*\)', r'Rectangle(width=\1, height=\2, color=\3)', code)
+        
+        # 4.1 修复 Line 构造函数参数
+        # Line(start, end, C_XXX) -> Line(start, end, color=C_XXX)
+        # 只匹配第三个参数是颜色变量（C_开头）的情况
+        code = re.sub(
+            r'Line\(([^,]+),\s*([^,]+),\s*(C_[A-Z]+)\s*(\)|,)',
+            r'Line(\1, \2, color=\3\4',
+            code
+        )
         
         # 5. 修复 Sector 参数
         code = re.sub(r'Sector\s*\(\s*outer_radius\s*=\s*([^,\)]+)', r'Sector(radius=\1', code)
@@ -194,3 +225,130 @@ class ManimService:
         code = self.fix_manim_compatibility(code)
         
         return code, warnings
+
+
+INCREMENTAL_FIX_PROMPT = """你是 Manim 代码修复专家。
+
+## 当前代码
+```python
+{current_code}
+```
+
+## 错误信息
+```
+{error_message}
+```
+
+## 修复要求
+**只输出需要修改的部分，不要输出完整代码！**
+
+## 输出格式（严格遵守）
+```
+## 错误位置
+行 X-Y（或 行 X）
+
+## 原代码
+```python
+需要修改的原代码
+```
+
+## 修复后代码
+```python
+修复后的代码
+```
+
+## 修复说明
+简要说明修复内容
+```
+
+## 注意
+- 精确定位错误行
+- 只输出需要修改的那几行
+- 保持代码缩进一致
+"""
+
+
+def parse_and_apply_fix(original_code: str, ai_response: str) -> tuple[str, str]:
+    """解析AI响应并应用修复，返回 (修复后代码, 修复说明)"""
+    import re
+    
+    lines = original_code.split('\n')
+    
+    # 解析行号
+    line_match = re.search(r'行\s*(\d+)(?:\s*[-~至]\s*(\d+))?', ai_response)
+    if not line_match:
+        raise ValueError("无法解析错误位置")
+    
+    start_line = int(line_match.group(1))
+    end_line = int(line_match.group(2)) if line_match.group(2) else start_line
+    
+    if start_line < 1 or start_line > len(lines):
+        raise ValueError(f"行号超出范围: {start_line}")
+    
+    # 提取修复后代码
+    code_match = re.search(r'## 修复后代码\s*```python\s*(.*?)\s*```', ai_response, re.DOTALL)
+    if not code_match:
+        raise ValueError("无法解析修复代码")
+    
+    fixed_code_block = code_match.group(1).strip()
+    fixed_lines = fixed_code_block.split('\n')
+    
+    # 替换指定行
+    lines[start_line - 1:end_line] = fixed_lines
+    
+    # 提取修复说明
+    desc_match = re.search(r'## 修复说明\s*(.+?)(?=##|$)', ai_response, re.DOTALL)
+    fix_desc = desc_match.group(1).strip() if desc_match else f"已修复第 {start_line} 行"
+    
+    return '\n'.join(lines), fix_desc
+
+
+class ManimFixService:
+    def __init__(self, db: Session):
+        self.db = db
+        self.client = LLMFactory.get_client()
+    
+    async def fix_code_incremental(self, current_code: str, error_message: str, user_id: int = None) -> tuple[str, str]:
+        """增量修复代码，返回 (修复后代码, 修复说明)"""
+        prompt = INCREMENTAL_FIX_PROMPT.format(
+            current_code=current_code,
+            error_message=error_message
+        )
+        
+        response = await self.client.chat(
+            messages=[
+                {"role": "system", "content": "你是 Manim 代码修复专家，只输出需要修改的部分。"},
+                {"role": "user", "content": prompt}
+            ],
+            model=LLMFactory.get_code_model(),
+            temperature=0.3,
+            max_tokens=2000
+        )
+        
+        # 获取 content
+        if hasattr(response, 'choices') and response.choices:
+            ai_response = response.choices[0].message.content
+        else:
+            ai_response = response
+        
+        # 统计 token
+        try:
+            if hasattr(response, 'usage') and response.usage:
+                tokens = response.usage.total_tokens
+                if user_id:
+                    from app.models.user import User
+                    user_obj = self.db.query(User).filter(User.id == user_id).first()
+                    if user_obj:
+                        user_obj.code_token_usage = (user_obj.code_token_usage or 0) + tokens
+                        self.db.commit()
+        except Exception as e:
+            print(f"[DEBUG] Failed to update token: {e}")
+        
+        # 解析并应用修复
+        fixed_code, fix_desc = parse_and_apply_fix(current_code, ai_response)
+        
+        # 应用兼容性修复
+        manim_service = ManimService(self.db)
+        fixed_code = manim_service.fix_manim_compatibility(fixed_code)
+        
+        return fixed_code, fix_desc
