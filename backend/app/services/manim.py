@@ -115,9 +115,25 @@ class ManimService:
         )
         
         # 5. 修复 Sector 参数
+        # 5.1 修复 outer_radius/inner_radius 关键字参数
         code = re.sub(r'Sector\s*\(\s*outer_radius\s*=\s*([^,\)]+)', r'Sector(radius=\1', code)
         code = re.sub(r',\s*inner_radius\s*=\s*[^,\)]+', '', code)
         code = re.sub(r'outer_radius\s*=\s*', 'radius=', code)
+        
+        # 5.2 修复 Sector(数值, 数值, color=...) 直接传参格式
+        # 匹配 Sector(1, PI, color=C_W) 或 Sector(1, 3.14, color=BLUE) 等
+        code = re.sub(
+            r'Sector\s*\(\s*([\d.]+)\s*,\s*([\d.]+|PI|PI\s*\*\s*[\d.]+|[\d.]+\s*\*\s*PI)\s*,\s*color\s*=\s*(\w+)\s*\)',
+            r'Sector(radius=\1, angle=\2, color=\3)',
+            code
+        )
+        
+        # 5.3 修复 Sector(数值, 数值) 无 color 格式
+        code = re.sub(
+            r'Sector\s*\(\s*([\d.]+)\s*,\s*([\d.]+|PI|PI\s*\*\s*[\d.]+|[\d.]+\s*\*\s*PI)\s*\)',
+            r'Sector(radius=\1, angle=\2)',
+            code
+        )
         
         # 6. 替换外部资源为内置图形
         code = re.sub(r'SVGMobject\s*\(\s*["\']([^"\']+)["\'][^)]*\)', 'Circle(radius=0.5, color=WHITE)', code)
@@ -135,6 +151,9 @@ class ManimService:
         code = code.replace('.point_at_proportion', '.point_from_proportion')
         code = code.replace('.n2p(', '.number_to_point(')
         code = re.sub(r'(\w+)\.length(?!\()', r'\1.get_length()', code)
+        
+        # 9.1 修复 Line(...).set_points_smoothly(...) - 移除这个调用
+        code = re.sub(r'Line\(([^)]+)\)\.set_points_smoothly\([^)]+\)', r'Line(\1)', code)
         
         # 10. 修复颜色函数 - interpolate_color 需要ManimColor对象
         def replace_interpolate_color(match):

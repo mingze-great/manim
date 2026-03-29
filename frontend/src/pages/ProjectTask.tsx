@@ -39,9 +39,9 @@ export default function ProjectTask() {
   const [showTerminal, setShowTerminal] = useState(false)
   const [renderError, setRenderError] = useState<string | null>(null)
   const [templates, setTemplates] = useState<Template[]>([])
-  const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null)
+  const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(1)
   const [availableModels, setAvailableModels] = useState<{ value: string; label: string }[]>([])
-  const [selectedModel, setSelectedModel] = useState<string | null>(null)
+  const [selectedModel, setSelectedModel] = useState<string>('deepseek-v3.2')
   const [showFullCode, setShowFullCode] = useState(false)
   const [fixingCode, setFixingCode] = useState(false)
   const codeRef = useRef<HTMLPreElement>(null)
@@ -468,7 +468,7 @@ export default function ProjectTask() {
                   <label className="block text-sm text-gray-500 mb-2">选择代码模板</label>
                   <Select
                     style={{ width: '100%', maxWidth: 300 }}
-                    placeholder="默认模板"
+                    placeholder="选择模板"
                     allowClear
                     value={selectedTemplateId}
                     onChange={setSelectedTemplateId}
@@ -477,7 +477,7 @@ export default function ProjectTask() {
                       value: t.id
                     }))}
                   />
-                  <p className="text-xs text-gray-400 mt-1">视频风格模板。高定版效果更好但可能出错，若首次出错建议换其他模板</p>
+                  <p className="text-xs text-gray-400 mt-1">默认：治愈系多维动态引擎。高定版效果更好但可能出错，若出错建议换其他模板</p>
                 </div>
 
                 {/* 模型选择 */}
@@ -486,13 +486,13 @@ export default function ProjectTask() {
                     <label className="block text-sm text-gray-500 mb-2">选择生成模型</label>
                     <Select
                       style={{ width: '100%', maxWidth: 300 }}
-                      placeholder="默认模型"
+                      placeholder="选择模型"
                       allowClear
                       value={selectedModel}
                       onChange={setSelectedModel}
                       options={availableModels}
                     />
-                    <p className="text-xs text-gray-400 mt-1">均可使用。若首次出错可选择 glm-5 重试</p>
+                    <p className="text-xs text-gray-400 mt-1">默认：deepseek-v3.2。若出错可切换 glm-5 重试，仍失败请新建项目或联系我</p>
                   </div>
                 )}
 
