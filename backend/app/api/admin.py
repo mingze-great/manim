@@ -632,7 +632,7 @@ async def get_token_usage(
     
     users = db.query(User).filter(
         ((User.chat_token_usage > 0) | (User.code_token_usage > 0)),
-        User.last_active_at >= start_time
+        # User.last_active_at >= start_time  # 已移除，因为字段为空
     ).all()
     
     result = []

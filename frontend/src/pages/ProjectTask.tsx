@@ -532,6 +532,20 @@ message.success('视频下载已开始')
 </div>
                 )}
 
+                {/* 生成代码按钮 */}
+                <div className="flex gap-3 mb-4">
+                  <Button 
+                    type="primary" 
+                    icon={<CodeOutlined />}
+                    onClick={handleGenerateCode}
+                    loading={generatingCode}
+                    size="large"
+                    className="btn-gradient"
+                  >
+                    {generatedCode ? '重新生成代码' : '生成代码'}
+                  </Button>
+                </div>
+
                 {/* 修复进度显示 */}
                 {fixingCode && (
                   <motion.div
