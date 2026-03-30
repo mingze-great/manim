@@ -2,6 +2,7 @@ from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
+from datetime import datetime, date
 import json
 import asyncio
 import subprocess
@@ -164,6 +165,18 @@ async def render_video_stream(
                 yield f"data: {json.dumps({'type': 'error', 'content': 'Project not found'})}\n\n"
                 return
             
+            user_local = db_session.query(User).filter(User.id == current_user.id).first()
+            if not user_local.is_admin:
+                today = date.today()
+                if user_local.last_video_date != today:
+                    user_local.daily_video_count = 0
+                    user_local.last_video_date = today
+                    db_session.commit()
+                
+                if (user_local.daily_video_count or 0) >= 5:
+                    yield f"data: {json.dumps({'type': 'error', 'content': '系统繁忙，请稍后重试。如问题持续，请联系管理员。'})}\n\n"
+                    return
+            
             with tempfile.TemporaryDirectory() as temp_dir:
                 scene_name = "SceneName"
                 
@@ -256,6 +269,11 @@ async def render_video_stream(
                             project_local.status = "completed"
                             project_local.video_url = video_url
                             project_local.render_fail_count = 0
+                            
+                            if not user_local.is_admin:
+                                user_local.daily_video_count = (user_local.daily_video_count or 0) + 1
+                                user_local.last_video_date = date.today()
+                            
                             db_session.commit()
                             
                             # 渲染成功，清除代码缓存
