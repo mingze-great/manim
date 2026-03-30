@@ -13,17 +13,17 @@ export default function Docs() {
   const steps = [
     {
       title: '第一步：输入主题',
-      description: '在首页输入你想要制作的视频主题，例如"世界公认十大顶级思维"',
+      description: '在首页输入你想要制作的视频主题，例如"世界公认十大顶级思维"。注意：只需要输入主题名称，禁止输入其他内容！',
       icon: <PlayCircleOutlined />,
     },
     {
       title: '第二步：AI 生成内容',
-      description: '系统会自动生成视频内容要点，包含文字描述和动态效果说明',
+      description: '系统会自动生成视频内容要点，包含文字描述和动态效果说明。如有其他要求，可在对话中调整',
       icon: <MessageOutlined />,
     },
     {
       title: '第三步：生成代码',
-      description: '点击下方"生成代码"按钮，AI 会根据内容生成 Manim 动画代码',
+      description: '点击下方"生成代码"按钮，AI 会根据内容生成 Manim 动画代码。默认使用 MiniMax-M2.5 模型',
       icon: <CodeOutlined />,
     },
     {
@@ -34,7 +34,8 @@ export default function Docs() {
   ]
 
   const tips = [
-    '主题越详细，生成的内容越准确',
+    '⚠️ 只需要输入主题名称，禁止输入其他内容！如有其他要求，进入对话后再调整',
+    '默认使用 MiniMax-M2.5 生成代码，若出错可切换 deepseek-v3.2 重试',
     '可以多次调整内容直到满意',
     '视频生成后可随时重新生成',
     '注意：最多保存3个作品，请及时下载',
@@ -96,40 +97,58 @@ export default function Docs() {
           type="warning" 
           showIcon
           style={{ marginBottom: '16px' }}
-          message="推荐使用 glm-5 进行代码生成，成功率更高"
+          message="默认使用 MiniMax-M2.5 进行代码生成，若出错可切换 deepseek-v3.2 重试"
         />
         <ul style={{ paddingLeft: '20px' }}>
           <li style={{ marginBottom: '12px', color: '#666' }}>
-            <strong>glm-5（推荐用于代码生成）</strong>
+            <strong>MiniMax-M2.5（默认推荐）</strong>
             <br />
-            <Text type="secondary">代码生成质量高，Manim 语法准确，出错率低</Text>
+            <Text type="secondary">代码生成质量高，Manim 语法准确，稳定性好</Text>
           </li>
           <li style={{ marginBottom: '12px', color: '#666' }}>
-            <strong>deepseek-v3.2</strong>
+            <strong>deepseek-v3.2（备用）</strong>
             <br />
-            <Text type="secondary">综合能力强，创意性好，但代码可能需要更多修复</Text>
+            <Text type="secondary">综合能力强，如果 MiniMax-M2.5 出错可切换此模型重试</Text>
+          </li>
+          <li style={{ marginBottom: '12px', color: '#666' }}>
+            <strong>glm-5</strong>
+            <br />
+            <Text type="secondary">备选模型，特定场景下效果更好</Text>
+          </li>
+          <li style={{ marginBottom: '12px', color: '#666' }}>
+            <strong>qwen3-coder-next</strong>
+            <br />
+            <Text type="secondary">代码专用模型，适合复杂逻辑的视频</Text>
+          </li>
+          <li style={{ marginBottom: '12px', color: '#666' }}>
+            <strong>kimi-k2-thinking</strong>
+            <br />
+            <Text type="secondary">深度思考模型，适合需要推理的内容</Text>
           </li>
         </ul>
         <Divider />
         <Paragraph type="secondary">
-          <strong>建议：</strong>如果使用 deepseek-v3.2 生成的代码多次修复失败，可以切换到 glm-5 重新生成
+          <strong>建议：</strong>默认使用 MiniMax-M2.5，若出错可切换 deepseek-v3.2 重试，仍失败请新建项目或联系我
         </Paragraph>
       </Card>
 
       <Card style={{ marginBottom: '24px' }}>
         <Title level={4}>渲染失败怎么办？</Title>
         <Paragraph type="secondary" style={{ marginBottom: '12px' }}>
-          渲染失败时，系统会显示错误信息，你可以：
+          渲染失败时，系统会显示错误信息并提供自动修复功能，你可以：
         </Paragraph>
         <ol style={{ paddingLeft: '20px' }}>
           <li style={{ marginBottom: '8px', color: '#666' }}>
-            <strong>点击"自动修复"</strong>：系统会自动分析错误并修复代码（推荐）
+            <strong>点击"自动修复"</strong>：系统会自动分析错误并修复代码，实时显示修复进度（推荐）
           </li>
           <li style={{ marginBottom: '8px', color: '#666' }}>
-            <strong>切换模型重新生成</strong>：如果自动修复多次失败，切换到 glm-5 重新生成代码
+            <strong>切换模型重新生成</strong>：如果自动修复多次失败，切换到 deepseek-v3.2 重新生成代码
           </li>
           <li style={{ marginBottom: '8px', color: '#666' }}>
-            <strong>切换模板重新生成</strong>：高定模板容易出错，可切换到默认模板
+            <strong>切换模板重新生成</strong>：高定模板容易出错，可切换到默认模板（治愈系多维动态引擎）
+          </li>
+          <li style={{ marginBottom: '8px', color: '#666' }}>
+            <strong>新建项目</strong>：如果以上方法都失败，请新建项目重新开始
           </li>
         </ol>
       </Card>
