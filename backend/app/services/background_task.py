@@ -63,6 +63,8 @@ class BackgroundTaskManager:
                     await self._run_render_video(db, bg_task)
                     
             except Exception as e:
+                import traceback
+                traceback.print_exc()
                 bg_task = db.query(BackgroundTask).filter(BackgroundTask.id == task_id).first()
                 if bg_task:
                     bg_task.status = "failed"
@@ -74,7 +76,13 @@ class BackgroundTaskManager:
                 if task_id in self._tasks:
                     del self._tasks[task_id]
         
-        self._tasks[task_id] = asyncio.create_task(run_task())
+        # 使用 asyncio.ensure_future 确保在正确的 event loop 中创建任务
+        try:
+            loop = asyncio.get_running_loop()
+            self._tasks[task_id] = asyncio.ensure_future(run_task(), loop=loop)
+        except RuntimeError:
+            # 如果没有运行的 event loop，创建一个新的
+            self._tasks[task_id] = asyncio.create_task(run_task())
     
     async def _run_generate_code(self, db: Session, bg_task: BackgroundTask):
         try:
@@ -139,6 +147,8 @@ class BackgroundTaskManager:
             db.commit()
             
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             bg_task.status = "failed"
             bg_task.error = str(e)
             bg_task.completed_at = datetime.utcnow()
