@@ -111,11 +111,6 @@ export default function Docs() {
             <Text type="secondary">综合能力强，如果 MiniMax-M2.5 出错可切换此模型重试</Text>
           </li>
           <li style={{ marginBottom: '12px', color: '#666' }}>
-            <strong>glm-5</strong>
-            <br />
-            <Text type="secondary">备选模型，特定场景下效果更好</Text>
-          </li>
-          <li style={{ marginBottom: '12px', color: '#666' }}>
             <strong>qwen3-coder-next</strong>
             <br />
             <Text type="secondary">代码专用模型，适合复杂逻辑的视频</Text>
