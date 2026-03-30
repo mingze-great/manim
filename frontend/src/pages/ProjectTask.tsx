@@ -599,8 +599,19 @@ message.success('视频下载已开始')
                   </motion.div>
                 )}
 
-                {/* 代码显示 */}
-                {generatedCode && (
+{/* 代码显示 */}
+                {generatedCode && !isAdmin && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                  >
+                    <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 rounded-lg p-4 mb-4">
+                      <p className="text-sm text-green-700 dark:text-green-400 font-medium">✅ 代码生成完成！请点击「渲染视频」按钮开始渲染</p>
+                    </div>
+                  </motion.div>
+                )}
+                
+                {generatedCode && isAdmin && (
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -619,34 +630,32 @@ message.success('视频下载已开始')
                         key="code"
                       >
                         <div className="code-block relative">
-                          {isAdmin && (
-                            <div className="flex justify-end gap-2 mb-2">
+                          <div className="flex justify-end gap-2 mb-2">
+                            <Button 
+                              size="small" 
+                              icon={<CopyOutlined />}
+                              onClick={handleCopyCode}
+                            >
+                              复制代码
+                            </Button>
+                            {generatedCode.split('\n').length > 10 && (
                               <Button 
                                 size="small" 
-                                icon={<CopyOutlined />}
-                                onClick={handleCopyCode}
+                                icon={showFullCode ? <UpOutlined /> : <DownOutlined />}
+                                onClick={() => setShowFullCode(!showFullCode)}
                               >
-                                复制代码
+                                {showFullCode ? '收起' : '展开全部'}
                               </Button>
-                              {generatedCode.split('\n').length > 10 && (
-                                <Button 
-                                  size="small" 
-                                  icon={showFullCode ? <UpOutlined /> : <DownOutlined />}
-                                  onClick={() => setShowFullCode(!showFullCode)}
-                                >
-                                  {showFullCode ? '收起' : '展开全部'}
-                                </Button>
-                              )}
-                            </div>
-                          )}
+                            )}
+                          </div>
                           <pre 
                             ref={codeRef}
                             className="text-sm max-h-96 overflow-y-auto"
                           >
-                            {isAdmin && showFullCode ? generatedCode : generatedCode.split('\n').slice(0, 10).join('\n')}
-                            {(!isAdmin || !showFullCode) && generatedCode.split('\n').length > 10 && '\n...'}
+                            {showFullCode ? generatedCode : generatedCode.split('\n').slice(0, 10).join('\n')}
+                            {!showFullCode && generatedCode.split('\n').length > 10 && '\n...'}
                           </pre>
-                          {(!isAdmin || !showFullCode) && generatedCode.split('\n').length > 10 && (
+                          {!showFullCode && generatedCode.split('\n').length > 10 && (
                             <div className="text-xs text-gray-400 mt-2 text-center">
                               共 {generatedCode.split('\n').length} 行代码
                             </div>
