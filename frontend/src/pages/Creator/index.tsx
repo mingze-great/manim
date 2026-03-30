@@ -67,8 +67,18 @@ export default function Creator() {
 • 勾股定理的证明过程
 • 人生三件事：运动、阅读、赚钱`}
               rows={6}
-              className="theme-input mb-4"
+              className="theme-input mb-2"
             />
+
+            <div className="mb-4 p-3 bg-red-50 border-2 border-red-300 rounded-lg">
+              <p className="text-sm text-red-700 font-bold flex items-center gap-2">
+                <span className="text-lg">🚨</span>
+                <span>
+                  只需要输入<span className="text-red-600 underline decoration-2">主题名称</span>，
+                  禁止输入其他内容！如有其他要求，进入对话后再调整。
+                </span>
+              </p>
+            </div>
 
             <Button 
               type="primary" 
