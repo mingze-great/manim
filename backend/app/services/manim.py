@@ -215,6 +215,13 @@ class ManimService:
         # 0.2 修复未闭合的字符串（多行文本被放在单行字符串中）
         code = self._fix_unclosed_strings(code)
         
+        # 0.3 移除不存在的 Manim API（AI 幻觉生成）
+        code = re.sub(r'\.shift_back\(\)', '', code)
+        code = re.sub(r'\.move_to_back\(\)', '', code)
+        code = re.sub(r'\.move_to_front\(\)', '', code)
+        code = re.sub(r'\.reverse_direction\(\)', '', code)
+        code = re.sub(r'\.point_at_proportion\(', '.point_from_proportion(', code)
+        
         # 1. 修复 rate_functions
         code = re.sub(r'\brate_func\s*=\s*reverse_smooth\b', 'rate_func=smooth', code)
         code = re.sub(r'\brate_func\s*=\s*ease_out_expo\b', 'rate_func=rate_functions.ease_out_expo', code)
