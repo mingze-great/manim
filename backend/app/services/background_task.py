@@ -98,8 +98,11 @@ class BackgroundTaskManager:
             template_id = params.get("template_id")
             model = params.get("model")
             
+            # 计算预估点数
+            estimated_points = self._count_content_points(project.final_script or "")
+            
             bg_task.progress = 10
-            bg_task.message = "准备生成代码..."
+            bg_task.message = f"准备生成代码（预计 {estimated_points} 个内容点）..."
             db.commit()
             
             template_prompt = None
@@ -113,15 +116,22 @@ class BackgroundTaskManager:
             bg_task.message = "AI 正在生成代码..."
             db.commit()
             
+            # 进度更新回调函数
+            def progress_callback(progress: int):
+                bg_task.progress = min(progress, 99)
+                bg_task.message = "AI 正在生成代码..."
+                db.commit()
+            
             manim_service = ManimService(db)
-            code = await manim_service.generate_code(
+            code = await manim_service.generate_code_with_progress(
                 script=project.final_script,
                 template_prompt=template_prompt,
                 model=model,
-                user_id=bg_task.user_id
+                user_id=bg_task.user_id,
+                progress_callback=progress_callback
             )
             
-            bg_task.progress = 80
+            bg_task.progress = 99
             bg_task.message = "代码验证中..."
             db.commit()
             
@@ -154,6 +164,26 @@ class BackgroundTaskManager:
             bg_task.completed_at = datetime.utcnow()
             db.commit()
             raise
+    
+    def _count_content_points(self, script: str) -> int:
+        """计算脚本中的内容点数"""
+        import re
+        if not script:
+            return 5
+        
+        # 匹配多种格式的内容点
+        patterns = [
+            r'第\s*\d+\s*点',  # 第 1 点
+            r'\d+\.\s*[^。\n]{5,}',  # 1. xxx（至少5个字符）
+            r'###\s*第\s*\d+\s*点',  # ### 第 1 点
+        ]
+        
+        for pattern in patterns:
+            matches = re.findall(pattern, script)
+            if matches:
+                return len(matches)
+        
+        return 5  # 默认 5 个点
     
     async def _run_render_video(self, db: Session, bg_task: BackgroundTask):
         pass

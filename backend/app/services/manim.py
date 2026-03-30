@@ -208,6 +208,106 @@ class ManimService:
         
         return code
     
+    async def generate_code_with_progress(
+        self, 
+        script: str, 
+        template_prompt: str = None, 
+        model: str = None, 
+        user_id: int = None,
+        progress_callback = None
+    ) -> str:
+        """带进度回调的代码生成"""
+        system_prompt = template_prompt if template_prompt else self._get_default_template_prompt()
+        
+        user_message = f"""请根据以下主题和内容生成 Manim 动画代码：
+
+{script}
+
+要求：
+1. 严格按内容要点数量生成动画
+2. 每个要点必须有标题和解释文案
+3. 代码必须完整可运行
+"""
+
+        # 使用流式 API 获取响应并更新进度
+        try:
+            response = await self.client.stream_chat(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message}
+                ],
+                model=model or LLMFactory.get_code_model(),
+                temperature=0.7,
+                max_tokens=30000
+            )
+            
+            content = ""
+            chunk_count = 0
+            
+            async for chunk in response:
+                if hasattr(chunk, 'choices') and chunk.choices:
+                    delta = chunk.choices[0].delta
+                    if hasattr(delta, 'content') and delta.content:
+                        content += delta.content
+                        chunk_count += 1
+                        
+                        # 每 50 个 chunk 更新一次进度（20% - 99%）
+                        if progress_callback and chunk_count % 50 == 0:
+                            progress = 20 + min(int(chunk_count / 50), 79)
+                            progress_callback(progress)
+                
+                # 检查是否有 usage 信息（最后一个 chunk）
+                if hasattr(chunk, 'usage') and chunk.usage:
+                    tokens_used = chunk.usage.total_tokens
+                    if user_id:
+                        from app.models.user import User
+                        user_obj = self.db.query(User).filter(User.id == user_id).first()
+                        if user_obj:
+                            user_obj.code_token_usage = (user_obj.code_token_usage or 0) + tokens_used
+                            self.db.commit()
+                            print(f"[DEBUG] Code token usage updated: +{tokens_used}")
+            
+        except Exception as e:
+            print(f"[DEBUG] Stream chat failed, falling back to regular chat: {e}")
+            # 降级到普通 chat
+            content = await self.client.chat(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message}
+                ],
+                model=model or LLMFactory.get_code_model(),
+                temperature=0.7,
+                max_tokens=30000
+            )
+        
+        # 提取代码
+        if "```python" in content:
+            start = content.find("```python") + len("```python")
+            end = content.find("```", start)
+            if end != -1:
+                code = content[start:end].strip()
+            else:
+                code = content[start:].strip()
+        else:
+            code = content.strip()
+        
+        code = self.fix_manim_compatibility(code)
+        
+        # 语法检查
+        try:
+            compile(code, '<string>', 'exec')
+            print("[DEBUG] Code syntax check passed")
+        except SyntaxError as e:
+            print(f"[DEBUG] Code syntax error: {e}")
+            code = self._fix_syntax_error(code, str(e))
+            try:
+                compile(code, '<string>', 'exec')
+                print("[DEBUG] Code syntax fixed successfully")
+            except SyntaxError as e2:
+                print(f"[DEBUG] Code syntax still has error after fix: {e2}")
+        
+        return code
+    
     def fix_manim_compatibility(self, code: str) -> str:
         """修复 Manim 代码兼容性问题"""
         import re
