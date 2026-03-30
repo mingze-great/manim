@@ -23,10 +23,10 @@ class Settings(BaseSettings):
     # 阿里云百炼（优先级1）
     DASHSCOPE_API_KEY: str = ""
     DASHSCOPE_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    DASHSCOPE_MODELS: str = "deepseek-v3.2,glm-5"
+    DASHSCOPE_MODELS: str = "deepseek-v3.2,glm-5,MiniMax-M2.5"
     DASHSCOPE_CHAT_MODEL: str = "deepseek-v3.2"
     DASHSCOPE_CODE_MODEL: str = "glm-5"
-    DASHSCOPE_AVAILABLE_MODELS: str = "deepseek-v3.2,glm-5"
+    DASHSCOPE_AVAILABLE_MODELS: str = "deepseek-v3.2,glm-5,MiniMax-M2.5"
     DASHSCOPE_ENABLE_THINKING: bool = False
     
     # DeepSeek (Priority 2)
