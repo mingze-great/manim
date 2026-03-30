@@ -458,6 +458,10 @@ export default function ProjectChat() {
         <div className="text-xs text-gray-400 mb-2 text-center">
           ⚠️ 视频将在 3 小时后自动清除 | 对话内容将在 24 小时后清除
         </div>
+        <div className="text-xs text-red-500 mb-2 flex items-center gap-1">
+          <span className="text-red-500">❗</span>
+          只需要输入主题，禁止输入其他内容，如有其他要求对话过程中可调整
+        </div>
         <div className="flex gap-2">
           <TextArea
             value={input}
