@@ -41,7 +41,7 @@ export default function ProjectTask() {
   const [templates, setTemplates] = useState<Template[]>([])
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(1)
   const [availableModels, setAvailableModels] = useState<{ value: string; label: string }[]>([])
-  const [selectedModel, setSelectedModel] = useState<string>('deepseek-v3.2')
+  const [selectedModel, setSelectedModel] = useState<string>('MiniMax-M2.5')
   const [showFullCode, setShowFullCode] = useState(false)
   const [fixingCode, setFixingCode] = useState(false)
   const [fixProgress, setFixProgress] = useState(0)
@@ -528,7 +528,11 @@ message.success('视频下载已开始')
                       onChange={setSelectedModel}
                       options={availableModels}
                     />
-                    <p className="text-xs text-gray-400 mt-1">默认：deepseek-v3.2。若出错可切换 glm-5 重试，仍失败请新建项目或联系我</p>
+                    <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded-lg">
+                      <p className="text-sm text-yellow-800 font-medium">
+                        ⚠️ 默认使用 <span className="text-red-600 font-bold">MiniMax-M2.5</span>。若出错可切换 <span className="text-blue-600 font-bold">deepseek-v3.2</span> 重试，仍失败请新建项目或联系我
+                      </p>
+                    </div>
 </div>
                 )}
 
