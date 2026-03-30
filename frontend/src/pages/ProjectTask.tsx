@@ -324,35 +324,20 @@ export default function ProjectTask() {
     }
   }
 
-  const handleDownloadVideo = async () => {
+const handleDownloadVideo = () => {
     const videoUrl = task?.video_url || project?.video_url
     if (videoUrl) {
-      try {
-        const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
-        const token = useAuthStore.getState().token
-        const fullUrl = videoUrl.startsWith('http') ? videoUrl : `${API_BASE}${videoUrl}`
-        
-        const response = await fetch(fullUrl, {
-          headers: token ? { 'Authorization': `Bearer ${token}` } : {}
-        })
-        
-        if (!response.ok) {
-          throw new Error('下载失败')
-        }
-        
-        const blob = await response.blob()
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `video_${id}_${Date.now()}.mp4`
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(url)
-        message.success('视频下载成功')
-      } catch (error) {
-        message.error('视频下载失败，请重试')
-      }
+      const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
+      const fullUrl = videoUrl.startsWith('http') ? videoUrl : `${API_BASE}${videoUrl}`
+      
+      const a = document.createElement('a')
+      a.href = fullUrl
+      a.download = `video_${id}_${Date.now()}.mp4`
+      a.target = '_blank'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+message.success('视频下载已开始')
     }
   }
 
