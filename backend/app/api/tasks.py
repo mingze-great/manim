@@ -371,3 +371,103 @@ def clear_code_cache(
     """清除代码缓存（渲染成功后调用）"""
     CodeCache.delete(project_id)
     return {"message": "缓存已清除"}
+
+
+# ============ 后台任务 API ============
+
+from app.services.background_task import task_manager
+from app.models.background_task import BackgroundTask
+
+
+@router.post("/{project_id}/generate-code-async")
+async def generate_code_async(
+    project_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+    template_id: Optional[int] = Query(None),
+    model: Optional[str] = Query(None),
+):
+    """创建后台代码生成任务"""
+    project = db.query(Project).filter(
+        Project.id == project_id,
+        Project.user_id == current_user.id
+    ).first()
+    
+    if not project:
+        raise HTTPException(status_code=404, detail="项目不存在")
+    
+    if not project.final_script:
+        raise HTTPException(status_code=400, detail="请先完成内容对话")
+    
+    bg_task = task_manager.create_task(
+        db=db,
+        task_type="generate_code",
+        project_id=project_id,
+        user_id=current_user.id,
+        input_params={
+            "template_id": template_id,
+            "model": model
+        }
+    )
+    
+    task_manager.start_task(bg_task.id)
+    
+    return {
+        "task_id": bg_task.id,
+        "status": bg_task.status,
+        "message": "任务已创建，正在后台处理"
+    }
+
+
+@router.get("/background/{task_id}")
+def get_background_task_status(
+    task_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)]
+):
+    """获取后台任务状态"""
+    bg_task = db.query(BackgroundTask).filter(
+        BackgroundTask.id == task_id,
+        BackgroundTask.user_id == current_user.id
+    ).first()
+    
+    if not bg_task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    
+    result = {
+        "task_id": bg_task.id,
+        "task_type": bg_task.task_type,
+        "status": bg_task.status,
+        "progress": bg_task.progress,
+        "message": bg_task.message,
+        "error": bg_task.error,
+        "created_at": bg_task.created_at.isoformat() if bg_task.created_at else None,
+        "started_at": bg_task.started_at.isoformat() if bg_task.started_at else None,
+        "completed_at": bg_task.completed_at.isoformat() if bg_task.completed_at else None,
+    }
+    
+    if bg_task.status == "completed" and bg_task.result:
+        result["code"] = bg_task.result
+    
+    return result
+
+
+@router.get("/{project_id}/latest-code-task")
+def get_latest_code_task(
+    project_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)]
+):
+    """获取项目最新的代码生成任务"""
+    bg_task = task_manager.get_project_latest_task(db, project_id, "generate_code")
+    
+    if not bg_task:
+        return {"task_id": None, "status": None}
+    
+    return {
+        "task_id": bg_task.id,
+        "status": bg_task.status,
+        "progress": bg_task.progress,
+        "message": bg_task.message,
+        "error": bg_task.error
+    }

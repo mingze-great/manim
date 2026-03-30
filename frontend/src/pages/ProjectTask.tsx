@@ -39,15 +39,16 @@ export default function ProjectTask() {
   const [showTerminal, setShowTerminal] = useState(false)
   const [renderError, setRenderError] = useState<string | null>(null)
   const [templates, setTemplates] = useState<Template[]>([])
-  const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null)
+  const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(1)
   const [availableModels, setAvailableModels] = useState<{ value: string; label: string }[]>([])
-  const [selectedModel, setSelectedModel] = useState<string | null>(null)
+  const [selectedModel, setSelectedModel] = useState<string>('deepseek-v3.2')
   const [showFullCode, setShowFullCode] = useState(false)
   const [fixingCode, setFixingCode] = useState(false)
   const codeRef = useRef<HTMLPreElement>(null)
   const terminalRef = useRef<HTMLDivElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const readerRef = useRef<ReadableStreamDefaultReader | null>(null)
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const fetchProject = async () => {
     try {
@@ -120,104 +121,89 @@ export default function ProjectTask() {
   const handleGenerateCode = async () => {
     setGeneratingCode(true)
     setCodeProgress(0)
-    setCodeMessage('正在开始生成...')
+    setCodeMessage('正在创建后台任务...')
     setGeneratedCode('')
     setActiveTab('code')
 
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
-      const token = (useAuthStore.getState().token) || ''
-      console.log('[generateCode] API_BASE:', API_BASE)
-      console.log('[generateCode] id:', id)
-      console.log('[generateCode] templateId:', selectedTemplateId)
-      console.log('[generateCode] model:', selectedModel)
+      const { data } = await projectApi.generateCodeAsync(
+        Number(id),
+        selectedTemplateId || undefined,
+        selectedModel || undefined
+      )
       
-      let streamUrl = `${API_BASE}/api/tasks/${id}/generate-code`
-      const params: string[] = []
-      if (selectedTemplateId) {
-        params.push(`template_id=${selectedTemplateId}`)
-      }
-      if (selectedModel) {
-        params.push(`model=${selectedModel}`)
-      }
-      if (params.length > 0) {
-        streamUrl += `?${params.join('&')}`
-      }
-      console.log('[generateCode] streamUrl:', streamUrl)
-      let headers: any = {
-        'Content-Type': 'application/json'
-      }
-      if (token) headers['Authorization'] = `Bearer ${token}`
-
-      let response = await fetch(streamUrl, {
-        headers
-      })
-
-      if (response.status === 401) {
-        message.error('未通过身份验证，请重新登录后再试')
-        setLoading(false)
-        return
-      }
-
-      if (!response.ok) {
-        const err = await response.text()
-        throw new Error(err || '请求失败')
-      }
-
-      const reader = response.body?.getReader()
-      const decoder = new TextDecoder()
-
-      if (!reader) {
-        throw new Error('无法读取响应')
-      }
-
-      let buffer = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        buffer += decoder.decode(value, { stream: true })
-        
-        const parts = buffer.split('data: ')
-        buffer = parts.pop() || ''
-
-        for (const part of parts) {
-          const trimmed = part.trim()
-          if (!trimmed) continue
-          
-          try {
-            const data = JSON.parse(trimmed)
-            setCodeProgress(data.progress || 0)
-            setCodeMessage(data.message || '')
-            
-            if (data.code) {
-              setGeneratedCode(data.code)
-            }
-            
-            if (data.step === 'error') {
-              message.error(data.message)
-            }
-          } catch (e) {}
-        }
-      }
-
-      if (buffer.trim()) {
-        try {
-          const data = JSON.parse(buffer.trim())
-          if (data.code) setGeneratedCode(data.code)
-        } catch (e) {}
-      }
-
-      message.success('代码生成完成！')
-      await fetchProject()
+      setCodeMessage('任务已创建，正在后台处理...')
+      
+      startPolling(data.task_id)
     } catch (error: any) {
-      console.error('生成代码失败:', error)
-      message.error(error.message || '生成失败')
-    } finally {
+      console.error('创建任务失败:', error)
+      message.error(error.response?.data?.detail || error.message || '创建任务失败')
       setGeneratingCode(false)
     }
   }
+
+  const startPolling = (taskId: number) => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current)
+    }
+    
+    pollingRef.current = setInterval(async () => {
+      try {
+        const { data } = await projectApi.getBackgroundTask(taskId)
+        
+        setCodeProgress(data.progress || 0)
+        setCodeMessage(data.message || '处理中...')
+        
+        if (data.status === 'completed') {
+          if (pollingRef.current) {
+            clearInterval(pollingRef.current)
+          }
+          setGeneratingCode(false)
+          if (data.code) {
+            setGeneratedCode(data.code)
+          }
+          message.success('代码生成完成！')
+          await fetchProject()
+        } else if (data.status === 'failed') {
+          if (pollingRef.current) {
+            clearInterval(pollingRef.current)
+          }
+          setGeneratingCode(false)
+          message.error(data.error || '生成失败')
+        }
+      } catch (error: any) {
+        console.error('轮询任务状态失败:', error)
+      }
+    }, 2000)
+  }
+
+  useEffect(() => {
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current)
+      }
+    }
+  }, [])
+
+  const checkExistingTask = async () => {
+    try {
+      const { data } = await projectApi.getLatestCodeTask(Number(id))
+      if (data.task_id && (data.status === 'pending' || data.status === 'processing')) {
+        setGeneratingCode(true)
+        setCodeProgress(data.progress || 0)
+        setCodeMessage(data.message || '恢复任务中...')
+        startPolling(data.task_id)
+      }
+    } catch (error) {
+      console.error('检查任务状态失败:', error)
+    }
+  }
+
+  useEffect(() => {
+    if (project) {
+      checkExistingTask()
+    }
+  }, [project])
 
   const handleCopyCode = () => {
     if (!generatedCode) return
@@ -492,7 +478,7 @@ export default function ProjectTask() {
                       onChange={setSelectedModel}
                       options={availableModels}
                     />
-                    <p className="text-xs text-gray-400 mt-1">均可使用。若首次出错可选择 glm-5 重试</p>
+                    <p className="text-xs text-gray-400 mt-1">默认：deepseek-v3.2。若出错可切换 glm-5 重试，仍失败请新建项目或联系我</p>
                   </div>
                 )}
 

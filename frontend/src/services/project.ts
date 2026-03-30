@@ -35,6 +35,19 @@ export interface Task {
   created_at: string
 }
 
+export interface BackgroundTask {
+  task_id: number
+  task_type: string
+  status: string
+  progress: number
+  message: string | null
+  error: string | null
+  code?: string
+  created_at: string | null
+  started_at: string | null
+  completed_at: string | null
+}
+
 export interface PendingResponse {
   status: 'no_message' | 'pending' | 'completed' | 'error'
   response?: Conversation
@@ -63,5 +76,15 @@ export const projectApi = {
     api.post<{ success: boolean; fixed_code?: string; fix_description?: string; message?: string }>(
       `/tasks/${projectId}/fix-code`,
       data
+    ),
+  generateCodeAsync: (projectId: number, templateId?: number, model?: string) =>
+    api.post<{ task_id: number; status: string; message: string }>(
+      `/tasks/${projectId}/generate-code-async${templateId || model ? '?' : ''}${templateId ? `template_id=${templateId}` : ''}${templateId && model ? '&' : ''}${model ? `model=${model}` : ''}`
+    ),
+  getBackgroundTask: (taskId: number) =>
+    api.get<BackgroundTask>(`/tasks/background/${taskId}`),
+  getLatestCodeTask: (projectId: number) =>
+    api.get<{ task_id: number | null; status: string | null; progress: number; message: string | null; error: string | null }>(
+      `/tasks/${projectId}/latest-code-task`
     ),
 }
