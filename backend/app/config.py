@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     DASHSCOPE_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     DASHSCOPE_MODELS: str = "MiniMax-M2.5,deepseek-v3.2,qwen3-coder-next,kimi-k2-thinking"
     DASHSCOPE_CHAT_MODEL: str = "qwen-plus"
-    DASHSCOPE_CODE_MODEL: str = "MiniMax-M2.5"
+    DASHSCOPE_CODE_MODEL: str = "deepseek-v3.2"
     DASHSCOPE_AVAILABLE_MODELS: str = "MiniMax-M2.5,deepseek-v3.2,qwen3-coder-next,kimi-k2-thinking"
     DASHSCOPE_ENABLE_THINKING: bool = False
     

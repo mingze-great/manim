@@ -35,7 +35,7 @@ export default function Docs() {
 
   const tips = [
     '⚠️ 只需要输入主题名称，禁止输入其他内容！如有其他要求，进入对话后再调整',
-    '默认使用 MiniMax-M2.5 生成代码，若出错可切换 deepseek-v3.2 重试',
+    '默认使用 deepseek-v3.2 生成代码，若出错可切换 qwen3-coder-next 重试',
     '可以多次调整内容直到满意',
     '视频生成后可随时重新生成',
     '注意：最多保存3个作品，请及时下载',
@@ -97,23 +97,23 @@ export default function Docs() {
           type="warning" 
           showIcon
           style={{ marginBottom: '16px' }}
-          message="默认使用 MiniMax-M2.5 进行代码生成，若出错可切换 deepseek-v3.2 重试"
+          message="默认使用 deepseek-v3.2 进行代码生成，若出错可切换 qwen3-coder-next 重试"
         />
         <ul style={{ paddingLeft: '20px' }}>
           <li style={{ marginBottom: '12px', color: '#666' }}>
-            <strong>MiniMax-M2.5（默认推荐）</strong>
+            <strong>deepseek-v3.2（默认推荐）</strong>
             <br />
             <Text type="secondary">代码生成质量高，Manim 语法准确，稳定性好</Text>
           </li>
           <li style={{ marginBottom: '12px', color: '#666' }}>
-            <strong>deepseek-v3.2（备用）</strong>
+            <strong>qwen3-coder-next（备用）</strong>
             <br />
-            <Text type="secondary">综合能力强，如果 MiniMax-M2.5 出错可切换此模型重试</Text>
+            <Text type="secondary">代码专用模型，如果 deepseek-v3.2 出错可切换此模型重试</Text>
           </li>
           <li style={{ marginBottom: '12px', color: '#666' }}>
-            <strong>qwen3-coder-next</strong>
+            <strong>MiniMax-M2.5</strong>
             <br />
-            <Text type="secondary">代码专用模型，适合复杂逻辑的视频</Text>
+            <Text type="secondary">备选模型，特定场景下效果更好</Text>
           </li>
           <li style={{ marginBottom: '12px', color: '#666' }}>
             <strong>kimi-k2-thinking</strong>
@@ -123,7 +123,7 @@ export default function Docs() {
         </ul>
         <Divider />
         <Paragraph type="secondary">
-          <strong>建议：</strong>默认使用 MiniMax-M2.5，若出错可切换 deepseek-v3.2 重试，仍失败请新建项目或联系我
+          <strong>建议：</strong>默认使用 deepseek-v3.2，若出错可切换 qwen3-coder-next 重试，仍失败请新建项目或联系我
         </Paragraph>
       </Card>
 
