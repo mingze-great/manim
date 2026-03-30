@@ -363,6 +363,108 @@ async def fix_code(
         )
 
 
+@router.post("/{project_id}/fix-code-stream")
+async def fix_code_stream(
+    project_id: int,
+    request: FixCodeRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)]
+):
+    """流式修复代码，返回 SSE 事件"""
+    project = db.query(Project).filter(
+        Project.id == project_id,
+        Project.user_id == current_user.id
+    ).first()
+    
+    if not project:
+        raise HTTPException(status_code=404, detail="项目不存在")
+    
+    cached_code = CodeCache.load(project_id)
+    current_code = cached_code or request.current_code
+    
+    if not current_code:
+        async def error_gen():
+            yield f"data: {json.dumps({'type': 'error', 'message': '没有可修复的代码'})}\n\n"
+        return StreamingResponse(error_gen(), media_type="text/event-stream")
+    
+    async def event_generator():
+        from app.database import SessionLocal
+        db_session = SessionLocal()
+        try:
+            # 20%: 分析错误
+            yield f"data: {json.dumps({'type': 'progress', 'progress': 20, 'message': '分析错误中...'})}\n\n"
+            await asyncio.sleep(0.3)
+            
+            # 40%: 定位问题行
+            yield f"data: {json.dumps({'type': 'progress', 'progress': 40, 'message': '定位问题...'})}\n\n"
+            
+            # 获取错误上下文
+            error_line = extract_error_line(request.error_message)
+            if error_line:
+                preview_lines = get_code_context(current_code, error_line, window=10)
+                yield f"data: {json.dumps({'type': 'code_preview', 'lines': preview_lines, 'focus_line': min(5, len(preview_lines) - 1)})}\n\n"
+            
+            await asyncio.sleep(0.3)
+            
+            # 60%: AI修复中
+            yield f"data: {json.dumps({'type': 'progress', 'progress': 60, 'message': 'AI修复中...'})}\n\n"
+            
+            # 调用AI修复
+            fix_service = ManimFixService(db_session)
+            fixed_code, fix_desc = await fix_service.fix_code_incremental(
+                current_code,
+                request.error_message,
+                user_id=current_user.id
+            )
+            
+            # 80%: 应用兼容性修复
+            yield f"data: {json.dumps({'type': 'progress', 'progress': 80, 'message': '应用兼容性修复...'})}\n\n"
+            
+            from app.services.manim import ManimService
+            manim_service = ManimService(db_session)
+            fixed_code = manim_service.fix_manim_compatibility(fixed_code)
+            
+            # 更新缓存和项目
+            CodeCache.save(project_id, fixed_code)
+            project_local = db_session.query(Project).filter(Project.id == project_id).first()
+            if project_local:
+                project_local.manim_code = fixed_code
+                db_session.commit()
+            
+            # 100%: 完成
+            yield f"data: {json.dumps({'type': 'done', 'progress': 100, 'fixed_code': fixed_code, 'fix_description': fix_desc})}\n\n"
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            yield f"data: {json.dumps({'type': 'error', 'message': f'修复失败: {str(e)}'})}\n\n"
+        finally:
+            db_session.close()
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"}
+    )
+
+
+def extract_error_line(error_message: str) -> int | None:
+    """从错误信息中提取行号"""
+    import re
+    match = re.search(r'line (\d+)', error_message)
+    if match:
+        return int(match.group(1))
+    return None
+
+
+def get_code_context(code: str, line_number: int, window: int = 10) -> list:
+    """获取错误行上下文"""
+    lines = code.split('\n')
+    start = max(0, line_number - window // 2 - 1)
+    end = min(len(lines), line_number + window // 2)
+    return lines[start:end]
+
+
 @router.delete("/{project_id}/code-cache")
 def clear_code_cache(
     project_id: int,

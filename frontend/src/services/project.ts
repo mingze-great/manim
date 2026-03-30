@@ -77,6 +77,8 @@ export const projectApi = {
       `/tasks/${projectId}/fix-code`,
       data
     ),
+  fixCodeStream: (projectId: number) =>
+    `/api/tasks/${projectId}/fix-code-stream`,
   generateCodeAsync: (projectId: number, templateId?: number, model?: string) =>
     api.post<{ task_id: number; status: string; message: string }>(
       `/tasks/${projectId}/generate-code-async${templateId || model ? '?' : ''}${templateId ? `template_id=${templateId}` : ''}${templateId && model ? '&' : ''}${model ? `model=${model}` : ''}`

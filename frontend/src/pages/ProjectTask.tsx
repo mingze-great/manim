@@ -44,6 +44,12 @@ export default function ProjectTask() {
   const [selectedModel, setSelectedModel] = useState<string>('deepseek-v3.2')
   const [showFullCode, setShowFullCode] = useState(false)
   const [fixingCode, setFixingCode] = useState(false)
+  const [fixProgress, setFixProgress] = useState(0)
+  const [fixMessage, setFixMessage] = useState('')
+  const [fixPreviewLines, setFixPreviewLines] = useState<string[]>([])
+  const [fixFocusLine, setFixFocusLine] = useState<number | null>(null)
+  const [fixSuccess, setFixSuccess] = useState(false)
+  const [fixDescription, setFixDescription] = useState('')
   const codeRef = useRef<HTMLPreElement>(null)
   const terminalRef = useRef<HTMLDivElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
@@ -356,23 +362,82 @@ message.success('视频下载已开始')
     if (!generatedCode || !renderError) return
     
     setFixingCode(true)
+    setFixProgress(0)
+    setFixMessage('准备修复...')
+    setFixPreviewLines([])
+    setFixSuccess(false)
+    setFixDescription('')
+    
     try {
+      const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
+      const token = useAuthStore.getState().token
       const errorLog = terminalLog ? terminalLog.slice(-2000) : renderError
-      const { data } = await projectApi.fixCode(Number(id), {
-        error_message: errorLog,
-        current_code: generatedCode
+      
+      const response = await fetch(`${API_BASE}${projectApi.fixCodeStream(Number(id))}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          error_message: errorLog,
+          current_code: generatedCode
+        })
       })
       
-      if (data.success && data.fixed_code) {
-        setGeneratedCode(data.fixed_code)
-        setRenderError(null)
-        setTerminalLog('')
-        message.success(data.fix_description || '代码已自动修复，请重新渲染')
-      } else {
-        message.error(data.message || '自动修复失败，请尝试返回对话修复')
+      if (!response.ok) {
+        throw new Error('请求失败')
+      }
+      
+      const reader = response.body?.getReader()
+      if (!reader) {
+        throw new Error('无法读取响应')
+      }
+      
+      const decoder = new TextDecoder()
+      let buffer = ''
+      
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6))
+              
+              if (data.type === 'progress') {
+                setFixProgress(data.progress)
+                setFixMessage(data.message)
+              } else if (data.type === 'code_preview') {
+                setFixPreviewLines(data.lines || [])
+                setFixFocusLine(data.focus_line ?? null)
+              } else if (data.type === 'done') {
+                setFixProgress(100)
+                setFixMessage('修复完成')
+                if (data.fixed_code) {
+                  setGeneratedCode(data.fixed_code)
+                }
+                setFixSuccess(true)
+                setFixDescription(data.fix_description || '代码已修复')
+                setRenderError(null)
+                setTerminalLog('')
+                message.success('修复成功！')
+              } else if (data.type === 'error') {
+                message.error(data.message || '修复失败')
+              }
+            } catch (e) {
+              console.error('Parse error:', e)
+            }
+          }
+        }
       }
     } catch (error: any) {
-      message.error(error.response?.data?.message || '自动修复失败')
+      message.error(error.message || '修复失败')
     } finally {
       setFixingCode(false)
     }
@@ -464,22 +529,57 @@ message.success('视频下载已开始')
                       options={availableModels}
                     />
                     <p className="text-xs text-gray-400 mt-1">默认：deepseek-v3.2。若出错可切换 glm-5 重试，仍失败请新建项目或联系我</p>
-                  </div>
+</div>
                 )}
 
-                {/* 生成代码按钮 */}
-                <div className="flex gap-3">
-                  <Button 
-                    type="primary" 
-                    icon={<CodeOutlined />}
-                    onClick={handleGenerateCode}
-                    loading={generatingCode}
-                    size="large"
-                    className="btn-gradient"
+                {/* 修复进度显示 */}
+                {fixingCode && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-gradient-to-r from-orange-50 to-yellow-50 dark:from-orange-900/20 dark:to-yellow-900/20 p-4 rounded-xl border border-orange-100 dark:border-orange-800 mb-4"
                   >
-                    {generatedCode ? '重新生成代码' : '生成代码'}
-                  </Button>
-                </div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <Spin />
+                      <span className="text-orange-600 dark:text-orange-400 font-medium">🔧 正在修复代码...</span>
+                    </div>
+                    <Progress percent={fixProgress} strokeColor="#FF8C00" size="small" />
+                    <p className="text-sm text-gray-500 mt-2">{fixMessage}</p>
+                    
+                    {/* 代码预览窗口 */}
+                    {fixPreviewLines.length > 0 && (
+                      <div className="mt-3 bg-gray-900 rounded-lg p-3 overflow-x-auto">
+                        <pre className="text-xs text-gray-300">
+                          {fixPreviewLines.map((line, i) => (
+                            <div 
+                              key={i} 
+                              className={`px-2 py-0.5 ${i === fixFocusLine ? 'bg-orange-500/30 border-l-2 border-orange-500' : ''}`}
+                            >
+                              <span className="text-gray-500 mr-3">{String(i + 1).padStart(2, ' ')}</span>
+                              {line}
+                            </div>
+                          ))}
+                        </pre>
+                      </div>
+                    )}
+                  </motion.div>
+                )}
+
+                {/* 修复成功提示 */}
+                {fixSuccess && !fixingCode && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-green-50 dark:bg-green-900/20 border border-green-200 rounded-lg p-4 mb-4"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-green-600 text-lg">✅</span>
+                      <span className="text-green-700 dark:text-green-400 font-medium">修复成功！</span>
+                    </div>
+                    <p className="text-sm text-green-600 dark:text-green-400 mt-1">{fixDescription}</p>
+                    <p className="text-xs text-gray-500 mt-2">请点击「渲染视频」按钮重新渲染</p>
+                  </motion.div>
+                )}
 
                 {/* 代码显示 */}
                 {generatedCode && (
