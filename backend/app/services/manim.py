@@ -15,6 +15,109 @@ class ManimService:
             return template.prompt
         return ""
     
+    def _fix_unclosed_strings(self, code: str) -> str:
+        """修复未闭合的字符串"""
+        import re
+        
+        lines = code.split('\n')
+        fixed_lines = []
+        i = 0
+        
+        while i < len(lines):
+            line = lines[i]
+            
+            # 检查是否有未闭合的字符串赋值
+            string_match = re.search(r'^(\s*)(\w+)\s*=\s*"([^"]*)$', line)
+            if not string_match:
+                string_match = re.search(r"^(\s*)(\w+)\s*=\s*'([^']*)$", line)
+            
+            if string_match and not line.rstrip().endswith('"') and not line.rstrip().endswith("'"):
+                # 找到未闭合的字符串
+                indent = string_match.group(1)
+                var_name = string_match.group(2)
+                partial_value = string_match.group(3)
+                
+                # 收集后续行直到找到闭合引号或到达类/函数定义
+                full_value = partial_value
+                j = i + 1
+                found_close = False
+                
+                while j < len(lines):
+                    next_line = lines[j]
+                    if '"' in next_line:
+                        # 找到闭合引号
+                        close_idx = next_line.index('"')
+                        full_value += next_line[:close_idx]
+                        found_close = True
+                        break
+                    elif next_line.strip().startswith('def ') or next_line.strip().startswith('class '):
+                        # 到达新的定义，停止
+                        break
+                    else:
+                        full_value += ' ' + next_line.strip()
+                    j += 1
+                
+                # 清理值中的特殊字符
+                clean_value = full_value.replace('\n', ' ').replace('"', "'")[:100]
+                
+                # 添加修复后的行
+                fixed_lines.append(f'{indent}{var_name} = "{clean_value}"')
+                
+                if found_close:
+                    i = j + 1
+                else:
+                    i = j
+            else:
+                fixed_lines.append(line)
+                i += 1
+        
+        return '\n'.join(fixed_lines)
+    
+    def _fix_syntax_error(self, code: str, error_msg: str) -> str:
+        """尝试修复语法错误"""
+        import re
+        
+        lines = code.split('\n')
+        
+        # 提取错误行号
+        line_match = re.search(r'line (\d+)', error_msg)
+        if not line_match:
+            return code
+        
+        error_line = int(line_match.group(1))
+        if error_line < 1 or error_line > len(lines):
+            return code
+        
+        # 获取错误行
+        line = lines[error_line - 1]
+        
+        # 处理 unterminated string literal
+        if 'unterminated string literal' in error_msg.lower():
+            # 检查是否是未闭合的字符串
+            # 查找行中的字符串开始
+            double_quote_count = line.count('"') - line.count('\\"')
+            single_quote_count = line.count("'") - line.count("\\'")
+            
+            if double_quote_count % 2 != 0:
+                # 双引号未闭合
+                lines[error_line - 1] = line.rstrip() + '"'
+            elif single_quote_count % 2 != 0:
+                # 单引号未闭合
+                lines[error_line - 1] = line.rstrip() + "'"
+            else:
+                # 可能是多行字符串问题，尝试删除后续行直到找到闭合
+                if 'INTRO_TITLE' in line or 'TITLE_TEXT' in line or 'OUTRO_TEXT' in line:
+                    # 这是一个标题/文本赋值，删除多行内容
+                    # 找到变量名和值
+                    match = re.match(r"(\s*)(\w+)\s*=\s*['\"](.*)", line)
+                    if match:
+                        indent, var_name, value = match.groups()
+                        # 截断到第一个换行或特殊字符
+                        clean_value = value.split('\n')[0][:50]  # 限制长度
+                        lines[error_line - 1] = f'{indent}{var_name} = "{clean_value}"'
+        
+        return '\n'.join(lines)
+    
     def generate_code_sync(self, script: str) -> str:
         """同步版本的代码生成"""
         import asyncio
@@ -76,11 +179,41 @@ class ManimService:
         
         code = self.fix_manim_compatibility(code)
         
+        # 语法检查
+        try:
+            compile(code, '<string>', 'exec')
+            print("[DEBUG] Code syntax check passed")
+        except SyntaxError as e:
+            print(f"[DEBUG] Code syntax error: {e}")
+            # 尝试修复语法错误
+            code = self._fix_syntax_error(code, str(e))
+            # 再次检查
+            try:
+                compile(code, '<string>', 'exec')
+                print("[DEBUG] Code syntax fixed successfully")
+            except SyntaxError as e2:
+                print(f"[DEBUG] Code syntax still has error after fix: {e2}")
+        
         return code
     
     def fix_manim_compatibility(self, code: str) -> str:
         """修复 Manim 代码兼容性问题"""
         import re
+        
+        # 0. 清理 AI 错误输出的系统提示信息
+        code = re.sub(r'<system-reminder>.*?</system-reminder>', '', code, flags=re.DOTALL)
+        code = re.sub(r'# Plan Mode.*', '', code)
+        code = re.sub(r'## Responsibility.*', '', code)
+        code = re.sub(r'## Important.*', '', code)
+        code = re.sub(r'CRITICAL:.*', '', code)
+        
+        # 0.1 提取有效的 Python 代码（从 from manim 或 import 开始）
+        code_match = re.search(r'(from manim import.*|import manim.*)', code, re.DOTALL)
+        if code_match:
+            code = code[code_match.start():]
+        
+        # 0.2 修复未闭合的字符串（多行文本被放在单行字符串中）
+        code = self._fix_unclosed_strings(code)
         
         # 1. 修复 rate_functions
         code = re.sub(r'\brate_func\s*=\s*reverse_smooth\b', 'rate_func=smooth', code)
