@@ -136,15 +136,27 @@ class ManimService:
 3. 代码必须完整可运行
 """
 
-        response = await self.client.chat(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message}
-            ],
-            model=model or LLMFactory.get_code_model(),
-            temperature=0.7,
-            max_tokens=30000
-        )
+        # 使用 chat_with_response 获取完整响应（包含 usage）
+        if hasattr(self.client, 'chat_with_response'):
+            response = await self.client.chat_with_response(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message}
+                ],
+                model=model or LLMFactory.get_code_model(),
+                temperature=0.7,
+                max_tokens=30000
+            )
+        else:
+            response = await self.client.chat(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message}
+                ],
+                model=model or LLMFactory.get_code_model(),
+                temperature=0.7,
+                max_tokens=30000
+            )
         
         # 统计 token 使用量
         tokens_used = 0

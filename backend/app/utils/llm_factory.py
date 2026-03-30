@@ -12,6 +12,11 @@ class LLMAdapter(ABC):
     @abstractmethod
     async def chat(self, messages: list[dict], model: str, **kwargs) -> str:
         pass
+    
+    async def chat_with_response(self, messages: list[dict], model: str = None, **kwargs):
+        """返回完整的 response 对象，子类可以覆盖此方法"""
+        content = await self.chat(messages, model, **kwargs)
+        return {"content": content, "usage": None}
 
 
 class DashScopeAdapter(LLMAdapter):
@@ -48,6 +53,25 @@ class DashScopeAdapter(LLMAdapter):
                 self.current_model_index += 1
                 print(f"[DashScope] 模型 {model} 调用失败，降级到 {self.models[self.current_model_index]}")
                 return await self.chat(messages, **kwargs)
+            raise e
+    
+    async def chat_with_response(self, messages: list[dict], model: str = None, **kwargs):
+        """返回完整的 response 对象，包含 usage 信息"""
+        model = model or self.models[self.current_model_index]
+        extra_body = self._get_extra_body()
+        try:
+            response = await self.client.chat.completions.create(
+                model=model,
+                messages=messages,
+                extra_body=extra_body,
+                **kwargs
+            )
+            return response
+        except Exception as e:
+            if self.current_model_index < len(self.models) - 1:
+                self.current_model_index += 1
+                print(f"[DashScope] 模型 {model} 调用失败，降级到 {self.models[self.current_model_index]}")
+                return await self.chat_with_response(messages, **kwargs)
             raise e
     
     async def stream_chat(self, messages: list[dict], model: str = None, **kwargs):
