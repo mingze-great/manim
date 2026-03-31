@@ -1,7 +1,7 @@
-import { Card, Typography, Button, Steps, Divider, Alert } from 'antd'
+import { Card, Typography, Button, Steps, Alert } from 'antd'
 import { 
   PlayCircleOutlined, MessageOutlined, DownloadOutlined,
-  CodeOutlined, ToolOutlined, BulbOutlined
+  CodeOutlined, ToolOutlined
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 
@@ -17,13 +17,13 @@ export default function Docs() {
       icon: <PlayCircleOutlined />,
     },
     {
-      title: '第二步：AI 生成内容',
+      title: '第二步：生成内容',
       description: '系统会自动生成视频内容要点，包含文字描述和动态效果说明。如有其他要求，可在对话中调整',
       icon: <MessageOutlined />,
     },
     {
       title: '第三步：生成代码',
-      description: '点击下方"生成代码"按钮，AI 会根据内容生成 Manim 动画代码。默认使用 MiniMax-M2.5 模型',
+      description: '点击下方"生成代码"按钮，系统会根据内容自动生成 Manim 动画代码',
       icon: <CodeOutlined />,
     },
     {
@@ -35,7 +35,7 @@ export default function Docs() {
 
   const tips = [
     '⚠️ 只需要输入主题名称，禁止输入其他内容！如有其他要求，进入对话后再调整',
-    '默认使用 deepseek-v3.2 生成代码，若出错可切换 qwen3-coder-next 重试',
+    '代码自动生成，如多次失败请联系我',
     '可以多次调整内容直到满意',
     '视频生成后可随时重新生成',
     '注意：最多保存3个作品，请及时下载',
@@ -92,42 +92,6 @@ export default function Docs() {
       </Card>
 
       <Card style={{ marginBottom: '24px' }}>
-        <Title level={4}><BulbOutlined /> 生成模型选择</Title>
-        <Alert 
-          type="warning" 
-          showIcon
-          style={{ marginBottom: '16px' }}
-          message="默认使用 deepseek-v3.2 进行代码生成，若出错可切换 qwen3-coder-next 重试"
-        />
-        <ul style={{ paddingLeft: '20px' }}>
-          <li style={{ marginBottom: '12px', color: '#666' }}>
-            <strong>deepseek-v3.2（默认推荐）</strong>
-            <br />
-            <Text type="secondary">代码生成质量高，Manim 语法准确，稳定性好</Text>
-          </li>
-          <li style={{ marginBottom: '12px', color: '#666' }}>
-            <strong>qwen3-coder-next（备用）</strong>
-            <br />
-            <Text type="secondary">代码专用模型，如果 deepseek-v3.2 出错可切换此模型重试</Text>
-          </li>
-          <li style={{ marginBottom: '12px', color: '#666' }}>
-            <strong>MiniMax-M2.5</strong>
-            <br />
-            <Text type="secondary">备选模型，特定场景下效果更好</Text>
-          </li>
-          <li style={{ marginBottom: '12px', color: '#666' }}>
-            <strong>kimi-k2-thinking</strong>
-            <br />
-            <Text type="secondary">深度思考模型，适合需要推理的内容</Text>
-          </li>
-        </ul>
-        <Divider />
-        <Paragraph type="secondary">
-          <strong>建议：</strong>默认使用 deepseek-v3.2，若出错可切换 qwen3-coder-next 重试，仍失败请新建项目或联系我
-        </Paragraph>
-      </Card>
-
-      <Card style={{ marginBottom: '24px' }}>
         <Title level={4}>渲染失败怎么办？</Title>
         <Paragraph type="secondary" style={{ marginBottom: '12px' }}>
           渲染失败时，系统会显示错误信息并提供自动修复功能，你可以：
@@ -135,9 +99,6 @@ export default function Docs() {
         <ol style={{ paddingLeft: '20px' }}>
           <li style={{ marginBottom: '8px', color: '#666' }}>
             <strong>点击"自动修复"</strong>：系统会自动分析错误并修复代码，实时显示修复进度（推荐）
-          </li>
-          <li style={{ marginBottom: '8px', color: '#666' }}>
-            <strong>切换模型重新生成</strong>：如果自动修复多次失败，切换到 deepseek-v3.2 重新生成代码
           </li>
           <li style={{ marginBottom: '8px', color: '#666' }}>
             <strong>切换模板重新生成</strong>：高定模板容易出错，可切换到默认模板（治愈系多维动态引擎）

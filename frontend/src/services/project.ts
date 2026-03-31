@@ -79,9 +79,9 @@ export const projectApi = {
     ),
   fixCodeStream: (projectId: number) =>
     `/api/tasks/${projectId}/fix-code-stream`,
-  generateCodeAsync: (projectId: number, templateId?: number, model?: string) =>
+  generateCodeAsync: (projectId: number, templateId?: number) =>
     api.post<{ task_id: number; status: string; message: string }>(
-      `/tasks/${projectId}/generate-code-async${templateId || model ? '?' : ''}${templateId ? `template_id=${templateId}` : ''}${templateId && model ? '&' : ''}${model ? `model=${model}` : ''}`
+      `/tasks/${projectId}/generate-code-async${templateId ? `?template_id=${templateId}` : ''}`
     ),
   getBackgroundTask: (taskId: number) =>
     api.get<BackgroundTask>(`/tasks/background/${taskId}`),

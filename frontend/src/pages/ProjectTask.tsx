@@ -4,7 +4,6 @@ import { Card, Progress, Button, Space, message, Spin, Tabs, Collapse, Select } 
 import { DownloadOutlined, PlayCircleOutlined, CodeOutlined, CloudUploadOutlined, CopyOutlined, DownOutlined, UpOutlined } from '@ant-design/icons'
 import { projectApi, Task, Project } from '@/services/project'
 import { templateApi, Template } from '@/services/template'
-import { adminApi } from '@/services/admin'
 import { useAuthStore } from '@/stores/authStore'
 import { motion } from 'framer-motion'
 
@@ -40,8 +39,6 @@ export default function ProjectTask() {
   const [renderError, setRenderError] = useState<string | null>(null)
   const [templates, setTemplates] = useState<Template[]>([])
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(1)
-  const [availableModels, setAvailableModels] = useState<{ value: string; label: string }[]>([])
-  const [selectedModel, setSelectedModel] = useState<string>('deepseek-v3.2')
   const [showFullCode, setShowFullCode] = useState(false)
   const [fixingCode, setFixingCode] = useState(false)
   const [fixProgress, setFixProgress] = useState(0)
@@ -92,19 +89,9 @@ export default function ProjectTask() {
     }
   }
 
-  const fetchAvailableModels = async () => {
-    try {
-      const { data } = await adminApi.getAvailableModels()
-      setAvailableModels(data.models)
-    } catch (error) {
-      console.error('获取模型列表失败:', error)
-    }
-  }
-
   useEffect(() => {
     fetchProject()
     fetchTemplates()
-    fetchAvailableModels()
   }, [id])
 
   useEffect(() => {
@@ -134,8 +121,7 @@ export default function ProjectTask() {
     try {
       const { data } = await projectApi.generateCodeAsync(
         Number(id),
-        selectedTemplateId || undefined,
-        selectedModel || undefined
+        selectedTemplateId || undefined
       )
       
       setCodeMessage('任务已创建，正在后台处理...')
@@ -515,26 +501,6 @@ message.success('视频下载已开始')
                   />
                   <p className="text-xs text-gray-400 mt-1">视频风格模板。高定版效果更好但可能出错，若首次出错建议换其他模板</p>
                 </div>
-
-                {/* 模型选择 */}
-                {availableModels.length > 0 && (
-                  <div className="mb-4">
-                    <label className="block text-sm text-gray-500 mb-2">选择生成模型</label>
-                    <Select
-                      style={{ width: '100%', maxWidth: 300 }}
-                      placeholder="默认模型"
-                      allowClear
-                      value={selectedModel}
-                      onChange={setSelectedModel}
-                      options={availableModels}
-                    />
-                    <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded-lg">
-                      <p className="text-sm text-yellow-800 font-medium">
-                        ⚠️ 默认使用 <span className="text-red-600 font-bold">deepseek-v3.2</span>。若出错可切换 <span className="text-blue-600 font-bold">qwen3-coder-next</span> 重试，仍失败请新建项目或联系我
-                      </p>
-                    </div>
-</div>
-                )}
 
                 {/* 生成代码按钮 */}
                 <div className="flex gap-3 mb-4">

@@ -21,9 +21,8 @@ settings = get_settings()
 async def get_available_models(
     current_user: User = Depends(get_current_user)
 ):
-    """获取可用模型列表（所有登录用户）"""
-    models = settings.DASHSCOPE_AVAILABLE_MODELS.split(",")
-    return {"models": [{"value": m.strip(), "label": m.strip()} for m in models]}
+    """获取可用模型列表（已废弃，返回空列表）"""
+    return {"models": []}
 
 
 @router.get("/users", response_model=List[UserResponse])
