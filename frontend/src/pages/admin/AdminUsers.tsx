@@ -8,7 +8,7 @@ import {
   ReloadOutlined, DeleteOutlined, SearchOutlined,
   LockOutlined, UnlockOutlined, EyeOutlined, UserOutlined,
   CheckCircleOutlined, CloseCircleOutlined,
-  ClockCircleOutlined
+  ClockCircleOutlined, VideoCameraOutlined
 } from '@ant-design/icons'
 import { adminApi, User } from '../../services/admin'
 
@@ -41,6 +41,10 @@ export default function AdminUsers() {
   const [durationType, setDurationType] = useState<string>('1m')
   const [customDays, setCustomDays] = useState<number>(30)
   const [durationLoading, setDurationLoading] = useState(false)
+  const [videoLimitModalVisible, setVideoLimitModalVisible] = useState(false)
+  const [videoLimitUser, setVideoLimitUser] = useState<User | null>(null)
+  const [videoLimitValue, setVideoLimitValue] = useState<number>(5)
+  const [videoLimitLoading, setVideoLimitLoading] = useState(false)
 
   useEffect(() => {
     fetchUsers()
@@ -135,6 +139,27 @@ export default function AdminUsers() {
     }
   }
 
+  const handleVideoLimitUser = (user: User) => {
+    setVideoLimitUser(user)
+    setVideoLimitValue(user.daily_video_limit || 5)
+    setVideoLimitModalVisible(true)
+  }
+
+  const handleSetVideoLimit = async () => {
+    if (!videoLimitUser) return
+    setVideoLimitLoading(true)
+    try {
+      await adminApi.setVideoLimit(videoLimitUser.id, videoLimitValue)
+      message.success(`已设置每日配额为 ${videoLimitValue} 条`)
+      setVideoLimitModalVisible(false)
+      fetchUsers()
+    } catch (err: any) {
+      message.error(err.response?.data?.detail || '操作失败')
+    } finally {
+      setVideoLimitLoading(false)
+    }
+  }
+
   const columns = [
     {
       title: '用户',
@@ -180,6 +205,17 @@ export default function AdminUsers() {
       width: 100,
       render: (isAdmin: boolean) => (
         isAdmin ? <Tag color="gold">管理员</Tag> : <Tag color="default">用户</Tag>
+      ),
+    },
+    {
+      title: '每日配额',
+      dataIndex: 'daily_video_limit',
+      key: 'daily_video_limit',
+      width: 100,
+      render: (limit: number | undefined, record: User) => (
+        record.is_admin 
+          ? <Tag color="blue">无限制</Tag>
+          : <span>{limit || 5} 条/天</span>
       ),
     },
     {
@@ -229,6 +265,15 @@ export default function AdminUsers() {
               onClick={() => handleExtendUser(record)}
             >
               设置时长
+            </Button>
+          )}
+          {record.is_approved && !record.is_admin && (
+            <Button
+              size="small"
+              icon={<VideoCameraOutlined />}
+              onClick={() => handleVideoLimitUser(record)}
+            >
+              配额
             </Button>
           )}
           <Button 
@@ -351,6 +396,31 @@ export default function AdminUsers() {
               当前有效期至：{formatDateTime(durationUser.expires_at, false)}
             </p>
           )}
+        </div>
+      </Modal>
+
+      <Modal
+        title="设置每日视频配额"
+        open={videoLimitModalVisible}
+        onCancel={() => setVideoLimitModalVisible(false)}
+        onOk={handleSetVideoLimit}
+        confirmLoading={videoLimitLoading}
+        okText="确认"
+        cancelText="取消"
+      >
+        <div className="py-4">
+          <p className="mb-4">为用户 <strong>{videoLimitUser?.username}</strong> 设置每日视频生成配额：</p>
+          <InputNumber
+            value={videoLimitValue}
+            onChange={(v: number | null) => setVideoLimitValue(v || 5)}
+            min={5}
+            max={20}
+            addonAfter="条/天"
+            style={{ width: '100%' }}
+          />
+          <p className="text-xs text-gray-500 mt-2">
+            配额范围：5-20 条/天
+          </p>
         </div>
       </Modal>
     </div>

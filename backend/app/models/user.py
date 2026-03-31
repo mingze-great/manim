@@ -21,6 +21,7 @@ class User(Base):
     chat_token_usage = Column(Integer, default=0, comment="对话Token使用量")
     code_token_usage = Column(Integer, default=0, comment="代码生成Token使用量")
     daily_video_count = Column(Integer, default=0, comment="当日视频生成数量")
+    daily_video_limit = Column(Integer, default=5, comment="每日视频配额限制(5-20)")
     last_video_date = Column(Date, nullable=True, comment="最后生成视频日期")
     last_active_at = Column(DateTime, nullable=True, comment="最后活跃时间")
     created_at = Column(DateTime, default=datetime.utcnow)

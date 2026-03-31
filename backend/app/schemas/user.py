@@ -35,6 +35,7 @@ class UserResponse(UserBase):
     expires_at: Optional[datetime] = None
     api_calls_count: int = 0
     videos_count: int = 0
+    daily_video_limit: int = 5
     last_active_at: Optional[datetime] = None
     created_at: datetime
     
@@ -126,6 +127,7 @@ class UserDetail(BaseModel):
     expires_at: Optional[datetime] = None
     created_at: datetime
     last_active_at: Optional[datetime] = None
+    daily_video_limit: int = 5
     
     total_projects: int = 0
     videos_count: int = 0

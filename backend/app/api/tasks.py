@@ -173,7 +173,7 @@ async def render_video_stream(
                     user_local.last_video_date = today
                     db_session.commit()
                 
-                if (user_local.daily_video_count or 0) >= 5:
+                if (user_local.daily_video_count or 0) >= (user_local.daily_video_limit or 5):
                     yield f"data: {json.dumps({'type': 'error', 'content': '系统繁忙，请稍后重试。如问题持续，请联系管理员。'})}\n\n"
                     return
             

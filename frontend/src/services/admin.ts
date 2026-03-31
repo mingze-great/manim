@@ -34,6 +34,7 @@ export interface User {
   is_active: boolean
   is_admin: boolean
   is_approved: boolean
+  daily_video_limit?: number
   expires_at?: string
   created_at: string
 }
@@ -163,6 +164,9 @@ export const adminApi = {
 
   extendUser: (userId: number, days: number = 30) =>
     api.post<{ message: string; expires_at: string }>(`/admin/users/${userId}/extend`, null, { params: { days } }),
+
+  setVideoLimit: (userId: number, limit: number) =>
+    api.post<{ message: string; daily_video_limit: number }>(`/admin/users/${userId}/set-video-limit`, null, { params: { limit } }),
 
   getStatisticsOverview: (period: string = 'day') =>
     api.get<{

@@ -326,6 +326,31 @@ async def toggle_user_active(
     return {"message": f"用户已{action_text}", "is_active": user.is_active}
 
 
+@router.post("/users/{user_id}/set-video-limit")
+async def set_user_video_limit(
+    user_id: int,
+    limit: int = Query(..., ge=5, le=20),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+    request: Request = None
+):
+    """设置用户每日视频配额"""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    
+    user.daily_video_limit = limit
+    db.commit()
+    
+    from app.api.auth import log_audit
+    log_audit(db, current_user.id, current_user.username, "SET_VIDEO_LIMIT",
+              resource="user", resource_id=user_id,
+              details=f"设置用户 {user.username} 每日视频配额为 {limit}",
+              request=request)
+    
+    return {"message": "配额已更新", "daily_video_limit": limit}
+
+
 @router.post("/users/{user_id}/reset-password")
 async def reset_user_password(
     user_id: int,
