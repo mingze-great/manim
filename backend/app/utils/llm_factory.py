@@ -117,13 +117,22 @@ class DeepSeekAdapter(LLMAdapter):
         )
         return response.choices[0].message.content
     
+    async def chat_with_response(self, messages: list[dict], model: str = None, **kwargs):
+        model = model or settings.DEEPSEEK_MODEL
+        response = await self.client.chat.completions.create(
+            model=model,
+            messages=messages,
+            **kwargs
+        )
+        return response
+    
     async def stream_chat(self, messages: list[dict], model: str = None, **kwargs):
-        """流式聊天 - 返回生成器"""
         model = model or settings.DEEPSEEK_MODEL
         response = await self.client.chat.completions.create(
             model=model,
             messages=messages,
             stream=True,
+            stream_options={"include_usage": True},
             **kwargs
         )
         return response
@@ -281,116 +290,30 @@ class GLMAdapter(LLMAdapter):
 
 
 class LLMFactory:
-    """LLM 工厂类 - 自动选择可用的 LLM 提供商"""
-    
     _client_cache = None
     
     @classmethod
     def get_client(cls) -> LLMAdapter:
-        """获取 LLM 客户端，按优先级自动选择"""
-        
-        # 如果已缓存，直接返回
         if cls._client_cache is not None:
             return cls._client_cache
         
-        # 每次都重新检查配置
-        provider = settings.LLM_PROVIDER.lower()
+        if not settings.DEEPSEEK_API_KEY:
+            raise ValueError(
+                "未配置 DEEPSEEK_API_KEY。\n"
+                "请在 .env 中配置 DEEPSEEK_API_KEY"
+            )
         
-        # 自动选择模式
-        if provider == "auto":
-            if settings.DASHSCOPE_API_KEY:
-                cls._client_cache = DashScopeAdapter()
-            elif settings.GLM_API_KEY:
-                cls._client_cache = GLMAdapter()
-            elif settings.DEEPSEEK_API_KEY:
-                cls._client_cache = DeepSeekAdapter()
-            elif settings.GEMINI_API_KEY:
-                cls._client_cache = GeminiAdapter()
-            elif settings.OPENAI_API_KEY:
-                cls._client_cache = OpenAIAdapter()
-            else:
-                raise ValueError(
-                    "未配置任何 LLM API Key。\n"
-                    "请在 .env 中配置以下任一API Key:\n"
-                    "  - DASHSCOPE_API_KEY (推荐)\n"
-                    "  - GLM_API_KEY\n"
-                    "  - DEEPSEEK_API_KEY\n"
-                    "  - GEMINI_API_KEY\n"
-                    "  - OPENAI_API_KEY"
-                )
-        # 指定提供商
-        elif provider == "dashscope":
-            if not settings.DASHSCOPE_API_KEY:
-                raise ValueError("未配置 DASHSCOPE_API_KEY")
-            cls._client_cache = DashScopeAdapter()
-        elif provider == "glm":
-            if not settings.GLM_API_KEY:
-                raise ValueError("未配置 GLM_API_KEY")
-            cls._client_cache = GLMAdapter()
-        elif provider == "deepseek":
-            if not settings.DEEPSEEK_API_KEY:
-                raise ValueError("未配置 DEEPSEEK_API_KEY")
-            cls._client_cache = DeepSeekAdapter()
-        elif provider == "gemini":
-            if not settings.GEMINI_API_KEY:
-                raise ValueError("未配置 GEMINI_API_KEY")
-            cls._client_cache = GeminiAdapter()
-        elif provider in ["openai", "qwen", "aliyun"]:
-            if not settings.OPENAI_API_KEY:
-                raise ValueError("未配置 OPENAI_API_KEY")
-            # 如果是阿里云，检测是否使用通义千问
-            if settings.OPENAI_BASE_URL and "aliyuncs" in settings.OPENAI_BASE_URL:
-                cls._client_cache = QwenAdapter()
-            else:
-                cls._client_cache = OpenAIAdapter()
-        else:
-            raise ValueError(f"不支持的 LLM 提供商: {provider}")
-        
+        cls._client_cache = DeepSeekAdapter()
         return cls._client_cache
     
     @classmethod
     def get_model_name(cls) -> str:
-        """获取当前使用的模型名称"""
-        provider = settings.LLM_PROVIDER.lower()
-        
-        if provider == "auto":
-            if settings.DASHSCOPE_API_KEY:
-                if isinstance(cls._client_cache, DashScopeAdapter):
-                    return cls._client_cache.get_current_model()
-                return settings.DASHSCOPE_MODELS.split(",")[0].strip()
-            elif settings.GLM_API_KEY:
-                return settings.GLM_MODEL
-            elif settings.DEEPSEEK_API_KEY:
-                return settings.DEEPSEEK_MODEL
-            elif settings.GEMINI_API_KEY:
-                return settings.GEMINI_MODEL
-            elif settings.OPENAI_API_KEY:
-                return settings.OPENAI_MODEL
-        elif provider == "dashscope":
-            if isinstance(cls._client_cache, DashScopeAdapter):
-                return cls._client_cache.get_current_model()
-            return settings.DASHSCOPE_MODELS.split(",")[0].strip()
-        elif provider == "glm":
-            return settings.GLM_MODEL
-        elif provider == "deepseek":
-            return settings.DEEPSEEK_MODEL
-        elif provider == "gemini":
-            return settings.GEMINI_MODEL
-        elif provider == "openai":
-            return settings.OPENAI_MODEL
-        
-        return "unknown"
+        return settings.DEEPSEEK_MODEL
     
     @classmethod
     def get_chat_model(cls) -> str:
-        """获取对话模型名称"""
-        if settings.DASHSCOPE_API_KEY and settings.DASHSCOPE_CHAT_MODEL:
-            return settings.DASHSCOPE_CHAT_MODEL
-        return cls.get_model_name()
+        return settings.DEEPSEEK_MODEL
     
     @classmethod
     def get_code_model(cls) -> str:
-        """获取代码生成模型名称"""
-        if settings.DASHSCOPE_API_KEY and settings.DASHSCOPE_CODE_MODEL:
-            return settings.DASHSCOPE_CODE_MODEL
-        return cls.get_model_name()
+        return settings.DEEPSEEK_MODEL
