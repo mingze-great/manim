@@ -146,6 +146,9 @@ class ManimService:
 1. 保持模板的动画风格、颜色配置、排版方式
 2. 只替换内容部分（标题、文案等）
 3. 保持代码结构不变
+4. 代码必须语法正确，能通过 Python ast.parse() 检查
+5. 参数之间用逗号分隔，如 color=C_CYAN, opacity=0.15（注意逗号后有空格）
+6. 不要漏掉逗号或添加多余字符
 """
         else:
             system_prompt = MANIM_SYSTEM_PROMPT
@@ -240,6 +243,7 @@ class ManimService:
     def validate_code(self, code: str) -> tuple:
         """验证并修复代码，返回 (fixed_code, warnings)"""
         import re
+        import ast
         warnings = []
         
         if not code:
@@ -258,6 +262,9 @@ class ManimService:
         
         code = code.strip()
         
+        # 自动修复常见语法错误
+        code = self._fix_common_syntax_errors(code)
+        
         # 确保必要的 import
         if 'from manim import *' not in code and 'import manim' not in code:
             code = 'from manim import *\n\n' + code
@@ -274,4 +281,49 @@ class ManimService:
         # 调用兼容性修复
         code = self.fix_manim_compatibility(code)
         
+        # 语法验证
+        try:
+            ast.parse(code)
+        except SyntaxError as e:
+            warnings.append(f"语法错误: {e.msg} (行 {e.lineno})")
+            # 尝试修复
+            code = self._try_fix_syntax(code, e)
+            try:
+                ast.parse(code)
+                warnings.append("语法错误已自动修复")
+            except:
+                warnings.append("无法自动修复语法错误，请检查代码")
+        
         return code, warnings
+    
+    def _fix_common_syntax_errors(self, code: str) -> str:
+        """修复常见的语法拼写错误"""
+        import re
+        
+        # 修复参数分隔错误：color=X,1 opacity=Y → color=X, opacity=Y
+        code = re.sub(r'(\w+)=([^,\s]+),(\d+)\s+(\w+)=', r'\1=\2, \4=', code)
+        
+        # 修复多余数字：set_fill(color=X, 0.5 opacity=Y) → set_fill(color=X, opacity=Y)
+        code = re.sub(r'set_fill\(([^)]+),\s*\d+\s+opacity', r'set_fill(\1, opacity', code)
+        
+        # 修复缺少逗号：color=X opacity=Y → color=X, opacity=Y
+        code = re.sub(r'(\w+)=([^\s,)]+)\s+(\w+)=', r'\1=\2, \3=', code)
+        
+        # 修复括号内多余空格
+        code = re.sub(r'\(\s+', '(', code)
+        code = re.sub(r'\s+\)', ')', code)
+        
+        # 修复字符串拼接错误
+        code = re.sub(r'"([^"]*)"\s*\+\s*\d+\s*"([^"]*)"', r'"\1\2"', code)
+        
+        return code
+    
+    def _try_fix_syntax(self, code: str, error: SyntaxError) -> str:
+        """尝试修复语法错误"""
+        lines = code.split('\n')
+        if error.lineno and error.lineno <= len(lines):
+            line = lines[error.lineno - 1]
+            if "invalid syntax" in error.msg:
+                line = self._fix_common_syntax_errors(line)
+                lines[error.lineno - 1] = line
+        return '\n'.join(lines)
