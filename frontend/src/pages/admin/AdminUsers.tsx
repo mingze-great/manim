@@ -1,13 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import {
   Table, Card, Input, Button, Space, Tag, Popconfirm,
-  Modal, Descriptions, message, Row, Col, Avatar, Badge, Radio, InputNumber
+  Modal, Descriptions, message, Row, Col, Avatar, Badge, Radio, InputNumber, Statistic
 } from 'antd'
 import {
   ReloadOutlined, DeleteOutlined, SearchOutlined,
   LockOutlined, UnlockOutlined, EyeOutlined, UserOutlined,
   ProjectOutlined, VideoCameraOutlined, CheckCircleOutlined, CloseCircleOutlined,
-  EditOutlined, ClockCircleOutlined
+  EditOutlined, ClockCircleOutlined, TeamOutlined, CrownOutlined, HourglassOutlined
 } from '@ant-design/icons'
 import { adminApi, User, UserStats } from '../../services/admin'
 
@@ -166,6 +166,14 @@ export default function AdminUsers() {
     }
   }
 
+  const userStatsSummary = useMemo(() => {
+    const total = users.length
+    const active = users.filter(u => u.is_active).length
+    const pending = users.filter(u => !u.is_approved).length
+    const admins = users.filter(u => u.is_admin).length
+    return { total, active, pending, admins }
+  }, [users])
+
   const columns = [
     {
       title: '用户',
@@ -297,6 +305,53 @@ export default function AdminUsers() {
 
   return (
     <div>
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold">用户管理</h2>
+        <p className="text-gray-500 mt-1">管理平台用户账户</p>
+      </div>
+
+      <Row gutter={[16, 16]} className="mb-6">
+        <Col xs={24} sm={12} lg={6}>
+          <Card className="hover-lift" style={{ borderRadius: '12px' }}>
+            <Statistic
+              title="用户总数"
+              value={userStatsSummary.total}
+              prefix={<TeamOutlined className="text-blue-500" />}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card className="hover-lift" style={{ borderRadius: '12px' }}>
+            <Statistic
+              title="活跃用户"
+              value={userStatsSummary.active}
+              prefix={<CheckCircleOutlined className="text-green-500" />}
+              valueStyle={{ color: '#10b981' }}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card className="hover-lift" style={{ borderRadius: '12px' }}>
+            <Statistic
+              title="待审核"
+              value={userStatsSummary.pending}
+              prefix={<HourglassOutlined className="text-orange-500" />}
+              valueStyle={{ color: '#f59e0b' }}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card className="hover-lift" style={{ borderRadius: '12px' }}>
+            <Statistic
+              title="管理员"
+              value={userStatsSummary.admins}
+              prefix={<CrownOutlined className="text-purple-500" />}
+              valueStyle={{ color: '#8b5cf6' }}
+            />
+          </Card>
+        </Col>
+      </Row>
+
       <Card className="mb-4 hover-lift" style={{ borderRadius: '16px' }}>
         <Row gutter={16} align="middle">
           <Col flex="auto">
