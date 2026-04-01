@@ -1,7 +1,11 @@
 import asyncio
 import json
 import os
+import re
+import shutil
 import subprocess
+import sys
+import tempfile
 import pathlib
 from datetime import datetime
 from typing import Optional, Dict, Any
@@ -12,6 +16,14 @@ from app.models.project import Project
 from app.models.user import User
 from app.models.template import Template
 from app.services.manim import ManimService
+
+
+def get_manim_python_path() -> str:
+    """获取 Manim 环境的 Python 路径"""
+    if sys.platform == "win32":
+        return sys.executable
+    else:
+        return "/opt/miniconda3/envs/manim311/bin/python"
 
 
 class BackgroundTaskManager:
@@ -196,6 +208,7 @@ class BackgroundTaskManager:
     
     async def _run_render_template_preview(self, db: Session, bg_task: BackgroundTask):
         """渲染模板预览视频"""
+        temp_dir = None
         try:
             template_id = bg_task.input_params.get("template_id")
             if not template_id:
@@ -213,19 +226,38 @@ class BackgroundTaskManager:
             if not code:
                 raise ValueError("模板代码为空")
             
-            output_dir = pathlib.Path(__file__).parent.parent / "videos" / "template_examples"
-            output_dir.mkdir(parents=True, exist_ok=True)
+            # 动态获取 Scene 类名
+            scene_match = re.search(r'class\s+(\w+)\s*\(\s*Scene\s*\)', code)
+            scene_name = scene_match.group(1) if scene_match else "SceneName"
             
-            temp_code_file = output_dir / f"temp_template_{template_id}.py"
-            temp_code_file.write_text(code, encoding='utf-8')
+            # 创建临时目录
+            temp_dir = tempfile.mkdtemp(prefix=f"template_{template_id}_")
+            
+            # 写入代码文件
+            manim_file = os.path.join(temp_dir, "scene.py")
+            with open(manim_file, "w", encoding="utf-8") as f:
+                f.write(code)
             
             bg_task.progress = 20
-            bg_task.message = "正在执行 Manim 渲染..."
+            bg_task.message = f"正在执行 Manim 渲染 (场景: {scene_name})..."
             db.commit()
             
+            # 获取 Manim 环境的 Python 路径
+            python_path = get_manim_python_path()
+            
+            # 构建命令
+            cmd = [
+                python_path, "-m", "manim",
+                "-qm",  # 中等质量 720p30
+                "--disable_caching",
+                "--media_dir", temp_dir,
+                "-o", f"template_{template_id}",
+                manim_file,
+                scene_name
+            ]
+            
             result = subprocess.run(
-                ["manim", "-qm", str(temp_code_file), "SceneName", "-o", f"template_{template_id}"],
-                cwd=str(output_dir),
+                cmd,
                 capture_output=True,
                 text=True,
                 timeout=300
@@ -239,40 +271,32 @@ class BackgroundTaskManager:
             bg_task.message = "正在处理渲染结果..."
             db.commit()
             
-            media_dir = output_dir / "media" / "videos" / f"temp_template_{template_id}" / "720p30"
-            
-            video_files = list(media_dir.glob("*.mp4")) if media_dir.exists() else []
-            
-            if not video_files:
-                for p in output_dir.rglob("*.mp4"):
-                    if f"template_{template_id}" in p.name or f"temp_template_{template_id}" in str(p):
-                        video_files.append(p)
+            # 查找生成的视频文件
+            video_files = []
+            for root, dirs, files in os.walk(temp_dir):
+                for file in files:
+                    if file.endswith(".mp4"):
+                        video_files.append(os.path.join(root, file))
             
             if not video_files:
                 raise RuntimeError("未找到生成的视频文件")
             
-            latest_video = max(video_files, key=lambda x: x.stat().st_mtime)
+            # 移动到最终位置
+            backend_dir = pathlib.Path(__file__).parent.parent
+            videos_dir = backend_dir / "videos" / "template_examples"
+            videos_dir.mkdir(parents=True, exist_ok=True)
             
             final_filename = f"template_{template_id}_preview.mp4"
-            final_path = output_dir / final_filename
+            final_path = videos_dir / final_filename
             
-            if latest_video != final_path:
-                import shutil
-                shutil.move(str(latest_video), str(final_path))
+            # 使用最新的视频文件
+            latest_video = max(video_files, key=lambda x: os.path.getmtime(x))
+            shutil.move(latest_video, str(final_path))
             
+            # 更新数据库
             video_url = f"/api/videos/template_examples/{final_filename}"
             template.example_video_url = video_url
             db.commit()
-            
-            try:
-                if temp_code_file.exists():
-                    temp_code_file.unlink()
-                media_root = output_dir / "media"
-                if media_root.exists():
-                    import shutil
-                    shutil.rmtree(media_root)
-            except Exception:
-                pass
             
             bg_task.status = "completed"
             bg_task.progress = 100
@@ -293,7 +317,13 @@ class BackgroundTaskManager:
             bg_task.error = str(e)
             bg_task.completed_at = datetime.utcnow()
             db.commit()
-            raise
+        finally:
+            # 清理临时目录
+            if temp_dir and os.path.exists(temp_dir):
+                try:
+                    shutil.rmtree(temp_dir)
+                except Exception:
+                    pass
     
     def get_task_status(self, db: Session, task_id: int) -> Optional[BackgroundTask]:
         return db.query(BackgroundTask).filter(BackgroundTask.id == task_id).first()
