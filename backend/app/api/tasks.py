@@ -71,28 +71,30 @@ async def generate_code_stream(
             await asyncio.sleep(0.1)
             
             template = None
+            template_code = None
             if template_id:
                 template = db_session.query(Template).filter(Template.id == template_id).first()
                 if template:
+                    template_code = template.code
                     yield f"data: {json.dumps({'step': 'template', 'progress': 15, 'message': f'使用模板: {template.name}'})}\n\n"
             
-            yield f"data: {json.dumps({'step': 'generate', 'progress': 20, 'message': 'AI正在生成代码...'})}\n\n"
+            yield f"data: {json.dumps({'step': 'generate', 'progress': 20, 'message': '脚本生成中...'})}\n\n"
             
             manim_service = ManimService(db_session)
-            template_prompt = template.prompt if template else None
             
             manim_code = None
             async for progress, content in manim_service.stream_generate_code(
                 project_local.final_script, 
-                template_prompt
+                template_code,
+                video_title=project_local.title
             ):
                 if progress < 100:
-                    yield f"data: {json.dumps({'step': 'generating', 'progress': progress, 'message': f'AI正在生成代码... ({len(content)} 字符)'})}\n\n"
+                    yield f"data: {json.dumps({'step': 'generating', 'progress': progress, 'message': f'脚本生成中... ({len(content)} 字符)'})}\n\n"
                 else:
                     manim_code = content
             
             if not manim_code:
-                yield f"data: {json.dumps({'step': 'error', 'progress': 0, 'message': '代码生成失败：未获取到有效代码'})}\n\n"
+                yield f"data: {json.dumps({'step': 'error', 'progress': 0, 'message': '脚本生成失败：未获取到有效内容'})}\n\n"
                 return
             
             fixed_code, warnings = manim_service.validate_code(manim_code)
@@ -107,7 +109,7 @@ async def generate_code_stream(
             project_local.status = "code_generated"
             db_session.commit()
             
-            yield f"data: {json.dumps({'step': 'done', 'progress': 100, 'message': '代码生成完成！', 'code': fixed_code})}\n\n"
+            yield f"data: {json.dumps({'step': 'done', 'progress': 100, 'message': '脚本生成完成！', 'code': fixed_code})}\n\n"
             
         except Exception as e:
             import traceback

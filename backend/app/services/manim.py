@@ -163,12 +163,35 @@ class ManimService:
         
         return code
     
-    async def stream_generate_code(self, script: str, template_prompt: str = None):
-        """流式生成代码，yield (progress, content) 元组"""
-        system_prompt = template_prompt if template_prompt else MANIM_SYSTEM_PROMPT
+    async def stream_generate_code(self, script: str, template_code: str = None, video_title: str = None):
+        """流式生成代码，yield (progress, content) 元组
         
-        user_message = f"""请根据以下主题和内容生成 Manim 动画代码：
+        Args:
+            script: 视频内容脚本
+            template_code: 模板代码（可选），如果提供则按模板风格生成
+            video_title: 视频标题（可选），将作为视频开头的大标题
+        """
+        if template_code:
+            system_prompt = f"""你是 Manim 动画代码专家。请参考以下模板代码的风格和结构生成新代码：
 
+```python
+{template_code}
+```
+
+重要要求：
+1. 保持模板的动画风格、颜色配置、排版方式
+2. 只替换内容部分（标题、文案等）
+3. 保持代码结构不变
+"""
+        else:
+            system_prompt = MANIM_SYSTEM_PROMPT
+        
+        title_instruction = ""
+        if video_title:
+            title_instruction = f"\n视频标题：「{video_title}」\n请使用这个标题作为视频开头的大标题（INTRO_TITLE）。\n"
+        
+        user_message = f"""请根据以下内容生成 Manim 动画代码：
+{title_instruction}
 {script}
 
 要求：
