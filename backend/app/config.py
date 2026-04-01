@@ -31,8 +31,8 @@ class Settings(BaseSettings):
     
     # DeepSeek (Priority 2)
     DEEPSEEK_API_KEY: str = ""
-    DEEPSEEK_BASE_URL: str = "https://ai.1seey.com/v1"
-    DEEPSEEK_MODEL: str = "qwen3.5-plus"
+    DEEPSEEK_BASE_URL: str = "https://openrouter.fans/v1"
+    DEEPSEEK_MODEL: str = "deepseek/deepseek-v3.2"
     
     # Gemini (Priority 3)
     GEMINI_API_KEY: str = ""
