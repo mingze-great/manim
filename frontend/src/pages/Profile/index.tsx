@@ -42,7 +42,7 @@ export default function Profile() {
   }
 
   const planLabels: Record<string, string> = {
-    free: '免费版',
+    free: '付费版',
     basic: '基础版',
     pro: '专业版',
     enterprise: '企业版'
@@ -59,7 +59,7 @@ export default function Profile() {
           <Title level={3}>{user?.username || '用户'}</Title>
           <Space>
             <Tag color={subscription?.plan === 'free' ? 'blue' : 'green'}>
-              {planLabels[subscription?.plan || 'free'] || subscription?.plan || '免费版'}
+              {planLabels[subscription?.plan || 'free'] || subscription?.plan || '付费版'}
             </Tag>
             <Text type="secondary">ID: {user?.id || 1}</Text>
           </Space>

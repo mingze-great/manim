@@ -157,7 +157,7 @@ export default function MainLayout() {
                 />
                 <div className="user-details">
                   <span className="user-name">{user?.username || '用户'}</span>
-                  <span className="user-plan">免费版</span>
+                  <span className="user-plan">付费版</span>
                 </div>
               </Space>
             </Dropdown>
