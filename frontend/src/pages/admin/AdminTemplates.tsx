@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Table, Button, Space, Tag, Modal, Form, Input, message, Popconfirm, Upload, Tooltip } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, PlayCircleOutlined, UploadOutlined, EyeOutlined } from '@ant-design/icons'
+import { Table, Button, Space, Tag, Modal, Form, Input, message, Popconfirm, Upload } from 'antd'
+import { PlusOutlined, EditOutlined, DeleteOutlined, PlayCircleOutlined, UploadOutlined } from '@ant-design/icons'
 import { templateApi, Template } from '@/services/template'
 
 const { TextArea } = Input

@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
-import { Card, Progress, Button, Space, message, Spin, Tabs, Collapse, Select, Modal, Tooltip } from 'antd'
+import { Card, Progress, Button, Space, message, Spin, Tabs, Collapse, Select, Modal } from 'antd'
 import { DownloadOutlined, PlayCircleOutlined, PlaySquareOutlined, CloudUploadOutlined, EyeOutlined } from '@ant-design/icons'
 import { projectApi, Task, Project } from '@/services/project'
 import { templateApi, Template } from '@/services/template'
@@ -360,12 +360,13 @@ export default function ProjectTask() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto p-6">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-      >
-        <Card
+    <>
+      <div className="max-w-6xl mx-auto p-6">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <Card
           title={
             <Space>
               <span className="text-lg font-bold">{project?.title}</span>
@@ -383,7 +384,7 @@ export default function ProjectTask() {
           }
         >
           <Tabs activeKey={activeTab} onChange={setActiveTab}>
-            <Tabs.TabPane tab={<span><CodeOutlined /> 代码生成</span>} key="code">
+            <Tabs.TabPane tab={<span><PlaySquareOutlined /> 脚本生成</span>} key="code">
               <div className="space-y-4">
                 {/* 进度显示 */}
                 {generatingCode && (
@@ -634,13 +635,14 @@ export default function ProjectTask() {
           </Tabs>
         </Card>
       </motion.div>
-    </div>
-    
-    <TemplateVideoPreviewModal 
-      visible={videoPreviewVisible} 
-      videoUrl={previewVideoUrl} 
-      onClose={() => setVideoPreviewVisible(false)} 
-    />
+      </div>
+      
+      <TemplateVideoPreviewModal 
+        visible={videoPreviewVisible} 
+        videoUrl={previewVideoUrl} 
+        onClose={() => setVideoPreviewVisible(false)} 
+      />
+    </>
   )
 }
 
