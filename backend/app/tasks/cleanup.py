@@ -13,6 +13,8 @@ scheduler = AsyncIOScheduler()
 VIDEO_RETENTION_HOURS = 3
 CONVERSATION_RETENTION_HOURS = 24
 TEMP_RETENTION_HOURS = 1
+USER_VIDEO_RETENTION_DAYS = 30
+BACKGROUND_TASK_RETENTION_DAYS = 7
 
 VIDEOS_DIR = "/opt/manim/backend/videos"
 TEMP_DIR = "/tmp"
@@ -139,6 +141,67 @@ def cleanup_expired_users():
         db.close()
 
 
+def cleanup_processes():
+    """清理僵尸进程和孤儿进程"""
+    print(f"[Cleanup] Starting process cleanup at {datetime.utcnow()}")
+    try:
+        from app.utils.process_cleanup import cleanup_all
+        result = cleanup_all(max_process_age=7200)  # 2小时
+        
+        zombies = result.get('zombies_cleaned', [])
+        orphans = result.get('orphan_processes_killed', [])
+        
+        if zombies or orphans:
+            print(f"[Cleanup] Cleaned {len(zombies)} zombie processes, killed {len(orphans)} orphan processes")
+        
+    except Exception as e:
+        print(f"[Cleanup Error] Process cleanup failed: {e}")
+
+
+def cleanup_old_videos():
+    """清理旧的视频文件（保留30天）"""
+    print(f"[Cleanup] Starting old videos cleanup at {datetime.utcnow()}")
+    try:
+        from app.utils.resource_cleanup import cleanup_old_videos, cleanup_temp_render_directories
+        
+        # 清理旧视频
+        video_result = cleanup_old_videos(
+            videos_dir=VIDEOS_DIR,
+            days_to_keep=USER_VIDEO_RETENTION_DAYS,
+            max_total_size_gb=10.0
+        )
+        
+        # 清理临时渲染目录
+        temp_result = cleanup_temp_render_directories(videos_dir=VIDEOS_DIR)
+        
+        freed_mb = video_result.get('freed_space_mb', 0) + temp_result.get('freed_space_mb', 0)
+        deleted_count = video_result.get('deleted_count', 0)
+        
+        if deleted_count > 0 or freed_mb > 0:
+            print(f"[Cleanup] Deleted {deleted_count} old videos, freed {freed_mb}MB")
+        
+    except Exception as e:
+        print(f"[Cleanup Error] Old videos cleanup failed: {e}")
+
+
+def cleanup_background_tasks():
+    """清理旧的后台任务记录"""
+    print(f"[Cleanup] Starting background tasks cleanup at {datetime.utcnow()}")
+    try:
+        from app.utils.resource_cleanup import cleanup_old_background_tasks
+        
+        result = cleanup_old_background_tasks(days_to_keep=BACKGROUND_TASK_RETENTION_DAYS)
+        
+        deleted = result.get('deleted_records', 0)
+        stuck = result.get('stuck_tasks_marked_failed', 0)
+        
+        if deleted > 0 or stuck > 0:
+            print(f"[Cleanup] Deleted {deleted} old task records, marked {stuck} stuck tasks as failed")
+        
+    except Exception as e:
+        print(f"[Cleanup Error] Background tasks cleanup failed: {e}")
+
+
 def init_scheduler():
     """初始化定时任务"""
     scheduler.add_job(
@@ -166,6 +229,30 @@ def init_scheduler():
         cleanup_expired_users,
         IntervalTrigger(hours=1),
         id="cleanup_expired_users",
+        replace_existing=True
+    )
+    
+    # 新增：进程清理（每小时）
+    scheduler.add_job(
+        cleanup_processes,
+        IntervalTrigger(hours=1),
+        id="cleanup_processes",
+        replace_existing=True
+    )
+    
+    # 新增：旧视频清理（每天凌晨3点）
+    scheduler.add_job(
+        cleanup_old_videos,
+        IntervalTrigger(hours=24),
+        id="cleanup_old_videos",
+        replace_existing=True
+    )
+    
+    # 新增：后台任务记录清理（每天）
+    scheduler.add_job(
+        cleanup_background_tasks,
+        IntervalTrigger(hours=24),
+        id="cleanup_background_tasks",
         replace_existing=True
     )
     

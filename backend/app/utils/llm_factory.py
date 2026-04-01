@@ -109,7 +109,7 @@ class DeepSeekAdapter(LLMAdapter):
         self.client = AsyncOpenAI(
             api_key=settings.DEEPSEEK_API_KEY,
             base_url=settings.DEEPSEEK_BASE_URL,
-            timeout=httpx.Timeout(120.0, connect=30.0)
+            timeout=httpx.Timeout(180.0, connect=30.0)
         )
         self.model = settings.DEEPSEEK_MODEL
         
