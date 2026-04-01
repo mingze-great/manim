@@ -409,7 +409,7 @@ export default function History() {
             
             {selectedProject.manim_code && (
               <div className="mt-4">
-                <Text type="secondary">代码预览</Text>
+                <Text type="secondary">脚本预览</Text>
                 <Card size="small" className="mt-2" bodyStyle={{ maxHeight: 200, overflow: 'auto' }}>
                   <pre style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>{selectedProject.manim_code.slice(0, 500)}...</pre>
                 </Card>

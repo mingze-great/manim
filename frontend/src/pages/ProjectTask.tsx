@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { Card, Progress, Button, Space, message, Spin, Tabs, Collapse, Select } from 'antd'
-import { DownloadOutlined, PlayCircleOutlined, CodeOutlined, CloudUploadOutlined } from '@ant-design/icons'
+import { DownloadOutlined, PlayCircleOutlined, PlaySquareOutlined, CloudUploadOutlined } from '@ant-design/icons'
 import { projectApi, Task, Project } from '@/services/project'
 import { templateApi, Template } from '@/services/template'
 import { useAuthStore } from '@/stores/authStore'
@@ -12,7 +12,7 @@ const { Panel } = Collapse
 const statusMap: Record<string, { text: string; color: string }> = {
   pending: { text: '等待中', color: '#faad14' },
   processing: { text: '处理中', color: '#0066FF' },
-  code_generated: { text: '代码已生成', color: '#00CCFF' },
+  code_generated: { text: '脚本就绪', color: '#00CCFF' },
   completed: { text: '已完成', color: '#52c41a' },
   failed: { text: '失败', color: '#ff4d4f' },
 }
@@ -183,10 +183,10 @@ export default function ProjectTask() {
         } catch (e) {}
       }
 
-      message.success('代码生成完成！')
+      message.success('脚本生成完成！')
       await fetchProject()
     } catch (error: any) {
-      console.error('生成代码失败:', error)
+      console.error('生成脚本失败:', error)
       message.error(error.message || '生成失败')
     } finally {
       setGeneratingCode(false)
@@ -195,7 +195,7 @@ export default function ProjectTask() {
 
   const handleGenerateVideo = async () => {
     if (!generatedCode) {
-      message.warning('请先生成代码')
+      message.warning('请先生成脚本')
       return
     }
     
@@ -381,7 +381,7 @@ export default function ProjectTask() {
           }
         >
           <Tabs activeKey={activeTab} onChange={setActiveTab}>
-            <Tabs.TabPane tab={<span><CodeOutlined /> 代码生成</span>} key="code">
+            <Tabs.TabPane tab={<span><PlaySquareOutlined /> 脚本生成</span>} key="code">
               <div className="space-y-4">
                 {/* 进度显示 */}
                 {generatingCode && (
@@ -407,10 +407,10 @@ export default function ProjectTask() {
 
                 {/* 模板选择 */}
                 <div className="mb-4">
-                  <label className="block text-sm text-gray-500 mb-2">选择代码模板</label>
+                  <label className="block text-sm text-gray-500 mb-2">选择视频风格模板</label>
                   <Select
                     style={{ width: '100%', maxWidth: 300 }}
-                    placeholder="默认模板"
+                    placeholder="默认风格"
                     allowClear
                     value={selectedTemplateId}
                     onChange={setSelectedTemplateId}
@@ -421,21 +421,21 @@ export default function ProjectTask() {
                   />
                 </div>
 
-                {/* 生成代码按钮 */}
+                {/* 生成脚本按钮 */}
                 <div className="flex gap-3">
                   <Button 
                     type="primary" 
-                    icon={<CodeOutlined />}
+                    icon={<PlaySquareOutlined />}
                     onClick={handleGenerateCode}
                     loading={generatingCode}
                     size="large"
                     className="btn-gradient"
                   >
-                    {generatedCode ? '重新生成代码' : '生成代码'}
+                    {generatedCode ? '重新生成脚本' : '生成脚本'}
                   </Button>
                 </div>
 
-                {/* 代码显示 */}
+                {/* 脚本显示 */}
                 {generatedCode && (
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}
@@ -445,8 +445,8 @@ export default function ProjectTask() {
                       <Panel 
                         header={
                           <div className="flex items-center gap-2">
-                            <CodeOutlined className="text-[#0066FF]" />
-                            <span>生成的 Manim 代码</span>
+                            <PlaySquareOutlined className="text-[#0066FF]" />
+                            <span>生成的动画脚本</span>
                           </div>
                         } 
                         key="code"
@@ -552,7 +552,7 @@ export default function ProjectTask() {
                 {/* 渲染失败时的返回按钮 */}
                 {renderError && (
                   <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200">
-                    <p className="text-red-600 mb-3">渲染失败，返回对话让智能助手修复代码。</p>
+                    <p className="text-red-600 mb-3">渲染失败，返回对话让智能助手修复问题。</p>
                     <Button type="primary" onClick={handleBackToEdit}>
                       返回对话修复
                     </Button>

@@ -191,7 +191,7 @@ export default function Pricing() {
           {[
             { icon: <VideoCameraOutlined />, title: '智能对话生成', desc: '智能脚本策划' },
             { icon: <HddOutlined />, title: '云端渲染', desc: '强大算力支持' },
-            { icon: <ToolOutlined />, title: '代码编辑器', desc: '在线修改代码' },
+            { icon: <ToolOutlined />, title: '脚本编辑器', desc: '在线修改内容' },
             { icon: <CustomerServiceOutlined />, title: '技术支持', desc: '专业客服帮助' },
           ].map((item, i) => (
             <Col xs={12} lg={6} key={i}>
