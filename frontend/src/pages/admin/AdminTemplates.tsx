@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Table, Button, Space, Tag, Modal, Form, Input, message, Popconfirm, Upload } from 'antd'
+import { Table, Button, Space, Tag, Modal, Form, Input, message, Popconfirm, Upload, Switch } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, PlayCircleOutlined, UploadOutlined } from '@ant-design/icons'
 import { templateApi, Template } from '@/services/template'
 
@@ -72,6 +72,16 @@ export default function AdminTemplates() {
     }
   }
 
+  const handleToggleVisible = async (template: Template) => {
+    try {
+      await templateApi.update(template.id, { is_visible: !template.is_visible })
+      message.success(template.is_visible ? '已隐藏' : '已显示')
+      fetchTemplates()
+    } catch (err) {
+      message.error('操作失败')
+    }
+  }
+
   const handlePreviewVideo = (videoUrl: string) => {
     const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
     setPreviewVideoUrl(videoUrl.startsWith('http') ? videoUrl : `${API_BASE}${videoUrl}`)
@@ -129,6 +139,20 @@ export default function AdminTemplates() {
         <Tag color={isSystem ? 'blue' : 'green'}>
           {isSystem ? '系统' : '自定义'}
         </Tag>
+      ),
+    },
+    {
+      title: '用户可见',
+      dataIndex: 'is_visible',
+      key: 'is_visible',
+      width: 100,
+      render: (isVisible: boolean, record: Template) => (
+        <Switch
+          checked={isVisible}
+          onChange={() => handleToggleVisible(record)}
+          checkedChildren="显示"
+          unCheckedChildren="隐藏"
+        />
       ),
     },
     {

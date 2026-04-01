@@ -15,6 +15,7 @@ class Template(Base):
     thumbnail = Column(String(500), nullable=True)
     example_video_url = Column(String(500), nullable=True, comment="示例视频URL")
     is_system = Column(Boolean, default=False)
+    is_visible = Column(Boolean, default=True, comment="是否对用户可见")
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     usage_count = Column(Integer, default=0)
     is_active = Column(Boolean, default=True)

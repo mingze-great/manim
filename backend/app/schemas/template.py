@@ -22,11 +22,13 @@ class TemplateUpdate(BaseModel):
     code: Optional[str] = None
     thumbnail: Optional[str] = None
     example_video_url: Optional[str] = None
+    is_visible: Optional[bool] = None
 
 
 class TemplateResponse(TemplateBase):
     id: int
     is_system: bool
+    is_visible: bool = True
     example_video_url: Optional[str] = None
     user_id: Optional[int]
     usage_count: int

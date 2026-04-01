@@ -31,14 +31,15 @@ def get_templates(
     if category:
         base_query = base_query.filter(Template.category == category)
     
-    # 获取系统模板
+    # 获取系统模板（用户可见的）
     system_query_result = db.query(Template).filter(
         Template.is_active.is_(True),
-        Template.is_system.is_(True)
+        Template.is_system.is_(True),
+        Template.is_visible.is_(True)
     ).offset(skip).limit(limit).all()
     
     # 获取当前用户权限并执行查询
-    user_is_admin = bool(current_user_obj.is_admin)  # 转换为原生Python bool类型
+    user_is_admin = bool(current_user_obj.is_admin)
     current_user_id = current_user_obj.id
     
     if user_is_admin:
@@ -54,7 +55,7 @@ def get_templates(
             Template.user_id == current_user_id
         ).offset(skip).limit(limit).all()
     
-    # 将换 SQLAlchemy 模型为 Pydantic 响应模型
+    # 将 SQLAlchemy 模型为 Pydantic 响应模型
     system_responses = [TemplateResponse.model_validate(t) for t in system_query_result]
     user_responses = [TemplateResponse.model_validate(t) for t in user_query_result]
     

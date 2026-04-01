@@ -53,6 +53,11 @@ async def lifespan(app: FastAPI):
             conn.execute(text("ALTER TABLE templates ADD COLUMN example_video_url VARCHAR(500)"))
             conn.commit()
             print("Added example_video_url column to templates")
+        
+        if 'is_visible' not in columns:
+            conn.execute(text("ALTER TABLE templates ADD COLUMN is_visible BOOLEAN DEFAULT 1"))
+            conn.commit()
+            print("Added is_visible column to templates")
     
     db = SessionLocal()
     system_templates = [
