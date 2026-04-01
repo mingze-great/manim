@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
-import { Card, Progress, Button, Space, message, Spin, Tabs, Collapse, Select } from 'antd'
-import { DownloadOutlined, PlayCircleOutlined, CodeOutlined, CloudUploadOutlined } from '@ant-design/icons'
+import { Card, Progress, Button, Space, message, Spin, Tabs, Collapse, Select, Modal, Tooltip } from 'antd'
+import { DownloadOutlined, PlayCircleOutlined, PlaySquareOutlined, CloudUploadOutlined, EyeOutlined } from '@ant-design/icons'
 import { projectApi, Task, Project } from '@/services/project'
 import { templateApi, Template } from '@/services/template'
 import { useAuthStore } from '@/stores/authStore'
@@ -37,6 +37,8 @@ export default function ProjectTask() {
   const [renderError, setRenderError] = useState<string | null>(null)
   const [templates, setTemplates] = useState<Template[]>([])
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null)
+  const [videoPreviewVisible, setVideoPreviewVisible] = useState(false)
+  const [previewVideoUrl, setPreviewVideoUrl] = useState<string>('')
   const codeRef = useRef<HTMLPreElement>(null)
   const terminalRef = useRef<HTMLDivElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
@@ -407,35 +409,59 @@ export default function ProjectTask() {
 
                 {/* 模板选择 */}
                 <div className="mb-4">
-                  <label className="block text-sm text-gray-500 mb-2">选择代码模板</label>
-                  <Select
-                    style={{ width: '100%', maxWidth: 300 }}
-                    placeholder="默认模板"
-                    allowClear
-                    value={selectedTemplateId}
-                    onChange={setSelectedTemplateId}
-                    options={templates.map(t => ({
-                      label: t.name,
-                      value: t.id
-                    }))}
-                  />
+                  <label className="block text-sm text-gray-500 mb-2">选择视频风格模板</label>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Select
+                      style={{ width: '100%', maxWidth: 300 }}
+                      placeholder="默认风格"
+                      allowClear
+                      value={selectedTemplateId}
+                      onChange={setSelectedTemplateId}
+                      options={templates.map(t => ({
+                        label: t.name,
+                        value: t.id
+                      }))}
+                    />
+                    {selectedTemplateId && templates.find(t => t.id === selectedTemplateId)?.example_video_url && (
+                      <Button
+                        icon={<EyeOutlined />}
+                        onClick={() => {
+                          const template = templates.find(t => t.id === selectedTemplateId)
+                          if (template?.example_video_url) {
+                            const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
+                            setPreviewVideoUrl(template.example_video_url.startsWith('http') 
+                              ? template.example_video_url 
+                              : `${API_BASE}${template.example_video_url}`)
+                            setVideoPreviewVisible(true)
+                          }
+                        }}
+                      >
+                        预览示例
+                      </Button>
+                    )}
+                  </div>
+                  {selectedTemplateId && templates.find(t => t.id === selectedTemplateId)?.description && (
+                    <div className="text-xs text-gray-400 mt-1">
+                      {templates.find(t => t.id === selectedTemplateId)?.description}
+                    </div>
+                  )}
                 </div>
 
-                {/* 生成代码按钮 */}
+                {/* 生成脚本按钮 */}
                 <div className="flex gap-3">
                   <Button 
                     type="primary" 
-                    icon={<CodeOutlined />}
+                    icon={<PlaySquareOutlined />}
                     onClick={handleGenerateCode}
                     loading={generatingCode}
                     size="large"
                     className="btn-gradient"
                   >
-                    {generatedCode ? '重新生成代码' : '生成代码'}
+                    {generatedCode ? '重新生成脚本' : '生成脚本'}
                   </Button>
                 </div>
 
-                {/* 代码显示 */}
+                {/* 脚本显示 */}
                 {generatedCode && (
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}
@@ -445,8 +471,8 @@ export default function ProjectTask() {
                       <Panel 
                         header={
                           <div className="flex items-center gap-2">
-                            <CodeOutlined className="text-[#0066FF]" />
-                            <span>生成的 Manim 代码</span>
+                            <PlaySquareOutlined className="text-[#0066FF]" />
+                            <span>生成的动画脚本</span>
                           </div>
                         } 
                         key="code"
@@ -609,5 +635,32 @@ export default function ProjectTask() {
         </Card>
       </motion.div>
     </div>
+    
+    <TemplateVideoPreviewModal 
+      visible={videoPreviewVisible} 
+      videoUrl={previewVideoUrl} 
+      onClose={() => setVideoPreviewVisible(false)} 
+    />
+  )
+}
+
+
+function TemplateVideoPreviewModal({ visible, videoUrl, onClose }: { visible: boolean; videoUrl: string; onClose: () => void }) {
+  return (
+    <Modal
+      title="模板示例视频"
+      open={visible}
+      onCancel={onClose}
+      footer={null}
+      width={800}
+      centered
+    >
+      <video
+        src={videoUrl}
+        controls
+        className="w-full rounded-lg"
+        autoPlay
+      />
+    </Modal>
   )
 }

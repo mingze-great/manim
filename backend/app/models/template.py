@@ -13,6 +13,7 @@ class Template(Base):
     code = Column(Text, nullable=False)
     prompt = Column(Text, nullable=True)
     thumbnail = Column(String(500), nullable=True)
+    example_video_url = Column(String(500), nullable=True, comment="示例视频URL")
     is_system = Column(Boolean, default=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     usage_count = Column(Integer, default=0)

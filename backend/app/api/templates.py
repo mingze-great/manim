@@ -1,6 +1,9 @@
 from typing import Annotated, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from sqlalchemy.orm import Session
+import os
+import pathlib
+import time
 
 from app.database import get_db
 from app.models.user import User
@@ -226,3 +229,70 @@ def delete_template(
     template.is_active = False  # type: ignore
     db.commit()
     return {"message": "Template deleted"}
+
+
+@router.post("/{template_id}/example-video")
+async def upload_example_video(
+    template_id: int,
+    file: UploadFile = File(...),
+    current_user: Annotated[User, Depends(get_current_user)] = None,
+    db: Session = Depends(get_db)
+):
+    """上传模板示例视频（仅管理员）"""
+    current_user_obj = current_user
+    if not current_user_obj or not bool(current_user_obj.is_admin):
+        raise HTTPException(status_code=403, detail="Only administrators can upload example videos")
+    
+    template = db.query(Template).filter(Template.id == template_id).first()
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    if not file.filename or not file.filename.endswith('.mp4'):
+        raise HTTPException(status_code=400, detail="Only MP4 files are allowed")
+    
+    videos_dir = pathlib.Path(__file__).parent.parent.parent / "videos" / "template_examples"
+    videos_dir.mkdir(parents=True, exist_ok=True)
+    
+    timestamp = int(time.time())
+    filename = f"template_{template_id}_{timestamp}.mp4"
+    file_path = videos_dir / filename
+    
+    content = await file.read()
+    with open(file_path, 'wb') as f:
+        f.write(content)
+    
+    video_url = f"/api/videos/template_examples/{filename}"
+    template.example_video_url = video_url
+    db.commit()
+    
+    return {
+        "message": "Video uploaded successfully",
+        "video_url": video_url
+    }
+
+
+@router.delete("/{template_id}/example-video")
+def delete_example_video(
+    template_id: int,
+    current_user: Annotated[User, Depends(get_current_user)] = None,
+    db: Session = Depends(get_db)
+):
+    """删除模板示例视频（仅管理员）"""
+    current_user_obj = current_user
+    if not current_user_obj or not bool(current_user_obj.is_admin):
+        raise HTTPException(status_code=403, detail="Only administrators can delete example videos")
+    
+    template = db.query(Template).filter(Template.id == template_id).first()
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    if template.example_video_url:
+        filename = template.example_video_url.split('/')[-1]
+        file_path = pathlib.Path(__file__).parent.parent.parent / "videos" / "template_examples" / filename
+        if file_path.exists():
+            os.remove(file_path)
+        
+        template.example_video_url = None
+        db.commit()
+    
+    return {"message": "Video deleted successfully"}

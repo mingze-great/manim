@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Table, Button, Space, Tag, Modal, Form, Input, message, Popconfirm } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
+import { Table, Button, Space, Tag, Modal, Form, Input, message, Popconfirm, Upload, Tooltip } from 'antd'
+import { PlusOutlined, EditOutlined, DeleteOutlined, PlayCircleOutlined, UploadOutlined, EyeOutlined } from '@ant-design/icons'
 import { templateApi, Template } from '@/services/template'
 
 const { TextArea } = Input
@@ -11,6 +11,9 @@ export default function AdminTemplates() {
   const [modalVisible, setModalVisible] = useState(false)
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null)
   const [form] = Form.useForm()
+  const [videoPreviewVisible, setVideoPreviewVisible] = useState(false)
+  const [previewVideoUrl, setPreviewVideoUrl] = useState<string>('')
+  const [uploading, setUploading] = useState(false)
 
   useEffect(() => {
     fetchTemplates()
@@ -69,11 +72,47 @@ export default function AdminTemplates() {
     }
   }
 
+  const handlePreviewVideo = (videoUrl: string) => {
+    const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
+    setPreviewVideoUrl(videoUrl.startsWith('http') ? videoUrl : `${API_BASE}${videoUrl}`)
+    setVideoPreviewVisible(true)
+  }
+
+  const handleUploadVideo = async (templateId: number, file: File) => {
+    setUploading(true)
+    try {
+      await templateApi.uploadExampleVideo(templateId, file)
+      message.success('视频上传成功')
+      fetchTemplates()
+    } catch (err) {
+      message.error('视频上传失败')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleDeleteVideo = async (templateId: number) => {
+    try {
+      await templateApi.deleteExampleVideo(templateId)
+      message.success('视频删除成功')
+      fetchTemplates()
+    } catch (err) {
+      message.error('视频删除失败')
+    }
+  }
+
   const columns = [
+    {
+      title: 'ID',
+      dataIndex: 'id',
+      key: 'id',
+      width: 50,
+    },
     {
       title: '名称',
       dataIndex: 'name',
       key: 'name',
+      width: 200,
     },
     {
       title: '描述',
@@ -82,28 +121,63 @@ export default function AdminTemplates() {
       ellipsis: true,
     },
     {
-      title: '分类',
-      dataIndex: 'category',
-      key: 'category',
-      render: (cat: string) => (
-        <Tag color={cat === 'system' ? 'blue' : 'green'}>
-          {cat === 'system' ? '系统' : '自定义'}
+      title: '类型',
+      dataIndex: 'is_system',
+      key: 'is_system',
+      width: 80,
+      render: (isSystem: boolean) => (
+        <Tag color={isSystem ? 'blue' : 'green'}>
+          {isSystem ? '系统' : '自定义'}
         </Tag>
       ),
     },
     {
-      title: '代码',
-      dataIndex: 'code',
-      key: 'code',
-      render: (code: string) => (
-        <span className="text-xs text-gray-500">
-          {code?.slice(0, 50)}...
-        </span>
+      title: '示例视频',
+      dataIndex: 'example_video_url',
+      key: 'example_video_url',
+      width: 180,
+      render: (videoUrl: string | null, record: Template) => (
+        <Space>
+          {videoUrl ? (
+            <>
+              <Button
+                type="link"
+                size="small"
+                icon={<PlayCircleOutlined />}
+                onClick={() => handlePreviewVideo(videoUrl)}
+              >
+                预览
+              </Button>
+              <Popconfirm
+                title="确定删除此示例视频？"
+                onConfirm={() => handleDeleteVideo(record.id)}
+              >
+                <Button type="link" size="small" danger>
+                  删除
+                </Button>
+              </Popconfirm>
+            </>
+          ) : (
+            <Upload
+              accept=".mp4"
+              showUploadList={false}
+              beforeUpload={(file) => {
+                handleUploadVideo(record.id, file)
+                return false
+              }}
+            >
+              <Button type="link" size="small" icon={<UploadOutlined />} loading={uploading}>
+                上传
+              </Button>
+            </Upload>
+          )}
+        </Space>
       ),
     },
     {
       title: '操作',
       key: 'action',
+      width: 150,
       render: (_: any, record: Template) => (
         <Space>
           <Button
@@ -113,7 +187,7 @@ export default function AdminTemplates() {
           >
             编辑
           </Button>
-          {record.category !== 'system' && (
+          {!record.is_system && (
             <Popconfirm
               title="确定删除此模板？"
               onConfirm={() => handleDelete(record.id)}
@@ -133,7 +207,7 @@ export default function AdminTemplates() {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h2 className="text-2xl font-bold">代码模板管理</h2>
-          <p className="text-gray-500 mt-1">管理前台用户可选择的代码模板</p>
+          <p className="text-gray-500 mt-1">管理所有模板，上传示例视频供用户预览</p>
         </div>
         <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
           添加模板
@@ -146,6 +220,7 @@ export default function AdminTemplates() {
         rowKey="id"
         loading={loading}
         pagination={{ pageSize: 10 }}
+        scroll={{ x: 1000 }}
       />
 
       <Modal
@@ -202,10 +277,64 @@ class MyScene(Scene):
             />
           </Form.Item>
           
+          {editingTemplate && (
+            <Form.Item label="示例视频">
+              {editingTemplate.example_video_url ? (
+                <Space direction="vertical" className="w-full">
+                  <video 
+                    src={editingTemplate.example_video_url.startsWith('http') 
+                      ? editingTemplate.example_video_url 
+                      : `${import.meta.env.VITE_API_BASE_URL || ''}${editingTemplate.example_video_url}`}
+                    controls
+                    className="w-full max-h-48 rounded-lg"
+                  />
+                  <Button 
+                    danger 
+                    onClick={() => {
+                      handleDeleteVideo(editingTemplate.id)
+                      setModalVisible(false)
+                    }}
+                  >
+                    删除视频
+                  </Button>
+                </Space>
+              ) : (
+                <Upload
+                  accept=".mp4"
+                  showUploadList={false}
+                  beforeUpload={(file) => {
+                    handleUploadVideo(editingTemplate.id, file)
+                    return false
+                  }}
+                >
+                  <Button icon={<UploadOutlined />} loading={uploading}>
+                    上传示例视频 (MP4)
+                  </Button>
+                </Upload>
+              )}
+            </Form.Item>
+          )}
+          
           <div className="bg-yellow-50 p-3 rounded-lg text-sm text-yellow-700">
-            <strong>💡 提示：</strong>用户选择此模板后，将完全按照此代码的风格（结构、动画、配色）生成新内容。
+            <strong>提示：</strong>用户选择此模板后，将完全按照此代码的风格（结构、动画、配色）生成新内容。
           </div>
         </Form>
+      </Modal>
+
+      <Modal
+        title="视频预览"
+        open={videoPreviewVisible}
+        onCancel={() => setVideoPreviewVisible(false)}
+        footer={null}
+        width={800}
+        centered
+      >
+        <video
+          src={previewVideoUrl}
+          controls
+          className="w-full rounded-lg"
+          autoPlay
+        />
       </Modal>
     </div>
   )

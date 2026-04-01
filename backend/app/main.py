@@ -48,6 +48,11 @@ async def lifespan(app: FastAPI):
             conn.execute(text("ALTER TABLE templates ADD COLUMN prompt TEXT"))
             conn.commit()
             print("Added prompt column to templates")
+        
+        if 'example_video_url' not in columns:
+            conn.execute(text("ALTER TABLE templates ADD COLUMN example_video_url VARCHAR(500)"))
+            conn.commit()
+            print("Added example_video_url column to templates")
     
     db = SessionLocal()
     system_templates = [
@@ -283,6 +288,28 @@ def download_video(
         return JSONResponse({"error": "Invalid filename"}, status_code=400)
     
     videos_dir = pathlib.Path(__file__).parent.parent / "videos"
+    video_path = videos_dir / safe_filename
+    
+    if not video_path.exists():
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"error": "Video not found"}, status_code=404)
+    
+    if not video_path.is_file():
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"error": "Not a file"}, status_code=400)
+    
+    return FileResponse(video_path, media_type="video/mp4", filename=safe_filename)
+
+
+@app.get("/api/videos/template_examples/{filename}")
+def download_template_example_video(filename: str):
+    safe_filename = pathlib.Path(filename).name
+    
+    if not re.match(r'^[\w\-\.]+\.mp4$', safe_filename):
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"error": "Invalid filename"}, status_code=400)
+    
+    videos_dir = pathlib.Path(__file__).parent / "videos" / "template_examples"
     video_path = videos_dir / safe_filename
     
     if not video_path.exists():
