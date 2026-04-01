@@ -77,6 +77,22 @@ export interface InvitationCode {
   created_at: string
 }
 
+export interface TokenUsageItem {
+  id: number
+  username: string
+  chat_token_usage: number
+  code_token_usage: number
+  total_token_usage: number
+  rank: number
+}
+
+export interface TokenUsageResponse {
+  users: TokenUsageItem[]
+  total_chat_tokens: number
+  total_code_tokens: number
+  total_tokens: number
+}
+
 export const adminApi = {
   getUsers: (params?: { skip?: number; limit?: number; search?: string }) =>
     api.get<{ users: User[]; total: number }>('/admin/users', { params }),
@@ -136,6 +152,9 @@ export const adminApi = {
       videos_count: number
       projects_count: number
     }[]>('/admin/statistics/trend', { params: { period } }),
+
+  getTokenUsage: (period: 'day' | 'week' | 'month' = 'day') =>
+    api.get<TokenUsageResponse>('/admin/token-usage', { params: { period } }),
 }
 
 export default api

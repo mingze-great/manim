@@ -19,6 +19,7 @@ import AdminLogs from './pages/admin/AdminLogs'
 import AdminSettings from './pages/admin/AdminSettings'
 import AdminTemplates from './pages/admin/AdminTemplates'
 import AdminStatistics from './pages/admin/AdminStatistics'
+import AdminTokenUsage from './pages/admin/AdminTokenUsage'
 import { useState, useEffect } from 'react'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -82,6 +83,7 @@ function AppContent() {
         <Route path="/admin/settings" element={<AdminSettings />} />
         <Route path="/admin/templates" element={<AdminTemplates />} />
         <Route path="/admin/statistics" element={<AdminStatistics />} />
+        <Route path="/admin/token-usage" element={<AdminTokenUsage />} />
       </Route>
     </Routes>
   )
