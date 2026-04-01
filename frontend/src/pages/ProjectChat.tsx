@@ -293,11 +293,8 @@ export default function ProjectChat() {
             <RobotOutlined className="text-3xl mb-3 block" />
             <p className="text-sm mb-4">欢迎使用 AI 视频创作助手</p>
             <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-lg p-4 text-left text-xs">
-              <p className="font-semibold mb-2">使用方法：</p>
-<p className="mb-1">1. 输入你想要的视频主题</p>
-               <p className="mb-1">2. AI 会生成完整内容</p>
-               <p className="mb-1">3. 满意后输入"满意"</p>
-               <p>4. 系统自动生成视频脚本</p>
+              <p className="font-semibold mb-2 text-indigo-600">请输入你的相关的要求，如果主题没有涉及到内容条数请在这里明确（10条以内），请在第一次对话明确对应要求</p>
+              <p className="text-gray-500">系统会根据您的主题生成视频文案</p>
             </div>
           </div>
         )}
