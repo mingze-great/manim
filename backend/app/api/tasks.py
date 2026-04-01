@@ -64,27 +64,32 @@ async def generate_code_stream(
                 yield f"data: {json.dumps({'step': 'error', 'progress': 0, 'message': 'Project not found'})}\n\n"
                 return
             
-            yield f"data: {json.dumps({'step': 'start', 'progress': 5, 'message': '开始生成代码...'})}\n\n"
+            yield f"data: {json.dumps({'step': 'start', 'progress': 5, 'message': '开始生成脚本...'})}\n\n"
             await asyncio.sleep(0.1)
             
             yield f"data: {json.dumps({'step': 'prepare', 'progress': 10, 'message': '准备提示词...'})}\n\n"
             await asyncio.sleep(0.1)
             
             template = None
+            template_code = None
             if template_id:
                 template = db_session.query(Template).filter(Template.id == template_id).first()
                 if template:
+                    template_code = template.code
                     yield f"data: {json.dumps({'step': 'template', 'progress': 15, 'message': f'使用模板: {template.name}'})}\n\n"
             
-            yield f"data: {json.dumps({'step': 'generate', 'progress': 20, 'message': 'AI正在生成代码...'})}\n\n"
+            yield f"data: {json.dumps({'step': 'generate', 'progress': 20, 'message': '脚本生成中...'})}\n\n"
             
             manim_service = ManimService(db_session)
-            template_prompt = template.prompt if template else None
-            manim_code = await manim_service.generate_code(project_local.final_script, template_prompt)
+            manim_code = await manim_service.generate_code(
+                project_local.final_script, 
+                template_code,
+                video_title=project_local.title
+            )
             
             fixed_code, warnings = manim_service.validate_code(manim_code)
             
-            yield f"data: {json.dumps({'step': 'validate', 'progress': 80, 'message': '代码验证中...'})}\n\n"
+            yield f"data: {json.dumps({'step': 'validate', 'progress': 80, 'message': '脚本验证中...'})}\n\n"
             await asyncio.sleep(0.1)
             
             if warnings:
@@ -94,7 +99,7 @@ async def generate_code_stream(
             project_local.status = "code_generated"
             db_session.commit()
             
-            yield f"data: {json.dumps({'step': 'done', 'progress': 100, 'message': '代码生成完成！', 'code': fixed_code})}\n\n"
+            yield f"data: {json.dumps({'step': 'done', 'progress': 100, 'message': '脚本生成完成！', 'code': fixed_code})}\n\n"
             
         except Exception as e:
             import traceback

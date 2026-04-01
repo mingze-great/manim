@@ -249,21 +249,10 @@ export default function AdminTemplates() {
           </Form.Item>
           
           <Form.Item
-            name="prompt"
-            label="生成提示词 (可选)"
-            extra="选择此模板时使用的自定义 AI 提示词，留空则使用默认提示词"
-          >
-            <TextArea
-              rows={6}
-              className="font-mono text-sm"
-              placeholder="输入自定义的 AI 提示词，用于指导代码生成风格..."
-            />
-          </Form.Item>
-          
-          <Form.Item
             name="code"
-            label="Manim 代码模板"
-            rules={[{ required: true, message: '请输入代码' }]}
+            label="代码模板"
+            rules={[{ required: true, message: '请输入代码模板' }]}
+            extra="此模板将作为AI生成视频脚本的参考风格，包括动画结构、配色、排版等"
           >
             <TextArea
               rows={12}
