@@ -28,6 +28,7 @@ class Project(Base):
     video_url = Column(String(500), nullable=True)
     video_created_at = Column(DateTime, nullable=True, comment="视频创建时间，用于定时清理")
     error_message = Column(Text, nullable=True)
+    render_fail_count = Column(Integer, default=0, comment="渲染失败次数")
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

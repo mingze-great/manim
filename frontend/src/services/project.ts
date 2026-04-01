@@ -12,6 +12,7 @@ export interface Project {
   video_url: string | null
   error_message: string | null
   template_id: number | null
+  render_fail_count: number
   created_at: string
   updated_at: string
 }
@@ -32,6 +33,19 @@ export interface Task {
   video_url: string | null
   error_message: string | null
   created_at: string
+}
+
+export interface BackgroundTask {
+  task_id: number
+  task_type: string
+  status: string
+  progress: number
+  message: string | null
+  error: string | null
+  code?: string
+  created_at: string | null
+  started_at: string | null
+  completed_at: string | null
 }
 
 export interface PendingResponse {
@@ -58,4 +72,21 @@ export const projectApi = {
     `/api/projects/${id}/optimize-code/stream?feedback=${encodeURIComponent(feedback)}`,
   getTask: (projectId: number) => api.get<Task>(`/tasks/project/${projectId}`),
   regenerateCode: (id: number) => api.post(`/projects/${id}/regenerate-code`),
+  fixCode: (projectId: number, data: { error_message: string; current_code: string }) =>
+    api.post<{ success: boolean; fixed_code?: string; fix_description?: string; message?: string }>(
+      `/tasks/${projectId}/fix-code`,
+      data
+    ),
+  fixCodeStream: (projectId: number) =>
+    `/api/tasks/${projectId}/fix-code-stream`,
+  generateCodeAsync: (projectId: number, templateId?: number) =>
+    api.post<{ task_id: number; status: string; message: string }>(
+      `/tasks/${projectId}/generate-code-async${templateId ? `?template_id=${templateId}` : ''}`
+    ),
+  getBackgroundTask: (taskId: number) =>
+    api.get<BackgroundTask>(`/tasks/background/${taskId}`),
+  getLatestCodeTask: (projectId: number) =>
+    api.get<{ task_id: number | null; status: string | null; progress: number; message: string | null; error: string | null }>(
+      `/tasks/${projectId}/latest-code-task`
+    ),
 }

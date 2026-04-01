@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, Date
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base
@@ -17,6 +17,12 @@ class User(Base):
     expires_at = Column(DateTime, nullable=True, comment="账号有效期")
     api_calls_count = Column(Integer, default=0, comment="API调用次数")
     videos_count = Column(Integer, default=0, comment="生成视频数量")
+    token_usage = Column(Integer, default=0, comment="Token使用量")
+    chat_token_usage = Column(Integer, default=0, comment="对话Token使用量")
+    code_token_usage = Column(Integer, default=0, comment="代码生成Token使用量")
+    daily_video_count = Column(Integer, default=0, comment="当日视频生成数量")
+    daily_video_limit = Column(Integer, default=5, comment="每日视频配额限制(5-20)")
+    last_video_date = Column(Date, nullable=True, comment="最后生成视频日期")
     last_active_at = Column(DateTime, nullable=True, comment="最后活跃时间")
     created_at = Column(DateTime, default=datetime.utcnow)
     

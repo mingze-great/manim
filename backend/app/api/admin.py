@@ -8,11 +8,21 @@ from app.database import get_db
 from app.models.user import User, AuditLog
 from app.models.project import Project
 from app.models.task import Task
-from app.schemas.user import UserResponse, UserUpdate, UserStats, AuditLogResponse, SystemStats
+from app.schemas.user import UserResponse, UserUpdate, UserStats, AuditLogResponse, SystemStats, UserDetail, ProjectStatus, RecentProject, TaskLog, TokenUsageItem, TokenUsageResponse
 from app.api.auth import get_current_user, get_current_admin_user
+from app.config import get_settings
 import psutil
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+settings = get_settings()
+
+
+@router.get("/available-models")
+async def get_available_models(
+    current_user: User = Depends(get_current_user)
+):
+    """获取可用模型列表（已废弃，返回空列表）"""
+    return {"models": []}
 
 
 @router.get("/users", response_model=List[UserResponse])
@@ -89,6 +99,102 @@ async def get_user_stats(
         "total_tasks": total_tasks,
         "completed_tasks": completed_tasks,
         "failed_tasks": failed_tasks
+    }
+
+
+@router.get("/users/{user_id}/detail", response_model=UserDetail)
+async def get_user_detail(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """获取用户详情（完整统计+最近任务日志）"""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    
+    total_projects = db.query(Project).filter(Project.user_id == user_id).count()
+    
+    def get_status_text(status: str) -> str:
+        status_map = {
+            "chatting": "对话中",
+            "code_generating": "生成代码中",
+            "code_generated": "代码生成完成",
+            "processing": "渲染中",
+            "completed": "视频生成成功",
+            "failed": "生成失败"
+        }
+        return status_map.get(status, status)
+    
+    current_status = None
+    recent_projects = []
+    latest_task = None
+    
+    projects = db.query(Project).filter(
+        Project.user_id == user_id
+    ).order_by(Project.created_at.desc()).limit(3).all()
+    
+    for proj in projects:
+        task = db.query(Task).filter(Task.project_id == proj.id).first()
+        
+        status = proj.status or "chatting"
+        if task and task.status == "processing":
+            status = "processing"
+        elif task and task.status == "completed":
+            status = "completed"
+        elif task and task.status == "failed":
+            status = "failed"
+        
+        recent_projects.append({
+            "id": proj.id,
+            "title": proj.title or f"项目-{proj.id}",
+            "status": status,
+            "status_text": get_status_text(status),
+            "created_at": proj.created_at,
+            "has_video": bool(task and task.video_url) if task else False,
+            "error_message": task.error_message if task else None
+        })
+        
+        if not current_status or status in ["processing", "code_generating", "chatting"]:
+            current_status = {
+                "project_id": proj.id,
+                "project_title": proj.title or f"项目-{proj.id}",
+                "status": status,
+                "status_text": get_status_text(status),
+                "updated_at": proj.updated_at
+            }
+    
+    latest_task_query = db.query(Task).join(
+        Project, Task.project_id == Project.id
+    ).filter(Project.user_id == user_id).order_by(Task.created_at.desc()).first()
+    
+    if latest_task_query:
+        proj = db.query(Project).filter(Project.id == latest_task_query.project_id).first()
+        latest_task = {
+            "project_id": latest_task_query.project_id,
+            "project_title": proj.title if proj else f"项目-{latest_task_query.project_id}",
+            "status": latest_task_query.status,
+            "error_message": latest_task_query.error_message,
+            "log": latest_task_query.log,
+            "created_at": latest_task_query.created_at
+        }
+    
+    return {
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "is_active": user.is_active,
+        "is_admin": user.is_admin,
+        "is_approved": user.is_approved,
+        "expires_at": user.expires_at,
+        "created_at": user.created_at,
+        "last_active_at": user.last_active_at,
+        "total_projects": total_projects,
+        "videos_count": user.videos_count or 0,
+        "token_usage": user.token_usage or 0,
+        "current_status": current_status,
+        "recent_projects": recent_projects,
+        "latest_task": latest_task
     }
 
 
@@ -220,6 +326,31 @@ async def toggle_user_active(
     return {"message": f"用户已{action_text}", "is_active": user.is_active}
 
 
+@router.post("/users/{user_id}/set-video-limit")
+async def set_user_video_limit(
+    user_id: int,
+    limit: int = Query(..., ge=5, le=20),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+    request: Request = None
+):
+    """设置用户每日视频配额"""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    
+    user.daily_video_limit = limit
+    db.commit()
+    
+    from app.api.auth import log_audit
+    log_audit(db, current_user.id, current_user.username, "SET_VIDEO_LIMIT",
+              resource="user", resource_id=user_id,
+              details=f"设置用户 {user.username} 每日视频配额为 {limit}",
+              request=request)
+    
+    return {"message": "配额已更新", "daily_video_limit": limit}
+
+
 @router.post("/users/{user_id}/reset-password")
 async def reset_user_password(
     user_id: int,
@@ -305,7 +436,7 @@ async def reject_user(
 @router.post("/users/{user_id}/extend")
 async def extend_user(
     user_id: int,
-    days: int = Query(30, ge=1, le=365),
+    days: float = Query(30, ge=0.00347, le=365),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
     request: Request = None
@@ -316,10 +447,11 @@ async def extend_user(
         raise HTTPException(status_code=404, detail="用户不存在")
     
     now = datetime.utcnow()
+    delta_seconds = days * 24 * 60 * 60
     if user.expires_at and user.expires_at > now:
-        user.expires_at = user.expires_at + timedelta(days=days)
+        user.expires_at = user.expires_at + timedelta(seconds=delta_seconds)
     else:
-        user.expires_at = now + timedelta(days=days)
+        user.expires_at = now + timedelta(seconds=delta_seconds)
     
     user.is_approved = True
     db.commit()
@@ -456,8 +588,9 @@ async def get_statistics_trend(
 def update_daily_statistics():
     """更新每日统计数据（定时任务调用）"""
     from datetime import date
-    from app.models.statistics import DailyStatistics
-    from app.models.conversation import Conversation
+    from sqlalchemy import func
+    from app.models import DailyStatistics, Conversation
+    from app.database import SessionLocal
     
     db = SessionLocal()
     try:
@@ -490,7 +623,7 @@ def update_daily_statistics():
         
         total_api_calls = db.query(User).filter(
             User.last_active_at >= datetime.combine(today, datetime.min.time())
-        ).with_entities(sql_func.sum(User.api_calls_count)).scalar() or 0
+        ).with_entities(func.sum(User.api_calls_count)).scalar() or 0
         
         existing.api_calls_count = total_api_calls
         
@@ -502,3 +635,48 @@ def update_daily_statistics():
         db.rollback()
     finally:
         db.close()
+
+
+@router.get("/token-usage", response_model=TokenUsageResponse)
+async def get_token_usage(
+    period: str = Query("day", regex="^(day|week|month)$"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """获取 Token 使用统计（按总量排序）"""
+    from datetime import datetime, timedelta
+    
+    now = datetime.utcnow()
+    if period == "day":
+        start_time = now - timedelta(days=1)
+    elif period == "week":
+        start_time = now - timedelta(weeks=1)
+    else:
+        start_time = now - timedelta(days=30)
+    
+    users = db.query(User).filter(
+        ((User.chat_token_usage > 0) | (User.code_token_usage > 0)),
+        # User.last_active_at >= start_time  # 已移除，因为字段为空
+    ).all()
+    
+    result = []
+    sorted_users = sorted(users, key=lambda x: (x.chat_token_usage or 0) + (x.code_token_usage or 0), reverse=True)
+    
+    for i, user in enumerate(sorted_users):
+        chat_tokens = user.chat_token_usage or 0
+        code_tokens = user.code_token_usage or 0
+        result.append({
+            "id": user.id,
+            "username": user.username,
+            "chat_token_usage": chat_tokens,
+            "code_token_usage": code_tokens,
+            "total_token_usage": chat_tokens + code_tokens,
+            "rank": i + 1
+        })
+    
+    return {
+        "users": result,
+        "total_chat_tokens": sum(u["chat_token_usage"] for u in result),
+        "total_code_tokens": sum(u["code_token_usage"] for u in result),
+        "total_tokens": sum(u["total_token_usage"] for u in result)
+    }

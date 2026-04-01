@@ -6,42 +6,46 @@ from app.utils.llm_factory import LLMFactory
 
 SYSTEM_PROMPT = """你是一个专业的动画内容策划专家。
 
-## 你的任务
-根据用户给定的视频主题，直接生成完整的视频内容脚本，包括各个要点的详细内容。
+## 第一步：判断主题类型
 
-## 工作流程（重要）
-1. 用户输入主题后，**直接生成完整内容**，不要询问用户要补充什么
-2. **严格按用户要求的数量生成**：用户说"十大思维"就生成 10 个，说"5 个方法"就生成 5 个
-3. 列出内容后，**自动确认**，不需要再问用户是否满意
-4. 只有当用户明确要求调整某个部分时，才进行修改
+根据用户输入的主题，判断属于哪种类型：
 
-## 输出格式要求
-请用结构化格式输出，结尾必须包含下一步指引：
+### 类型 A：思维可视化（方法论、情绪治愈、自我提升等）
+关键词：思维、方法、习惯、心理、情绪、认知、技巧、步骤、原则、真相、觉醒、思维模型...
 
+### 类型 B：数学/科学可视化（公式、定理、物理概念等）
+关键词：傅里叶变换、欧拉公式、洛伦兹吸引子、微积分、物理、定理、证明、方程、函数、几何、向量、概率、积分、导数、矩阵...
+
+## 输出格式
+
+### 类型 A 格式：
 【视频内容】
 
-### 第 1 点：[标题]
-- 内容：[完整文字内容，30-80 字，充实有内涵]
-- 动态图：[描述动画效果]
+### 第 1 点：[标题，8-10字]
+- 内容：[30-40字]
+- 动态图：[15-20字]
 
-### 第 2 点：[标题]
-- 内容：[完整文字内容]
-- 动态图：[描述动画效果]
+...（以此类推）
 
-...（以此类推，严格按用户要求的数量）
+### 类型 B 格式：
+【核心概念】
+[30-40字]
 
----
+【关键公式】
+- [公式1]：[10-20字]
+- [公式2]：[10-20字]
 
-💡 **下一步**：如果你对以上内容满意，请输入「满意」，我将为你生成视频代码和预览。
+【动态演示】
+[20-30字]
+
+【视觉亮点】
+[15-20字]
 
 ## 重要规则
-1. **不要询问用户补充信息**，直接生成
-2. **内容数量严格按用户要求**：用户要几个就生成几个，不要擅自减少
-3. 内容要充实，每个要点 30-80 字
-4. 动态图描述要具体可执行
-5. 生成内容后，在结尾添加「下一步」指引
-6. 当用户说"可以"、"满意"、"开始生成"、"确认"时，直接设置 is_final=true 并生成代码
-7. 如果用户要求调整某部分，只修改指定内容，不要重新生成全部
+1. 直接输出结果，不要输出思考过程
+2. 内容简洁精炼，严格控制在规定字数内
+3. 动态图描述要简短具体
+4. 不要询问用户，直接生成
 """
 
 CODE_GENERATE_PROMPT = """你是 Manim 动画代码专家。
@@ -71,6 +75,24 @@ import numpy as np  # 如果使用 numpy
 ```
 
 ## Manim 0.20.1 兼容
+
+### 颜色函数（重要！）
+- 颜色常量直接使用：WHITE, BLUE, YELLOW, GREEN, RED, PURPLE, ORANGE 等
+- **interpolate_color 必须使用 ManimColor 对象**：
+  ```python
+  # 正确写法
+  interpolate_color(ManimColor("#FF0000"), ManimColor("#00FF00"), 0.5)
+  interpolate_color(RED, BLUE, 0.5)
+  
+  # 错误写法（会报错）
+  interpolate_color("#FF0000", "#00FF00", 0.5)
+  ```
+- **average_color 也需要 ManimColor 对象**：
+  ```python
+  average_color(ManimColor(RED), ManimColor(BLUE))
+  ```
+
+### 其他兼容性
 - 使用 Text() 不是 TextMobject()
 - 使用 Paragraph() 显示多行文字
 - 颜色使用：WHITE, BLUE, YELLOW, GREEN, RED 等
@@ -101,11 +123,25 @@ CODE_FIX_PROMPT = """你是 Manim 代码修复专家。
 - 常见缺失：`import random`, `import numpy as np`
 - 修复时在代码开头添加缺失的 import
 
-### 2. 只修复错误行
+### 2. 颜色函数错误（重要！）
+- AttributeError: 'str' object has no attribute 'interpolate'
+- **原因**：interpolate_color 需要传 ManimColor 对象，不能传字符串
+- **修复方法**：
+  ```python
+  # 错误
+  interpolate_color("#FF0000", "#00FF00", 0.5)
+  # 正确
+  interpolate_color(ManimColor("#FF0000"), ManimColor("#00FF00"), 0.5)
+  # 或使用颜色常量
+  interpolate_color(RED, BLUE, 0.5)
+  ```
+- 同样适用于 average_color 等颜色函数
+
+### 3. 只修复错误行
 - 找到错误日志中的行号
 - 只修改报错的那一行，其他代码不要动
 
-### 3. Manim 0.20.1 兼容性
+### 4. Manim 0.20.1 兼容性
 - AttributeError → 检查方法是否存在
 - Cube 没有 get_front/get_back/get_top/get_bottom 方法
 
@@ -160,6 +196,7 @@ class ChatService:
         # 正常对话流程 - AI生成内容后自动保存为草稿
         content = await self.client.chat(
             messages=messages,
+            model=LLMFactory.get_chat_model(),
             temperature=0.7,
             max_tokens=8000
         )
@@ -242,7 +279,10 @@ class ChatService:
             try:
                 from app.services.manim import ManimService
                 manim_service = ManimService(self.db)
-                generated_code = await manim_service.generate_code(project_final_script)
+                generated_code = await manim_service.generate_code(
+                    project_final_script, 
+                    user_id=project.user_id if project else None
+                )
                 
                 yield {
                     "type": "final",
@@ -282,28 +322,22 @@ class ChatService:
         messages[-1] = {"role": "user", "content": user_context}
         
         content = ""
-        reasoning_content = ""
         
         try:
             print(f"[DEBUG] Calling stream_chat with {len(messages)} messages")
             response = await self.client.stream_chat(
                 messages=messages,
+                model=LLMFactory.get_chat_model(),
                 temperature=0.7,
                 max_tokens=8000
             )
             print(f"[DEBUG] Got response, starting iteration")
             
             async for chunk in response:
-                delta = chunk.choices[0].delta
+                if not chunk.choices:
+                    continue
                 
-                # 只有 DeepSeek 支持 reasoning_content
-                reasoning = getattr(delta, 'reasoning_content', None)
-                if reasoning:
-                    reasoning_content += reasoning
-                    yield {
-                        "type": "reasoning",
-                        "content": reasoning
-                    }
+                delta = chunk.choices[0].delta
                 
                 if delta.content:
                     content += delta.content
@@ -311,6 +345,22 @@ class ChatService:
                         "type": "content",
                         "content": delta.content
                     }
+            
+            # 统计 token 使用量
+            try:
+                if hasattr(chunk, 'usage') and chunk.usage:
+                    tokens = chunk.usage.total_tokens
+                    if project and project.user_id:
+                        user = self.db.query(Project).filter(Project.id == project_id).first()
+                        if user:
+                            from app.models.user import User
+                            user_obj = self.db.query(User).filter(User.id == project.user_id).first()
+                            if user_obj:
+                                user_obj.chat_token_usage = (user_obj.chat_token_usage or 0) + tokens
+                                self.db.commit()
+                                print(f"[DEBUG] Token usage updated: +{tokens}")
+            except Exception as e:
+                print(f"[DEBUG] Failed to update token usage: {e}")
             
             print(f"[DEBUG] Stream finished, content length: {len(content)}")
             
@@ -412,11 +462,15 @@ class ChatService:
         try:
             response = await self.client.stream_chat(
                 messages=messages,
+                model=LLMFactory.get_chat_model(),
                 temperature=0.7,
                 max_tokens=8000
             )
             
             async for chunk in response:
+                if not chunk.choices:
+                    continue
+                
                 delta = chunk.choices[0].delta
                 
                 reasoning = getattr(delta, 'reasoning_content', None)

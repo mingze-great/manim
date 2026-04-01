@@ -19,5 +19,6 @@ class Template(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     usage_count = Column(Integer, default=0)
     is_active = Column(Boolean, default=True)
+    is_visible = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

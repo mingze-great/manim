@@ -12,6 +12,90 @@ class LLMAdapter(ABC):
     @abstractmethod
     async def chat(self, messages: list[dict], model: str, **kwargs) -> str:
         pass
+    
+    async def chat_with_response(self, messages: list[dict], model: str = None, **kwargs):
+        """返回完整的 response 对象，子类可以覆盖此方法"""
+        content = await self.chat(messages, model, **kwargs)
+        return {"content": content, "usage": None}
+
+
+class DashScopeAdapter(LLMAdapter):
+    """阿里云百炼适配器 - 支持模型降级"""
+    
+    def __init__(self):
+        from openai import AsyncOpenAI
+        self.client = AsyncOpenAI(
+            api_key=settings.DASHSCOPE_API_KEY,
+            base_url=settings.DASHSCOPE_BASE_URL
+        )
+        self.models = [m.strip() for m in settings.DASHSCOPE_MODELS.split(",")]
+        self.current_model_index = 0
+        self.enable_thinking = settings.DASHSCOPE_ENABLE_THINKING
+    
+    def _get_extra_body(self):
+        if self.enable_thinking:
+            return {"enable_thinking": True}
+        return {}
+    
+    async def chat(self, messages: list[dict], model: str = None, **kwargs) -> str:
+        model = model or self.models[self.current_model_index]
+        extra_body = self._get_extra_body()
+        try:
+            response = await self.client.chat.completions.create(
+                model=model,
+                messages=messages,
+                extra_body=extra_body,
+                **kwargs
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            if self.current_model_index < len(self.models) - 1:
+                self.current_model_index += 1
+                print(f"[DashScope] 模型 {model} 调用失败，降级到 {self.models[self.current_model_index]}")
+                return await self.chat(messages, **kwargs)
+            raise e
+    
+    async def chat_with_response(self, messages: list[dict], model: str = None, **kwargs):
+        """返回完整的 response 对象，包含 usage 信息"""
+        model = model or self.models[self.current_model_index]
+        extra_body = self._get_extra_body()
+        try:
+            response = await self.client.chat.completions.create(
+                model=model,
+                messages=messages,
+                extra_body=extra_body,
+                **kwargs
+            )
+            return response
+        except Exception as e:
+            if self.current_model_index < len(self.models) - 1:
+                self.current_model_index += 1
+                print(f"[DashScope] 模型 {model} 调用失败，降级到 {self.models[self.current_model_index]}")
+                return await self.chat_with_response(messages, **kwargs)
+            raise e
+    
+    async def stream_chat(self, messages: list[dict], model: str = None, **kwargs):
+        model = model or self.models[self.current_model_index]
+        extra_body = self._get_extra_body()
+        try:
+            response = await self.client.chat.completions.create(
+                model=model,
+                messages=messages,
+                stream=True,
+                stream_options={"include_usage": True},
+                extra_body=extra_body,
+                **kwargs
+            )
+            return response
+        except Exception as e:
+            if self.current_model_index < len(self.models) - 1:
+                self.current_model_index += 1
+                print(f"[DashScope] 模型 {model} 调用失败，降级到 {self.models[self.current_model_index]}")
+                return await self.stream_chat(messages, **kwargs)
+            raise e
+    
+    def get_current_model(self) -> str:
+        return self.models[self.current_model_index]
 
 
 class DeepSeekAdapter(LLMAdapter):
@@ -33,13 +117,22 @@ class DeepSeekAdapter(LLMAdapter):
         )
         return response.choices[0].message.content
     
+    async def chat_with_response(self, messages: list[dict], model: str = None, **kwargs):
+        model = model or settings.DEEPSEEK_MODEL
+        response = await self.client.chat.completions.create(
+            model=model,
+            messages=messages,
+            **kwargs
+        )
+        return response
+    
     async def stream_chat(self, messages: list[dict], model: str = None, **kwargs):
-        """流式聊天 - 返回生成器"""
         model = model or settings.DEEPSEEK_MODEL
         response = await self.client.chat.completions.create(
             model=model,
             messages=messages,
             stream=True,
+            stream_options={"include_usage": True},
             **kwargs
         )
         return response
@@ -197,87 +290,30 @@ class GLMAdapter(LLMAdapter):
 
 
 class LLMFactory:
-    """LLM 工厂类 - 自动选择可用的 LLM 提供商"""
-    
     _client_cache = None
     
     @classmethod
     def get_client(cls) -> LLMAdapter:
-        """获取 LLM 客户端，按优先级自动选择"""
-        
-        # 如果已缓存，直接返回
         if cls._client_cache is not None:
             return cls._client_cache
         
-        # 每次都重新检查配置
-        provider = settings.LLM_PROVIDER.lower()
+        if not settings.DEEPSEEK_API_KEY:
+            raise ValueError(
+                "未配置 DEEPSEEK_API_KEY。\n"
+                "请在 .env 中配置 DEEPSEEK_API_KEY"
+            )
         
-        # 自动选择模式
-        if provider == "auto":
-            if settings.GLM_API_KEY:
-                cls._client_cache = GLMAdapter()
-            elif settings.DEEPSEEK_API_KEY:
-                cls._client_cache = DeepSeekAdapter()
-            elif settings.GEMINI_API_KEY:
-                cls._client_cache = GeminiAdapter()
-            elif settings.OPENAI_API_KEY:
-                cls._client_cache = OpenAIAdapter()
-            else:
-                raise ValueError(
-                    "未配置任何 LLM API Key。\n"
-                    "请在 .env 中配置以下任一API Key:\n"
-                    "  - GLM_API_KEY (推荐)\n"
-                    "  - DEEPSEEK_API_KEY\n"
-                    "  - GEMINI_API_KEY\n"
-                    "  - OPENAI_API_KEY"
-                )
-        # 指定提供商
-        elif provider == "glm":
-            if not settings.GLM_API_KEY:
-                raise ValueError("未配置 GLM_API_KEY")
-            cls._client_cache = GLMAdapter()
-        elif provider == "deepseek":
-            if not settings.DEEPSEEK_API_KEY:
-                raise ValueError("未配置 DEEPSEEK_API_KEY")
-            cls._client_cache = DeepSeekAdapter()
-        elif provider == "gemini":
-            if not settings.GEMINI_API_KEY:
-                raise ValueError("未配置 GEMINI_API_KEY")
-            cls._client_cache = GeminiAdapter()
-        elif provider in ["openai", "qwen", "aliyun"]:
-            if not settings.OPENAI_API_KEY:
-                raise ValueError("未配置 OPENAI_API_KEY")
-            # 如果是阿里云，检测是否使用通义千问
-            if settings.OPENAI_BASE_URL and "aliyuncs" in settings.OPENAI_BASE_URL:
-                cls._client_cache = QwenAdapter()
-            else:
-                cls._client_cache = OpenAIAdapter()
-        else:
-            raise ValueError(f"不支持的 LLM 提供商: {provider}")
-        
+        cls._client_cache = DeepSeekAdapter()
         return cls._client_cache
     
     @classmethod
     def get_model_name(cls) -> str:
-        """获取当前使用的模型名称"""
-        provider = settings.LLM_PROVIDER.lower()
-        
-        if provider == "auto":
-            if settings.GLM_API_KEY:
-                return settings.GLM_MODEL
-            elif settings.DEEPSEEK_API_KEY:
-                return settings.DEEPSEEK_MODEL
-            elif settings.GEMINI_API_KEY:
-                return settings.GEMINI_MODEL
-            elif settings.OPENAI_API_KEY:
-                return settings.OPENAI_MODEL
-        elif provider == "glm":
-            return settings.GLM_MODEL
-        elif provider == "deepseek":
-            return settings.DEEPSEEK_MODEL
-        elif provider == "gemini":
-            return settings.GEMINI_MODEL
-        elif provider == "openai":
-            return settings.OPENAI_MODEL
-        
-        return "unknown"
+        return settings.DEEPSEEK_MODEL
+    
+    @classmethod
+    def get_chat_model(cls) -> str:
+        return settings.DEEPSEEK_MODEL
+    
+    @classmethod
+    def get_code_model(cls) -> str:
+        return settings.DEEPSEEK_MODEL
