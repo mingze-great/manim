@@ -42,7 +42,7 @@ function AppContent() {
     const validateUser = async () => {
       if (token) {
         try {
-          const { data } = await authApi.me()
+          const { data } = await authApi.me(token)
           login(token, data)
         } catch (error) {
           logout()

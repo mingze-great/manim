@@ -24,19 +24,9 @@ export const authApi = {
     return response
   },
   register: (data: RegisterRequest) => axios.post(`${API_BASE}/auth/register`, data),
-  me: (token?: string) => {
-    let authToken = token
-    if (!authToken) {
-      const stored = localStorage.getItem('auth-storage')
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored)
-          authToken = parsed.state?.token
-        } catch (e) {}
-      }
-    }
+  me: (token: string) => {
     return axios.get(`${API_BASE}/auth/me`, {
-      headers: { Authorization: `Bearer ${authToken}` }
+      headers: { Authorization: `Bearer ${token}` }
     })
   },
 }
