@@ -35,10 +35,12 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
 }
 
 function AppContent() {
-  const { token, login, logout } = useAuthStore()
+  const { token, login, logout, _hasHydrated } = useAuthStore()
   const [validating, setValidating] = useState(true)
 
   useEffect(() => {
+    if (!_hasHydrated) return
+    
     const validateUser = async () => {
       if (token) {
         try {
@@ -51,9 +53,9 @@ function AppContent() {
       setValidating(false)
     }
     validateUser()
-  }, [])
+  }, [_hasHydrated, token])
 
-  if (validating && token) {
+  if (!_hasHydrated || (validating && token)) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
         <Spin size="large" />
