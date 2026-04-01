@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react'
-import { Table, Button, Space, Tag, Modal, Form, Input, message, Popconfirm } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
+import { useState, useEffect, useMemo } from 'react'
+import { Table, Button, Space, Tag, Modal, Form, Input, message, Popconfirm, Card, Row, Col, Statistic } from 'antd'
+import { PlusOutlined, EditOutlined, DeleteOutlined, FileTextOutlined, AppstoreOutlined, StarOutlined, EyeOutlined } from '@ant-design/icons'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import { templateApi, Template } from '@/services/template'
 
 const { TextArea } = Input
+const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6']
 
 export default function AdminTemplates() {
   const [templates, setTemplates] = useState<Template[]>([])
@@ -48,6 +50,23 @@ export default function AdminTemplates() {
       message.error('删除失败')
     }
   }
+
+  const stats = useMemo(() => {
+    const systemCount = templates.filter(t => t.is_system).length
+    const customCount = templates.filter(t => !t.is_system).length
+    const totalUsage = templates.reduce((sum, t) => sum + (t.usage_count || 0), 0)
+    const topTemplates = [...templates]
+      .sort((a, b) => (b.usage_count || 0) - (a.usage_count || 0))
+      .slice(0, 5)
+      .map(t => ({ name: t.name, 使用次数: t.usage_count || 0 }))
+
+    const categoryData = [
+      { name: '系统模板', value: systemCount },
+      { name: '自定义模板', value: customCount }
+    ]
+
+    return { systemCount, customCount, totalUsage, topTemplates, categoryData }
+  }, [templates])
 
   const handleSubmit = async () => {
     try {
@@ -102,6 +121,15 @@ export default function AdminTemplates() {
       ),
     },
     {
+      title: '使用次数',
+      dataIndex: 'usage_count',
+      key: 'usage_count',
+      width: 100,
+      render: (count: number) => (
+        <span className="font-medium text-blue-600">{count || 0}</span>
+      ),
+    },
+    {
       title: '操作',
       key: 'action',
       render: (_: any, record: Template) => (
@@ -140,13 +168,102 @@ export default function AdminTemplates() {
         </Button>
       </div>
 
-      <Table
-        columns={columns}
-        dataSource={templates}
-        rowKey="id"
-        loading={loading}
-        pagination={{ pageSize: 10 }}
-      />
+      <Row gutter={[16, 16]} className="mb-6">
+        <Col xs={24} sm={12} lg={6}>
+          <Card className="hover-lift" style={{ borderRadius: '12px' }}>
+            <Statistic
+              title="模板总数"
+              value={templates.length}
+              prefix={<FileTextOutlined className="text-blue-500" />}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card className="hover-lift" style={{ borderRadius: '12px' }}>
+            <Statistic
+              title="系统模板"
+              value={stats.systemCount}
+              prefix={<AppstoreOutlined className="text-green-500" />}
+              valueStyle={{ color: '#10b981' }}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card className="hover-lift" style={{ borderRadius: '12px' }}>
+            <Statistic
+              title="自定义模板"
+              value={stats.customCount}
+              prefix={<StarOutlined className="text-purple-500" />}
+              valueStyle={{ color: '#8b5cf6' }}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card className="hover-lift" style={{ borderRadius: '12px' }}>
+            <Statistic
+              title="总使用次数"
+              value={stats.totalUsage}
+              prefix={<EyeOutlined className="text-orange-500" />}
+              valueStyle={{ color: '#f59e0b' }}
+            />
+          </Card>
+        </Col>
+      </Row>
+
+      <Row gutter={[16, 16]} className="mb-6">
+        <Col xs={24} lg={12}>
+          <Card className="hover-lift" style={{ borderRadius: '16px' }}>
+            <div className="text-gray-600 font-medium mb-4">热门模板（使用次数）</div>
+            {stats.topTemplates.length > 0 ? (
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={stats.topTemplates}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar dataKey="使用次数" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-48 text-gray-400">暂无数据</div>
+            )}
+          </Card>
+        </Col>
+        <Col xs={24} lg={12}>
+          <Card className="hover-lift" style={{ borderRadius: '16px' }}>
+            <div className="text-gray-600 font-medium mb-4">模板类型分布</div>
+            <ResponsiveContainer width="100%" height={200}>
+              <PieChart>
+                <Pie
+                  data={stats.categoryData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={80}
+                  paddingAngle={5}
+                  dataKey="value"
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                >
+                  {stats.categoryData.map((_, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          </Card>
+        </Col>
+      </Row>
+
+      <Card className="hover-lift" style={{ borderRadius: '16px' }}>
+        <Table
+          columns={columns}
+          dataSource={templates}
+          rowKey="id"
+          loading={loading}
+          pagination={{ pageSize: 10 }}
+        />
+      </Card>
 
       <Modal
         title={editingTemplate ? '编辑模板' : '添加模板'}
