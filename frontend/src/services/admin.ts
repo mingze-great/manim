@@ -36,6 +36,7 @@ export interface User {
   is_approved: boolean
   expires_at?: string
   created_at: string
+  daily_video_limit?: number
 }
 
 export interface UserStats {
@@ -134,6 +135,9 @@ export const adminApi = {
 
   extendUser: (userId: number, days: number = 30) =>
     api.post<{ message: string; expires_at: string }>(`/admin/users/${userId}/extend`, null, { params: { days } }),
+
+  setVideoLimit: (userId: number, limit: number) =>
+    api.post<{ message: string }>(`/admin/users/${userId}/set-video-limit`, null, { params: { limit } }),
 
   getStatisticsOverview: (period: string = 'day') =>
     api.get<{
