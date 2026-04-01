@@ -131,6 +131,8 @@ export default function AdminUsers() {
 
   const getDurationDays = (type: string): number => {
     switch (type) {
+      case '30m': return 0.0208
+      case '1h': return 0.0417
       case '1w': return 7
       case '1m': return 30
       case '3m': return 90
@@ -560,6 +562,8 @@ export default function AdminUsers() {
             className="w-full"
           >
             <Space direction="vertical" className="w-full">
+              <Radio value="30m">30 分钟</Radio>
+              <Radio value="1h">1 小时</Radio>
               <Radio value="1w">1 周</Radio>
               <Radio value="1m">1 个月（推荐）</Radio>
               <Radio value="3m">3 个月</Radio>

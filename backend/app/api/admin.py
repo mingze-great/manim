@@ -448,10 +448,7 @@ async def extend_user(
     
     now = datetime.utcnow()
     delta_seconds = days * 24 * 60 * 60
-    if user.expires_at and user.expires_at > now:
-        user.expires_at = user.expires_at + timedelta(seconds=delta_seconds)
-    else:
-        user.expires_at = now + timedelta(seconds=delta_seconds)
+    user.expires_at = now + timedelta(seconds=delta_seconds)
     
     user.is_approved = True
     db.commit()
