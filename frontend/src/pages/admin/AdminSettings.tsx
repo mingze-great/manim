@@ -1,5 +1,5 @@
 import { Card, Descriptions, Tag, Row, Col, Divider } from 'antd'
-import { SafetyOutlined, LockOutlined, GlobalOutlined, CheckCircleOutlined, InfoCircleOutlined, DatabaseOutlined, ApiOutlined, CodeOutlined, SecurityScanOutlined, AuditOutlined, FileProtectOutlined } from '@ant-design/icons'
+import { SafetyOutlined, LockOutlined, GlobalOutlined, CheckCircleOutlined, DatabaseOutlined, ApiOutlined, CodeOutlined, SecurityScanOutlined } from '@ant-design/icons'
 
 export default function AdminSettings() {
   return (

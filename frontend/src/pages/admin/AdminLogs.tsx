@@ -131,8 +131,8 @@ export default function AdminLogs() {
     if (dateRange && dateRange[0] && dateRange[1]) {
       result = result.filter(log => {
         const logDate = dayjs(log.created_at)
-        return logDate.isAfter(dateRange[0].startOf('day')) && 
-               logDate.isBefore(dateRange[1].endOf('day'))
+        return logDate.isAfter(dateRange[0]!.startOf('day')) && 
+               logDate.isBefore(dateRange[1]!.endOf('day'))
       })
     }
     return result

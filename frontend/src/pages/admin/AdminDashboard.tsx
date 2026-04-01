@@ -1,15 +1,13 @@
 import { useState, useEffect } from 'react'
-import { Row, Col, Card, Space, Tag, Progress, Spin, Empty } from 'antd'
+import { Row, Col, Card, Tag, Progress, Spin, Empty } from 'antd'
 import {
   UserOutlined, ProjectOutlined, VideoCameraOutlined,
   TeamOutlined, LockOutlined, EyeOutlined,
   SafetyCertificateOutlined, ThunderboltOutlined, ClockCircleOutlined, RiseOutlined, FireOutlined
 } from '@ant-design/icons'
-import { PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, AreaChart, Area } from 'recharts'
+import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, AreaChart, Area } from 'recharts'
 import { adminApi, SystemStats } from '../../services/admin'
 import { useNavigate } from 'react-router-dom'
-
-const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
 
 export default function AdminDashboard() {
   const navigate = useNavigate()
@@ -40,12 +38,6 @@ export default function AdminDashboard() {
     if (usage >= 90) return '#ef4444'
     if (usage >= 70) return '#f59e0b'
     return '#10b981'
-  }
-
-  const getUsageStatus = (usage: number) => {
-    if (usage >= 90) return 'danger'
-    if (usage >= 70) return 'warning'
-    return 'normal'
   }
 
   const renderCircularProgress = (value: number, label: string, icon: React.ReactNode) => {
@@ -94,7 +86,7 @@ export default function AdminDashboard() {
   }
 
   const getTrendChartData = () => {
-    return trend.slice(-7).map((item, index) => ({
+    return trend.slice(-7).map((item, _index) => ({
       ...item,
       date: item.date.slice(5),
       fullDate: item.date
