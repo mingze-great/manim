@@ -39,14 +39,4 @@ export const templateApi = {
     })
   },
   deleteExampleVideo: (id: number) => api.delete(`/templates/${id}/example-video`),
-  renderPreview: (id: number) => api.post<{ message: string; task_id: number; template_id: number }>(`/templates/${id}/render-preview`),
-  renderAllPreviews: () => api.post<{ message: string; tasks: Array<{ task_id: number; template_id: number; template_name: string }> }>('/templates/render-all-previews'),
-  getRenderStatus: (taskId: number) => api.get<{
-    task_id: number
-    status: string
-    progress: number
-    message: string
-    error: string | null
-    result: any
-  }>(`/templates/render-status/${taskId}`),
 }

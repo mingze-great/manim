@@ -1,18 +1,9 @@
-import { useState, useEffect, useRef } from 'react'
-import { Table, Button, Space, Tag, Modal, Form, Input, message, Popconfirm, Upload, Switch, Tooltip, Progress } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, PlayCircleOutlined, UploadOutlined, VideoCameraOutlined, SyncOutlined } from '@ant-design/icons'
+import { useState, useEffect } from 'react'
+import { Table, Button, Space, Tag, Modal, Form, Input, message, Popconfirm, Upload, Switch } from 'antd'
+import { PlusOutlined, EditOutlined, DeleteOutlined, PlayCircleOutlined, UploadOutlined } from '@ant-design/icons'
 import { templateApi, Template } from '@/services/template'
 
 const { TextArea } = Input
-
-interface RenderTask {
-  taskId: number
-  templateId: number
-  templateName: string
-  status: string
-  progress: number
-  message: string
-}
 
 export default function AdminTemplates() {
   const [templates, setTemplates] = useState<Template[]>([])
@@ -23,31 +14,10 @@ export default function AdminTemplates() {
   const [videoPreviewVisible, setVideoPreviewVisible] = useState(false)
   const [previewVideoUrl, setPreviewVideoUrl] = useState<string>('')
   const [uploading, setUploading] = useState(false)
-  const [renderTasks, setRenderTasks] = useState<Map<number, RenderTask>>(new Map())
-  const [batchRendering, setBatchRendering] = useState(false)
-  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
     fetchTemplates()
-    return () => {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current)
-      }
-    }
   }, [])
-
-  useEffect(() => {
-    if (renderTasks.size > 0) {
-      if (!pollingRef.current) {
-        pollingRef.current = setInterval(pollRenderTasks, 2000)
-      }
-    } else {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current)
-        pollingRef.current = null
-      }
-    }
-  }, [renderTasks.size])
 
   const fetchTemplates = async () => {
     try {
@@ -57,44 +27,6 @@ export default function AdminTemplates() {
       message.error('获取模板失败')
     } finally {
       setLoading(false)
-    }
-  }
-
-  const pollRenderTasks = async () => {
-    const updatedTasks = new Map<number, RenderTask>()
-    let hasActiveTask = false
-    
-    for (const [templateId, task] of renderTasks) {
-      if (task.status === 'processing' || task.status === 'pending') {
-        hasActiveTask = true
-        try {
-          const { data } = await templateApi.getRenderStatus(task.taskId)
-          updatedTasks.set(templateId, {
-            ...task,
-            status: data.status,
-            progress: data.progress,
-            message: data.message
-          })
-          
-          if (data.status === 'completed') {
-            message.success(`模板 "${task.templateName}" 预览视频渲染完成`)
-            fetchTemplates()
-          } else if (data.status === 'failed') {
-            message.error(`模板 "${task.templateName}" 渲染失败: ${data.error || data.message}`)
-          }
-        } catch (err) {
-          console.error('Failed to poll task status:', err)
-        }
-      } else {
-        updatedTasks.set(templateId, task)
-      }
-    }
-    
-    setRenderTasks(updatedTasks)
-    
-    if (!hasActiveTask && pollingRef.current) {
-      clearInterval(pollingRef.current)
-      pollingRef.current = null
     }
   }
 
@@ -179,60 +111,6 @@ export default function AdminTemplates() {
     }
   }
 
-  const handleRenderPreview = async (template: Template) => {
-    try {
-      const { data } = await templateApi.renderPreview(template.id)
-      setRenderTasks(prev => {
-        const newMap = new Map(prev)
-        newMap.set(template.id, {
-          taskId: data.task_id,
-          templateId: template.id,
-          templateName: template.name,
-          status: 'pending',
-          progress: 0,
-          message: '渲染任务已启动'
-        })
-        return newMap
-      })
-      message.info(`模板 "${template.name}" 预览渲染已启动`)
-    } catch (err: any) {
-      message.error(err.response?.data?.detail || '启动渲染失败')
-    }
-  }
-
-  const handleBatchRender = async () => {
-    setBatchRendering(true)
-    try {
-      const { data } = await templateApi.renderAllPreviews()
-      if (data.tasks.length === 0) {
-        message.info('没有需要渲染的系统模板')
-        return
-      }
-      
-      const newTasks = new Map(renderTasks)
-      data.tasks.forEach((task: any) => {
-        newTasks.set(task.template_id, {
-          taskId: task.task_id,
-          templateId: task.template_id,
-          templateName: task.template_name,
-          status: 'pending',
-          progress: 0,
-          message: '渲染任务已启动'
-        })
-      })
-      setRenderTasks(newTasks)
-      message.success(`已启动 ${data.tasks.length} 个渲染任务`)
-    } catch (err: any) {
-      message.error(err.response?.data?.detail || '批量渲染失败')
-    } finally {
-      setBatchRendering(false)
-    }
-  }
-
-  const getRenderStatus = (templateId: number): RenderTask | undefined => {
-    return renderTasks.get(templateId)
-  }
-
   const columns = [
     {
       title: 'ID',
@@ -281,82 +159,44 @@ export default function AdminTemplates() {
       title: '示例视频',
       dataIndex: 'example_video_url',
       key: 'example_video_url',
-      width: 250,
-      render: (videoUrl: string | null, record: Template) => {
-        const task = getRenderStatus(record.id)
-        
-        if (task && (task.status === 'processing' || task.status === 'pending')) {
-          return (
-            <Space direction="vertical" size="small" className="w-full">
-              <Progress percent={task.progress} size="small" status="active" />
-              <span className="text-xs text-gray-500">{task.message}</span>
-            </Space>
-          )
-        }
-        
-        return (
-          <Space>
-            {videoUrl ? (
-              <>
-                <Button
-                  type="link"
-                  size="small"
-                  icon={<PlayCircleOutlined />}
-                  onClick={() => handlePreviewVideo(videoUrl)}
-                >
-                  预览
+      width: 180,
+      render: (videoUrl: string | null, record: Template) => (
+        <Space>
+          {videoUrl ? (
+            <>
+              <Button
+                type="link"
+                size="small"
+                icon={<PlayCircleOutlined />}
+                onClick={() => handlePreviewVideo(videoUrl)}
+              >
+                预览
+              </Button>
+              <Popconfirm
+                title="确定删除此示例视频？"
+                onConfirm={() => handleDeleteVideo(record.id)}
+              >
+                <Button type="link" size="small" danger>
+                  删除
                 </Button>
-                <Popconfirm
-                  title="确定删除此示例视频？"
-                  onConfirm={() => handleDeleteVideo(record.id)}
-                >
-                  <Button type="link" size="small" danger>
-                    删除
-                  </Button>
-                </Popconfirm>
-                {record.is_system && (
-                  <Tooltip title="重新渲染预览视频">
-                    <Button
-                      type="link"
-                      size="small"
-                      icon={<SyncOutlined />}
-                      onClick={() => handleRenderPreview(record)}
-                    />
-                  </Tooltip>
-                )}
-              </>
-            ) : (
-              <>
-                {record.is_system ? (
-                  <Tooltip title="渲染模板代码生成预览视频">
-                    <Button
-                      type="link"
-                      size="small"
-                      icon={<VideoCameraOutlined />}
-                      onClick={() => handleRenderPreview(record)}
-                    >
-                      渲染预览
-                    </Button>
-                  </Tooltip>
-                ) : (
-                  <Upload
-                    accept=".mp4"
-                    showUploadList={false}
-                    beforeUpload={(file) => {
-                      handleUploadVideo(record.id, file)
-                      return false
-                    }}
-                  >
-                    <Button type="link" size="small" icon={<UploadOutlined />} loading={uploading}>
-                      上传
-                    </Button>
-                  </Upload>
-                )}
-              </>
-            )}
-          </Space>
-        )
-      },
+              </Popconfirm>
+            </>
+          ) : (
+            <Upload
+              accept=".mp4"
+              showUploadList={false}
+              beforeUpload={(file) => {
+                handleUploadVideo(record.id, file)
+                return false
+              }}
+            >
+              <Button type="link" size="small" icon={<UploadOutlined />} loading={uploading}>
+                上传
+              </Button>
+            </Upload>
+          )}
+        </Space>
+      ),
     },
     {
       title: '操作',
@@ -390,47 +230,13 @@ export default function AdminTemplates() {
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h2 className="text-2xl font-bold">代码模板管理</h2>
-          <p className="text-gray-500 mt-1">管理所有模板，渲染或上传示例视频供用户预览</p>
+          <h2 className="text-2xl font-bold">视频风格模板管理</h2>
+          <p className="text-gray-500 mt-1">管理所有模板，上传示例视频供用户预览</p>
         </div>
-        <Space>
-          <Button
-            icon={<SyncOutlined />}
-            onClick={handleBatchRender}
-            loading={batchRendering}
-          >
-            批量渲染预览
-          </Button>
-          <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
-            添加模板
-          </Button>
-        </Space>
+        <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
+          添加模板
+        </Button>
       </div>
-
-      {renderTasks.size > 0 && (
-        <div className="mb-4 p-4 bg-blue-50 rounded-lg">
-          <div className="flex items-center gap-2 mb-2">
-            <SyncOutlined spin className="text-blue-500" />
-            <span className="font-medium">渲染任务进度</span>
-          </div>
-          <div className="space-y-2">
-            {Array.from(renderTasks.values()).map(task => (
-              <div key={task.taskId} className="flex items-center gap-4">
-                <span className="text-sm text-gray-600 w-32 truncate">{task.templateName}</span>
-                <Progress 
-                  percent={task.progress} 
-                  size="small" 
-                  className="flex-1"
-                  status={task.status === 'failed' ? 'exception' : task.status === 'completed' ? 'success' : 'active'}
-                />
-                <span className="text-xs text-gray-500 w-20">
-                  {task.status === 'completed' ? '完成' : task.status === 'failed' ? '失败' : task.message}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       <Table
         columns={columns}
@@ -438,7 +244,7 @@ export default function AdminTemplates() {
         rowKey="id"
         loading={loading}
         pagination={{ pageSize: 10 }}
-        scroll={{ x: 1200 }}
+        scroll={{ x: 1000 }}
       />
 
       <Modal
