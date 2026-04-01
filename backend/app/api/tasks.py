@@ -84,7 +84,7 @@ async def generate_code_stream(
             manim_code = await manim_service.generate_code(
                 project_local.final_script, 
                 template_code,
-                video_title=project_local.title
+                video_title=project_local.theme
             )
             
             fixed_code, warnings = manim_service.validate_code(manim_code)
