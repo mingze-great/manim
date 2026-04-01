@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { Card, Progress, Button, Space, message, Spin, Tabs, Collapse, Select } from 'antd'
-import { DownloadOutlined, PlayCircleOutlined, CodeOutlined, CloudUploadOutlined } from '@ant-design/icons'
+import { DownloadOutlined, PlayCircleOutlined, PlaySquareOutlined, CloudUploadOutlined } from '@ant-design/icons'
 import { projectApi, Task, Project } from '@/services/project'
 import { templateApi, Template } from '@/services/template'
 import { useAuthStore } from '@/stores/authStore'
@@ -358,254 +358,274 @@ export default function ProjectTask() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto p-6">
+    <div className="max-w-6xl mx-auto p-3 sm:p-6">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
       >
         <Card
           title={
-            <Space>
-              <span className="text-lg font-bold">{project?.title}</span>
+            <Space className="min-w-0">
+              <span className="text-base sm:text-lg font-bold truncate max-w-[150px] sm:max-w-none">{project?.title}</span>
               {task && (
-                <span style={{ color: statusMap[task.status]?.color }}>
+                <span style={{ color: statusMap[task.status]?.color }} className="text-xs sm:text-sm">
                   ({statusMap[task.status]?.text})
                 </span>
               )}
             </Space>
           }
           extra={
-            <Button onClick={() => navigate(`/project/${id}/chat`)}>
+            <Button size="small" onClick={() => navigate(`/project/${id}/chat`)}>
               返回编辑
             </Button>
           }
+          styles={{ header: { flexWrap: 'wrap' } }}
         >
-          <Tabs activeKey={activeTab} onChange={setActiveTab}>
-            <Tabs.TabPane tab={<span><CodeOutlined /> 代码生成</span>} key="code">
-              <div className="space-y-4">
-                {/* 进度显示 */}
-                {generatingCode && (
-                  <motion.div 
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    className="bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 p-4 rounded-xl border border-blue-100 dark:border-blue-800"
-                  >
-                    <div className="flex items-center gap-3 mb-3">
-                      <Spin />
-                      <span className="text-blue-600 dark:text-blue-400 font-medium">{codeMessage}</span>
-                    </div>
-                    <Progress 
-                      percent={codeProgress} 
-                      status="active"
-                      strokeColor={{
-                        '0%': '#0066FF',
-                        '100%': '#00CCFF',
-                      }}
-                    />
-                  </motion.div>
-                )}
-
-                {/* 模板选择 */}
-                <div className="mb-4">
-                  <label className="block text-sm text-gray-500 mb-2">选择代码模板</label>
-                  <Select
-                    style={{ width: '100%', maxWidth: 300 }}
-                    placeholder="默认模板"
-                    allowClear
-                    value={selectedTemplateId}
-                    onChange={setSelectedTemplateId}
-                    options={templates.map(t => ({
-                      label: t.name,
-                      value: t.id
-                    }))}
-                  />
-                </div>
-
-                {/* 生成代码按钮 */}
-                <div className="flex gap-3">
-                  <Button 
-                    type="primary" 
-                    icon={<CodeOutlined />}
-                    onClick={handleGenerateCode}
-                    loading={generatingCode}
-                    size="large"
-                    className="btn-gradient"
-                  >
-                    {generatedCode ? '重新生成代码' : '生成代码'}
-                  </Button>
-                </div>
-
-                {/* 代码显示 */}
-                {generatedCode && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                  >
-                    <Collapse defaultActiveKey={['code']}>
-                      <Panel 
-                        header={
-                          <div className="flex items-center gap-2">
-                            <CodeOutlined className="text-[#0066FF]" />
-                            <span>生成的 Manim 代码</span>
-                          </div>
-                        } 
-                        key="code"
+          <Tabs 
+            activeKey={activeTab} 
+            onChange={setActiveTab}
+            size="small"
+            items={[
+              {
+                key: 'code',
+                label: <span className="text-xs sm:text-sm"><PlaySquareOutlined /> 脚本生成</span>,
+                children: (
+                  <div className="space-y-3 sm:space-y-4">
+                    {/* 进度显示 */}
+                    {generatingCode && (
+                      <motion.div 
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        className="bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 p-3 sm:p-4 rounded-xl border border-blue-100 dark:border-blue-800"
                       >
-                        <div className="code-block relative">
-                          <pre 
-                            ref={codeRef}
-                            className="text-sm max-h-96 overflow-y-auto"
-                          >
-                            {generatedCode}
-                          </pre>
+                        <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
+                          <Spin size="small" />
+                          <span className="text-xs sm:text-sm text-blue-600 dark:text-blue-400 font-medium">{codeMessage}</span>
                         </div>
-                      </Panel>
-                    </Collapse>
-                  </motion.div>
-                )}
-              </div>
-            </Tabs.TabPane>
-
-            <Tabs.TabPane tab={<span><CloudUploadOutlined /> 视频渲染</span>} key="video">
-              <div className="space-y-4">
-                {/* 渲染进度显示 */}
-                {generatingVideo && (
-                  <motion.div 
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 p-4 rounded-xl border border-purple-100 dark:border-purple-800"
-                  >
-                    <div className="flex items-center gap-3 mb-3">
-                      <Spin />
-                      <span className="text-purple-600 dark:text-purple-400 font-medium">{videoMessage}</span>
-                    </div>
-                    <Progress 
-                      percent={videoProgress} 
-                      status="active"
-                      strokeColor={{
-                        '0%': '#722ed1',
-                        '100%': '#eb2f96',
-                      }}
-                    />
-                  </motion.div>
-                )}
-
-                {/* 任务状态 */}
-                {(task || generatingVideo || project?.video_url) ? (
-                  <motion.div 
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="bg-gray-50 dark:bg-gray-800/50 p-6 rounded-xl"
-                  >
-                    <div className="flex items-center justify-between mb-4">
-                      <span className="font-medium">渲染状态</span>
-                      <span 
-                        className="status-badge"
-                        style={{ 
-                          backgroundColor: `${statusMap[task?.status || (generatingVideo ? 'processing' : 'completed')]?.color}20`,
-                          color: statusMap[task?.status || (generatingVideo ? 'processing' : 'completed')]?.color 
-                        }}
-                      >
-                        {statusMap[task?.status || (generatingVideo ? 'processing' : 'completed')]?.text}
-                      </span>
-                    </div>
-                    <Progress 
-                      percent={task?.progress || videoProgress} 
-                      status={task?.status === 'failed' || renderError ? 'exception' : task?.status === 'completed' || project?.video_url ? 'success' : 'active'}
-                      strokeColor={{
-                        '0%': '#0066FF',
-                        '100%': '#00CCFF',
-                      }}
-                    />
-                    {renderError && (
-                      <div className="text-red-500 mt-3 text-sm bg-red-50 dark:bg-red-900/20 p-3 rounded-lg">
-                        错误: {renderError}
-                      </div>
+                        <Progress 
+                          percent={codeProgress} 
+                          status="active"
+                          size="small"
+                          strokeColor={{
+                            '0%': '#0066FF',
+                            '100%': '#00CCFF',
+                          }}
+                        />
+                      </motion.div>
                     )}
-                  </motion.div>
-                ) : (
-                  <div className="text-center py-12 text-gray-400">
-                    尚未开始渲染
-                  </div>
-                )}
 
-                {/* 终端输出 */}
-                {(showTerminal || terminalLog) && (
-                  <div className="mt-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="font-medium">终端输出</span>
-                      <Button size="small" onClick={() => setShowTerminal(!showTerminal)}>
-                        {showTerminal ? '收起' : '展开'}
+                    {/* 模板选择 */}
+                    <div className="mb-3 sm:mb-4">
+                      <label className="block text-xs sm:text-sm text-gray-500 mb-1 sm:mb-2">选择视频风格模板</label>
+                      <Select
+                        style={{ width: '100%' }}
+                        placeholder="默认风格"
+                        allowClear
+                        value={selectedTemplateId}
+                        onChange={setSelectedTemplateId}
+                        options={templates.map(t => ({
+                          label: t.name,
+                          value: t.id
+                        }))}
+                      />
+                    </div>
+
+                    {/* 生成脚本按钮 */}
+                    <div className="flex gap-2 sm:gap-3">
+                      <Button 
+                        type="primary" 
+                        icon={<PlaySquareOutlined />}
+                        onClick={handleGenerateCode}
+                        loading={generatingCode}
+                        size="large"
+                        block
+                        className="btn-gradient"
+                      >
+                        {generatedCode ? '重新生成脚本' : '生成脚本'}
                       </Button>
                     </div>
-                    {showTerminal && (
-                      <div 
-                        ref={terminalRef}
-                        className="bg-gray-900 text-gray-100 p-4 rounded-lg text-xs font-mono max-h-64 overflow-auto"
+
+                    {/* 脚本显示 */}
+                    {generatedCode && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
                       >
-                        {terminalLog || '等待渲染开始...\n'}
-                      </div>
+                        <Collapse defaultActiveKey={['code']}>
+                          <Panel 
+                            header={
+                              <div className="flex items-center gap-2">
+                                <PlaySquareOutlined className="text-[#0066FF]" />
+                                <span className="text-xs sm:text-sm">生成的动画脚本</span>
+                              </div>
+                            } 
+                            key="code"
+                          >
+                            <div className="code-block relative overflow-x-auto">
+                              <pre 
+                                ref={codeRef}
+                                className="text-xs sm:text-sm max-h-64 sm:max-h-96 overflow-y-auto"
+                              >
+                                {generatedCode}
+                              </pre>
+                            </div>
+                          </Panel>
+                        </Collapse>
+                      </motion.div>
                     )}
                   </div>
-                )}
+                )
+              },
+              {
+                key: 'video',
+                label: <span className="text-xs sm:text-sm"><CloudUploadOutlined /> 视频渲染</span>,
+                children: (
+                  <div className="space-y-3 sm:space-y-4">
+                    {/* 渲染进度显示 */}
+                    {generatingVideo && (
+                      <motion.div 
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 p-3 sm:p-4 rounded-xl border border-purple-100 dark:border-purple-800"
+                      >
+                        <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
+                          <Spin size="small" />
+                          <span className="text-xs sm:text-sm text-purple-600 dark:text-purple-400 font-medium">{videoMessage}</span>
+                        </div>
+                        <Progress 
+                          percent={videoProgress} 
+                          status="active"
+                          size="small"
+                          strokeColor={{
+                            '0%': '#722ed1',
+                            '100%': '#eb2f96',
+                          }}
+                        />
+                      </motion.div>
+                    )}
 
-                {/* 渲染失败时的返回按钮 */}
-                {renderError && (
-                  <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200">
-                    <p className="text-red-600 mb-3">渲染失败，返回对话让智能助手修复代码。</p>
-                    <Button type="primary" onClick={handleBackToEdit}>
-                      返回对话修复
-                    </Button>
+                    {/* 任务状态 */}
+                    {(task || generatingVideo || project?.video_url) ? (
+                      <motion.div 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="bg-gray-50 dark:bg-gray-800/50 p-3 sm:p-6 rounded-xl"
+                      >
+                        <div className="flex items-center justify-between mb-3 sm:mb-4">
+                          <span className="text-sm sm:font-medium">渲染状态</span>
+                          <span 
+                            className="status-badge text-xs"
+                            style={{ 
+                              backgroundColor: `${statusMap[task?.status || (generatingVideo ? 'processing' : 'completed')]?.color}20`,
+                              color: statusMap[task?.status || (generatingVideo ? 'processing' : 'completed')]?.color 
+                            }}
+                          >
+                            {statusMap[task?.status || (generatingVideo ? 'processing' : 'completed')]?.text}
+                          </span>
+                        </div>
+                        <Progress 
+                          percent={task?.progress || videoProgress} 
+                          status={task?.status === 'failed' || renderError ? 'exception' : task?.status === 'completed' || project?.video_url ? 'success' : 'active'}
+                          size="small"
+                          strokeColor={{
+                            '0%': '#0066FF',
+                            '100%': '#00CCFF',
+                          }}
+                        />
+                        {renderError && (
+                          <div className="text-red-500 mt-2 sm:mt-3 text-xs sm:text-sm bg-red-50 dark:bg-red-900/20 p-2 sm:p-3 rounded-lg">
+                            错误: {renderError}
+                          </div>
+                        )}
+                      </motion.div>
+                    ) : (
+                      <div className="text-center py-8 sm:py-12 text-gray-400 text-sm">
+                        尚未开始渲染
+                      </div>
+                    )}
+
+                    {/* 终端输出 */}
+                    {(showTerminal || terminalLog) && (
+                      <div className="mt-3 sm:mt-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium">终端输出</span>
+                          <Button size="small" onClick={() => setShowTerminal(!showTerminal)}>
+                            {showTerminal ? '收起' : '展开'}
+                          </Button>
+                        </div>
+                        {showTerminal && (
+                          <div 
+                            ref={terminalRef}
+                            className="bg-gray-900 text-gray-100 p-2 sm:p-4 rounded-lg text-xs font-mono max-h-48 sm:max-h-64 overflow-auto"
+                          >
+                            {terminalLog || '等待渲染开始...\n'}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* 渲染失败时的返回按钮 */}
+                    {renderError && (
+                      <div className="mt-3 sm:mt-4 p-3 sm:p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200">
+                        <p className="text-red-600 mb-2 sm:mb-3 text-xs sm:text-sm">渲染失败，返回对话让智能助手修复问题。</p>
+                        <Button type="primary" size="small" block className="sm:block sm:w-auto" onClick={handleBackToEdit}>
+                          返回对话修复
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* 渲染按钮 */}
+                    <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+                      <Button 
+                        type="primary"
+                        icon={<PlayCircleOutlined />}
+                        onClick={handleGenerateVideo}
+                        loading={generatingVideo}
+                        disabled={!generatedCode}
+                        size="large"
+                        block
+                        className="btn-gradient sm:block sm:w-auto sm:flex-1"
+                      >
+                        {task?.status === 'completed' ? '重新渲染' : '开始渲染视频'}
+                      </Button>
+
+                      {project?.video_url && (
+                        <Button 
+                          type="primary"
+                          icon={<DownloadOutlined />}
+                          onClick={handleDownloadVideo}
+                          size="large"
+                          block
+                          className="btn-gradient sm:block sm:w-auto"
+                        >
+                          下载视频
+                        </Button>
+                      )}
+                    </div>
+
+                    {/* 视频预览 */}
+                    {project?.video_url && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="mt-4 sm:mt-6"
+                      >
+                        <video
+                          src={project.video_url.startsWith('http') ? project.video_url : `${import.meta.env.VITE_API_BASE_URL || ''}${project.video_url}`}
+                          controls
+                          className="w-full rounded-xl shadow-lg"
+                          style={{ maxHeight: '50vh' }}
+                          playsInline
+                        >
+                          您的浏览器不支持视频播放
+                        </video>
+                      </motion.div>
+                    )}
                   </div>
-                )}
-
-                {/* 渲染按钮 */}
-                <div className="flex gap-3">
-                  <Button 
-                    type="primary"
-                    icon={<PlayCircleOutlined />}
-                    onClick={handleGenerateVideo}
-                    loading={generatingVideo}
-                    disabled={!generatedCode}
-                    size="large"
-                    className="btn-gradient"
-                  >
-                    {task?.status === 'completed' ? '重新渲染' : '开始渲染视频'}
-                  </Button>
-
-                  {project?.video_url && (
-                    <Button 
-                      type="primary"
-                      icon={<DownloadOutlined />}
-                      onClick={handleDownloadVideo}
-                      size="large"
-                      className="btn-gradient"
-                    >
-                      下载视频
-                    </Button>
-                  )}
-                </div>
-
-                {/* 视频预览 */}
-                {project?.video_url && (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="mt-6"
-                  >
-                    <video
-                      src={project.video_url.startsWith('http') ? project.video_url : `${import.meta.env.VITE_API_BASE_URL || ''}${project.video_url}`}
-                      controls
-                      className="w-full rounded-xl shadow-lg"
-                      style={{ maxHeight: '60vh' }}
-                    >
-                      您的浏览器不支持视频播放
-                    </video>
-                  </motion.div>
-                )}
-              </div>
-            </Tabs.TabPane>
-          </Tabs>
+                )
+              }
+            ]}
+          />
         </Card>
       </motion.div>
     </div>

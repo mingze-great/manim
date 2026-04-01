@@ -60,28 +60,28 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen p-6">
+    <div className="min-h-screen p-3 sm:p-6">
       {/* 头部 */}
       <motion.div 
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex justify-between items-center mb-8"
+        className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-6 sm:mb-8"
       >
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#0066FF] to-[#00CCFF] flex items-center justify-center">
-            <RocketOutlined className="text-2xl text-white" />
+        <div className="flex items-center gap-3 sm:gap-4">
+          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-[#0066FF] to-[#00CCFF] flex items-center justify-center">
+            <RocketOutlined className="text-xl sm:text-2xl text-white" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-800 dark:text-white">
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-white">
               我的项目
             </h1>
-            <p className="text-gray-500 dark:text-gray-400 text-sm">
+            <p className="text-gray-500 dark:text-gray-400 text-xs sm:text-sm">
               管理您的动画视频项目
             </p>
           </div>
         </div>
         
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 sm:gap-4 w-full sm:w-auto">
           {/* 主题切换按钮 */}
           <Button
             type="default"
@@ -107,7 +107,7 @@ export default function Dashboard() {
               }
               setModalVisible(true)
             }}
-            className="btn-gradient h-10 px-6"
+            className="btn-gradient h-9 sm:h-10 px-4 sm:px-6 flex-1 sm:flex-initial"
           >
             新建项目
           </Button>

@@ -444,3 +444,51 @@ code {
     transform: translateY(0);
   }
 }
+
+/* 移动端响应式优化 */
+@media (max-width: 768px) {
+  .auth-page {
+    padding: 16px;
+  }
+  
+  .glass-card {
+    padding: 24px 20px !important;
+    border-radius: 16px;
+  }
+  
+  .auth-shape-1 {
+    width: 250px;
+    height: 250px;
+  }
+  
+  .auth-shape-2 {
+    width: 180px;
+    height: 180px;
+  }
+  
+  .auth-shape-3 {
+    width: 120px;
+    height: 120px;
+  }
+}
+
+@media (max-width: 576px) {
+  .auth-page {
+    padding: 12px;
+    align-items: flex-start;
+    padding-top: 40px;
+  }
+  
+  .glass-card {
+    padding: 20px 16px !important;
+    border-radius: 12px;
+  }
+  
+  .auth-shape {
+    opacity: 0.05;
+  }
+  
+  .hover-lift:hover {
+    transform: none;
+  }
+}

@@ -163,14 +163,105 @@
 }
 
 @media (max-width: 768px) {
+  .history-page {
+    padding: 0 4px;
+  }
+  
   .history-header {
     flex-direction: column;
-    gap: 16px;
-    align-items: flex-start;
+    gap: 12px;
+    align-items: stretch;
+  }
+  
+  .history-header .ant-space {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  
+  .history-header .ant-btn {
+    font-size: 12px;
+    padding: 0 8px;
+  }
+  
+  .header-left {
+    text-align: center;
   }
   
   .projects-grid {
     grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  
+  .project-thumbnail {
+    height: 120px;
+  }
+  
+  .project-info {
+    padding: 12px;
+  }
+  
+  .project-name {
+    font-size: 14px;
+  }
+  
+  .project-meta {
+    font-size: 12px;
+  }
+  
+  .project-actions {
+    flex-wrap: wrap;
+  }
+  
+  .project-actions .ant-btn {
+    font-size: 11px;
+    padding: 0 6px;
+  }
+  
+  .stat-item {
+    gap: 12px;
+  }
+  
+  .stat-icon {
+    width: 40px;
+    height: 40px;
+    font-size: 16px;
+  }
+  
+  .stat-value {
+    font-size: 20px;
+  }
+  
+  .stat-label {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 576px) {
+  .history-header .ant-space {
+    gap: 4px;
+  }
+  
+  .history-header .ant-btn {
+    font-size: 11px;
+    height: 28px;
+    padding: 0 6px;
+  }
+  
+  .project-thumbnail {
+    height: 100px;
+  }
+  
+  .thumbnail-icon {
+    font-size: 36px;
+  }
+  
+  .project-actions .ant-btn {
+    flex: 1 1 45%;
+    margin-bottom: 4px;
+  }
+  
+  .stats-card .ant-col {
+    margin-bottom: 8px;
   }
 }
 

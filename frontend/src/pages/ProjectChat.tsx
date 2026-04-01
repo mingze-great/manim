@@ -273,9 +273,9 @@ export default function ProjectChat() {
   return (
     <div className="h-full flex flex-col bg-white dark:bg-gray-800">
       {/* 头部 */}
-      <div className="p-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-        <div>
-          <h2 className="text-base font-semibold">{project?.theme || '项目对话'}</h2>
+      <div className="p-2 sm:p-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-sm sm:text-base font-semibold truncate">{project?.theme || '项目对话'}</h2>
           <span className="text-xs px-2 py-0.5 rounded" style={{ 
             backgroundColor: `${statusBadgeMap[project?.status || 'draft']?.color}20`,
             color: statusBadgeMap[project?.status || 'draft']?.color 
@@ -287,29 +287,29 @@ export default function ProjectChat() {
       </div>
 
       {/* 消息列表 */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+      <div className="flex-1 overflow-y-auto p-2 sm:p-3 space-y-3">
         {conversations.length === 0 && (
-          <div className="text-center text-gray-400 py-8 px-4">
-            <RobotOutlined className="text-3xl mb-3 block" />
-            <p className="text-sm mb-4">欢迎使用 AI 视频创作助手</p>
-            <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-lg p-4 text-left text-xs">
+          <div className="text-center text-gray-400 py-4 sm:py-8 px-2 sm:px-4">
+            <RobotOutlined className="text-2xl sm:text-3xl mb-2 sm:mb-3 block" />
+            <p className="text-xs sm:text-sm mb-2 sm:mb-4">欢迎使用 AI 视频创作助手</p>
+            <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-lg p-3 sm:p-4 text-left text-xs">
               <p className="font-semibold mb-2">使用方法：</p>
               <p className="mb-1">1. 输入你想要的视频主题</p>
               <p className="mb-1">2. AI 会生成完整内容</p>
               <p className="mb-1">3. 满意后输入"满意"</p>
-              <p>4. 系统自动生成视频代码</p>
+              <p>4. 系统自动生成视频脚本</p>
             </div>
           </div>
         )}
         
         {conversations.map((conv) => (
           <div key={conv.id} className={`flex gap-2 ${conv.role === 'user' ? 'flex-row-reverse' : ''}`}>
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+            <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
               conv.role === 'user' ? 'bg-indigo-500' : 'bg-emerald-500'
-            } text-white text-sm`}>
+            } text-white text-xs sm:text-sm`}>
               {conv.role === 'user' ? <UserOutlined /> : <RobotOutlined />}
             </div>
-            <div className={`max-w-[75%] rounded-lg p-2 text-sm ${
+            <div className={`max-w-[85%] sm:max-w-[75%] rounded-lg p-2 text-xs sm:text-sm ${
               conv.role === 'user' 
                 ? 'bg-indigo-500 text-white' 
                 : 'bg-gray-100 dark:bg-gray-700'
@@ -414,9 +414,9 @@ export default function ProjectChat() {
         )}
       </div>
 
-      {/* 输入区域 */}
-      <div className="p-3 border-t border-gray-200 dark:border-gray-700">
-        <div className="text-xs text-gray-400 mb-2 text-center">
+{/* 输入区域 */}
+      <div className="p-2 sm:p-3 border-t border-gray-200 dark:border-gray-700">
+        <div className="text-xs text-gray-400 mb-1 sm:mb-2 text-center hidden sm:block">
           ⚠️ 视频将在 3 小时后自动清除 | 对话内容将在 24 小时后清除
         </div>
         <div className="flex gap-2">
@@ -438,30 +438,31 @@ export default function ProjectChat() {
         </div>
       </div>
 
-      {/* 代码确认弹窗 */}
+      {/* 脚本确认弹窗 */}
       <Modal
         title={
           <div className="flex items-center gap-2">
             <CheckCircleOutlined className="text-green-500" />
-            <span>AI 生成了新代码</span>
+            <span>AI 生成了新脚本</span>
           </div>
         }
         open={showCodeConfirm}
         onCancel={() => { setShowCodeConfirm(false); setPendingCode(null); }}
         footer={null}
-        width={700}
+        width="min(700px, 95vw)"
+        styles={{ body: { maxHeight: '60vh', overflow: 'auto' } }}
       >
-        <div className="text-xs text-gray-500 mb-2">代码预览（共 {pendingCode?.split('\n').length || 0} 行）：</div>
-        <pre className="text-xs bg-gray-900 text-green-400 p-3 rounded-lg mb-4 overflow-auto max-h-64">
+        <div className="text-xs text-gray-500 mb-2">脚本预览（共 {pendingCode?.split('\n').length || 0} 行）：</div>
+        <pre className="text-xs bg-gray-900 text-green-400 p-2 sm:p-3 rounded-lg mb-4 overflow-auto max-h-48 sm:max-h-64">
           {pendingCode?.split('\n').slice(0, 30).join('\n')}
           {pendingCode && pendingCode.split('\n').length > 30 && '\n...'}
         </pre>
-        <div className="flex gap-2 justify-end">
-          <Button onClick={() => { setShowCodeConfirm(false); setPendingCode(null); }}>
+        <div className="flex flex-col sm:flex-row gap-2 justify-end">
+          <Button onClick={() => { setShowCodeConfirm(false); setPendingCode(null); }} block className="sm:block sm:w-auto">
             重新生成
           </Button>
-          <Button type="primary" icon={<CheckCircleOutlined />} onClick={handleConfirmCode}>
-            使用此代码并渲染
+          <Button type="primary" icon={<CheckCircleOutlined />} onClick={handleConfirmCode} block className="sm:block sm:w-auto">
+            使用此脚本并渲染
           </Button>
         </div>
       </Modal>
