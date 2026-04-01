@@ -31,8 +31,8 @@ class Settings(BaseSettings):
     
     # DeepSeek (Priority 2)
     DEEPSEEK_API_KEY: str = ""
-    DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
-    DEEPSEEK_MODEL: str = "deepseek-chat"
+    DEEPSEEK_BASE_URL: str = "https://ai.1seey.com/v1"
+    DEEPSEEK_MODEL: str = "qwen3.5-plus"
     
     # Gemini (Priority 3)
     GEMINI_API_KEY: str = ""
