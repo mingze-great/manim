@@ -24,38 +24,28 @@ def get_templates(
 ):
     current_user_obj = current_user
     
-    # 构建基础查询
-    base_query = db.query(Template).filter(Template.is_active.is_(True))
-    
-    # 应用筛选条件  
-    if category:
-        base_query = base_query.filter(Template.category == category)
-    
-    # 获取系统模板（用户可见的）
-    system_query_result = db.query(Template).filter(
-        Template.is_active.is_(True),
-        Template.is_system.is_(True),
-        Template.is_visible.is_(True)
-    ).offset(skip).limit(limit).all()
-    
-    # 获取当前用户权限并执行查询
     user_is_admin = bool(current_user_obj.is_admin)
     current_user_id = current_user_obj.id
     
     if user_is_admin:
-        # 管理员能看到所有非系统模板
+        system_query_result = db.query(Template).filter(
+            Template.is_active.is_(True),
+            Template.is_system.is_(True)
+        ).offset(skip).limit(limit).all()
+        
         user_query_result = db.query(Template).filter(
             Template.is_active.is_(True),
             Template.is_system.is_(False)
         ).offset(skip).limit(limit).all()
     else:
-        # 普通用户只能看到自己创建的模板
-        user_query_result = db.query(Template).filter(
+        all_visible = db.query(Template).filter(
             Template.is_active.is_(True),
-            Template.user_id == current_user_id
+            Template.is_visible.is_(True)
         ).offset(skip).limit(limit).all()
+        
+        system_query_result = [t for t in all_visible if t.is_system]
+        user_query_result = [t for t in all_visible if not t.is_system]
     
-    # 将 SQLAlchemy 模型为 Pydantic 响应模型
     system_responses = [TemplateResponse.model_validate(t) for t in system_query_result]
     user_responses = [TemplateResponse.model_validate(t) for t in user_query_result]
     
