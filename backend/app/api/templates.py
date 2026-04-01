@@ -287,3 +287,110 @@ def delete_example_video(
         db.commit()
     
     return {"message": "Video deleted successfully"}
+
+
+@router.post("/{template_id}/render-preview")
+async def render_template_preview(
+    template_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    """渲染模板预览视频（仅管理员）"""
+    from app.services.background_task import task_manager
+    
+    current_user_obj = current_user
+    if not current_user_obj or not bool(current_user_obj.is_admin):
+        raise HTTPException(status_code=403, detail="Only administrators can render preview videos")
+    
+    template = db.query(Template).filter(Template.id == template_id).first()
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    if not template.code:
+        raise HTTPException(status_code=400, detail="Template has no code to render")
+    
+    bg_task = task_manager.create_task(
+        db=db,
+        task_type="render_template_preview",
+        project_id=0,
+        user_id=current_user_obj.id,
+        input_params={"template_id": template_id}
+    )
+    
+    task_manager.start_task(bg_task.id)
+    
+    return {
+        "message": "渲染任务已启动",
+        "task_id": bg_task.id,
+        "template_id": template_id
+    }
+
+
+@router.post("/render-all-previews")
+async def render_all_template_previews(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    """批量渲染所有系统模板预览视频（仅管理员）"""
+    from app.services.background_task import task_manager
+    
+    current_user_obj = current_user
+    if not current_user_obj or not bool(current_user_obj.is_admin):
+        raise HTTPException(status_code=403, detail="Only administrators can render preview videos")
+    
+    templates = db.query(Template).filter(
+        Template.is_system == True,
+        Template.is_active == True
+    ).all()
+    
+    if not templates:
+        return {"message": "没有系统模板需要渲染", "tasks": []}
+    
+    tasks = []
+    for template in templates:
+        if not template.code:
+            continue
+        
+        bg_task = task_manager.create_task(
+            db=db,
+            task_type="render_template_preview",
+            project_id=0,
+            user_id=current_user_obj.id,
+            input_params={"template_id": template.id}
+        )
+        
+        task_manager.start_task(bg_task.id)
+        tasks.append({
+            "task_id": bg_task.id,
+            "template_id": template.id,
+            "template_name": template.name
+        })
+    
+    return {
+        "message": f"已启动 {len(tasks)} 个渲染任务",
+        "tasks": tasks
+    }
+
+
+@router.get("/render-status/{task_id}")
+def get_render_status(
+    task_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    """获取渲染任务状态"""
+    from app.services.background_task import task_manager
+    from app.models.background_task import BackgroundTask
+    
+    bg_task = db.query(BackgroundTask).filter(BackgroundTask.id == task_id).first()
+    if not bg_task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    return {
+        "task_id": bg_task.id,
+        "status": bg_task.status,
+        "progress": bg_task.progress,
+        "message": bg_task.message,
+        "error": bg_task.error,
+        "result": bg_task.result
+    }

@@ -1,5 +1,8 @@
 import asyncio
 import json
+import os
+import subprocess
+import pathlib
 from datetime import datetime
 from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
@@ -7,6 +10,7 @@ from app.database import SessionLocal
 from app.models.background_task import BackgroundTask
 from app.models.project import Project
 from app.models.user import User
+from app.models.template import Template
 from app.services.manim import ManimService
 
 
@@ -61,6 +65,8 @@ class BackgroundTaskManager:
                     await self._run_generate_code(db, bg_task)
                 elif bg_task.task_type == "render_video":
                     await self._run_render_video(db, bg_task)
+                elif bg_task.task_type == "render_template_preview":
+                    await self._run_render_template_preview(db, bg_task)
                     
             except Exception as e:
                 import traceback
@@ -187,6 +193,107 @@ class BackgroundTaskManager:
     
     async def _run_render_video(self, db: Session, bg_task: BackgroundTask):
         pass
+    
+    async def _run_render_template_preview(self, db: Session, bg_task: BackgroundTask):
+        """渲染模板预览视频"""
+        try:
+            template_id = bg_task.input_params.get("template_id")
+            if not template_id:
+                raise ValueError("缺少 template_id 参数")
+            
+            template = db.query(Template).filter(Template.id == template_id).first()
+            if not template:
+                raise ValueError(f"模板 {template_id} 不存在")
+            
+            bg_task.progress = 10
+            bg_task.message = "准备渲染模板预览视频..."
+            db.commit()
+            
+            code = template.code
+            if not code:
+                raise ValueError("模板代码为空")
+            
+            output_dir = pathlib.Path(__file__).parent.parent / "videos" / "template_examples"
+            output_dir.mkdir(parents=True, exist_ok=True)
+            
+            temp_code_file = output_dir / f"temp_template_{template_id}.py"
+            temp_code_file.write_text(code, encoding='utf-8')
+            
+            bg_task.progress = 20
+            bg_task.message = "正在执行 Manim 渲染..."
+            db.commit()
+            
+            result = subprocess.run(
+                ["manim", "-qm", str(temp_code_file), "SceneName", "-o", f"template_{template_id}"],
+                cwd=str(output_dir),
+                capture_output=True,
+                text=True,
+                timeout=300
+            )
+            
+            if result.returncode != 0:
+                error_msg = result.stderr or result.stdout or "未知渲染错误"
+                raise RuntimeError(f"Manim 渲染失败: {error_msg[:500]}")
+            
+            bg_task.progress = 80
+            bg_task.message = "正在处理渲染结果..."
+            db.commit()
+            
+            media_dir = output_dir / "media" / "videos" / f"temp_template_{template_id}" / "720p30"
+            
+            video_files = list(media_dir.glob("*.mp4")) if media_dir.exists() else []
+            
+            if not video_files:
+                for p in output_dir.rglob("*.mp4"):
+                    if f"template_{template_id}" in p.name or f"temp_template_{template_id}" in str(p):
+                        video_files.append(p)
+            
+            if not video_files:
+                raise RuntimeError("未找到生成的视频文件")
+            
+            latest_video = max(video_files, key=lambda x: x.stat().st_mtime)
+            
+            final_filename = f"template_{template_id}_preview.mp4"
+            final_path = output_dir / final_filename
+            
+            if latest_video != final_path:
+                import shutil
+                shutil.move(str(latest_video), str(final_path))
+            
+            video_url = f"/api/videos/template_examples/{final_filename}"
+            template.example_video_url = video_url
+            db.commit()
+            
+            try:
+                if temp_code_file.exists():
+                    temp_code_file.unlink()
+                media_root = output_dir / "media"
+                if media_root.exists():
+                    import shutil
+                    shutil.rmtree(media_root)
+            except Exception:
+                pass
+            
+            bg_task.status = "completed"
+            bg_task.progress = 100
+            bg_task.message = "模板预览视频渲染完成"
+            bg_task.result = {"video_url": video_url, "template_id": template_id}
+            bg_task.completed_at = datetime.utcnow()
+            db.commit()
+            
+        except subprocess.TimeoutExpired:
+            bg_task.status = "failed"
+            bg_task.error = "渲染超时（超过5分钟）"
+            bg_task.completed_at = datetime.utcnow()
+            db.commit()
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            bg_task.status = "failed"
+            bg_task.error = str(e)
+            bg_task.completed_at = datetime.utcnow()
+            db.commit()
+            raise
     
     def get_task_status(self, db: Session, task_id: int) -> Optional[BackgroundTask]:
         return db.query(BackgroundTask).filter(BackgroundTask.id == task_id).first()
