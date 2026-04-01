@@ -163,6 +163,58 @@ class ManimService:
         
         return code
     
+    async def stream_generate_code(self, script: str, template_prompt: str = None):
+        """流式生成代码，yield (progress, content) 元组"""
+        system_prompt = template_prompt if template_prompt else MANIM_SYSTEM_PROMPT
+        
+        user_message = f"""请根据以下主题和内容生成 Manim 动画代码：
+
+{script}
+
+要求：
+1. 严格按内容要点数量生成动画
+2. 每个要点必须有标题和解释文案
+3. 代码必须完整可运行
+"""
+
+        stream = await self.client.stream_chat(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message}
+            ],
+            temperature=0.7,
+            max_tokens=30000
+        )
+        
+        full_content = ""
+        progress = 20
+        chunk_count = 0
+        
+        async for chunk in stream:
+            if chunk and chunk.choices:
+                delta = chunk.choices[0].delta
+                if hasattr(delta, 'content') and delta.content:
+                    full_content += delta.content
+                    chunk_count += 1
+                    
+                    if chunk_count % 20 == 0:
+                        progress = min(progress + 1, 75)
+                        yield (progress, full_content)
+        
+        if "```python" in full_content:
+            start = full_content.find("```python") + len("```python")
+            end = full_content.find("```", start)
+            if end != -1:
+                code = full_content[start:end].strip()
+            else:
+                code = full_content[start:].strip()
+        else:
+            code = full_content.strip()
+        
+        code = self.fix_manim_compatibility(code)
+        
+        yield (100, code)
+    
     def fix_manim_compatibility(self, code: str) -> str:
         """修复 Manim 代码兼容性问题"""
         import re

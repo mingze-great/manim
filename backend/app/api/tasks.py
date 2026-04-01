@@ -80,7 +80,20 @@ async def generate_code_stream(
             
             manim_service = ManimService(db_session)
             template_prompt = template.prompt if template else None
-            manim_code = await manim_service.generate_code(project_local.final_script, template_prompt)
+            
+            manim_code = None
+            async for progress, content in manim_service.stream_generate_code(
+                project_local.final_script, 
+                template_prompt
+            ):
+                if progress < 100:
+                    yield f"data: {json.dumps({'step': 'generating', 'progress': progress, 'message': f'AI正在生成代码... ({len(content)} 字符)'})}\n\n"
+                else:
+                    manim_code = content
+            
+            if not manim_code:
+                yield f"data: {json.dumps({'step': 'error', 'progress': 0, 'message': '代码生成失败：未获取到有效代码'})}\n\n"
+                return
             
             fixed_code, warnings = manim_service.validate_code(manim_code)
             
