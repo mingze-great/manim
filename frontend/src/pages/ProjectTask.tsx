@@ -12,7 +12,7 @@ const { Panel } = Collapse
 const statusMap: Record<string, { text: string; color: string }> = {
   pending: { text: '等待中', color: '#faad14' },
   processing: { text: '处理中', color: '#0066FF' },
-  code_generated: { text: '代码已生成', color: '#00CCFF' },
+  code_generated: { text: '脚本就绪', color: '#00CCFF' },
   completed: { text: '已完成', color: '#52c41a' },
   failed: { text: '失败', color: '#ff4d4f' },
 }
@@ -185,10 +185,10 @@ export default function ProjectTask() {
         } catch (e) {}
       }
 
-      message.success('代码生成完成！')
+      message.success('脚本生成完成！')
       await fetchProject()
     } catch (error: any) {
-      console.error('生成代码失败:', error)
+      console.error('生成脚本失败:', error)
       message.error(error.message || '生成失败')
     } finally {
       setGeneratingCode(false)
@@ -197,7 +197,7 @@ export default function ProjectTask() {
 
   const handleGenerateVideo = async () => {
     if (!generatedCode) {
-      message.warning('请先生成代码')
+      message.warning('请先生成脚本')
       return
     }
     
@@ -579,7 +579,7 @@ export default function ProjectTask() {
                 {/* 渲染失败时的返回按钮 */}
                 {renderError && (
                   <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200">
-                    <p className="text-red-600 mb-3">渲染失败，返回对话让智能助手修复代码。</p>
+                    <p className="text-red-600 mb-3">渲染失败，返回对话让智能助手修复问题。</p>
                     <Button type="primary" onClick={handleBackToEdit}>
                       返回对话修复
                     </Button>

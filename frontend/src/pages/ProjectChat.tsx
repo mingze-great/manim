@@ -11,7 +11,7 @@ const statusBadgeMap: Record<string, { text: string; color: string }> = {
   draft: { text: '草稿', color: '#faad14' },
   chatting: { text: '对话中', color: '#1890ff' },
   chatting_completed: { text: '已确认', color: '#52c41a' },
-  code_generated: { text: '代码就绪', color: '#722ed1' },
+  code_generated: { text: '脚本就绪', color: '#722ed1' },
   rendering: { text: '渲染中', color: '#fa8c16' },
   completed: { text: '已完成', color: '#52c41a' },
   failed: { text: '失败', color: '#ff4d4f' },
@@ -61,13 +61,13 @@ export default function ProjectChat() {
       if (currentCode) {
         setFixingCode(currentCode)
       }
-      const fixMessage = `渲染遇到以下错误，请基于当前代码修复：\n\n错误信息：\n\`\`\`\n${errorLog.substring(0, 1500)}\n\`\`\`\n\n请给出修复后的完整代码。`
+      const fixMessage = `渲染遇到以下错误，请基于当前内容修复：\n\n错误信息：\n\`\`\`\n${errorLog.substring(0, 1500)}\n\`\`\`\n\n请给出修复后的完整内容。`
       setInput(fixMessage)
       window.history.replaceState({}, document.title)
     } else if (location.state?.errorLog && location.state?.fromRender) {
       const errorLog = location.state.errorLog as string
       setErrorFromRender(errorLog)
-      setInput(`渲染遇到以下错误，请帮我修复代码：\n\`\`\`\n${errorLog.substring(0, 2000)}\n\`\`\``)
+      setInput(`渲染遇到以下错误，请帮我修复问题：\n\`\`\`\n${errorLog.substring(0, 2000)}\n\`\`\``)
       window.history.replaceState({}, document.title)
     }
   }, [location.state])
@@ -106,7 +106,7 @@ export default function ProjectChat() {
         await projectApi.update(Number(id), { manim_code: fixingCode })
         setFixingCode(null)
       } catch (error) {
-        console.error('保存代码失败')
+        console.error('保存脚本失败')
       }
     }
     
@@ -247,13 +247,13 @@ export default function ProjectChat() {
     if (!lastAiCode) return
     try {
       await projectApi.update(Number(id), { manim_code: lastAiCode, status: 'code_generated' })
-      message.success('代码已保存，跳转到渲染页面')
+      message.success('脚本已保存，跳转到渲染页面')
       setShowUseCodeButton(false)
       setLastAiCode(null)
       fetchProject()
       setTimeout(() => navigate(`/project/${id}/task`), 500)
     } catch (error) {
-      message.error('保存代码失败')
+      message.error('保存脚本失败')
     }
   }
 
@@ -261,12 +261,12 @@ export default function ProjectChat() {
     if (!pendingCode) return
     try {
       await projectApi.update(Number(id), { manim_code: pendingCode, status: 'code_generated' })
-      message.success('代码已保存，跳转到渲染页面')
+      message.success('脚本已保存，跳转到渲染页面')
       setShowCodeConfirm(false)
       setPendingCode(null)
       setTimeout(() => navigate(`/project/${id}/task`), 500)
     } catch (error) {
-      message.error('保存代码失败')
+      message.error('保存脚本失败')
     }
   }
 
@@ -294,10 +294,10 @@ export default function ProjectChat() {
             <p className="text-sm mb-4">欢迎使用 AI 视频创作助手</p>
             <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-lg p-4 text-left text-xs">
               <p className="font-semibold mb-2">使用方法：</p>
-              <p className="mb-1">1. 输入你想要的视频主题</p>
-              <p className="mb-1">2. AI 会生成完整内容</p>
-              <p className="mb-1">3. 满意后输入"满意"</p>
-              <p>4. 系统自动生成视频代码</p>
+<p className="mb-1">1. 输入你想要的视频主题</p>
+               <p className="mb-1">2. AI 会生成完整内容</p>
+               <p className="mb-1">3. 满意后输入"满意"</p>
+               <p>4. 系统自动生成视频脚本</p>
             </div>
           </div>
         )}
@@ -360,7 +360,7 @@ export default function ProjectChat() {
           <Alert
             type="warning"
             message="检测到渲染错误"
-            description="错误信息已填充到输入框，可直接发送给AI修复代码"
+            description="错误信息已填充到输入框，可直接发送给AI修复问题"
             className="mb-3"
             closable
             onClose={() => setErrorFromRender(null)}
@@ -370,13 +370,13 @@ export default function ProjectChat() {
         {showUseCodeButton && lastAiCode && (
           <div className="mb-3 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-green-600 font-medium">✅ AI生成了新代码</span>
+              <span className="text-green-600 font-medium">✅ AI生成了新脚本</span>
               <div className="flex gap-2">
                 <Button size="small" onClick={() => { setShowUseCodeButton(false); setLastAiCode(null); }}>
                   忽略
                 </Button>
                 <Button type="primary" size="small" icon={<CheckCircleOutlined />} onClick={handleUseCode}>
-                  使用此代码
+                  使用此脚本
                 </Button>
               </div>
             </div>
@@ -395,7 +395,7 @@ export default function ProjectChat() {
             block
             className="btn-gradient"
           >
-            生成代码和视频
+            生成脚本和视频
           </Button>
         ) : project?.manim_code ? (
           <Button
@@ -409,7 +409,7 @@ export default function ProjectChat() {
           </Button>
         ) : (
           <p className="text-xs text-gray-400 text-center">
-            输入"满意"确认内容，AI 将自动生成代码
+            输入"满意"确认内容，AI 将自动生成脚本
           </p>
         )}
       </div>
@@ -438,12 +438,12 @@ export default function ProjectChat() {
         </div>
       </div>
 
-      {/* 代码确认弹窗 */}
+      {/* 脚本确认弹窗 */}
       <Modal
         title={
           <div className="flex items-center gap-2">
             <CheckCircleOutlined className="text-green-500" />
-            <span>AI 生成了新代码</span>
+            <span>AI 生成了新脚本</span>
           </div>
         }
         open={showCodeConfirm}
@@ -451,7 +451,7 @@ export default function ProjectChat() {
         footer={null}
         width={700}
       >
-        <div className="text-xs text-gray-500 mb-2">代码预览（共 {pendingCode?.split('\n').length || 0} 行）：</div>
+        <div className="text-xs text-gray-500 mb-2">脚本预览（共 {pendingCode?.split('\n').length || 0} 行）：</div>
         <pre className="text-xs bg-gray-900 text-green-400 p-3 rounded-lg mb-4 overflow-auto max-h-64">
           {pendingCode?.split('\n').slice(0, 30).join('\n')}
           {pendingCode && pendingCode.split('\n').length > 30 && '\n...'}
@@ -461,7 +461,7 @@ export default function ProjectChat() {
             重新生成
           </Button>
           <Button type="primary" icon={<CheckCircleOutlined />} onClick={handleConfirmCode}>
-            使用此代码并渲染
+            使用此脚本并渲染
           </Button>
         </div>
       </Modal>

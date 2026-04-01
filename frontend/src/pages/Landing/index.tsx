@@ -2,9 +2,9 @@ import { useNavigate } from 'react-router-dom'
 import { Link } from 'react-router-dom'
 import { Button, Card, Row, Col } from 'antd'
 import {
-  CodeOutlined, ThunderboltOutlined,
+  ThunderboltOutlined,
   ArrowRightOutlined,
-  RobotOutlined, DownloadOutlined
+  RobotOutlined, DownloadOutlined, PlaySquareOutlined
 } from '@ant-design/icons'
 import { useAuthStore } from '@/stores/authStore'
 import './Landing.css'
@@ -16,9 +16,9 @@ const features = [
     desc: '与大模型多轮对话，不断优化视频主题与内容',
   },
   {
-    icon: <CodeOutlined />,
-    title: '自动代码生成',
-    desc: '一键生成专业级 Manim 动画代码，无需编程基础',
+    icon: <PlaySquareOutlined />,
+    title: '智能脚本生成',
+    desc: '一键生成专业级动画脚本，无需任何技术基础',
   },
   {
     icon: <ThunderboltOutlined />,
@@ -113,8 +113,8 @@ export default function Landing() {
               <span className="gradient-text">思维可视化动画</span>
             </h1>
             <p className="hero-desc">
-              输入视频主题，帮你完成创意策划、代码生成、视频渲染全流程。
-              无需编程基础，人人都能制作专业的思维可视化动画。
+              输入视频主题，帮你完成创意策划、脚本生成、视频渲染全流程。
+              无需任何技术基础，人人都能制作专业的思维可视化动画。
             </p>
             <div className="hero-actions">
               <Button type="primary" size="large" onClick={handleStart}>
