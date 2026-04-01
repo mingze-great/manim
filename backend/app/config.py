@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     DEEPSEEK_BASE_URL: str = "https://openrouter.fans/v1"
     DEEPSEEK_MODEL: str = "deepseek/deepseek-v3.2"
     
+    # DeepSeek Fallback (降级模型)
+    DEEPSEEK_FALLBACK_API_KEY: str = ""
+    DEEPSEEK_FALLBACK_BASE_URL: str = "https://ai.1seey.com/v1"
+    DEEPSEEK_FALLBACK_MODEL: str = "qwen3.5-plus"
+    
     # Gemini (Priority 3)
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-2.0-flash"

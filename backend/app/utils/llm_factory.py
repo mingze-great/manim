@@ -99,43 +99,123 @@ class DashScopeAdapter(LLMAdapter):
 
 
 class DeepSeekAdapter(LLMAdapter):
-    """DeepSeek 适配器 - 兼容 OpenAI 格式"""
+    """DeepSeek 适配器 - 支持降级到备用模型"""
     
     def __init__(self):
         from openai import AsyncOpenAI
+        import httpx
+        
+        # 主 API
         self.client = AsyncOpenAI(
             api_key=settings.DEEPSEEK_API_KEY,
-            base_url=settings.DEEPSEEK_BASE_URL
+            base_url=settings.DEEPSEEK_BASE_URL,
+            timeout=httpx.Timeout(120.0, connect=30.0)
         )
+        self.model = settings.DEEPSEEK_MODEL
+        
+        # 降级 API
+        self.fallback_client = None
+        self.fallback_model = settings.DEEPSEEK_FALLBACK_MODEL
+        if settings.DEEPSEEK_FALLBACK_API_KEY:
+            self.fallback_client = AsyncOpenAI(
+                api_key=settings.DEEPSEEK_FALLBACK_API_KEY,
+                base_url=settings.DEEPSEEK_FALLBACK_BASE_URL,
+                timeout=httpx.Timeout(180.0, connect=30.0)
+            )
     
     async def chat(self, messages: list[dict], model: str = None, **kwargs) -> str:
-        model = model or settings.DEEPSEEK_MODEL
-        response = await self.client.chat.completions.create(
-            model=model,
-            messages=messages,
-            **kwargs
-        )
-        return response.choices[0].message.content
+        model = model or self.model
+        
+        # 尝试主 API
+        try:
+            print(f"[DeepSeek] 使用主模型: {model}")
+            response = await self.client.chat.completions.create(
+                model=model,
+                messages=messages,
+                **kwargs
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            print(f"[DeepSeek] 主模型失败: {e}")
+            
+            # 降级到备用 API
+            if self.fallback_client:
+                print(f"[DeepSeek] 降级到备用模型: {self.fallback_model}")
+                try:
+                    response = await self.fallback_client.chat.completions.create(
+                        model=self.fallback_model,
+                        messages=messages,
+                        **kwargs
+                    )
+                    return response.choices[0].message.content
+                except Exception as fallback_error:
+                    print(f"[DeepSeek] 备用模型也失败: {fallback_error}")
+                    raise fallback_error
+            raise e
     
     async def chat_with_response(self, messages: list[dict], model: str = None, **kwargs):
-        model = model or settings.DEEPSEEK_MODEL
-        response = await self.client.chat.completions.create(
-            model=model,
-            messages=messages,
-            **kwargs
-        )
-        return response
+        model = model or self.model
+        
+        # 尝试主 API
+        try:
+            print(f"[DeepSeek] 使用主模型: {model}")
+            response = await self.client.chat.completions.create(
+                model=model,
+                messages=messages,
+                **kwargs
+            )
+            return response
+        except Exception as e:
+            print(f"[DeepSeek] 主模型失败: {e}")
+            
+            # 降级到备用 API
+            if self.fallback_client:
+                print(f"[DeepSeek] 降级到备用模型: {self.fallback_model}")
+                try:
+                    response = await self.fallback_client.chat.completions.create(
+                        model=self.fallback_model,
+                        messages=messages,
+                        **kwargs
+                    )
+                    return response
+                except Exception as fallback_error:
+                    print(f"[DeepSeek] 备用模型也失败: {fallback_error}")
+                    raise fallback_error
+            raise e
     
     async def stream_chat(self, messages: list[dict], model: str = None, **kwargs):
-        model = model or settings.DEEPSEEK_MODEL
-        response = await self.client.chat.completions.create(
-            model=model,
-            messages=messages,
-            stream=True,
-            stream_options={"include_usage": True},
-            **kwargs
-        )
-        return response
+        model = model or self.model
+        
+        # 尝试主 API
+        try:
+            print(f"[DeepSeek] 使用主模型(流式): {model}")
+            response = await self.client.chat.completions.create(
+                model=model,
+                messages=messages,
+                stream=True,
+                stream_options={"include_usage": True},
+                **kwargs
+            )
+            return response
+        except Exception as e:
+            print(f"[DeepSeek] 主模型失败: {e}")
+            
+            # 降级到备用 API
+            if self.fallback_client:
+                print(f"[DeepSeek] 降级到备用模型(流式): {self.fallback_model}")
+                try:
+                    response = await self.fallback_client.chat.completions.create(
+                        model=self.fallback_model,
+                        messages=messages,
+                        stream=True,
+                        stream_options={"include_usage": True},
+                        **kwargs
+                    )
+                    return response
+                except Exception as fallback_error:
+                    print(f"[DeepSeek] 备用模型也失败: {fallback_error}")
+                    raise fallback_error
+            raise e
 
 
 class GeminiAdapter(LLMAdapter):
