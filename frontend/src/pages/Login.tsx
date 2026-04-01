@@ -15,9 +15,17 @@ export default function Login() {
     setLoading(true)
     try {
       const { data: loginData } = await authApi.login(values)
+      
+      login(loginData.access_token, { 
+        id: 0, 
+        username: values.username, 
+        email: '', 
+        is_admin: false,
+        is_approved: false
+      })
+      
       const { data: userData } = await authApi.me()
       
-      // 检查账号状态（管理员跳过审批检查）
       if (userData.is_expired) {
         message.error('账号已过期，请联系管理员续费')
         return

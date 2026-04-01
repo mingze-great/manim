@@ -21,13 +21,18 @@ export const authApi = {
     const response = await axios.post(`${API_BASE}/auth/login`, params, {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
     })
-    // 保存token到localStorage
-    localStorage.setItem('auth-token', response.data.access_token)
     return response
   },
   register: (data: RegisterRequest) => axios.post(`${API_BASE}/auth/register`, data),
   me: () => {
-    const token = localStorage.getItem('auth-token')
+    const stored = localStorage.getItem('auth-storage')
+    let token = null
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored)
+        token = parsed.state?.token
+      } catch (e) {}
+    }
     return axios.get(`${API_BASE}/auth/me`, {
       headers: { Authorization: `Bearer ${token}` }
     })

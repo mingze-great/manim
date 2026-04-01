@@ -19,6 +19,7 @@ interface AuthState {
   isAuthenticated: () => boolean
   login: (token: string, user: User) => void
   logout: () => void
+  setUser: (user: User) => void
   updateActivity: () => void
   checkExpiration: () => boolean
 }
@@ -32,6 +33,7 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: () => !!get().token,
       login: (token, user) => set({ token, user, lastActivity: Date.now() }),
       logout: () => set({ token: null, user: null, lastActivity: Date.now() }),
+      setUser: (user) => set({ user }),
       updateActivity: () => set({ lastActivity: Date.now() }),
       checkExpiration: () => {
         const { user } = get()
@@ -48,8 +50,7 @@ export const useAuthStore = create<AuthState>()(
   )
 )
 
-// 自动登出检查（10分钟无操作）
-const INACTIVITY_TIMEOUT = 10 * 60 * 1000 // 10分钟
+const INACTIVITY_TIMEOUT = 10 * 60 * 1000
 
 export const startInactivityCheck = (onLogout: () => void) => {
   let timeoutId: ReturnType<typeof setTimeout>
@@ -61,7 +62,7 @@ export const startInactivityCheck = (onLogout: () => void) => {
       if (token && Date.now() - lastActivity > INACTIVITY_TIMEOUT) {
         onLogout()
       } else if (token) {
-        resetTimer() // 继续检查
+        resetTimer()
       }
     }, INACTIVITY_TIMEOUT)
   }
