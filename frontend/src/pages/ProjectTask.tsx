@@ -24,6 +24,7 @@ export default function ProjectTask() {
   const [loading, setLoading] = useState(true)
   const [generatingCode, setGeneratingCode] = useState(false)
   const [generatingVideo, setGeneratingVideo] = useState(false)
+  const [downloadingVideo, setDownloadingVideo] = useState(false)
   const [codeProgress, setCodeProgress] = useState(0)
   const [codeMessage, setCodeMessage] = useState('')
   const [videoProgress, setVideoProgress] = useState(0)
@@ -332,8 +333,23 @@ useEffect(() => {
 
   const handleDownloadVideo = async () => {
     const videoUrl = task?.video_url || project?.video_url
-    if (videoUrl) {
-      try {
+    if (!videoUrl) return
+    
+    setDownloadingVideo(true)
+    
+    try {
+      // 如果是 COS URL，直接下载，不需要 fetch
+      if (videoUrl.includes('cos.ap-beijing.myqcloud.com')) {
+        const a = document.createElement('a')
+        a.href = videoUrl
+        a.download = `video_${id}_${Date.now()}.mp4`
+        a.target = '_blank'
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        message.success('开始下载视频')
+      } else {
+        // 本地 API 路径，需要 fetch
         const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
         const token = useAuthStore.getState().token
         const fullUrl = videoUrl.startsWith('http') ? videoUrl : `${API_BASE}${videoUrl}`
@@ -356,9 +372,12 @@ useEffect(() => {
         document.body.removeChild(a)
         URL.revokeObjectURL(url)
         message.success('视频下载成功')
-      } catch (error) {
-        message.error('视频下载失败，请重试')
       }
+    } catch (error) {
+      console.error('下载失败:', error)
+      message.error('视频下载失败，请重试')
+    } finally {
+      setDownloadingVideo(false)
     }
   }
 
@@ -635,10 +654,12 @@ useEffect(() => {
                       type="primary"
                       icon={<DownloadOutlined />}
                       onClick={handleDownloadVideo}
+                      loading={downloadingVideo}
+                      disabled={downloadingVideo}
                       size="large"
                       className="btn-gradient"
                     >
-                      下载视频
+                      {downloadingVideo ? '下载中...' : '下载视频'}
                     </Button>
                   )}
                 </div>
