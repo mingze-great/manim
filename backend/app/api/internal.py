@@ -24,7 +24,14 @@ def get_python_path() -> str:
     if sys.platform == "win32":
         return "python"
     else:
-        return "/root/miniconda3/envs/manim311/bin/python"
+        paths = [
+            "/root/miniconda3/envs/manim311/bin/python",
+            "/opt/miniconda3/envs/manim311/bin/python"
+        ]
+        for path in paths:
+            if os.path.exists(path):
+                return path
+        return paths[0]
 
 
 class RenderRequest(BaseModel):
