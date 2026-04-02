@@ -8,16 +8,34 @@
 
 | 分支名 | 用途 | 说明 |
 |--------|------|------|
-| `feature-chat-render-button` | 稳定版本分支 | **禁止修改**，远程纯净分支 |
-| `feature-local-test` | 远程备份分支 | 用于远程备份 |
-| `feature-dev-local` | 本地开发分支 | 日常开发使用 |
-| `feature-global-constraints` | 约束文档分支 | 当前分支，存放约束文档 |
+| `main` | **主分支** | 最新的稳定版本，部署基准 |
+| `feature/template-preview-video` | 当前开发分支 | 日常开发使用 |
+| `backup-template-preview-video-20260402` | 备份分支 | 安全备份，禁止修改 |
 
 **规则：**
-1. 所有新功能开发在 `feature-dev-local` 分支进行
-2. 功能完成后合并到 `feature-chat-render-button` 进行测试
-3. 测试通过后合并到 `master` 触发 CI/CD 部署
-4. **永远不要直接修改 `feature-chat-render-button` 分支**
+1. 所有新功能开发在当前开发分支进行
+2. **每次部署前必须合并到 `main` 分支**，保证 `main` 始终是最新状态
+3. 如果当前分支出现问题，可以从 `main` 分支恢复
+4. **永远不要直接修改备份分支**
+
+**部署前合并流程：**
+```bash
+# 1. 提交当前分支的更改
+git add . && git commit -m "feat: xxx"
+
+# 2. 推送当前分支
+git push origin feature/template-preview-video
+
+# 3. 切换到 main 并合并
+git checkout main
+git merge feature/template-preview-video
+
+# 4. 推送 main
+git push origin main
+
+# 5. 切回开发分支继续开发
+git checkout feature/template-preview-video
+```
 
 ---
 
@@ -189,6 +207,7 @@ backend/app/
 | 2026-03-24 | 添加统计数据模型和页面 |
 | 2026-03-24 | 添加"最小修改原则"约束规则 |
 | 2026-04-01 | 添加分支合并规范约束 |
+| 2026-04-02 | 更新分支结构，添加部署前合并到 main 分支的规则 |
 
 ---
 
@@ -219,4 +238,4 @@ curl -sk https://manim.asia/health
 
 ---
 
-*最后更新：2026-03-24*
+*最后更新：2026-04-02*
