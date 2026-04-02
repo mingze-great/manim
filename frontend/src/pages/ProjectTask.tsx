@@ -24,6 +24,8 @@ export default function ProjectTask() {
   const [loading, setLoading] = useState(true)
   const [generatingCode, setGeneratingCode] = useState(false)
   const [generatingVideo, setGeneratingVideo] = useState(false)
+  const [codeProgress, setCodeProgress] = useState(0)
+  const [codeMessage, setCodeMessage] = useState('')
   const [videoProgress, setVideoProgress] = useState(0)
   const [videoMessage, setVideoMessage] = useState('')
   const [generatedCode, setGeneratedCode] = useState('')
@@ -124,6 +126,8 @@ useEffect(() => {
 
   const handleGenerateCode = async () => {
     setGeneratingCode(true)
+    setCodeProgress(0)
+    setCodeMessage('正在开始生成...')
     setGeneratedCode('')
 
     try {
@@ -182,6 +186,8 @@ useEffect(() => {
           
           try {
             const data = JSON.parse(trimmed)
+            setCodeProgress(data.progress || 0)
+            setCodeMessage(data.message || '')
             
             if (data.code) {
               setGeneratedCode(data.code)
@@ -402,6 +408,28 @@ useEffect(() => {
           <Tabs activeKey={activeTab} onChange={setActiveTab}>
             <Tabs.TabPane tab={<span><PlaySquareOutlined /> 脚本生成</span>} key="code">
               <div className="space-y-4">
+                {/* 进度显示 */}
+                {generatingCode && (
+                  <motion.div 
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    className="bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 p-4 rounded-xl border border-blue-100 dark:border-blue-800"
+                  >
+                    <div className="flex items-center gap-3 mb-3">
+                      <Spin />
+                      <span className="text-blue-600 dark:text-blue-400 font-medium">{codeMessage}</span>
+                    </div>
+                    <Progress 
+                      percent={codeProgress} 
+                      status="active"
+                      strokeColor={{
+                        '0%': '#0066FF',
+                        '100%': '#00CCFF',
+                      }}
+                    />
+                  </motion.div>
+                )}
+
                 {/* 模板和模型选择 */}
                 <div className="mb-4">
                   <div className="flex items-center gap-3 flex-wrap mb-2">
