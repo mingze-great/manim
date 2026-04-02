@@ -25,8 +25,8 @@ class Settings(BaseSettings):
     DASHSCOPE_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     
     # 代码生成模型配置
-    DASHSCOPE_CODE_MODEL: str = "qwen3-coder-next"  # 主代码模型
-    DASHSCOPE_CODE_FALLBACK_MODEL: str = "deepseek-v3.2"  # 代码降级模型
+    DASHSCOPE_CODE_MODEL: str = "deepseek-v3.2"  # 主代码模型（推荐首次使用）
+    DASHSCOPE_CODE_FALLBACK_MODEL: str = "qwen3-coder-next"  # 代码降级模型
     
     # 文本对话模型配置
     DASHSCOPE_CHAT_MODEL: str = "deepseek-v3.1"  # 主对话模型

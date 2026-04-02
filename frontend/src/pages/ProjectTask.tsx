@@ -457,9 +457,12 @@ useEffect(() => {
                     </div>
                     
                     <div>
-                      <label className="block text-sm text-gray-500 mb-1">AI 模型</label>
+                      <label className="block text-sm text-gray-500 mb-1">
+                        AI 模型
+                        <span className="text-xs text-green-500 ml-2">推荐首次使用 DeepSeek V3.2</span>
+                      </label>
                       <Select
-                        placeholder="默认模型"
+                        placeholder="默认 DeepSeek V3.2"
                         style={{ width: 200 }}
                         value={selectedModel}
                         onChange={setSelectedModel}
@@ -467,9 +470,9 @@ useEffect(() => {
                       >
                         {availableModels.map(m => (
                           <Select.Option key={m} value={m}>
-                            {m === 'qwen3-coder-next' ? 'Qwen3 Coder（推荐）' : 
+                            {m === 'deepseek-v3.2' ? 'DeepSeek V3.2（推荐）' : 
+                             m === 'qwen3-coder-next' ? 'Qwen3 Coder（备用）' :
                              m === 'deepseek-v3.1' ? 'DeepSeek V3.1' :
-                             m === 'deepseek-v3.2' ? 'DeepSeek V3.2' :
                              m === 'qwen3.5-plus' ? 'Qwen3.5 Plus' : m}
                           </Select.Option>
                         ))}
@@ -499,7 +502,7 @@ useEffect(() => {
                   {/* 提示文字 */}
                   <div className="text-xs text-gray-400 space-y-1">
                     <p>• 视频风格模板：选择后生成的脚本会按模板风格渲染，不选则使用默认风格</p>
-                    <p>• AI 模型：推荐使用 Qwen3 Coder（代码生成专用），不选则使用默认模型</p>
+                    <p>• AI 模型：推荐首次使用 DeepSeek V3.2，出错时自动切换到 Qwen3 Coder</p>
                     {selectedTemplateId && templates.find(t => t.id === selectedTemplateId)?.description && (
                       <p className="text-blue-500">• {templates.find(t => t.id === selectedTemplateId)?.description}</p>
                     )}
