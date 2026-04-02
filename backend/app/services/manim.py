@@ -173,7 +173,7 @@ class ManimService:
                 {"role": "user", "content": user_message}
             ],
             temperature=0.7,
-            max_tokens=15000
+            max_tokens=8000
         )
         
         if "```python" in content:
