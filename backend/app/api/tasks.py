@@ -26,6 +26,26 @@ router = APIRouter(prefix="/tasks", tags=["tasks"])
 settings = get_settings()
 
 RENDER_SEMAPHORE = asyncio.Semaphore(3)
+CURRENT_RENDERS = 0
+RENDER_QUEUE_INFO = {"waiting": 0, "total_capacity": 3}
+
+
+@router.get("/render-status")
+async def get_render_status():
+    """获取渲染状态信息"""
+    from app.services.render_dispatcher import render_dispatcher
+    
+    old_server_status = await render_dispatcher.check_old_server_status()
+    
+    return {
+        "new_server": {
+            "max_concurrent": 3,
+            "current_renders": CURRENT_RENDERS,
+            "available_slots": 3 - CURRENT_RENDERS
+        },
+        "old_server": old_server_status,
+        "total_capacity": 3 + (old_server_status.get("max_concurrent_renders", 0) if old_server_status.get("status") == "healthy" else 0)
+    }
 
 
 @router.get("/available-models")
@@ -165,9 +185,11 @@ async def render_video_stream(
     
     async def event_generator():
         from app.database import SessionLocal
+        global CURRENT_RENDERS
         db_session = SessionLocal()
         
         async with RENDER_SEMAPHORE:
+            CURRENT_RENDERS += 1
             try:
                 project_local = db_session.query(Project).filter(Project.id == project_id).first()
                 if not project_local:
@@ -298,6 +320,7 @@ async def render_video_stream(
                 traceback.print_exc()
                 yield f"data: {json.dumps({'type': 'error', 'content': f'渲染异常: {str(e)}'})}\n\n"
             finally:
+                CURRENT_RENDERS -= 1
                 db_session.close()
     
     return StreamingResponse(

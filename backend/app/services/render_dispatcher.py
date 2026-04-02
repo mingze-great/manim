@@ -20,7 +20,8 @@ class RenderDispatcher:
     ) -> AsyncGenerator[str, None]:
         async with httpx.AsyncClient(timeout=600.0) as client:
             try:
-                response = await client.post(
+                async with client.stream(
+                    "POST",
                     f"{self.old_server_url}/api/internal/render",
                     json={
                         "project_id": project_id,
@@ -29,11 +30,10 @@ class RenderDispatcher:
                     headers={
                         "X-Internal-Key": self.internal_api_key
                     }
-                )
-                
-                async for line in response.aiter_lines():
-                    if line.startswith("data: "):
-                        yield line
+                ) as response:
+                    async for line in response.aiter_lines():
+                        if line.startswith("data: "):
+                            yield line
                 
             except httpx.ConnectError:
                 yield f"data: {json.dumps({'type': 'error', 'content': '无法连接到旧服务器'})}\n\n"
