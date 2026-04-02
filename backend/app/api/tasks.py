@@ -163,7 +163,7 @@ async def generate_code_stream(
             manim_service = ManimService(db_session)
             
             # 发送中间进度提示
-            yield f"data: {json.dumps({'step': 'generate', 'progress': 30, 'message': '正在调用 AI 生成代码，预计需要 1-2 分钟...'})}\n\n"
+            yield f"data: {json.dumps({'step': 'generate', 'progress': 30, 'message': '正在生成脚本，预计需要 1-2 分钟...'})}\n\n"
             
             manim_code = await manim_service.generate_code(
                 project_local.final_script, 
@@ -172,7 +172,7 @@ async def generate_code_stream(
                 model=model
             )
             
-            yield f"data: {json.dumps({'step': 'generate', 'progress': 70, 'message': '代码生成完成，正在验证...'})}\n\n"
+            yield f"data: {json.dumps({'step': 'generate', 'progress': 70, 'message': '脚本生成完成，正在验证...'})}\n\n"
             
             fixed_code, warnings = manim_service.validate_code(manim_code)
             

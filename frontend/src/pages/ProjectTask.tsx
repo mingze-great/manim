@@ -362,17 +362,6 @@ useEffect(() => {
     }
   }
 
-  const handleBackToEdit = () => {
-    const errorLog = terminalLog ? terminalLog.split('\n').slice(-100).join('\n') : ''
-    navigate(`/project/${id}/chat`, { 
-      state: { 
-        renderErrorLog: errorLog,
-        currentCode: generatedCode,
-        fromRender: true 
-      } 
-    })
-  }
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -620,9 +609,9 @@ useEffect(() => {
                 {/* 渲染失败时的返回按钮 */}
                 {renderError && (
                   <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200">
-                    <p className="text-red-600 mb-3">渲染失败，返回对话让智能助手修复问题。</p>
-                    <Button type="primary" onClick={handleBackToEdit}>
-                      返回对话修复
+                    <p className="text-red-600 mb-3">渲染失败，建议返回脚本生成页面，更换 AI 模型重新生成脚本后再试。</p>
+                    <Button type="primary" onClick={() => setActiveTab('code')}>
+                      返回脚本生成
                     </Button>
                   </div>
                 )}
