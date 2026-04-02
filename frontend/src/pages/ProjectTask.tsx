@@ -471,6 +471,38 @@ useEffect(() => {
                   )}
                 </div>
 
+                {/* 模板和模型选择 */}
+                <div className="flex gap-3 flex-wrap">
+                  <Select
+                    placeholder="选择视频风格模板（可选）"
+                    style={{ width: 220 }}
+                    value={selectedTemplateId}
+                    onChange={setSelectedTemplateId}
+                    allowClear
+                  >
+                    {templates.map(t => (
+                      <Select.Option key={t.id} value={t.id}>{t.name}</Select.Option>
+                    ))}
+                  </Select>
+                  
+                  <Select
+                    placeholder="选择模型（可选）"
+                    style={{ width: 200 }}
+                    value={selectedModel}
+                    onChange={setSelectedModel}
+                    allowClear
+                  >
+                    {availableModels.map(m => (
+                      <Select.Option key={m} value={m}>
+                        {m === 'qwen3-coder-next' ? 'Qwen3 Coder（推荐）' : 
+                         m === 'deepseek-v3.1' ? 'DeepSeek V3.1' :
+                         m === 'deepseek-v3.2' ? 'DeepSeek V3.2' :
+                         m === 'qwen3.5-plus' ? 'Qwen3.5 Plus' : m}
+                      </Select.Option>
+                    ))}
+                  </Select>
+                </div>
+
                 {/* 生成脚本按钮 */}
                 <div className="flex gap-3">
                   <Button 
