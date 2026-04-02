@@ -35,6 +35,8 @@ export default function ProjectTask() {
   const [terminalLog, setTerminalLog] = useState('')
   const [showTerminal, setShowTerminal] = useState(false)
   const [renderError, setRenderError] = useState<string | null>(null)
+  const [selectedModel, setSelectedModel] = useState<string>('')
+  const [availableModels, setAvailableModels] = useState<string[]>([])
   const [templates, setTemplates] = useState<Template[]>([])
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null)
   const [videoPreviewVisible, setVideoPreviewVisible] = useState(false)
@@ -79,10 +81,26 @@ export default function ProjectTask() {
       console.error('获取模板失败:', error)
     }
   }
+  
+  const fetchAvailableModels = async () => {
+    try {
+      const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
+      const response = await fetch(`${API_BASE}/api/tasks/available-models`)
+      if (response.ok) {
+        const data = await response.json()
+        setAvailableModels(data.models || [])
+      }
+    } catch (error) {
+      console.error('获取模型列表失败:', error)
+    }
+  }
 
-  useEffect(() => {
-    fetchProject()
-    fetchTemplates()
+useEffect(() => {
+    if (id) {
+      fetchProject()
+      fetchTemplates()
+      fetchAvailableModels()
+    }
   }, [id])
 
   useEffect(() => {
@@ -118,6 +136,11 @@ export default function ProjectTask() {
       let streamUrl = `${API_BASE}/api/tasks/${id}/generate-code`
       if (selectedTemplateId) {
         streamUrl += `?template_id=${selectedTemplateId}`
+        if (selectedModel) {
+          streamUrl += `&model=${selectedModel}`
+        }
+      } else if (selectedModel) {
+        streamUrl += `?model=${selectedModel}`
       }
       console.log('[generateCode] streamUrl:', streamUrl)
       let headers: any = {
