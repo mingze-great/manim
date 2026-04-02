@@ -26,6 +26,17 @@ router = APIRouter(prefix="/tasks", tags=["tasks"])
 settings = get_settings()
 
 
+@router.get("/available-models")
+async def get_available_models():
+    """获取可用的模型列表"""
+    from app.utils.llm_factory import LLMFactory
+    return {
+        "models": LLMFactory.get_available_models(),
+        "default_code_model": LLMFactory.get_code_model(),
+        "default_chat_model": LLMFactory.get_chat_model()
+    }
+
+
 def get_python_path() -> str:
     if sys.platform == "win32":
         return "python"
@@ -39,6 +50,7 @@ async def generate_code_stream(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
     template_id: Optional[int] = Query(None),
+    model: Optional[str] = Query(None),
 ):
     """生成Manim代码，流式返回进度"""
     project = db.query(Project).filter(
@@ -89,7 +101,8 @@ async def generate_code_stream(
             manim_code = await manim_service.generate_code(
                 project_local.final_script, 
                 template_code,
-                video_title=project_local.theme
+                video_title=project_local.theme,
+                model=model
             )
             
             yield f"data: {json.dumps({'step': 'generate', 'progress': 70, 'message': '代码生成完成，正在验证...'})}\n\n"

@@ -127,13 +127,14 @@ class ManimService:
         import asyncio
         return asyncio.run(self.generate_code(script))
     
-    async def generate_code(self, script: str, template_code: str = None, video_title: str = None) -> str:
+    async def generate_code(self, script: str, template_code: str = None, video_title: str = None, model: str = None) -> str:
         """生成Manim代码
         
         Args:
             script: 视频内容脚本
             template_code: 模板代码（可选），如果提供则按模板风格生成
             video_title: 视频标题（可选），将作为视频开头的大标题
+            model: 模型选择（可选），如 "qwen3-coder-next"
         """
         if template_code:
             system_prompt = f"""你是 Manim 动画代码专家。请参考以下模板代码的风格和结构生成新代码：
@@ -167,11 +168,12 @@ class ManimService:
 3. 代码必须完整可运行
 """
 
-        content = await self.client.chat(
+        content = await self.client.generate_code(
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_message}
             ],
+            model=model,
             temperature=0.7,
             max_tokens=8000
         )

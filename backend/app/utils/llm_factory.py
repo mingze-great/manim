@@ -70,6 +70,38 @@ class DashScopeAdapter(LLMAdapter):
         
         raise Exception("所有模型均失败")
     
+    async def generate_code(self, messages: list[dict], model: str = None, **kwargs):
+        """代码生成 - 使用更长的超时时间（120秒）"""
+        from openai import AsyncOpenAI
+        import httpx
+        
+        # 创建更长超时的客户端（120秒，代码生成需要更长时间）
+        long_timeout_client = AsyncOpenAI(
+            api_key=settings.DASHSCOPE_API_KEY,
+            base_url=settings.DASHSCOPE_BASE_URL,
+            timeout=httpx.Timeout(120.0, connect=10.0)
+        )
+        
+        models_to_try = [model] if model else self.code_models
+        
+        for i, current_model in enumerate(models_to_try):
+            try:
+                print(f"[DashScope] 尝试代码生成模型: {current_model}")
+                response = await long_timeout_client.chat.completions.create(
+                    model=current_model,
+                    messages=messages,
+                    **kwargs
+                )
+                return response.choices[0].message.content
+            except Exception as e:
+                print(f"[DashScope] 代码模型 {current_model} 失败: {e}")
+                if i < len(models_to_try) - 1:
+                    print(f"[DashScope] 降级到: {models_to_try[i+1]}")
+                else:
+                    raise e
+        
+        raise Exception("所有代码模型均失败")
+    
     async def chat_with_response(self, messages: list[dict], model: str = None, **kwargs):
         """返回完整的 response 对象"""
         models_to_try = [model] if model else self.chat_models
