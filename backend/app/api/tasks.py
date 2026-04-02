@@ -41,7 +41,7 @@ def get_python_path() -> str:
     if sys.platform == "win32":
         return "python"
     else:
-        return "/opt/miniconda3/envs/manim311/bin/python"
+        return "/root/miniconda3/envs/manim311/bin/python"
 
 
 @router.get("/{project_id}/generate-code")
