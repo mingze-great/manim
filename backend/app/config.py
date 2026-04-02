@@ -86,6 +86,9 @@ class Settings(BaseSettings):
     
     CORS_ORIGINS: str = "*"
     VITE_API_BASE_URL: str = ""
+    
+    INTERNAL_API_KEY: str = "internal-api-key-change-in-production"
+    OLD_SERVER_URL: str = "http://106.52.166.109:8000"
 
 
 @lru_cache()
