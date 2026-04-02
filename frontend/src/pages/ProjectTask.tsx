@@ -1,13 +1,11 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
-import { Card, Progress, Button, Space, message, Spin, Tabs, Collapse, Select, Modal } from 'antd'
+import { Card, Progress, Button, Space, message, Spin, Tabs, Select, Modal } from 'antd'
 import { DownloadOutlined, PlayCircleOutlined, PlaySquareOutlined, CloudUploadOutlined, EyeOutlined } from '@ant-design/icons'
 import { projectApi, Task, Project } from '@/services/project'
 import { templateApi, Template } from '@/services/template'
 import { useAuthStore } from '@/stores/authStore'
 import { motion } from 'framer-motion'
-
-const { Panel } = Collapse
 
 const statusMap: Record<string, { text: string; color: string }> = {
   pending: { text: '等待中', color: '#faad14' },
@@ -26,8 +24,6 @@ export default function ProjectTask() {
   const [loading, setLoading] = useState(true)
   const [generatingCode, setGeneratingCode] = useState(false)
   const [generatingVideo, setGeneratingVideo] = useState(false)
-  const [codeProgress, setCodeProgress] = useState(0)
-  const [codeMessage, setCodeMessage] = useState('')
   const [videoProgress, setVideoProgress] = useState(0)
   const [videoMessage, setVideoMessage] = useState('')
   const [generatedCode, setGeneratedCode] = useState('')
@@ -41,7 +37,6 @@ export default function ProjectTask() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null)
   const [videoPreviewVisible, setVideoPreviewVisible] = useState(false)
   const [previewVideoUrl, setPreviewVideoUrl] = useState<string>('')
-  const codeRef = useRef<HTMLPreElement>(null)
   const terminalRef = useRef<HTMLDivElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const readerRef = useRef<ReadableStreamDefaultReader | null>(null)
@@ -129,17 +124,11 @@ useEffect(() => {
 
   const handleGenerateCode = async () => {
     setGeneratingCode(true)
-    setCodeProgress(0)
-    setCodeMessage('正在开始生成...')
     setGeneratedCode('')
-    setActiveTab('code')
 
     try {
       const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
       const token = (useAuthStore.getState().token) || ''
-      console.log('[generateCode] API_BASE:', API_BASE)
-      console.log('[generateCode] id:', id)
-      console.log('[generateCode] templateId:', selectedTemplateId)
       let streamUrl = `${API_BASE}/api/tasks/${id}/generate-code`
       if (selectedTemplateId) {
         streamUrl += `?template_id=${selectedTemplateId}`
@@ -149,7 +138,6 @@ useEffect(() => {
       } else if (selectedModel) {
         streamUrl += `?model=${selectedModel}`
       }
-      console.log('[generateCode] streamUrl:', streamUrl)
       let headers: any = {
         'Content-Type': 'application/json'
       }
@@ -194,8 +182,6 @@ useEffect(() => {
           
           try {
             const data = JSON.parse(trimmed)
-            setCodeProgress(data.progress || 0)
-            setCodeMessage(data.message || '')
             
             if (data.code) {
               setGeneratedCode(data.code)
@@ -416,28 +402,6 @@ useEffect(() => {
           <Tabs activeKey={activeTab} onChange={setActiveTab}>
             <Tabs.TabPane tab={<span><PlaySquareOutlined /> 脚本生成</span>} key="code">
               <div className="space-y-4">
-                {/* 进度显示 */}
-                {generatingCode && (
-                  <motion.div 
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    className="bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 p-4 rounded-xl border border-blue-100 dark:border-blue-800"
-                  >
-                    <div className="flex items-center gap-3 mb-3">
-                      <Spin />
-                      <span className="text-blue-600 dark:text-blue-400 font-medium">{codeMessage}</span>
-                    </div>
-                    <Progress 
-                      percent={codeProgress} 
-                      status="active"
-                      strokeColor={{
-                        '0%': '#0066FF',
-                        '100%': '#00CCFF',
-                      }}
-                    />
-                  </motion.div>
-                )}
-
                 {/* 模板和模型选择 */}
                 <div className="mb-4">
                   <div className="flex items-center gap-3 flex-wrap mb-2">
@@ -521,35 +485,23 @@ useEffect(() => {
                   >
                     {generatedCode ? '重新生成脚本' : '生成脚本'}
                   </Button>
+                  {generatedCode && (
+                    <Button 
+                      type="default"
+                      icon={<CloudUploadOutlined />}
+                      onClick={() => setActiveTab('video')}
+                      size="large"
+                      className="text-green-600 border-green-600 hover:bg-green-50"
+                    >
+                      前往渲染
+                    </Button>
+                  )}
                 </div>
 
-                {/* 脚本显示 */}
                 {generatedCode && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                  >
-                    <Collapse defaultActiveKey={['code']}>
-                      <Panel 
-                        header={
-                          <div className="flex items-center gap-2">
-                            <PlaySquareOutlined className="text-[#0066FF]" />
-                            <span>生成的动画脚本</span>
-                          </div>
-                        } 
-                        key="code"
-                      >
-                        <div className="code-block relative">
-                          <pre 
-                            ref={codeRef}
-                            className="text-sm max-h-96 overflow-y-auto"
-                          >
-                            {generatedCode}
-                          </pre>
-                        </div>
-                      </Panel>
-                    </Collapse>
-                  </motion.div>
+                  <div className="text-green-600 text-sm">
+                    ✓ 脚本生成完成，点击"前往渲染"开始制作视频
+                  </div>
                 )}
               </div>
             </Tabs.TabPane>
