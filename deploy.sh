@@ -47,6 +47,11 @@ echo "  - 解压后端代码..."
 tar -xzvf backend.tar.gz > /dev/null
 echo "  - 解压前端代码..."
 tar -xzvf frontend_dist.tar.gz -C frontend/dist > /dev/null
+echo "  - 恢复配置..."
+if [ -f backend/.env.production ]; then
+    cp backend/.env.production backend/.env
+    echo "    配置已从 .env.production 恢复"
+fi
 echo "  - 重启服务..."
 systemctl restart manim
 echo "  - 新服务器部署完成！"
@@ -56,6 +61,11 @@ ssh root@106.52.166.109 << 'ENDSSH'
 cd /opt/manim
 echo "  - 解压后端代码..."
 tar -xzvf backend.tar.gz > /dev/null
+echo "  - 恢复配置..."
+if [ -f backend/.env.production ]; then
+    cp backend/.env.production backend/.env
+    echo "    配置已从 .env.production 恢复"
+fi
 echo "  - 重启服务..."
 systemctl restart manim
 echo "  - 旧服务器部署完成！"
