@@ -76,7 +76,11 @@ export default function ProjectTask() {
     try {
       const { data } = await templateApi.list()
       const allTemplates = [...data.system_templates, ...data.user_templates]
-      setTemplates(allTemplates.filter(t => t.is_active !== false))
+      const activeTemplates = allTemplates.filter(t => t.is_active !== false)
+      setTemplates(activeTemplates)
+      if (activeTemplates.length > 0 && !selectedTemplateId) {
+        setSelectedTemplateId(activeTemplates[0].id)
+      }
     } catch (error) {
       console.error('获取模板失败:', error)
     }
@@ -89,6 +93,9 @@ export default function ProjectTask() {
       if (response.ok) {
         const data = await response.json()
         setAvailableModels(data.models || [])
+        if (data.default_code_model && !selectedModel) {
+          setSelectedModel(data.default_code_model)
+        }
       }
     } catch (error) {
       console.error('获取模型列表失败:', error)
