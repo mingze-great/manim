@@ -431,21 +431,44 @@ useEffect(() => {
                   </motion.div>
                 )}
 
-                {/* 模板选择 */}
+                {/* 模板和模型选择 */}
                 <div className="mb-4">
-                  <label className="block text-sm text-gray-500 mb-2">选择视频风格模板</label>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Select
-                      style={{ width: '100%', maxWidth: 300 }}
-                      placeholder="默认风格"
-                      allowClear
-                      value={selectedTemplateId}
-                      onChange={setSelectedTemplateId}
-                      options={templates.map(t => ({
-                        label: t.name,
-                        value: t.id
-                      }))}
-                    />
+                  <div className="flex items-center gap-3 flex-wrap mb-2">
+                    <div>
+                      <label className="block text-sm text-gray-500 mb-1">视频风格模板</label>
+                      <Select
+                        style={{ width: 200 }}
+                        placeholder="默认风格"
+                        allowClear
+                        value={selectedTemplateId}
+                        onChange={setSelectedTemplateId}
+                        options={templates.map(t => ({
+                          label: t.name,
+                          value: t.id
+                        }))}
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm text-gray-500 mb-1">AI 模型</label>
+                      <Select
+                        placeholder="默认模型"
+                        style={{ width: 200 }}
+                        value={selectedModel}
+                        onChange={setSelectedModel}
+                        allowClear
+                      >
+                        {availableModels.map(m => (
+                          <Select.Option key={m} value={m}>
+                            {m === 'qwen3-coder-next' ? 'Qwen3 Coder（推荐）' : 
+                             m === 'deepseek-v3.1' ? 'DeepSeek V3.1' :
+                             m === 'deepseek-v3.2' ? 'DeepSeek V3.2' :
+                             m === 'qwen3.5-plus' ? 'Qwen3.5 Plus' : m}
+                          </Select.Option>
+                        ))}
+                      </Select>
+                    </div>
+                    
                     {selectedTemplateId && templates.find(t => t.id === selectedTemplateId)?.example_video_url && (
                       <Button
                         icon={<EyeOutlined />}
@@ -459,48 +482,21 @@ useEffect(() => {
                             setVideoPreviewVisible(true)
                           }
                         }}
+                        style={{ marginTop: '22px' }}
                       >
                         预览示例
                       </Button>
                     )}
                   </div>
-                  {selectedTemplateId && templates.find(t => t.id === selectedTemplateId)?.description && (
-                    <div className="text-xs text-gray-400 mt-1">
-                      {templates.find(t => t.id === selectedTemplateId)?.description}
-                    </div>
-                  )}
-                </div>
-
-                {/* 模板和模型选择 */}
-                <div className="flex gap-3 flex-wrap">
-                  <Select
-                    placeholder="选择视频风格模板（可选）"
-                    style={{ width: 220 }}
-                    value={selectedTemplateId}
-                    onChange={setSelectedTemplateId}
-                    allowClear
-                  >
-                    {templates.map(t => (
-                      <Select.Option key={t.id} value={t.id}>{t.name}</Select.Option>
-                    ))}
-                  </Select>
                   
-                  <Select
-                    placeholder="选择模型（可选）"
-                    style={{ width: 200 }}
-                    value={selectedModel}
-                    onChange={setSelectedModel}
-                    allowClear
-                  >
-                    {availableModels.map(m => (
-                      <Select.Option key={m} value={m}>
-                        {m === 'qwen3-coder-next' ? 'Qwen3 Coder（推荐）' : 
-                         m === 'deepseek-v3.1' ? 'DeepSeek V3.1' :
-                         m === 'deepseek-v3.2' ? 'DeepSeek V3.2' :
-                         m === 'qwen3.5-plus' ? 'Qwen3.5 Plus' : m}
-                      </Select.Option>
-                    ))}
-                  </Select>
+                  {/* 提示文字 */}
+                  <div className="text-xs text-gray-400 space-y-1">
+                    <p>• 视频风格模板：选择后生成的脚本会按模板风格渲染，不选则使用默认风格</p>
+                    <p>• AI 模型：推荐使用 Qwen3 Coder（代码生成专用），不选则使用默认模型</p>
+                    {selectedTemplateId && templates.find(t => t.id === selectedTemplateId)?.description && (
+                      <p className="text-blue-500">• {templates.find(t => t.id === selectedTemplateId)?.description}</p>
+                    )}
+                  </div>
                 </div>
 
                 {/* 生成脚本按钮 */}
