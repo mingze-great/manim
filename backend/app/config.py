@@ -63,6 +63,14 @@ class Settings(BaseSettings):
     OSS_BUCKET_NAME: str = "manim-videos"
     OSS_ENDPOINT: str = "oss-cn-hangzhou.aliyuncs.com"
     
+    # 腾讯云 COS 配置
+    COS_SECRET_ID: str = ""
+    COS_SECRET_KEY: str = ""
+    COS_BUCKET: str = "manim-1308464924"
+    COS_REGION: str = "ap-beijing"
+    COS_DOMAIN: str = "https://manim-1308464924.cos.ap-beijing.myqcloud.com"
+    COS_ENABLE: bool = True  # 是否启用 COS 存储
+    
     # WeChat Pay Configuration
     WX_MCH_ID: str = ""
     WX_APP_ID: str = ""

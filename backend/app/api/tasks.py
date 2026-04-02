@@ -20,6 +20,7 @@ from app.models.template import Template
 from app.api.auth import get_current_user
 from app.services.manim import ManimService
 from app.config import get_settings
+from app.utils.cos_storage import cos_storage
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 settings = get_settings()
@@ -243,7 +244,23 @@ async def render_video_stream(
                             
                             shutil.move(video_path, local_video_path)
                             
+                            # 尝试上传到 COS
                             video_url = f"/api/videos/{video_filename}"
+                            cos_key = None
+                            
+                            if cos_storage.enabled:
+                                success, cos_key, cos_url = cos_storage.upload_file(
+                                    local_video_path, 
+                                    project_id, 
+                                    0  # task_id 暂时用0
+                                )
+                                if success and cos_url:
+                                    video_url = cos_url
+                                    # 删除本地文件，节省空间
+                                    try:
+                                        os.remove(local_video_path)
+                                    except:
+                                        pass
                             
                             project_local.status = "completed"
                             project_local.video_url = video_url
