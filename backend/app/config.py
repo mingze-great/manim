@@ -20,21 +20,28 @@ class Settings(BaseSettings):
     # LLM Provider Configuration (auto/deepseek/gemini/openai/dashscope)
     LLM_PROVIDER: str = "auto"
     
-    # 阿里云百炼（优先级1）
+    # 阿里云百炼 API（主模型）
     DASHSCOPE_API_KEY: str = ""
     DASHSCOPE_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    DASHSCOPE_MODELS: str = "MiniMax-M2.5,deepseek-v3.2,qwen3-coder-next,kimi-k2-thinking"
-    DASHSCOPE_CHAT_MODEL: str = "qwen-plus"
-    DASHSCOPE_CODE_MODEL: str = "deepseek-v3.2"
-    DASHSCOPE_AVAILABLE_MODELS: str = "MiniMax-M2.5,deepseek-v3.2,qwen3-coder-next,kimi-k2-thinking"
-    DASHSCOPE_ENABLE_THINKING: bool = False
     
-    # DeepSeek (Priority 2)
+    # 代码生成模型配置
+    DASHSCOPE_CODE_MODEL: str = "qwen3-coder-next"  # 主代码模型
+    DASHSCOPE_CODE_FALLBACK_MODEL: str = "deepseek-v3.2"  # 代码降级模型
+    
+    # 文本对话模型配置
+    DASHSCOPE_CHAT_MODEL: str = "deepseek-v3.1"  # 主对话模型
+    DASHSCOPE_CHAT_FALLBACK_MODEL_1: str = "qwen3.5-plus"  # 第一降级
+    DASHSCOPE_CHAT_FALLBACK_MODEL_2: str = "deepseek-v3.2"  # 第二降级
+    
+    # 用户可选择的模型列表
+    DASHSCOPE_AVAILABLE_MODELS: str = "qwen3-coder-next,deepseek-v3.1,deepseek-v3.2,qwen3.5-plus"
+    
+    # DeepSeek (已废弃，仅保留兼容)
     DEEPSEEK_API_KEY: str = ""
     DEEPSEEK_BASE_URL: str = "https://openrouter.fans/v1"
     DEEPSEEK_MODEL: str = "deepseek/deepseek-v3.2"
     
-    # DeepSeek Fallback (降级模型)
+    # DeepSeek Fallback (已废弃)
     DEEPSEEK_FALLBACK_API_KEY: str = ""
     DEEPSEEK_FALLBACK_BASE_URL: str = "https://ai.1seey.com/v1"
     DEEPSEEK_FALLBACK_MODEL: str = "qwen3.5-plus"

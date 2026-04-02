@@ -20,82 +20,159 @@ class LLMAdapter(ABC):
 
 
 class DashScopeAdapter(LLMAdapter):
-    """阿里云百炼适配器 - 支持模型降级"""
+    """阿里云百炼适配器 - 支持代码生成和文本对话的独立降级"""
     
     def __init__(self):
         from openai import AsyncOpenAI
+        import httpx
+        
         self.client = AsyncOpenAI(
             api_key=settings.DASHSCOPE_API_KEY,
-            base_url=settings.DASHSCOPE_BASE_URL
+            base_url=settings.DASHSCOPE_BASE_URL,
+            timeout=httpx.Timeout(30.0, connect=10.0)
         )
-        self.models = [m.strip() for m in settings.DASHSCOPE_MODELS.split(",")]
-        self.current_model_index = 0
-        self.enable_thinking = settings.DASHSCOPE_ENABLE_THINKING
-    
-    def _get_extra_body(self):
-        if self.enable_thinking:
-            return {"enable_thinking": True}
-        return {}
+        
+        # 代码生成模型链
+        self.code_models = [
+            settings.DASHSCOPE_CODE_MODEL,
+            settings.DASHSCOPE_CODE_FALLBACK_MODEL
+        ]
+        
+        # 文本对话模型链
+        self.chat_models = [
+            settings.DASHSCOPE_CHAT_MODEL,
+            settings.DASHSCOPE_CHAT_FALLBACK_MODEL_1,
+            settings.DASHSCOPE_CHAT_FALLBACK_MODEL_2
+        ]
+        
+        # 可用模型列表（供用户选择）
+        self.available_models = [m.strip() for m in settings.DASHSCOPE_AVAILABLE_MODELS.split(",")]
     
     async def chat(self, messages: list[dict], model: str = None, **kwargs) -> str:
-        model = model or self.models[self.current_model_index]
-        extra_body = self._get_extra_body()
-        try:
-            response = await self.client.chat.completions.create(
-                model=model,
-                messages=messages,
-                extra_body=extra_body,
-                **kwargs
-            )
-            return response.choices[0].message.content
-        except Exception as e:
-            if self.current_model_index < len(self.models) - 1:
-                self.current_model_index += 1
-                print(f"[DashScope] 模型 {model} 调用失败，降级到 {self.models[self.current_model_index]}")
-                return await self.chat(messages, **kwargs)
-            raise e
+        """文本对话 - 使用对话模型链"""
+        models_to_try = [model] if model else self.chat_models
+        
+        for i, current_model in enumerate(models_to_try):
+            try:
+                print(f"[DashScope] 尝试对话模型: {current_model}")
+                response = await self.client.chat.completions.create(
+                    model=current_model,
+                    messages=messages,
+                    **kwargs
+                )
+                return response.choices[0].message.content
+            except Exception as e:
+                print(f"[DashScope] 模型 {current_model} 失败: {e}")
+                if i < len(models_to_try) - 1:
+                    print(f"[DashScope] 降级到: {models_to_try[i+1]}")
+                else:
+                    raise e
+        
+        raise Exception("所有模型均失败")
     
     async def chat_with_response(self, messages: list[dict], model: str = None, **kwargs):
-        """返回完整的 response 对象，包含 usage 信息"""
-        model = model or self.models[self.current_model_index]
-        extra_body = self._get_extra_body()
-        try:
-            response = await self.client.chat.completions.create(
-                model=model,
-                messages=messages,
-                extra_body=extra_body,
-                **kwargs
-            )
-            return response
-        except Exception as e:
-            if self.current_model_index < len(self.models) - 1:
-                self.current_model_index += 1
-                print(f"[DashScope] 模型 {model} 调用失败，降级到 {self.models[self.current_model_index]}")
-                return await self.chat_with_response(messages, **kwargs)
-            raise e
+        """返回完整的 response 对象"""
+        models_to_try = [model] if model else self.chat_models
+        
+        for i, current_model in enumerate(models_to_try):
+            try:
+                print(f"[DashScope] 尝试对话模型: {current_model}")
+                response = await self.client.chat.completions.create(
+                    model=current_model,
+                    messages=messages,
+                    **kwargs
+                )
+                return response
+            except Exception as e:
+                print(f"[DashScope] 模型 {current_model} 失败: {e}")
+                if i < len(models_to_try) - 1:
+                    print(f"[DashScope] 降级到: {models_to_try[i+1]}")
+                else:
+                    raise e
+        
+        raise Exception("所有模型均失败")
     
     async def stream_chat(self, messages: list[dict], model: str = None, **kwargs):
-        model = model or self.models[self.current_model_index]
-        extra_body = self._get_extra_body()
-        try:
-            response = await self.client.chat.completions.create(
-                model=model,
-                messages=messages,
-                stream=True,
-                stream_options={"include_usage": True},
-                extra_body=extra_body,
-                **kwargs
-            )
-            return response
-        except Exception as e:
-            if self.current_model_index < len(self.models) - 1:
-                self.current_model_index += 1
-                print(f"[DashScope] 模型 {model} 调用失败，降级到 {self.models[self.current_model_index]}")
-                return await self.stream_chat(messages, **kwargs)
-            raise e
+        """流式对话 - 使用对话模型链"""
+        models_to_try = [model] if model else self.chat_models
+        
+        for i, current_model in enumerate(models_to_try):
+            try:
+                print(f"[DashScope] 尝试流式对话模型: {current_model}")
+                response = await self.client.chat.completions.create(
+                    model=current_model,
+                    messages=messages,
+                    stream=True,
+                    stream_options={"include_usage": True},
+                    **kwargs
+                )
+                return response
+            except Exception as e:
+                print(f"[DashScope] 模型 {current_model} 失败: {e}")
+                if i < len(models_to_try) - 1:
+                    print(f"[DashScope] 降级到: {models_to_try[i+1]}")
+                else:
+                    raise e
+        
+        raise Exception("所有模型均失败")
+    
+    async def generate_code(self, messages: list[dict], model: str = None, **kwargs):
+        """代码生成 - 使用代码模型链"""
+        models_to_try = [model] if model else self.code_models
+        
+        for i, current_model in enumerate(models_to_try):
+            try:
+                print(f"[DashScope] 尝试代码生成模型: {current_model}")
+                response = await self.client.chat.completions.create(
+                    model=current_model,
+                    messages=messages,
+                    **kwargs
+                )
+                return response.choices[0].message.content
+            except Exception as e:
+                print(f"[DashScope] 代码模型 {current_model} 失败: {e}")
+                if i < len(models_to_try) - 1:
+                    print(f"[DashScope] 降级到: {models_to_try[i+1]}")
+                else:
+                    raise e
+        
+        raise Exception("所有代码模型均失败")
+    
+    async def generate_code_stream(self, messages: list[dict], model: str = None, **kwargs):
+        """流式代码生成 - 使用代码模型链"""
+        models_to_try = [model] if model else self.code_models
+        
+        for i, current_model in enumerate(models_to_try):
+            try:
+                print(f"[DashScope] 尝试流式代码生成模型: {current_model}")
+                response = await self.client.chat.completions.create(
+                    model=current_model,
+                    messages=messages,
+                    stream=True,
+                    stream_options={"include_usage": True},
+                    **kwargs
+                )
+                return response
+            except Exception as e:
+                print(f"[DashScope] 代码模型 {current_model} 失败: {e}")
+                if i < len(models_to_try) - 1:
+                    print(f"[DashScope] 降级到: {models_to_try[i+1]}")
+                else:
+                    raise e
+        
+        raise Exception("所有代码模型均失败")
+    
+    def get_available_models(self) -> list:
+        """获取用户可选择的模型列表"""
+        return self.available_models
     
     def get_current_model(self) -> str:
-        return self.models[self.current_model_index]
+        """获取当前主对话模型"""
+        return self.chat_models[0]
+    
+    def get_code_model(self) -> str:
+        """获取当前主代码模型"""
+        return self.code_models[0]
 
 
 class DeepSeekAdapter(LLMAdapter):
@@ -377,23 +454,27 @@ class LLMFactory:
         if cls._client_cache is not None:
             return cls._client_cache
         
-        if not settings.DEEPSEEK_API_KEY:
+        if not settings.DASHSCOPE_API_KEY:
             raise ValueError(
-                "未配置 DEEPSEEK_API_KEY。\n"
-                "请在 .env 中配置 DEEPSEEK_API_KEY"
+                "未配置 DASHSCOPE_API_KEY。\n"
+                "请在 .env 中配置 DASHSCOPE_API_KEY"
             )
         
-        cls._client_cache = DeepSeekAdapter()
+        cls._client_cache = DashScopeAdapter()
         return cls._client_cache
     
     @classmethod
     def get_model_name(cls) -> str:
-        return settings.DEEPSEEK_MODEL
+        return settings.DASHSCOPE_CHAT_MODEL
     
     @classmethod
     def get_chat_model(cls) -> str:
-        return settings.DEEPSEEK_MODEL
+        return settings.DASHSCOPE_CHAT_MODEL
     
     @classmethod
     def get_code_model(cls) -> str:
-        return settings.DEEPSEEK_MODEL
+        return settings.DASHSCOPE_CODE_MODEL
+    
+    @classmethod
+    def get_available_models(cls) -> list:
+        return [m.strip() for m in settings.DASHSCOPE_AVAILABLE_MODELS.split(",")]
