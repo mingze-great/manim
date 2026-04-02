@@ -176,7 +176,9 @@ class ChatService:
         messages.append({"role": "user", "content": user_message})
         
         # 检查是否确认生成
-        confirm_keywords = ["满意", "可以了", "开始生成", "确认生成", "好的", "开始吧"]
+        confirm_keywords_zh = ["满意", "可以了", "开始生成", "确认生成", "好的", "开始吧"]
+        confirm_keywords_en = ["satisfied", "ok", "confirm", "confirmed", "good", "done", "yes"]
+        confirm_keywords = confirm_keywords_zh + confirm_keywords_en
         user_confirmed = any(keyword in user_message for keyword in confirm_keywords)
         
         # 如果用户确认，使用之前生成的完整内容
@@ -264,7 +266,9 @@ class ChatService:
         
         messages.append({"role": "user", "content": user_message})
         
-        confirm_keywords = ["满意", "可以了", "开始生成", "确认生成", "好的", "开始吧"]
+        confirm_keywords_zh = ["满意", "可以了", "开始生成", "确认生成", "好的", "开始吧"]
+        confirm_keywords_en = ["satisfied", "ok", "confirm", "confirmed", "good", "done", "yes"]
+        confirm_keywords = confirm_keywords_zh + confirm_keywords_en
         user_confirmed = any(keyword in user_message for keyword in confirm_keywords)
         
         if user_confirmed and project_final_script:
@@ -377,7 +381,7 @@ class ChatService:
                     print(f"[DEBUG] Failed to extract code from content")
             
             is_first_response = len(conversations) == 0
-            has_structured_content = "【视频内容】" in content or "### 第" in content or "### 1" in content
+            has_structured_content = "【视频内容】" in content or "【Video Content】" in content or "### 第" in content or "### Point" in content or "### 1" in content
             
             if is_first_response or has_structured_content:
                 proj = self.db.query(Project).filter(Project.id == project_id).first()
@@ -387,7 +391,7 @@ class ChatService:
                 result = {
                     "type": "done",
                     "content": content,
-                    "is_final": False,
+                    "is_final": True,
                     "final_script": content
                 }
                 if extracted_code:
@@ -396,7 +400,7 @@ class ChatService:
                 yield result
             else:
                 is_final = any(keyword in content for keyword in confirm_keywords)
-                has_structured_content = "【视频内容】" in content or "### 第" in content or "### 1" in content
+                has_structured_content = "【视频内容】" in content or "【Video Content】" in content or "### 第" in content or "### Point" in content or "### 1" in content
                 
                 if is_final or has_structured_content:
                     proj = self.db.query(Project).filter(Project.id == project_id).first()
@@ -439,7 +443,9 @@ class ChatService:
         messages.extend(conversation_history)
         messages.append({"role": "user", "content": user_message})
         
-        confirm_keywords = ["满意", "可以了", "开始生成", "确认生成", "好的", "开始吧"]
+        confirm_keywords_zh = ["满意", "可以了", "开始生成", "确认生成", "好的", "开始吧"]
+        confirm_keywords_en = ["satisfied", "ok", "confirm", "confirmed", "good", "done", "yes"]
+        confirm_keywords = confirm_keywords_zh + confirm_keywords_en
         user_confirmed = any(keyword in user_message for keyword in confirm_keywords)
         
         if user_confirmed and final_script:
