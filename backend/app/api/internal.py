@@ -158,6 +158,19 @@ async def internal_render(
                                 if not video_url:
                                     video_url = f"/api/videos/{video_filename}"
                                 
+                                # 回调新服务器更新数据库
+                                try:
+                                    import httpx
+                                    async with httpx.AsyncClient(timeout=10.0) as client:
+                                        await client.post(
+                                            f"{settings.NEW_SERVER_URL}/api/tasks/internal/update-video",
+                                            params={"project_id": request.project_id, "video_url": video_url},
+                                            headers={"X-Internal-Key": settings.INTERNAL_API_KEY}
+                                        )
+                                        print(f"[Callback] Updated project {request.project_id} on new server")
+                                except Exception as e:
+                                    print(f"[Callback] Failed to update new server: {e}")
+                                
                                 yield f"data: {json.dumps({'type': 'success', 'content': '渲染完成！', 'video_url': video_url})}\n\n"
                             else:
                                 yield f"data: {json.dumps({'type': 'error', 'content': '未找到视频文件'})}\n\n"

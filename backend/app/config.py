@@ -89,6 +89,7 @@ class Settings(BaseSettings):
     
     INTERNAL_API_KEY: str = "internal-api-key-change-in-production"
     OLD_SERVER_URL: str = "http://106.52.166.109:8000"
+    NEW_SERVER_URL: str = "http://152.136.218.74:8000"
 
 
 @lru_cache()
