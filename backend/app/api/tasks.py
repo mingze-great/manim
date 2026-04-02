@@ -25,7 +25,7 @@ from app.utils.cos_storage import cos_storage
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 settings = get_settings()
 
-RENDER_SEMAPHORE = asyncio.Semaphore(3)
+RENDER_SEMAPHORE = asyncio.Semaphore(4)
 CURRENT_RENDERS = 0
 OLD_SERVER_SEMAPHORE = asyncio.Semaphore(2)
 
@@ -56,7 +56,7 @@ async def get_render_status():
     
     return {
         "new_server": {
-            "max_concurrent": 3,
+            "max_concurrent": 4,
             "current_renders": CURRENT_RENDERS,
             "available_slots": RENDER_SEMAPHORE._value
         },
@@ -64,7 +64,7 @@ async def get_render_status():
             **old_server_status,
             "available_slots": old_server_available
         },
-        "total_capacity": 3 + (old_server_status.get("max_concurrent_renders", 0) if old_server_status.get("status") == "healthy" else 0)
+        "total_capacity": 4 + (old_server_status.get("max_concurrent_renders", 0) if old_server_status.get("status") == "healthy" else 0)
     }
 
 
