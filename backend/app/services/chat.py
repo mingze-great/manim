@@ -442,7 +442,16 @@ class ChatService:
                     print(f"[DEBUG] Failed to extract code from content")
             
             is_first_response = len(conversations) == 0
-            has_structured_content = "【视频内容】" in content or "【Video Content】" in content or "### 第" in content or "### Point" in content or "### 1" in content
+            # 检测结构化内容 - 包含思维类型和数学/科学类型
+            has_structured_content = (
+                "【视频内容】" in content or 
+                "【Video Content】" in content or 
+                "【核心概念】" in content or 
+                "【Core Concept】" in content or
+                "### 第" in content or 
+                "### Point" in content or 
+                "### 1" in content
+            )
             
             if is_first_response or has_structured_content:
                 proj = self.db.query(Project).filter(Project.id == project_id).first()
@@ -461,7 +470,16 @@ class ChatService:
                 yield result
             else:
                 is_final = any(keyword in content for keyword in confirm_keywords)
-                has_structured_content = "【视频内容】" in content or "【Video Content】" in content or "### 第" in content or "### Point" in content or "### 1" in content
+                # 检测结构化内容 - 包含思维类型和数学/科学类型
+                has_structured_content = (
+                    "【视频内容】" in content or 
+                    "【Video Content】" in content or 
+                    "【核心概念】" in content or 
+                    "【Core Concept】" in content or
+                    "### 第" in content or 
+                    "### Point" in content or 
+                    "### 1" in content
+                )
                 
                 if is_final or has_structured_content:
                     proj = self.db.query(Project).filter(Project.id == project_id).first()
