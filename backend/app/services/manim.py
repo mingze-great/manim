@@ -1,7 +1,15 @@
 from sqlalchemy.orm import Session
 from app.utils.llm_factory import LLMFactory
 
-MANIM_SYSTEM_PROMPT = """角色与任务：你是一个精通自媒体爆款文案的创作者，同时也是精通 Python Manim 的数据可视化"导演"。
+
+def detect_language(text: str) -> str:
+    """检测文本语言：zh 或 en"""
+    if any('一' <= char <= '鿿' for char in text):
+        return 'zh'
+    return 'en'
+
+
+MANIM_SYSTEM_PROMPT_ZH = """角色与任务：你是一个精通自媒体爆款文案的创作者，同时也是精通 Python Manim 的数据可视化"导演"。
 我需要你根据我提供的新主题，创作具有极强吸引力、情绪共鸣和自我提升感的短句文案。并为每句文案"智能匹配"最适合的动态图形，最后严格填入我提供的代码模板中。
 
 步骤 1：生成文案与匹配图形
@@ -28,6 +36,7 @@ from manim import *
 
 # 中文字体配置
 CHINESE_FONT = "Droid Sans Fallback"
+ENGLISH_FONT = "Arial"
 
 
 class Dynamic_HUD_Review(Scene):
@@ -140,6 +149,9 @@ class ManimService:
             video_title: 视频标题（可选），将作为视频开头的大标题
             model: 模型选择（可选），如 "qwen3-coder-next"
         """
+        # 检测语言
+        language = detect_language(script)
+        
         if template_code:
             system_prompt = f"""你是 Manim 动画代码专家。请参考以下模板代码的风格和结构生成新代码：
 
@@ -156,7 +168,7 @@ class ManimService:
 6. 不要漏掉逗号或添加多余字符
 """
         else:
-            system_prompt = MANIM_SYSTEM_PROMPT
+            system_prompt = MANIM_SYSTEM_PROMPT_ZH if language == 'zh' else MANIM_SYSTEM_PROMPT_EN
         
         title_instruction = ""
         if video_title:
@@ -170,6 +182,12 @@ class ManimService:
 1. 严格按内容要点数量生成动画
 2. 每个要点必须有标题和解释文案
 3. 代码必须完整可运行
+4. 必须使用字体：font="Droid Sans Fallback"
+""" if language == 'zh' else """Requirements:
+1. Strictly generate animations according to the number of content points
+2. Each point must have a title and explanatory text
+3. Code must be complete and runnable
+4. Must use font: font="Arial"
 """
 
         content = await self.client.generate_code(

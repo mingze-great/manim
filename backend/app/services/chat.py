@@ -4,7 +4,15 @@ from sqlalchemy.orm import Session
 from app.models.project import Conversation, Project
 from app.utils.llm_factory import LLMFactory
 
-SYSTEM_PROMPT = """你是一个专业的动画内容策划专家。
+
+def detect_language(text: str) -> str:
+    """检测文本语言：zh 或 en"""
+    if any('一' <= char <= '鿿' for char in text):
+        return 'zh'
+    return 'en'
+
+
+SYSTEM_PROMPT_ZH = """你是一个专业的动画内容策划专家。
 
 ## 第一步：判断主题类型
 
@@ -46,6 +54,50 @@ SYSTEM_PROMPT = """你是一个专业的动画内容策划专家。
 2. 内容简洁精炼，严格控制在规定字数内
 3. 动态图描述要简短具体
 4. 不要询问用户，直接生成
+"""
+
+SYSTEM_PROMPT_EN = """You are a professional animation content planning expert.
+
+## Step 1: Determine Topic Type
+
+Based on the user's input topic, determine which type it belongs to:
+
+### Type A: Mind Visualization (methodology, emotional healing, self-improvement, etc.)
+Keywords: mindset, method, habit, psychology, emotion, cognition, skill, step, principle, truth, awakening, mental model...
+
+### Type B: Math/Science Visualization (formulas, theorems, physics concepts, etc.)
+Keywords: Fourier transform, Euler's formula, Lorenz attractor, calculus, physics, theorem, proof, equation, function, geometry, vector, probability, integral, derivative, matrix...
+
+## Output Format
+
+### Type A Format:
+【Video Content】
+
+### Point 1: [Title, 40-60 characters]
+- Content: [120-180 characters]
+- Animation: [60-100 characters]
+
+... (and so on)
+
+### Type B Format:
+【Core Concept】
+[120-180 characters]
+
+【Key Formulas】
+- [Formula 1]: [40-80 characters]
+- [Formula 2]: [40-80 characters]
+
+【Dynamic Demonstration】
+[80-120 characters]
+
+【Visual Highlight】
+[60-100 characters]
+
+## Important Rules
+1. Output the result directly, do not output the thinking process
+2. Keep content concise and strictly within the specified character limit
+3. Keep animation descriptions brief and specific
+4. Do not ask the user, generate directly
 """
 
 CODE_GENERATE_PROMPT = """你是 Manim 动画代码专家。
@@ -165,8 +217,12 @@ class ChatService:
         # 提取数据，避免会话问题
         project_final_script = str(project.final_script) if project and project.final_script else ""
         
+        # 检测语言并选择提示词
+        language = detect_language(theme + " " + user_message)
+        system_prompt = SYSTEM_PROMPT_ZH if language == 'zh' else SYSTEM_PROMPT_EN_ZH if language == 'zh' else SYSTEM_PROMPT_EN
+        
         messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"视频主题：{theme}"}
         ]
         
@@ -256,8 +312,12 @@ class ChatService:
         is_code_request = any(kw in user_message for kw in code_keywords)
         is_fix_request = any(kw in user_message for kw in fix_keywords)
         
+        # 检测语言并选择提示词
+        language = detect_language(theme + " " + user_message)
+        system_prompt = SYSTEM_PROMPT_ZH if language == 'zh' else SYSTEM_PROMPT_EN_ZH if language == 'zh' else SYSTEM_PROMPT_EN
+        
         messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"视频主题：{theme}"}
         ]
         
@@ -303,7 +363,8 @@ class ChatService:
             return
         
         # 确定使用的 prompt 和消息
-        system_prompt = SYSTEM_PROMPT
+        language = detect_language(theme + " " + user_message)
+        system_prompt = SYSTEM_PROMPT_ZH if language == 'zh' else SYSTEM_PROMPT_EN
         user_context = user_message
         
         # 如果是代码生成或修复请求，且有必要的信息
@@ -435,8 +496,12 @@ class ChatService:
         project = self.db.query(Project).filter(Project.id == project_id).first()
         project_final_script = str(project.final_script) if project and project.final_script else ""
         
+        # 检测语言并选择提示词
+        language = detect_language(theme + " " + user_message)
+        system_prompt = SYSTEM_PROMPT_ZH if language == 'zh' else SYSTEM_PROMPT_EN_ZH if language == 'zh' else SYSTEM_PROMPT_EN
+        
         messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"视频主题：{theme}"}
         ]
         
