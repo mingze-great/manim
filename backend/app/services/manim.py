@@ -4,7 +4,7 @@ from app.utils.llm_factory import LLMFactory
 
 def detect_language(text: str) -> str:
     """检测文本语言：zh 或 en"""
-    if any('一' <= char <= '鿿' for char in text):
+    if any('\u4e00' <= char <= '\u9fff' for char in text):
         return 'zh'
     return 'en'
 
@@ -36,7 +36,6 @@ from manim import *
 
 # 中文字体配置
 CHINESE_FONT = "Droid Sans Fallback"
-ENGLISH_FONT = "Arial"
 
 
 class Dynamic_HUD_Review(Scene):
@@ -130,6 +129,129 @@ class Dynamic_HUD_Review(Scene):
 """
 
 
+MANIM_SYSTEM_PROMPT_EN = """Role & Task: You are a Manim code expert.
+
+CRITICAL RULES - MUST FOLLOW:
+1. ALL content (titles, descriptions, comments, outro) MUST be in English language
+2. Use the EXACT content provided in the user's script - DO NOT translate to Chinese
+3. Use FONT = "Arial" - NEVER use Chinese fonts like "Droid Sans Fallback" or "Microsoft YaHei"
+4. DO NOT invent new content in Chinese - extract from the English script provided
+
+Step 1: Extract Content from Script
+Requirements:
+- Extract titles and descriptions directly from the provided script
+- Keep all text in English - DO NOT translate or convert
+- Choose the best Graphic ID (0, 1, or 2):
+  - 0: Data Matrix (logic, systems, accumulation)
+  - 1: Cyclic Halo (patterns, loops, vision)
+  - 2: Polygon Fission (breakthrough, change, action)
+
+Step 2: Fill Code Template
+Strictly follow the template below. Only modify the 3 places marked with <<<REPLACE>>>:
+- INTRO_TITLE: Use English title from script
+- models list: Format ("Number. Title", "Line 1\\nLine 2", GraphicID) - ALL in English
+- OUTRO_TEXT: Use English closing statement
+
+Output complete, runnable Python code:
+
+from manim import *
+
+
+# Font configuration
+FONT = "Arial"
+
+
+class Dynamic_HUD_Review(Scene):
+    def construct(self):
+        # --- 1. Core Config (DO NOT MODIFY) ---
+        BG_COLOR = "#0D0D12"
+        COLORS = ["#00F0FF", "#FF003C", "#FCEE09", "#B026FF", "#00FF66"]
+        self.camera.background_color = BG_COLOR
+
+
+        # ==========================================
+        # Content Injection Area (ONLY MODIFY HERE)
+        # ==========================================
+        INTRO_TITLE = "[<<<REPLACE 1: Video Title>>>]"
+        
+        # Format: ("Number. Title", "Line 1\\nLine 2", GraphicID)
+        models = [
+            # [<<<REPLACE 2: Fill in generated content>>>]
+            ("01. Example Title One", "First line of example text,\\nSecond line of example text.", 1),
+            ("02. Example Title Two", "First line of example text,\\nSecond line of example text.", 0)
+        ]
+        
+        OUTRO_TEXT = "[<<<REPLACE 3: Powerful closing statement>>>]"
+        # ==========================================
+
+
+        # --- 2. Dynamic Visual Factory (DO NOT MODIFY) ---
+        def get_dynamic_visual(v_type, color):
+            if v_type == 0:  # Data Matrix
+                mob = VGroup(*[Dot(radius=0.06, color=color) for _ in range(16)])
+                mob.arrange_in_grid(4, 4, buff=0.6)
+                mob.add_updater(lambda m, dt: m.rotate(dt * 0.3))
+                return mob
+            elif v_type == 1:  # Cyclic Halo
+                mob = VGroup(
+                    DashedVMobject(Circle(radius=1.8, color=color), num_dashes=20),
+                    Circle(radius=2.4, color=color).set_opacity(0.3)
+                )
+                mob[0].add_updater(lambda m, dt: m.rotate(dt * 0.5))
+                mob[1].add_updater(lambda m, dt: m.rotate(-dt * 0.3))
+                return mob
+            else:  # Polygon Fission
+                mob = VGroup(
+                    RegularPolygon(n=3, radius=1.6, color=color),
+                    RegularPolygon(n=6, radius=2.2, color=color).set_opacity(0.4)
+                )
+                mob[0].add_updater(lambda m, dt: m.rotate(-dt * 0.6))
+                mob[1].add_updater(lambda m, dt: m.rotate(dt * 0.4))
+                return mob
+
+
+        # --- 3. Animation Flow (DO NOT MODIFY) ---
+        title_text = Text(INTRO_TITLE, font=FONT, color=COLORS[0], weight=BOLD).scale(1.5)
+        self.play(Write(title_text), run_time=2)
+        self.wait(1.5)
+        self.play(FadeOut(title_text))
+
+
+        for i, (title_str, desc_str, v_type) in enumerate(models):
+            current_color = COLORS[i % len(COLORS)]
+            
+            # Left side text layout
+            title = Text(title_str, font=FONT, color=current_color, weight=BOLD).scale(1.2)
+            desc = Text(desc_str, font=FONT, color=WHITE, line_spacing=1.5).scale(0.8)
+            text_group = VGroup(title, desc).arrange(DOWN, aligned_edge=LEFT, buff=0.8).to_edge(LEFT, buff=1.5)
+
+
+            # Right side dynamic visual
+            visual = get_dynamic_visual(v_type, current_color).to_edge(RIGHT, buff=2.0)
+
+
+            # Enter
+            self.play(
+                Write(title), 
+                FadeIn(desc, shift=UP*0.3), 
+                FadeIn(visual, scale=0.5), 
+                run_time=1.5
+            )
+            self.wait(3.5)
+            
+            # Exit and clear cache
+            self.play(FadeOut(text_group), FadeOut(visual), run_time=1)
+            visual.clear_updaters() 
+
+
+        # Ending
+        outro = Text(OUTRO_TEXT, font=FONT, color=WHITE, line_spacing=1.5).scale(1.2)
+        self.play(FadeIn(outro, shift=UP*0.3))
+        self.wait(3.5)
+        self.play(FadeOut(outro), run_time=2)
+"""
+
+
 class ManimService:
     def __init__(self, db: Session):
         self.db = db
@@ -149,7 +271,6 @@ class ManimService:
             video_title: 视频标题（可选），将作为视频开头的大标题
             model: 模型选择（可选），如 "qwen3-coder-next"
         """
-        # 检测语言
         language = detect_language(script)
         
         if template_code:
@@ -166,13 +287,26 @@ class ManimService:
 4. 代码必须语法正确，能通过 Python ast.parse() 检查
 5. 参数之间用逗号分隔，如 color=C_CYAN, opacity=0.15（注意逗号后有空格）
 6. 不要漏掉逗号或添加多余字符
+""" if language == 'zh' else f"""You are a Manim animation code expert. Generate new code following this template's style and structure:
+
+```python
+{template_code}
+```
+
+Important requirements:
+1. Maintain template's animation style, color config, layout
+2. Only replace content parts (titles, copy, etc.)
+3. Keep code structure unchanged
+4. Code must be syntactically correct, pass Python ast.parse()
+5. Separate parameters with commas, e.g., color=C_CYAN, opacity=0.15
+6. Don't miss commas or add extra characters
 """
         else:
             system_prompt = MANIM_SYSTEM_PROMPT_ZH if language == 'zh' else MANIM_SYSTEM_PROMPT_EN
         
         title_instruction = ""
         if video_title:
-            title_instruction = f"\n视频标题：「{video_title}」\n请使用这个标题作为视频开头的大标题。\n"
+            title_instruction = f"\n视频标题：「{video_title}」\n请使用这个标题作为视频开头的大标题。\n" if language == 'zh' else f"\nVideo Title: \"{video_title}\"\nUse this title as the opening title of the video.\n"
         
         user_message = f"""请根据以下内容生成 Manim 动画代码：
 {title_instruction}
@@ -182,12 +316,21 @@ class ManimService:
 1. 严格按内容要点数量生成动画
 2. 每个要点必须有标题和解释文案
 3. 代码必须完整可运行
-4. 必须使用字体：font="Droid Sans Fallback"
-""" if language == 'zh' else """Requirements:
-1. Strictly generate animations according to the number of content points
+""" if language == 'zh' else f"""CRITICAL: Generate code with English content only!
+
+DO NOT translate the following English content to Chinese.
+Use the exact titles and descriptions from the script below.
+
+{title_instruction}
+
+SCRIPT CONTENT TO USE (extract from this, keep in English):
+{script}
+
+Requirements:
+1. Extract titles and descriptions from the script above - KEEP IN ENGLISH
 2. Each point must have a title and explanatory text
-3. Code must be complete and runnable
-4. Must use font: font="Arial"
+3. Code must use FONT = "Arial" (NOT Chinese fonts)
+4. DO NOT translate any content to Chinese
 """
 
         content = await self.client.generate_code(

@@ -396,7 +396,8 @@ async def regenerate_code(
     
     manim_code = await manim_service.generate_code(
         project.final_script,
-        custom_code=project.custom_code or None
+        template_code=template_code,
+        video_title=project.theme
     )
     
     project.manim_code = manim_code
