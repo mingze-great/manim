@@ -124,8 +124,27 @@ async def get_current_user(
     if user is None:
         raise credentials_exception
     
-    # 检查过期状态，但不阻止访问（允许渲染任务继续）
-    # 前端会根据 can_use 状态显示提示
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="账号已被禁用，请联系管理员",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    if not user.is_approved and not user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="账号正在等待审核",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    if user.is_expired():
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="账号已过期，请联系续费",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
     return user
 
 
