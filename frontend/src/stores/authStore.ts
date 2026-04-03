@@ -84,3 +84,31 @@ export const startInactivityCheck = (onLogout: () => void) => {
   
   resetTimer()
 }
+
+const STATUS_CHECK_INTERVAL = 30 * 1000
+
+export const startStatusCheck = (onForceLogout: () => void) => {
+  let intervalId: ReturnType<typeof setInterval>
+  
+  const checkStatus = async () => {
+    const { token, user } = useAuthStore.getState()
+    if (!token || !user) return
+    
+    try {
+      const response = await fetch('/api/auth/me', {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      
+      if (response.status === 401) {
+        clearInterval(intervalId)
+        onForceLogout()
+      }
+    } catch (error) {
+      // 网络错误不处理，继续检查
+    }
+  }
+  
+  intervalId = setInterval(checkStatus, STATUS_CHECK_INTERVAL)
+  
+  return () => clearInterval(intervalId)
+}

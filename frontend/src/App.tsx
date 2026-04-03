@@ -21,6 +21,7 @@ import AdminTemplates from './pages/admin/AdminTemplates'
 import AdminStatistics from './pages/admin/AdminStatistics'
 import AdminTokenUsage from './pages/admin/AdminTokenUsage'
 import { useState, useEffect } from 'react'
+import { startStatusCheck } from './stores/authStore'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { token } = useAuthStore()
@@ -54,6 +55,17 @@ function AppContent() {
     }
     validateUser()
   }, [_hasHydrated, token])
+
+  useEffect(() => {
+    if (!token || !_hasHydrated) return
+    
+    const cleanup = startStatusCheck(() => {
+      logout()
+      window.location.href = '/login'
+    })
+    
+    return cleanup
+  }, [token, _hasHydrated, logout])
 
   if (!_hasHydrated || (validating && token)) {
     return (
