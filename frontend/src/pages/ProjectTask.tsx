@@ -19,6 +19,7 @@ export default function ProjectTask() {
   const { id } = useParams<{ id: string }>()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
+  const { user } = useAuthStore()
   const [project, setProject] = useState<Project | null>(null)
   const [task, setTask] = useState<Task | null>(null)
   const [loading, setLoading] = useState(true)
@@ -605,8 +606,8 @@ useEffect(() => {
                   </div>
                 )}
 
-                {/* 终端输出 */}
-                {(showTerminal || terminalLog) && (
+                {/* 终端输出 - 仅管理员可见 */}
+                {(showTerminal || terminalLog) && user?.is_admin && (
                   <div className="mt-4">
                     <div className="flex items-center justify-between mb-2">
                       <span className="font-medium">终端输出</span>
