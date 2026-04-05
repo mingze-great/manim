@@ -165,12 +165,40 @@ async def generate_code_stream(
             # 发送中间进度提示
             yield f"data: {json.dumps({'step': 'generate', 'progress': 30, 'message': '正在生成脚本，预计需要 1-2 分钟...'})}\n\n"
             
-            manim_code = await manim_service.generate_code(
-                project_local.final_script, 
-                template_code,
-                video_title=project_local.theme,
-                model=model
+            # 进度更新配置
+            progress_messages = [
+                (35, "正在分析内容结构..."),
+                (40, "正在生成动画场景..."),
+                (45, "正在编写 Manim 代码..."),
+                (50, "代码生成中，请耐心等待..."),
+                (55, "继续生成中..."),
+                (60, "即将完成..."),
+                (65, "正在收尾..."),
+            ]
+            
+            # 创建生成任务
+            generate_task = asyncio.create_task(
+                manim_service.generate_code(
+                    project_local.final_script, 
+                    template_code,
+                    video_title=project_local.theme,
+                    model=model
+                )
             )
+            
+            # 等待生成完成，同时发送进度更新
+            progress_index = 0
+            while not generate_task.done():
+                try:
+                    await asyncio.wait_for(asyncio.shield(generate_task), timeout=8)
+                except asyncio.TimeoutError:
+                    # 每 8 秒发送一次进度更新
+                    if progress_index < len(progress_messages):
+                        progress, msg = progress_messages[progress_index]
+                        yield f"data: {json.dumps({'step': 'generate', 'progress': progress, 'message': msg})}\n\n"
+                        progress_index += 1
+            
+            manim_code = generate_task.result()
             
             yield f"data: {json.dumps({'step': 'generate', 'progress': 70, 'message': '脚本生成完成，正在验证...'})}\n\n"
             
