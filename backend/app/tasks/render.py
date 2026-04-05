@@ -171,7 +171,7 @@ class {scene_name}(Scene):
                 
                 # 使用 communicate 替代逐行读取，避免死锁
                 try:
-                    output, _ = process.communicate(timeout=600)
+                    output, _ = process.communicate(timeout=420)
                     
                     # 输出日志
                     for line in output.strip().split('\n'):
@@ -186,7 +186,7 @@ class {scene_name}(Scene):
                 except subprocess.TimeoutExpired:
                     process.kill()
                     process.wait()  # 确保进程完全终止
-                    update_task_progress(task_id, 80, "failed", error_message="Render timeout", log="❌ 渲染超时！\n")
+                    update_task_progress(task_id, 80, "failed", error_message="Render timeout (7 minutes)", log="❌ 渲染超时（超过7分钟）！\n")
                     return
                 except Exception as e:
                     process.kill()
