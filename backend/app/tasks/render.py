@@ -169,24 +169,32 @@ class {scene_name}(Scene):
                     bufsize=1
                 )
                 
-                for line in process.stdout:
-                    line = line.strip()
-                    if line:
-                        update_task_progress(task_id, 40, "processing", log=f"{line}\n")
-                        print(f"[Task {task_id}] {line}")
-                
-                result = process.wait(timeout=600)
-                
-                if result != 0:
-                    update_task_progress(task_id, 80, "failed", error_message="Render failed", log=f"❌ 渲染失败 (code: {result})\n")
-                    return
+                # 使用 communicate 替代逐行读取，避免死锁
+                try:
+                    output, _ = process.communicate(timeout=600)
                     
-            except subprocess.TimeoutExpired:
-                process.kill()
-                update_task_progress(task_id, 80, "failed", error_message="Render timeout", log="❌ 渲染超时！\n")
-                return
+                    # 输出日志
+                    for line in output.strip().split('\n'):
+                        if line:
+                            update_task_progress(task_id, 40, "processing", log=f"{line}\n")
+                            print(f"[Task {task_id}] {line}")
+                    
+                    if process.returncode != 0:
+                        update_task_progress(task_id, 80, "failed", error_message="Render failed", log=f"❌ 渲染失败 (code: {process.returncode})\n")
+                        return
+                        
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()  # 确保进程完全终止
+                    update_task_progress(task_id, 80, "failed", error_message="Render timeout", log="❌ 渲染超时！\n")
+                    return
+                except Exception as e:
+                    process.kill()
+                    process.wait()
+                    update_task_progress(task_id, 80, "failed", error_message=f"Render error: {str(e)}", log=f"❌ 渲染异常: {e}\n")
+                    return
             except Exception as e:
-                update_task_progress(task_id, 80, "failed", error_message=f"Render error: {str(e)}", log=f"❌ 渲染异常: {e}\n")
+                update_task_progress(task_id, 80, "failed", error_message=f"Process error: {str(e)}", log=f"❌ 进程异常: {e}\n")
                 return
             
             update_task_progress(task_id, 75, "processing", log="🎉 渲染完成！\n")
