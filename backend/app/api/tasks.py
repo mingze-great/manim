@@ -1,5 +1,5 @@
 from typing import Annotated, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, Header
+from fastapi import APIRouter, Depends, HTTPException, Query, Header, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 import json
@@ -21,6 +21,7 @@ from app.api.auth import get_current_user
 from app.services.manim import ManimService
 from app.config import get_settings
 from app.utils.cos_storage import cos_storage
+from app.tasks.celery_tasks import render_video_celery
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 settings = get_settings()
@@ -434,3 +435,77 @@ def get_project_task(
 ):
     task = db.query(Task).filter(Task.project_id == project_id).order_by(Task.created_at.desc()).first()
     return task
+
+
+@router.post("/{project_id}/render-async")
+async def render_video_async(
+    project_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+    background_tasks: BackgroundTasks
+):
+    """后台渲染视频（支持关闭浏览器后继续运行）"""
+    project = db.query(Project).filter(
+        Project.id == project_id,
+        Project.user_id == current_user.id
+    ).first()
+    
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    if not project.manim_code:
+        raise HTTPException(status_code=400, detail="请先生成脚本")
+    
+    # 创建任务记录
+    task = Task(
+        project_id=project_id,
+        user_id=current_user.id,
+        status="pending",
+        progress=0
+    )
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+    
+    # 提交 Celery 后台任务
+    celery_result = render_video_celery.delay(
+        task.id,
+        project_id,
+        None,
+        project.custom_code
+    )
+    
+    # 保存 celery task id
+    task.celery_task_id = celery_result.id
+    db.commit()
+    
+    return {
+        "task_id": task.id,
+        "celery_task_id": celery_result.id,
+        "message": "任务已提交，后台运行中，可关闭浏览器"
+    }
+
+
+@router.get("/task/{task_id}/status")
+def get_task_status(
+    task_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)]
+):
+    """查询后台任务状态"""
+    task = db.query(Task).filter(
+        Task.id == task_id,
+        Task.user_id == current_user.id
+    ).first()
+    
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    return {
+        "task_id": task.id,
+        "status": task.status,
+        "progress": task.progress or 0,
+        "video_url": task.video_url,
+        "error_message": task.error_message,
+        "celery_task_id": task.celery_task_id
+    }

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Table, Button, Space, Tag, Modal, Form, Input, message, Popconfirm, Upload, Switch } from 'antd'
+import { Table, Button, Space, Tag, Modal, Form, Input, message, Popconfirm, Upload, Switch, Tooltip } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, PlayCircleOutlined, UploadOutlined } from '@ant-design/icons'
 import { templateApi, Template } from '@/services/template'
 
@@ -211,15 +211,22 @@ export default function AdminTemplates() {
           >
             编辑
           </Button>
-          {!record.is_system && (
+          {!record.is_system ? (
             <Popconfirm
               title="确定删除此模板？"
+              description="删除后无法恢复"
               onConfirm={() => handleDelete(record.id)}
             >
               <Button type="link" danger icon={<DeleteOutlined />}>
                 删除
               </Button>
             </Popconfirm>
+          ) : (
+            <Tooltip title="系统模板不可删除，如需隐藏请点击「隐藏」按钮">
+              <Button type="link" disabled icon={<DeleteOutlined />}>
+                删除
+              </Button>
+            </Tooltip>
           )}
         </Space>
       ),
