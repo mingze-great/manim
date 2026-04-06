@@ -339,44 +339,57 @@ useEffect(() => {
     setDownloadingVideo(true)
     
     try {
-      // 如果是 COS URL，直接下载，不需要 fetch
-      if (videoUrl.includes('cos.ap-beijing.myqcloud.com')) {
-        const a = document.createElement('a')
-        a.href = videoUrl
-        a.download = `video_${id}_${Date.now()}.mp4`
-        a.target = '_blank'
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        message.success('开始下载视频')
-      } else {
-        // 本地 API 路径，需要 fetch
-        const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
-        const token = useAuthStore.getState().token
-        const fullUrl = videoUrl.startsWith('http') ? videoUrl : `${API_BASE}${videoUrl}`
-        
-        const response = await fetch(fullUrl, {
-          headers: token ? { 'Authorization': `Bearer ${token}` } : {}
-        })
-        
-        if (!response.ok) {
-          throw new Error('下载失败')
-        }
-        
-        const blob = await response.blob()
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `video_${id}_${Date.now()}.mp4`
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(url)
-        message.success('视频下载成功')
+      const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
+      const token = useAuthStore.getState().token
+      const fullUrl = videoUrl.startsWith('http') ? videoUrl : `${API_BASE}${videoUrl}`
+      
+      message.loading({ content: '准备下载...', key: 'download', duration: 0 })
+      
+      const response = await fetch(fullUrl, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      })
+      
+      if (!response.ok) {
+        throw new Error('下载失败')
       }
+      
+      const contentLength = response.headers.get('content-length')
+      const total = contentLength ? parseInt(contentLength, 10) : 0
+      
+      const reader = response.body?.getReader()
+      if (!reader) {
+        throw new Error('无法读取响应')
+      }
+      
+      const chunks: Uint8Array[] = []
+      let receivedLength = 0
+      
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        chunks.push(value)
+        receivedLength += value.length
+        
+        if (total > 0) {
+          const progress = Math.round((receivedLength / total) * 100)
+          message.loading({ content: `下载中... ${progress}%`, key: 'download', duration: 0 })
+        }
+      }
+      
+      const blob = new Blob(chunks)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `video_${id}_${Date.now()}.mp4`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      
+      message.success({ content: '视频下载成功！', key: 'download' })
     } catch (error) {
       console.error('下载失败:', error)
-      message.error('视频下载失败，请重试')
+      message.error({ content: '视频下载失败，请重试', key: 'download' })
     } finally {
       setDownloadingVideo(false)
     }
