@@ -1,8 +1,8 @@
-from celery import shared_task
+from celery_app import celery_app
 from .render import render_video_task
 
 
-@shared_task(bind=True)
+@celery_app.task(bind=True, name="app.tasks.render_video_celery")
 def render_video_celery(self, task_id: int, project_id: int, template_id: int = None, custom_code: str = None):
     """Celery 后台渲染任务"""
     try:
