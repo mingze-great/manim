@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
     
+    # Environment
+    ENVIRONMENT: str = "development"  # development/production
+    DEBUG: bool = False
+    
     # Admin
     ADMIN_EMAIL: str = ""
     
