@@ -392,7 +392,7 @@ class ChatService:
             print(f"[DEBUG] Calling stream_chat with {len(messages)} messages")
             response = await self.client.stream_chat(
                 messages=messages,
-                model=LLMFactory.get_chat_model(),
+                # 不传 model 参数，使用默认降级列表
                 temperature=0.7,
                 max_tokens=8000
             )
@@ -551,7 +551,7 @@ class ChatService:
         try:
             response = await self.client.stream_chat(
                 messages=messages,
-                model=LLMFactory.get_chat_model(),
+                # 不传 model 参数，使用默认降级列表
                 temperature=0.7,
                 max_tokens=8000
             )
