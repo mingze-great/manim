@@ -176,6 +176,9 @@ class ArticleGenService:
         
         for key, value in kwargs.items():
             if hasattr(article, key):
+                # 将 list 类型序列化为 JSON 字符串存储
+                if key == "images" and isinstance(value, list):
+                    value = json.dumps(value, ensure_ascii=False)
                 setattr(article, key, value)
         
         article.updated_at = datetime.utcnow()

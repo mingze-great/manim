@@ -1,6 +1,7 @@
-from pydantic import BaseModel
-from typing import Optional, List
+from pydantic import BaseModel, field_validator
+from typing import Optional, List, Any
 from datetime import datetime
+import json
 
 
 class ArticleBase(BaseModel):
@@ -37,6 +38,16 @@ class ArticleResponse(BaseModel):
     word_count: int
     created_at: datetime
     updated_at: datetime
+    
+    @field_validator('images', mode='before')
+    @classmethod
+    def parse_images(cls, v: Any) -> Optional[List[dict]]:
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except:
+                return None
+        return v
     
     class Config:
         from_attributes = True
