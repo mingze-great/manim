@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.models.article import Article
 from app.models.daily_usage import UserDailyUsage
 from app.config import get_settings
+from app.config.article_prompts import get_category_prompt
 
 settings = get_settings()
 
@@ -51,11 +52,13 @@ class ArticleGenService:
         
         self.db.commit()
     
-    async def generate_outline(self, topic: str) -> str:
+    async def generate_outline(self, topic: str, category: str = "生活") -> str:
         """生成文章大纲"""
         from app.utils.llm_factory import LLMFactory
         
         client = LLMFactory.get_client()
+        
+        system_prompt = get_category_prompt(category)
         
         prompt = f"""请为以下主题生成一个公众号文章大纲，要求：
 1. 包含标题和3-5个要点
@@ -67,18 +70,20 @@ class ArticleGenService:
 请直接输出大纲，不要其他解释。"""
         
         messages = [
-            {"role": "system", "content": "你是一个公众号文章创作专家，擅长生成吸引人的文章大纲。"},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt}
         ]
         
         response = await client.chat(messages=messages)
         return response
     
-    async def generate_content(self, topic: str, outline: str) -> dict:
+    async def generate_content(self, topic: str, outline: str, category: str = "生活") -> dict:
         """生成完整文章内容"""
         from app.utils.llm_factory import LLMFactory
         
         client = LLMFactory.get_client()
+        
+        system_prompt = get_category_prompt(category)
         
         prompt = f"""请根据以下主题和大纲，生成一篇公众号文章，要求：
 1. 字数700-1000字
@@ -95,7 +100,7 @@ class ArticleGenService:
 请直接输出文章正文，不要输出标题和大纲。"""
         
         messages = [
-            {"role": "system", "content": "你是一个公众号文章创作专家，擅长写深度好文。"},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt}
         ]
         
@@ -165,11 +170,12 @@ class ArticleGenService:
         
         return "\n".join(html_parts)
     
-    async def create_article(self, user_id: int, topic: str, outline: str = None) -> Article:
+    async def create_article(self, user_id: int, topic: str, category: str = "生活", outline: str = None) -> Article:
         """创建文章"""
         article = Article(
             user_id=user_id,
             topic=topic,
+            category=category,
             outline=outline,
             status="draft"
         )

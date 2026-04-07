@@ -6,6 +6,7 @@ import json
 
 class ArticleBase(BaseModel):
     topic: str
+    category: str = "生活"
     outline: Optional[str] = None
 
 
@@ -17,6 +18,7 @@ class ArticleUpdate(BaseModel):
     title: Optional[str] = None
     content_text: Optional[str] = None
     outline: Optional[str] = None
+    category: Optional[str] = None
 
 
 class ImageInfo(BaseModel):
@@ -28,6 +30,7 @@ class ImageInfo(BaseModel):
 class ArticleResponse(BaseModel):
     id: int
     user_id: int
+    category: str
     title: Optional[str]
     topic: str
     outline: Optional[str]
@@ -58,3 +61,9 @@ class UsageResponse(BaseModel):
     limit: int
     remaining: int
     reset_time: str
+
+
+class CategoryResponse(BaseModel):
+    name: str
+    icon: str
+    example_topics: List[str]

@@ -8,6 +8,7 @@ class Article(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    category = Column(String(50), default="生活")
     title = Column(String(200))
     topic = Column(Text, nullable=False)
     outline = Column(Text)

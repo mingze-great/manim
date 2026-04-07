@@ -10,12 +10,27 @@ from app.schemas.article import (
     ArticleCreate,
     ArticleUpdate,
     ArticleResponse,
-    UsageResponse
+    UsageResponse,
+    CategoryResponse
 )
 from app.services.article_gen import ArticleGenService
 from app.services.image_gen import image_gen_service
+from app.config.article_prompts import ARTICLE_CATEGORIES
 
 router = APIRouter(prefix="/articles", tags=["articles"])
+
+
+@router.get("/categories", response_model=List[CategoryResponse])
+async def get_categories():
+    """获取创作方向列表"""
+    categories = []
+    for name, data in ARTICLE_CATEGORIES.items():
+        categories.append(CategoryResponse(
+            name=name,
+            icon=data["icon"],
+            example_topics=data["example_topics"]
+        ))
+    return categories
 
 
 @router.get("/usage", response_model=UsageResponse)
@@ -43,6 +58,7 @@ async def create_article(
     article = await service.create_article(
         user_id=current_user.id,
         topic=article_data.topic,
+        category=article_data.category,
         outline=article_data.outline
     )
     
@@ -61,7 +77,7 @@ async def generate_outline(
     if not article or article.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="文章不存在")
     
-    outline = await service.generate_outline(article.topic)
+    outline = await service.generate_outline(article.topic, article.category)
     
     article = await service.update_article(article_id, outline=outline)
     
@@ -81,10 +97,10 @@ async def generate_content(
         raise HTTPException(status_code=404, detail="文章不存在")
     
     if not article.outline:
-        outline = await service.generate_outline(article.topic)
+        outline = await service.generate_outline(article.topic, article.category)
         article = await service.update_article(article_id, outline=outline)
     
-    result = await service.generate_content(article.topic, article.outline)
+    result = await service.generate_content(article.topic, article.outline, article.category)
     
     article = await service.update_article(
         article_id,
