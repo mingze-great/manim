@@ -90,6 +90,11 @@ class Settings(BaseSettings):
     INTERNAL_API_KEY: str = "internal-api-key-change-in-production"
     OLD_SERVER_URL: str = "http://106.52.166.109:8000"
     NEW_SERVER_URL: str = "http://152.136.218.74:8000"
+    
+    IMAGE_API_KEY: str = ""
+    IMAGE_BASE_URL: str = "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
+    IMAGE_MODEL: str = "wan2.7-image-pro"
+    ARTICLE_DAILY_LIMIT: int = 2
 
 
 @lru_cache()

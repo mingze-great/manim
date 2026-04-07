@@ -20,6 +20,9 @@ import AdminSettings from './pages/admin/AdminSettings'
 import AdminTemplates from './pages/admin/AdminTemplates'
 import AdminStatistics from './pages/admin/AdminStatistics'
 import AdminTokenUsage from './pages/admin/AdminTokenUsage'
+import ArticleCreator from './pages/Article/Creator'
+import ArticleEditor from './pages/Article/Editor'
+import ArticleHistory from './pages/Article/History'
 import { useState, useEffect } from 'react'
 import { startStatusCheck } from './stores/authStore'
 
@@ -88,6 +91,9 @@ function AppContent() {
         <Route path="/project/:id/task" element={<ProjectTask />} />
         <Route path="/history" element={<History />} />
         <Route path="/profile" element={<Profile />} />
+        <Route path="/article" element={<ArticleCreator />} />
+        <Route path="/article/:id" element={<ArticleEditor />} />
+        <Route path="/article/history" element={<ArticleHistory />} />
       </Route>
 
       <Route element={<AdminRoute><AdminLayout /></AdminRoute>}>

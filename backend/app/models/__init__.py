@@ -5,5 +5,7 @@ from .template import Template
 from .subscription import Order, Subscription
 from .statistics import DailyStatistics
 from .background_task import BackgroundTask
+from .article import Article
+from .daily_usage import UserDailyUsage
 
-__all__ = ["User", "Project", "Conversation", "Task", "Template", "Order", "Subscription", "DailyStatistics", "BackgroundTask"]
+__all__ = ["User", "Project", "Conversation", "Task", "Template", "Order", "Subscription", "DailyStatistics", "BackgroundTask", "Article", "UserDailyUsage"]
