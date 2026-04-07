@@ -2,6 +2,7 @@ import os
 import hashlib
 import hmac
 import time
+import httpx
 from datetime import datetime, timedelta
 from typing import Optional
 from qcloud_cos import CosConfig
@@ -99,6 +100,32 @@ class COSStorage:
         if result:
             return True, key, self.generate_presigned_url(key)
         return False, None, None
+    
+    async def upload_image_from_url(self, image_url: str, filename: str) -> Optional[str]:
+        if not self.enabled or not self.client:
+            return image_url
+        
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(image_url)
+                if response.status_code != 200:
+                    print(f"[COS] Download image failed: {response.status_code}")
+                    return image_url
+                
+                image_data = response.content
+                key = f"articles/{filename}"
+                
+                self.client.put_object(
+                    Bucket=self.bucket,
+                    Body=image_data,
+                    Key=key,
+                    ContentType='image/png'
+                )
+                
+                return f"{self.domain}/{key}"
+        except Exception as e:
+            print(f"[COS] Upload image from URL failed: {e}")
+            return image_url
 
 
 cos_storage = COSStorage()

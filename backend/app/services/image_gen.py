@@ -25,7 +25,14 @@ class ImageGenService:
                 json={
                     "model": self.model,
                     "input": {
-                        "prompt": prompt
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": [
+                                    {"text": prompt}
+                                ]
+                            }
+                        ]
                     }
                 }
             )
@@ -34,7 +41,17 @@ class ImageGenService:
                 raise Exception(f"图片生成失败: {response.text}")
             
             data = response.json()
-            image_url = data["output"]["results"][0]["url"]
+            
+            if "output" not in data:
+                raise Exception(f"图片生成响应格式错误: {data}")
+            
+            results = data["output"].get("results", [])
+            if not results:
+                raise Exception(f"图片生成未返回结果: {data}")
+            
+            image_url = results[0].get("url")
+            if not image_url:
+                raise Exception(f"图片生成未返回URL: {data}")
             
             cos_url = await cos_storage.upload_image_from_url(image_url, f"article_{hash(prompt)}.png")
             
