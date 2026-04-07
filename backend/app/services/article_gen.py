@@ -121,6 +121,16 @@ class ArticleGenService:
     
     def convert_to_html(self, title: str, content: str, images: list) -> str:
         """转换为微信公众号兼容的 HTML 格式"""
+        # 处理 images 参数类型（可能是 JSON 字符串）
+        if isinstance(images, str):
+            try:
+                images = json.loads(images)
+            except:
+                images = []
+        
+        if not isinstance(images, list):
+            images = []
+        
         paragraphs = content.split("\n\n")
         html_parts = []
         
