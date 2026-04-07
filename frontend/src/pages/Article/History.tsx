@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Card, List, Button, Typography, Space, Spin, Empty, Popconfirm, message } from 'antd'
-import { EditOutlined, DeleteOutlined, EyeOutlined, PlusOutlined } from '@ant-design/icons'
+import { DeleteOutlined, EyeOutlined, PlusOutlined } from '@ant-design/icons'
 import { articleApi, Article } from '@/services/article'
 
 const { Text, Title } = Typography

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Card, Button, Input, message, Spin, Progress, Typography, Space } from 'antd'
+import { Card, Button, Input, message, Progress, Typography, Space } from 'antd'
 import { EditOutlined, RocketOutlined, FileTextOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { articleApi, Usage } from '@/services/article'
@@ -13,7 +13,6 @@ export default function ArticleCreator() {
   const [topic, setTopic] = useState('')
   const [usage, setUsage] = useState<Usage | null>(null)
   const [step, setStep] = useState(0)
-  const [articleId, setArticleId] = useState<number | null>(null)
 
   useEffect(() => {
     loadUsage()
@@ -45,7 +44,6 @@ export default function ArticleCreator() {
     try {
       setStep(1)
       const { data: article } = await articleApi.create({ topic })
-      setArticleId(article.id)
 
       setStep(2)
       await articleApi.generateOutline(article.id)
@@ -121,7 +119,7 @@ export default function ArticleCreator() {
             icon={<RocketOutlined />}
             onClick={handleGenerate}
             loading={loading}
-            disabled={usage && usage.remaining <= 0}
+            disabled={!usage || usage.remaining <= 0}
             block
             size="large"
           >
