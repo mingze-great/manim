@@ -20,7 +20,7 @@ from app.config.article_prompts import ARTICLE_CATEGORIES
 router = APIRouter(prefix="/articles", tags=["articles"])
 
 
-@router.get("/categories", response_model=List[CategoryResponse])
+@router.get("/meta/categories", response_model=List[CategoryResponse])
 async def get_categories():
     """获取创作方向列表"""
     categories = []
