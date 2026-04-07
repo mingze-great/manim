@@ -45,13 +45,34 @@ class ImageGenService:
             if "output" not in data:
                 raise Exception(f"图片生成响应格式错误: {data}")
             
-            results = data["output"].get("results", [])
-            if not results:
-                raise Exception(f"图片生成未返回结果: {data}")
+            output = data["output"]
+            image_url: str = ""
             
-            image_url = results[0].get("url")
+            # 新版 API 返回格式：choices[].message.content[].image
+            if "choices" in output:
+                choices = output.get("choices", [])
+                if not choices:
+                    raise Exception(f"图片生成未返回choices: {data}")
+                
+                content = choices[0].get("message", {}).get("content", [])
+                if not content:
+                    raise Exception(f"图片生成未返回content: {data}")
+                
+                image_url = content[0].get("image", "")
+            
+            # 旧版 API 返回格式：results[].url (兼容)
+            elif "results" in output:
+                results = output.get("results", [])
+                if not results:
+                    raise Exception(f"图片生成未返回results: {data}")
+                
+                image_url = results[0].get("url", "")
+            
+            else:
+                raise Exception(f"图片生成响应格式不支持: {data}")
+            
             if not image_url:
-                raise Exception(f"图片生成未返回URL: {data}")
+                raise Exception(f"图片生成未返回有效的URL: {data}")
             
             cos_url = await cos_storage.upload_image_from_url(image_url, f"article_{hash(prompt)}.png")
             

@@ -101,7 +101,7 @@ class COSStorage:
             return True, key, self.generate_presigned_url(key)
         return False, None, None
     
-    async def upload_image_from_url(self, image_url: str, filename: str) -> Optional[str]:
+    async def upload_image_from_url(self, image_url: str, filename: str) -> str:
         if not self.enabled or not self.client:
             return image_url
         
