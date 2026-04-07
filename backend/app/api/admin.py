@@ -8,6 +8,7 @@ from app.database import get_db
 from app.models.user import User, AuditLog
 from app.models.project import Project
 from app.models.task import Task
+from app.models.article_category import ArticleCategory
 from app.schemas.user import UserResponse, UserUpdate, UserStats, AuditLogResponse, SystemStats, UserDetail, ProjectStatus, RecentProject, TaskLog, TokenUsageItem, TokenUsageResponse
 from app.api.auth import get_current_user, get_current_admin_user
 from app.config import get_settings
@@ -677,3 +678,111 @@ async def get_token_usage(
         "total_code_tokens": sum(u["code_token_usage"] for u in result),
         "total_tokens": sum(u["total_token_usage"] for u in result)
     }
+
+
+# ==================== 文章创作方向管理 ====================
+
+@router.get("/article-categories")
+async def list_article_categories(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """获取所有文章创作方向"""
+    categories = db.query(ArticleCategory).order_by(ArticleCategory.sort_order).all()
+    return categories
+
+
+@router.post("/article-categories")
+async def create_article_category(
+    name: str,
+    icon: str,
+    system_prompt: str,
+    example_topics: List[str],
+    image_prompt_template: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """创建新创作方向"""
+    existing = db.query(ArticleCategory).filter(ArticleCategory.name == name).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="该创作方向已存在")
+    
+    import json
+    category = ArticleCategory(
+        name=name,
+        icon=icon,
+        system_prompt=system_prompt,
+        example_topics=json.dumps(example_topics, ensure_ascii=False),
+        image_prompt_template=image_prompt_template
+    )
+    db.add(category)
+    db.commit()
+    db.refresh(category)
+    
+    return {"message": "创作方向创建成功", "id": category.id}
+
+
+@router.put("/article-categories/{category_id}")
+async def update_article_category(
+    category_id: int,
+    name: Optional[str] = None,
+    icon: Optional[str] = None,
+    system_prompt: Optional[str] = None,
+    example_topics: Optional[List[str]] = None,
+    image_prompt_template: Optional[str] = None,
+    is_active: Optional[bool] = None,
+    sort_order: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """更新创作方向"""
+    category = db.query(ArticleCategory).filter(ArticleCategory.id == category_id).first()
+    if not category:
+        raise HTTPException(status_code=404, detail="创作方向不存在")
+    
+    import json
+    if name:
+        category.name = name
+    if icon:
+        category.icon = icon
+    if system_prompt:
+        category.system_prompt = system_prompt
+    if example_topics:
+        category.example_topics = json.dumps(example_topics, ensure_ascii=False)
+    if image_prompt_template is not None:
+        category.image_prompt_template = image_prompt_template
+    if is_active is not None:
+        category.is_active = is_active
+    if sort_order is not None:
+        category.sort_order = sort_order
+    
+    db.commit()
+    db.refresh(category)
+    
+    return {"message": "创作方向更新成功", "category": {
+        "id": category.id,
+        "name": category.name,
+        "icon": category.icon,
+        "system_prompt": category.system_prompt,
+        "example_topics": json.loads(category.example_topics) if category.example_topics else [],
+        "image_prompt_template": category.image_prompt_template,
+        "is_active": category.is_active,
+        "sort_order": category.sort_order
+    }}
+
+
+@router.delete("/article-categories/{category_id}")
+async def delete_article_category(
+    category_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """删除创作方向"""
+    category = db.query(ArticleCategory).filter(ArticleCategory.id == category_id).first()
+    if not category:
+        raise HTTPException(status_code=404, detail="创作方向不存在")
+    
+    db.delete(category)
+    db.commit()
+    
+    return {"message": "创作方向删除成功"}

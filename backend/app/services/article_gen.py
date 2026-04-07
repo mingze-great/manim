@@ -55,10 +55,20 @@ class ArticleGenService:
     async def generate_outline(self, topic: str, category: str = "生活") -> str:
         """生成文章大纲"""
         from app.utils.llm_factory import LLMFactory
+        from app.models.article_category import ArticleCategory
+        import json
         
         client = LLMFactory.get_client()
         
-        system_prompt = get_category_prompt(category)
+        # 从数据库读取系统提示词
+        db_category = self.db.query(ArticleCategory).filter(
+            ArticleCategory.name == category
+        ).first()
+        
+        if db_category:
+            system_prompt = db_category.system_prompt
+        else:
+            system_prompt = get_category_prompt(category)
         
         prompt = f"""请为以下主题生成一个公众号文章大纲，要求：
 1. 包含标题和3-5个要点
@@ -80,10 +90,19 @@ class ArticleGenService:
     async def generate_content(self, topic: str, outline: str, category: str = "生活") -> dict:
         """生成完整文章内容"""
         from app.utils.llm_factory import LLMFactory
+        from app.models.article_category import ArticleCategory
         
         client = LLMFactory.get_client()
         
-        system_prompt = get_category_prompt(category)
+        # 从数据库读取系统提示词
+        db_category = self.db.query(ArticleCategory).filter(
+            ArticleCategory.name == category
+        ).first()
+        
+        if db_category:
+            system_prompt = db_category.system_prompt
+        else:
+            system_prompt = get_category_prompt(category)
         
         prompt = f"""请根据以下主题和大纲，生成一篇公众号文章，要求：
 1. 字数700-1000字
