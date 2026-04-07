@@ -93,7 +93,7 @@ class Settings(BaseSettings):
     
     IMAGE_API_KEY: str = ""
     IMAGE_BASE_URL: str = "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
-    IMAGE_MODEL: str = "wan2.7-image-pro"
+    IMAGE_MODEL: str = "wan2.7-image"
     ARTICLE_DAILY_LIMIT: int = 2
 
 
