@@ -11,6 +11,7 @@ import uuid
 import re
 import shutil
 import sys
+import time
 
 from app.database import get_db
 from app.models.user import User
@@ -30,6 +31,8 @@ RENDER_SEMAPHORE = asyncio.Semaphore(4)
 CURRENT_RENDERS = 0
 OLD_SERVER_SEMAPHORE = asyncio.Semaphore(2)
 MAX_TOTAL_RENDERS = 6
+RENDER_TOTAL_TIMEOUT = 300
+RENDER_NO_OUTPUT_TIMEOUT = 60
 
 
 @router.post("/internal/update-video")
@@ -38,7 +41,6 @@ async def update_video_url(
     video_url: str,
     x_internal_key: str = Header(None)
 ):
-    """内部 API：更新视频 URL（供旧服务器回调）"""
     if x_internal_key != settings.INTERNAL_API_KEY:
         raise HTTPException(status_code=401, detail="Invalid API key")
     
@@ -74,7 +76,6 @@ async def try_dispatch_to_old_server(project_id: int, manim_code: str):
 
 @router.get("/render-status")
 async def get_render_status():
-    """获取渲染状态信息"""
     from app.services.render_dispatcher import render_dispatcher
     
     old_server_status = await render_dispatcher.check_old_server_status()
@@ -96,7 +97,6 @@ async def get_render_status():
 
 @router.get("/available-models")
 async def get_available_models():
-    """获取可用的模型列表"""
     from app.utils.llm_factory import LLMFactory
     return {
         "models": LLMFactory.get_available_models(),
@@ -120,7 +120,6 @@ async def generate_code_stream(
     template_id: Optional[int] = Query(None),
     model: Optional[str] = Query(None),
 ):
-    """生成Manim代码，流式返回进度"""
     project = db.query(Project).filter(
         Project.id == project_id,
         Project.user_id == current_user.id
@@ -163,10 +162,8 @@ async def generate_code_stream(
             
             manim_service = ManimService(db_session)
             
-            # 发送中间进度提示
             yield f"data: {json.dumps({'step': 'generate', 'progress': 30, 'message': '正在生成脚本，预计需要 1-2 分钟...'})}\n\n"
             
-            # 进度更新配置
             progress_messages = [
                 (35, "正在分析内容结构..."),
                 (40, "正在生成动画场景..."),
@@ -177,7 +174,6 @@ async def generate_code_stream(
                 (65, "正在收尾..."),
             ]
             
-            # 创建生成任务
             generate_task = asyncio.create_task(
                 manim_service.generate_code(
                     project_local.final_script, 
@@ -187,13 +183,11 @@ async def generate_code_stream(
                 )
             )
             
-            # 等待生成完成，同时发送进度更新
             progress_index = 0
             while not generate_task.done():
                 try:
                     await asyncio.wait_for(asyncio.shield(generate_task), timeout=8)
                 except asyncio.TimeoutError:
-                    # 每 8 秒发送一次进度更新
                     if progress_index < len(progress_messages):
                         progress, msg = progress_messages[progress_index]
                         yield f"data: {json.dumps({'step': 'generate', 'progress': progress, 'message': msg})}\n\n"
@@ -240,7 +234,6 @@ async def render_video_stream(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)]
 ):
-    """直接渲染视频，流式返回终端输出"""
     project = db.query(Project).filter(
         Project.id == project_id,
         Project.user_id == current_user.id
@@ -262,19 +255,16 @@ async def render_video_stream(
         from app.services.render_dispatcher import render_dispatcher
         global CURRENT_RENDERS
         
-        # 检查旧服务器状态
         old_server_status = await render_dispatcher.check_old_server_status()
         old_server_available = OLD_SERVER_SEMAPHORE._value if old_server_status.get("status") == "healthy" else 0
         total_available = RENDER_SEMAPHORE._value + old_server_available
         
-        # 如果总容量已满，提示系统繁忙
         if total_available == 0:
             yield f"data: {json.dumps({'type': 'error', 'content': '系统繁忙，请稍后再试'})}\n\n"
             return
         
         yield f"data: {json.dumps({'type': 'info', 'content': '正在准备渲染...'})}\n\n"
         
-        # 如果新服务器满了，分发到旧服务器
         if RENDER_SEMAPHORE._value == 0 and old_server_available > 0:
             async for line in try_dispatch_to_old_server(project_id, manim_code_str):
                 yield line
@@ -336,29 +326,84 @@ async def render_video_stream(
                     
                     yield f"data: {json.dumps({'type': 'info', 'content': f'开始渲染 (高质量1080p60模式)...'})}\n\n"
                     yield f"data: {json.dumps({'type': 'info', 'content': '命令: ' + ' '.join(cmd)})}\n\n"
+                    yield f"data: {json.dumps({'type': 'info', 'content': f'超时保护: 总超时{RENDER_TOTAL_TIMEOUT}秒, 无输出超时{RENDER_NO_OUTPUT_TIMEOUT}秒'})}\n\n"
                     yield f"data: {json.dumps({'type': 'info', 'content': '-' * 50})}\n\n"
                     
                     process = None
+                    start_time = time.time()
+                    last_output_time = start_time
+                    timed_out = False
+                    
                     try:
-                        process = subprocess.Popen(
-                            cmd,
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.STDOUT,
-                            text=True,
-                            bufsize=1
+                        process = await asyncio.create_subprocess_exec(
+                            *cmd,
+                            stdout=asyncio.subprocess.PIPE,
+                            stderr=asyncio.subprocess.STDOUT
                         )
                         
-                        for line in process.stdout:
-                            line = line.strip()
-                            if line:
-                                yield f"data: {json.dumps({'type': 'output', 'content': line})}\n\n"
-                                await asyncio.sleep(0.01)
+                        while True:
+                            elapsed = time.time() - start_time
+                            no_output_elapsed = time.time() - last_output_time
+                            
+                            if elapsed > RENDER_TOTAL_TIMEOUT:
+                                yield f"data: {json.dumps({'type': 'error', 'content': f'渲染总超时（超过{RENDER_TOTAL_TIMEOUT}秒），强制终止进程'})}\n\n"
+                                timed_out = True
+                                try:
+                                    process.kill()
+                                    await process.wait()
+                                except:
+                                    pass
+                                break
+                            
+                            if no_output_elapsed > RENDER_NO_OUTPUT_TIMEOUT:
+                                yield f"data: {json.dumps({'type': 'error', 'content': f'渲染无输出超时（{RENDER_NO_OUTPUT_TIMEOUT}秒无输出），强制终止进程'})}\n\n"
+                                timed_out = True
+                                try:
+                                    process.kill()
+                                    await process.wait()
+                                except:
+                                    pass
+                                break
+                            
+                            try:
+                                line_bytes = await asyncio.wait_for(
+                                    process.stdout.readline(),
+                                    timeout=5.0
+                                )
+                                
+                                if not line_bytes:
+                                    break
+                                
+                                last_output_time = time.time()
+                                line = line_bytes.decode('utf-8', errors='replace').strip()
+                                
+                                if line:
+                                    elapsed_str = f"[{int(elapsed)}s]"
+                                    yield f"data: {json.dumps({'type': 'output', 'content': elapsed_str + ' ' + line})}\n\n"
+                                    await asyncio.sleep(0.01)
+                                    
+                            except asyncio.TimeoutError:
+                                continue
                         
-                        result = process.wait(timeout=600)
+                        if process and process.returncode is None:
+                            try:
+                                returncode = await asyncio.wait_for(process.wait(), timeout=5.0)
+                            except asyncio.TimeoutError:
+                                process.kill()
+                                await process.wait()
+                                returncode = -1
+                        else:
+                            returncode = process.returncode if process else -1
                         
                         yield f"data: {json.dumps({'type': 'info', 'content': '-' * 50})}\n\n"
                         
-                        if result == 0:
+                        if timed_out:
+                            project_local.status = "failed"
+                            project_local.error_message = "渲染超时"
+                            db_session.commit()
+                            yield f"data: {json.dumps({'type': 'error', 'content': '渲染已因超时终止，请检查代码或降低视频复杂度'})}\n\n"
+                        
+                        elif returncode == 0:
                             video_files = []
                             for root, dirs, files in os.walk(temp_dir):
                                 for file in files:
@@ -378,7 +423,6 @@ async def render_video_stream(
                                 shutil.move(video_path, local_video_path)
                                 
                                 video_url = f"/api/videos/{video_filename}"
-                                cos_key = None
                                 
                                 if cos_storage.enabled:
                                     success, cos_key, cos_url = cos_storage.upload_file(
@@ -397,17 +441,24 @@ async def render_video_stream(
                                 project_local.video_url = video_url
                                 db_session.commit()
                                 
-                                yield f"data: {json.dumps({'type': 'success', 'content': f'渲染完成！', 'video_url': video_url})}\n\n"
+                                yield f"data: {json.dumps({'type': 'success', 'content': f'渲染完成！耗时{int(elapsed)}秒', 'video_url': video_url})}\n\n"
                             else:
                                 yield f"data: {json.dumps({'type': 'error', 'content': '未找到视频文件'})}\n\n"
                         else:
-                            yield f"data: {json.dumps({'type': 'error', 'content': f'渲染失败 (code: {result})'})}\n\n"
+                            project_local.status = "failed"
+                            project_local.error_message = f"渲染失败 (code: {returncode})"
+                            db_session.commit()
+                            yield f"data: {json.dumps({'type': 'error', 'content': f'渲染失败 (code: {returncode})'})}\n\n"
                             
-                    except subprocess.TimeoutExpired:
-                        if process:
-                            process.kill()
-                        yield f"data: {json.dumps({'type': 'error', 'content': '渲染超时 (10分钟)'})}\n\n"
                     except Exception as e:
+                        import traceback
+                        traceback.print_exc()
+                        if process:
+                            try:
+                                process.kill()
+                                await process.wait()
+                            except:
+                                pass
                         yield f"data: {json.dumps({'type': 'error', 'content': f'渲染异常: {e}'})}\n\n"
             except Exception as e:
                 import traceback
@@ -444,7 +495,6 @@ async def render_video_async(
     db: Annotated[Session, Depends(get_db)],
     background_tasks: BackgroundTasks
 ):
-    """后台渲染视频（支持关闭浏览器后继续运行）"""
     project = db.query(Project).filter(
         Project.id == project_id,
         Project.user_id == current_user.id
@@ -456,7 +506,6 @@ async def render_video_async(
     if not project.manim_code:
         raise HTTPException(status_code=400, detail="请先生成脚本")
     
-    # 创建任务记录
     task = Task(
         project_id=project_id,
         user_id=current_user.id,
@@ -467,7 +516,6 @@ async def render_video_async(
     db.commit()
     db.refresh(task)
     
-    # 提交 Celery 后台任务
     celery_result = render_video_celery.delay(
         task.id,
         project_id,
@@ -475,7 +523,6 @@ async def render_video_async(
         project.custom_code
     )
     
-    # 保存 celery task id
     task.celery_task_id = celery_result.id
     db.commit()
     
@@ -492,7 +539,6 @@ def get_task_status(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)]
 ):
-    """查询后台任务状态"""
     task = db.query(Task).filter(
         Task.id == task_id,
         Task.user_id == current_user.id

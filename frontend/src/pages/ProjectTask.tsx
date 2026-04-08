@@ -44,6 +44,10 @@ export default function ProjectTask() {
   const terminalRef = useRef<HTMLDivElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const readerRef = useRef<ReadableStreamDefaultReader | null>(null)
+  const renderStartTimeRef = useRef<number>(0)
+  const lastOutputTimeRef = useRef<number>(0)
+  const renderTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const CLIENT_RENDER_TIMEOUT = 330000
 
   const fetchProject = async () => {
     try {
@@ -234,11 +238,37 @@ useEffect(() => {
     setTask(null)
     
     abortControllerRef.current = new AbortController()
+    renderStartTimeRef.current = Date.now()
+    lastOutputTimeRef.current = Date.now()
+    
+    const checkTimeout = () => {
+      const now = Date.now()
+      const elapsed = now - renderStartTimeRef.current
+      const noOutputElapsed = now - lastOutputTimeRef.current
+      
+      if (elapsed > CLIENT_RENDER_TIMEOUT) {
+        setRenderError(`渲染超时（超过${Math.floor(CLIENT_RENDER_TIMEOUT / 60000)}分钟）`)
+        setTerminalLog(prev => prev + `\n⚠️ 客户端检测：渲染超时，正在终止...\n`)
+        abortControllerRef.current?.abort()
+        return true
+      }
+      
+      if (noOutputElapsed > 120000) {
+        setTerminalLog(prev => prev + `\n⚠️ 警告：${Math.floor(noOutputElapsed / 1000)}秒无输出\n`)
+      }
+      
+      return false
+    }
+    
+    renderTimeoutRef.current = setInterval(checkTimeout, 10000)
     
     try {
       const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
       const token = useAuthStore.getState().token
       const streamUrl = `${API_BASE}/api/tasks/${id}/render`
+      
+      setTerminalLog(prev => prev + `⏱️ 渲染开始时间: ${new Date().toLocaleTimeString()}\n`)
+      setTerminalLog(prev => prev + `🛡️ 超时保护: 服务器${300}秒, 客户端${Math.floor(CLIENT_RENDER_TIMEOUT / 60000)}分钟\n\n`)
       
       const response = await fetch(streamUrl, {
         headers: {
@@ -285,11 +315,14 @@ useEffect(() => {
               const parsed = JSON.parse(data)
               
               if (parsed.type === 'error') {
+                lastOutputTimeRef.current = Date.now()
                 setTerminalLog(prev => prev + `\n❌ ${parsed.content}\n`)
                 setRenderError(parsed.content)
                 message.error(parsed.content)
               } else if (parsed.type === 'success') {
-                setTerminalLog(prev => prev + `\n✅ ${parsed.content}\n`)
+                lastOutputTimeRef.current = Date.now()
+                const elapsed = Math.floor((Date.now() - renderStartTimeRef.current) / 1000)
+                setTerminalLog(prev => prev + `\n✅ ${parsed.content} (总耗时: ${elapsed}秒)\n`)
                 setVideoProgress(100)
                 setVideoMessage('渲染完成！')
                 if (parsed.video_url) {
@@ -297,6 +330,7 @@ useEffect(() => {
                 }
                 message.success('视频渲染完成！')
               } else if (parsed.type === 'info' || parsed.type === 'output') {
+                lastOutputTimeRef.current = Date.now()
                 setTerminalLog(prev => prev + parsed.content + '\n')
                 const content = parsed.content.toLowerCase()
                 if (content.includes('animation') || content.includes('rendering')) {
@@ -321,14 +355,33 @@ useEffect(() => {
         }
       }
     } catch (error: any) {
-      const errorMsg = error.message || '未知错误'
-      message.error('渲染失败: ' + errorMsg)
-      setRenderError(errorMsg)
-      setTerminalLog(prev => prev + `\n❌ 渲染失败: ${errorMsg}\n`)
+      if (error.name === 'AbortError') {
+        const errorMsg = '渲染已取消（超时保护）'
+        message.warning(errorMsg)
+        setRenderError(errorMsg)
+        setTerminalLog(prev => prev + `\n⚠️ ${errorMsg}\n`)
+      } else {
+        const errorMsg = error.message || '未知错误'
+        message.error('渲染失败: ' + errorMsg)
+        setRenderError(errorMsg)
+        setTerminalLog(prev => prev + `\n❌ 渲染失败: ${errorMsg}\n`)
+      }
       setVideoProgress(0)
     } finally {
+      if (renderTimeoutRef.current) {
+        clearInterval(renderTimeoutRef.current)
+        renderTimeoutRef.current = null
+      }
       setGeneratingVideo(false)
       await fetchProject()
+    }
+  }
+
+  const handleCancelRender = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+      setTerminalLog(prev => prev + '\n⚠️ 用户取消渲染\n')
+      message.warning('正在取消渲染...')
     }
   }
 
@@ -662,6 +715,16 @@ useEffect(() => {
                   >
                     {task?.status === 'completed' ? '重新渲染' : '开始渲染视频'}
                   </Button>
+                  
+                  {generatingVideo && (
+                    <Button 
+                      danger
+                      onClick={handleCancelRender}
+                      size="large"
+                    >
+                      取消渲染
+                    </Button>
+                  )}
 
                   {project?.video_url && (
                     <Button 

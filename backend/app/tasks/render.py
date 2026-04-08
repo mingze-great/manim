@@ -7,6 +7,8 @@ import concurrent.futures
 import re
 import shutil
 import sys
+import json
+import time
 from datetime import datetime
 
 from app.config import get_settings
@@ -16,6 +18,23 @@ from app.models.task import Task
 from app.services.manim import ManimService
 
 settings = get_settings()
+
+RENDER_TOTAL_TIMEOUT = 300
+RENDER_NO_OUTPUT_TIMEOUT = 60
+
+try:
+    import redis
+    redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True)
+except Exception:
+    redis_client = None
+
+
+def publish_progress(task_id: int, data: dict):
+    if redis_client:
+        try:
+            redis_client.publish(f"task:{task_id}:progress", json.dumps(data))
+        except Exception:
+            pass
 
 
 def get_manim_path() -> str:
@@ -50,6 +69,15 @@ def update_task_progress(task_id: int, progress: int, status: str = None, video_
             if status in ["completed", "failed"]:
                 task.completed_at = datetime.utcnow()
             db.commit()
+            
+            publish_progress(task_id, {
+                "progress": progress,
+                "status": status or task.status,
+                "video_url": video_url,
+                "error_message": error_message,
+                "log": log,
+                "timestamp": datetime.utcnow().isoformat()
+            })
     finally:
         db.close()
 
@@ -80,10 +108,10 @@ def render_video_task(task_id: int, project_id: int, template_id: int = None, cu
             update_task_progress(task_id, 0, "failed", error_message="Project not found")
             return
         
-        update_task_progress(task_id, 5, "processing", log="🚀 开始生成视频...\n")
+        update_task_progress(task_id, 5, "processing", log="开始生成视频...\n")
         
         try:
-            update_task_progress(task_id, 10, "processing", log="📝 正在生成 Manim 代码...\n")
+            update_task_progress(task_id, 10, "processing", log="正在生成 Manim 代码...\n")
             
             script_val = str(project.final_script) if project.final_script is not None else ""
             code_ref_val = custom_code or (str(project.custom_code) if project.custom_code is not None else "")
@@ -93,19 +121,19 @@ def render_video_task(task_id: int, project_id: int, template_id: int = None, cu
                 try:
                     manim_code = future.result(timeout=180)
                 except concurrent.futures.TimeoutError:
-                    update_task_progress(task_id, 20, "failed", error_message="Code generation timeout", log="❌ 代码生成超时！\n")
+                    update_task_progress(task_id, 20, "failed", error_message="Code generation timeout", log="代码生成超时！\n")
                     return
             
             project.manim_code = manim_code
             db.commit()
-            update_task_progress(task_id, 20, "processing", log=f"✅ 代码生成完成 (长度: {len(manim_code)})\n")
+            update_task_progress(task_id, 20, "processing", log=f"代码生成完成 (长度: {len(manim_code)})\n")
         except Exception as e:
             import traceback
             traceback.print_exc()
-            update_task_progress(task_id, 20, "failed", error_message=f"Generate code error: {str(e)}", log=f"❌ 生成代码失败: {e}\n")
+            update_task_progress(task_id, 20, "failed", error_message=f"Generate code error: {str(e)}", log=f"生成代码失败: {e}\n")
             return
         
-        update_task_progress(task_id, 25, "processing", log="🎬 准备渲染...\n")
+        update_task_progress(task_id, 25, "processing", log="准备渲染...\n")
         
         with tempfile.TemporaryDirectory() as temp_dir:
             scene_name = "Scene"
@@ -126,27 +154,27 @@ class {scene_name}(Scene):
             try:
                 compile(code_content, '<string>', 'exec')
             except SyntaxError as e:
-                update_task_progress(task_id, 50, "failed", error_message=f"Syntax error: {str(e)}", log=f"❌ 代码语法错误: {e}\n")
+                update_task_progress(task_id, 50, "failed", error_message=f"Syntax error: {str(e)}", log=f"代码语法错误: {e}\n")
                 return
             
             manim_file = os.path.join(temp_dir, "scene.py")
             with open(manim_file, "w", encoding="utf-8") as f:
                 f.write(code_content)
             
-            update_task_progress(task_id, 30, "processing", log=f"📁 保存代码到: {manim_file}\n")
+            update_task_progress(task_id, 30, "processing", log=f"保存代码到: {manim_file}\n")
             
             manim_path = get_manim_path()
             
             if sys.platform == "win32":
                 manim_check = shutil.which(manim_path) or (os.path.exists(manim_path) and manim_path)
                 if not manim_check:
-                    update_task_progress(task_id, 50, "failed", error_message="Manim not found", log="❌ Manim 未找到！请运行: pip install manim\n")
+                    update_task_progress(task_id, 50, "failed", error_message="Manim not found", log="Manim 未找到！请运行: pip install manim\n")
                     return
             elif not os.path.exists(manim_path):
-                update_task_progress(task_id, 50, "failed", error_message="Manim not found", log="❌ Manim 未找到！\n")
+                update_task_progress(task_id, 50, "failed", error_message="Manim not found", log="Manim 未找到！\n")
                 return
             
-            update_task_progress(task_id, 35, "processing", log=f"🎥 Manim 路径: {manim_path}\n")
+            update_task_progress(task_id, 35, "processing", log=f"Manim 路径: {manim_path}\n")
             
             cmd = [
                 manim_path,
@@ -158,7 +186,12 @@ class {scene_name}(Scene):
                 scene_name
             ]
             
-            update_task_progress(task_id, 40, "processing", log=f"⚡ 开始渲染 (高质量模式)...\n命令: {' '.join(cmd)}\n\n")
+            update_task_progress(task_id, 40, "processing", log=f"开始渲染...\n超时保护: 总超时{RENDER_TOTAL_TIMEOUT}秒, 无输出超时{RENDER_NO_OUTPUT_TIMEOUT}秒\n")
+            
+            process = None
+            start_time = time.time()
+            last_output_time = start_time
+            timed_out = False
             
             try:
                 process = subprocess.Popen(
@@ -169,35 +202,94 @@ class {scene_name}(Scene):
                     bufsize=1
                 )
                 
-                # 使用 communicate 替代逐行读取，避免死锁
-                try:
-                    output, _ = process.communicate(timeout=420)
+                while True:
+                    elapsed = time.time() - start_time
+                    no_output_elapsed = time.time() - last_output_time
                     
-                    # 输出日志
-                    for line in output.strip().split('\n'):
-                        if line:
-                            update_task_progress(task_id, 40, "processing", log=f"{line}\n")
-                            print(f"[Task {task_id}] {line}")
+                    if elapsed > RENDER_TOTAL_TIMEOUT:
+                        update_task_progress(task_id, 80, "processing", log=f"渲染总超时（超过{RENDER_TOTAL_TIMEOUT}秒），强制终止\n")
+                        timed_out = True
+                        try:
+                            process.kill()
+                            process.wait()
+                        except:
+                            pass
+                        break
                     
-                    if process.returncode != 0:
-                        update_task_progress(task_id, 80, "failed", error_message="Render failed", log=f"❌ 渲染失败 (code: {process.returncode})\n")
-                        return
+                    if no_output_elapsed > RENDER_NO_OUTPUT_TIMEOUT:
+                        update_task_progress(task_id, 80, "processing", log=f"渲染无输出超时（{RENDER_NO_OUTPUT_TIMEOUT}秒无输出），强制终止\n")
+                        timed_out = True
+                        try:
+                            process.kill()
+                            process.wait()
+                        except:
+                            pass
+                        break
+                    
+                    try:
+                        import select
+                        if sys.platform != "win32":
+                            ready, _, _ = select.select([process.stdout], [], [], 5.0)
+                            if not ready:
+                                continue
+                        else:
+                            import threading
+                            line = None
+                            result = [None]
+                            
+                            def read_line():
+                                try:
+                                    result[0] = process.stdout.readline()
+                                except:
+                                    result[0] = None
+                            
+                            thread = threading.Thread(target=read_line)
+                            thread.daemon = True
+                            thread.start()
+                            thread.join(timeout=5.0)
+                            
+                            if thread.is_alive() or result[0] is None:
+                                continue
+                            
+                            line = result[0]
+                            
+                        if not line:
+                            if process.poll() is not None:
+                                break
+                            continue
                         
-                except subprocess.TimeoutExpired:
-                    process.kill()
-                    process.wait()  # 确保进程完全终止
-                    update_task_progress(task_id, 80, "failed", error_message="Render timeout (7 minutes)", log="❌ 渲染超时（超过7分钟）！\n")
-                    return
-                except Exception as e:
-                    process.kill()
+                        last_output_time = time.time()
+                        line = line.strip()
+                        
+                        if line:
+                            update_task_progress(task_id, 40, "processing", log=f"[{int(elapsed)}s] {line}\n")
+                            print(f"[Task {task_id}] {line}")
+                            
+                    except Exception:
+                        continue
+                
+                if process.poll() is None:
                     process.wait()
-                    update_task_progress(task_id, 80, "failed", error_message=f"Render error: {str(e)}", log=f"❌ 渲染异常: {e}\n")
+                
+                if timed_out:
+                    update_task_progress(task_id, 80, "failed", error_message="渲染超时，强制终止", log="渲染超时，请检查代码或降低视频复杂度\n")
                     return
+                
+                if process.returncode != 0:
+                    update_task_progress(task_id, 80, "failed", error_message="Render failed", log=f"渲染失败 (code: {process.returncode})\n")
+                    return
+                    
             except Exception as e:
-                update_task_progress(task_id, 80, "failed", error_message=f"Process error: {str(e)}", log=f"❌ 进程异常: {e}\n")
+                if process:
+                    try:
+                        process.kill()
+                        process.wait()
+                    except:
+                        pass
+                update_task_progress(task_id, 80, "failed", error_message=f"Render error: {str(e)}", log=f"渲染异常: {e}\n")
                 return
             
-            update_task_progress(task_id, 75, "processing", log="🎉 渲染完成！\n")
+            update_task_progress(task_id, 75, "processing", log="渲染完成！\n")
             
             video_files = []
             for root, dirs, files in os.walk(temp_dir):
@@ -215,20 +307,20 @@ class {scene_name}(Scene):
                 video_filename = f"{project_id}_{uuid.uuid4().hex[:8]}.mp4"
                 local_video_path = os.path.join(videos_dir, video_filename)
                 
-                import shutil
                 shutil.move(video_path, local_video_path)
-                update_task_progress(task_id, 90, "processing", log=f"💾 视频保存: {video_filename}\n")
+                elapsed_total = int(time.time() - start_time)
+                update_task_progress(task_id, 90, "processing", log=f"视频保存: {video_filename}\n总耗时: {elapsed_total}秒\n")
                 
                 video_url = f"/api/videos/{video_filename}"
                 project.status = "completed"
                 db.commit()
-                update_task_progress(task_id, 100, "completed", video_url=video_url, log="✅ 任务完成！\n")
+                update_task_progress(task_id, 100, "completed", video_url=video_url, log="任务完成！\n")
             else:
-                update_task_progress(task_id, 80, "failed", error_message="No MP4 file found", log="❌ 未找到视频文件！\n")
+                update_task_progress(task_id, 80, "failed", error_message="No MP4 file found", log="未找到视频文件！\n")
     
     except Exception as e:
         import traceback
         traceback.print_exc()
-        update_task_progress(task_id, 0, "failed", error_message=str(e), log=f"❌ 任务异常: {e}\n")
+        update_task_progress(task_id, 0, "failed", error_message=str(e), log=f"任务异常: {e}\n")
     finally:
         db.close()
