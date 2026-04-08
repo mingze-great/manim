@@ -8,15 +8,17 @@
 
 | 分支名 | 用途 | 说明 |
 |--------|------|------|
-| `main` | **主分支** | 最新的稳定版本，部署基准 |
-| `feature/template-preview-video` | 当前开发分支 | 日常开发使用 |
-| `backup-template-preview-video-20260402` | 备份分支 | 安全备份，禁止修改 |
+| `main` | **主分支（生产）** | 生产环境部署分支，稳定版本 |
+| `develop` | **开发分支** | 开发环境部署分支，日常开发使用 |
+| `feature/*` | 功能分支 | 新功能开发 |
+| `feature/article-generation` | 公众号文章生成 | 已保留，待合并 |
 
 **规则：**
-1. 所有新功能开发在当前开发分支进行
-2. **每次部署前必须合并到 `main` 分支**，保证 `main` 始终是最新状态
-3. 如果当前分支出现问题，可以从 `main` 分支恢复
-4. **永远不要直接修改备份分支**
+1. 所有新功能开发在 `develop` 分支或功能分支进行
+2. **开发完成后，先部署到开发环境测试**
+3. **用户确认无误后，才能合并到 `main` 并部署到生产环境**
+4. `main` 分支只接受用户确认后的合并
+5. **永远不要直接修改生产环境服务器（152.136.218.74）**
 
 **部署前合并流程：**
 ```bash
@@ -39,44 +41,147 @@ git checkout feature/template-preview-video
 
 ---
 
-## 二、部署架构
+## 二、服务器架构（双环境）
 
+### 生产环境（152.136.218.74）
+| 项目 | 值 |
+|------|-----|
+| 服务器 IP | `152.136.218.74` |
+| SSH 密码 | `010421` |
+| 部署路径 | `/opt/manim` |
+| 后端端口 | `8000` |
+| 数据库 | `/opt/manim/backend/manim.db` (SQLite) |
+| HTTPS 域名 | `https://manim.asia` |
+| 状态 | ✅ 生产运行，**绝对不能影响** |
+
+### 开发环境（106.52.166.109）
 | 项目 | 值 |
 |------|-----|
 | 服务器 IP | `106.52.166.109` |
-| SSH 用户 | `root` |
-| SSH 私钥 | `~/.ssh/id_rsa` |
-| 部署路径 | `/opt/manim` |
-| 后端服务 | `systemctl restart manim` |
-| 数据库 | `sqlite:///./manim.db` |
-| HTTPS 域名 | `https://manim.asia` |
+| SSH 认证 | SSH 密钥登录 |
+| 部署路径 | `/opt/manim-dev` |
+| 后端端口 | `8001` |
+| 前端端口 | `3000` |
+| 数据库 | `/opt/manim-dev/backend/manim_dev.db` (SQLite) |
+| 渲染服务 | 端口 8000（服务于生产环境） |
+| 状态 | ✅ 开发测试环境 |
 
-**部署方式：**
-1. GitHub Actions CI/CD（push 到 master 触发）
-2. 手动部署：SSH 连接服务器，拉取代码，重启服务
+### 数据库独立性
+```
+生产环境数据库：/opt/manim/backend/manim.db (完整数据)
+开发环境数据库：/opt/manim-dev/backend/manim_dev.db (部分数据副本)
+
+✅ 两个数据库完全独立，物理隔离
+✅ 开发环境操作不会影响生产环境
+✅ 生产环境操作不会影响开发环境
+```
+
+### 环境数据差异
+| 数据表 | 生产环境 | 开发环境 |
+|--------|---------|---------|
+| users | 26 (含管理员) | 26 (复制) |
+| templates | 17 | 17 (复制) |
+| projects | 99 | 0 (已清理) |
+| articles | 7 | 0 (已清理) |
+| conversations | 117 | 0 (已清理) |
 
 ---
 
-## 三、账号信息
+## 三、开发流程约束
+
+### 3.1 核心约束（必须遵守）
+
+**⛔ 第一优先级：绝对不影响生产环境**
+```
+1. ❌ 禁止直接修改生产环境服务器（152.136.218.74）
+2. ❌ 禁止在生产环境数据库做任何修改
+3. ❌ 禁止在生产环境测试未确认的功能
+4. ❌ 禁止在生产环境部署未测试的代码
+```
+
+**✅ 正确的开发流程：**
+```
+1. ✅ 所有优化在 develop 分支进行
+2. ✅ 部署到开发环境（106.52.166.109）测试
+3. ✅ 在开发环境完整测试所有功能
+4. ✅ 用户确认无误后，合并到 main
+5. ✅ 用户确认后，部署到生产环境（152.136.218.74）
+```
+
+### 3.2 开发环境部署流程
+
+**后端部署：**
+```bash
+# 1. 停止开发环境后端
+ssh root@106.52.166.109 "kill $(cat /opt/manim-dev/logs/backend.pid)"
+
+# 2. 更新代码（从本地或 Git）
+ssh root@106.52.166.109 "cd /opt/manim-dev && git pull origin develop"
+
+# 3. 清理缓存
+ssh root@106.52.166.109 "cd /opt/manim-dev/backend && find . -type d -name '__pycache__' -exec rm -rf {} +"
+
+# 4. 启动后端
+ssh root@106.52.166.109 "cd /opt/manim-dev/backend && \
+  nohup /opt/manim-dev/backend/venv/bin/python -m uvicorn app.main:app \
+  --host 0.0.0.0 --port 8001 > /opt/manim-dev/logs/backend.log 2>&1 & \
+  echo \$! > /opt/manim-dev/logs/backend.pid"
+```
+
+**前端部署：**
+```bash
+# 1. 本地构建
+cd frontend && npm run build
+
+# 2. 上传到开发环境
+scp -r frontend/dist/* root@106.52.166.109:/opt/manim-dev/frontend/dist/
+
+# 3. 重载 Nginx
+ssh root@106.52.166.109 "systemctl reload nginx"
+```
+
+### 3.3 生产环境部署流程（用户确认后）
+
+```bash
+# ⚠️ 仅在用户确认后才执行
+
+# 1. 合并代码
+git checkout main
+git merge develop
+git push origin main
+
+# 2. 部署到生产环境
+ssh root@152.136.218.74 "cd /opt/manim && git pull origin main"
+ssh root@152.136.218.74 "systemctl restart manim-backend"
+
+# 3. 上传前端（如有修改）
+scp -r frontend/dist/* root@152.136.218.74:/opt/manim/frontend/dist/
+ssh root@152.136.218.74 "systemctl reload nginx"
+```
+
+---
+
+## 四、账号信息（开发环境 & 生产环境）
+
+**说明：开发环境和生产环境账号相同（数据库复制）**
 
 ### 管理员账号
 | 项目 | 值 |
 |------|-----|
 | 用户名 | `admin` |
 | 密码 | `admin123` |
-| 邮箱 | `admin@manim.com` |
+| 邮箱 | `admin@manim.com |
 
-### 数据库用户
-| 用户名 | 邮箱 | 权限 |
-|--------|------|------|
-| admin | admin@manim.com | 管理员 |
-| myoung | mylcsd@163.com | 普通用户 |
-| G先生 | 252345415@qq.com | 普通用户 |
-| yuliiiii | 623918645@qq.com | 普通用户 |
+### 测试账号
+| 用户名 | 箱 | 权限 | 可用环境 |
+|--------|------|------|---------|
+| admin | admin@manim.com | 管理员 | 开发 + 生产 |
+| myoung | mylcsd@163.com | 普通用户 | 开发 + 生产 |
+| G先生 | 252345415@qq.com | 普通用户 | 开发 + 生产 |
 
 ---
 
-## 四、平台命名规范
+## 五、平台命名规范
 
 | 原名称 | 新名称 | 说明 |
 |--------|--------|------|
@@ -84,7 +189,7 @@ git checkout feature/template-preview-video
 
 ---
 
-## 五、已完成功能清单
+## 六、已完成功能清单
 
 | # | 功能 | 状态 | 文件 |
 |---|------|------|------|
@@ -102,7 +207,7 @@ git checkout feature/template-preview-video
 
 ---
 
-## 六、待完成功能
+## 七、待完成功能
 
 | # | 功能 | 优先级 | 状态 |
 |---|------|--------|------|
@@ -112,7 +217,7 @@ git checkout feature/template-preview-video
 
 ---
 
-## 七、关键代码位置
+## 八、关键代码位置
 
 ### 前端
 ```
@@ -147,36 +252,68 @@ backend/app/
 
 ---
 
-## 八、约束规则
+## 九、约束规则（核心）
 
-### 8.1 开发约束
-1. **本地测试优先**：所有修改先在本地测试，确认无误后再部署
-2. **不修改远程纯净分支**：`feature-chat-render-button` 禁止直接修改
-3. **保持数据完整**：不删除服务器数据库中的用户数据
-4. **代码风格**：不添加注释（除非明确要求）
-5. **最小修改原则**：修改或优化某个功能时，只能改动该功能相关的代码，**绝对不能修改其他已有的功能代码**。如果发现需要修改其他功能，必须先询问用户确认
+### 9.1 开发约束（最高优先级）
 
-### 8.2 部署约束
-1. **手动部署流程**：
-   ```bash
-   # 构建前端
-   cd frontend && npm run build
+**⛔ 生产环境保护（绝对不能违反）**
+```
+1. ❌ 禁止直接修改生产环境（152.136.218.74）
+2. ❌ 禁止在生产环境测试未确认的功能
+3. ❌ 禁止绕过开发环境直接部署到生产环境
+4. ❌ 禁止在生产环境数据库做任何修改
+```
+
+**✅ 正确流程（必须遵守）**
+```
+1. ✅ 所有优化在 develop 分支进行
+2. ✅ 部署到开发环境（106.52.166.109）测试
+3. ✅ 用户确认无误后，才能合并到 main
+4. ✅ 用户确认后，才能部署到生产环境（152.136.218.74）
+```
+
+### 9.2 代码修改约束
+
+1. **最小修改原则**：修改某个功能时，只能改动该功能相关的代码，**绝对不能修改其他已有的功能代码**
+2. **不添加注释**：除非用户明确要求
+3. **保持数据完整**：不删除数据库中的用户数据
+4. **本地测试优先**：所有修改先在本地测试，确认无误后再部署到开发环境
+
+### 9.3 部署约束
+
+**开发环境部署：**
+```bash
+# 后端
+ssh root@106.52.166.109 "systemctl restart manim-dev"
+
+# 前端
+cd frontend && npm run build
+scp -r frontend/dist/* root@106.52.166.109:/opt/manim-dev/frontend/dist/
+ssh root@106.52.166.109 "systemctl reload nginx"
+```
+
+**生产环境部署（仅用户确认后）：**
+```bash
+# ⚠️ 必须用户确认后才执行
+ssh root@152.136.218.74 "systemctl restart manim-backend"
+```
+
+### 9.4 数据库约束
+
+1. **两个数据库完全独立**：
+   - 生产：`/opt/manim/backend/manim.db`
+   - 开发：`/opt/manim-dev/backend/manim_dev.db`
    
-   # 上传前端
-   scp -i ~/.ssh/id_rsa -r frontend/dist/* root@106.52.166.109:/opt/manim/frontend/dist/
+2. **开发环境数据库操作**：
+   - 可以修改、测试、清理
+   - 不影响生产环境
    
-   # 重启后端
-   ssh -i ~/.ssh/id_rsa root@106.52.166.109 "systemctl restart manim"
-   ```
+3. **生产环境数据库**：
+   - ❌ 禁止修改表结构
+   - ❌ 禁止删除数据
+   - ✅ 仅读取或备份
 
-2. **CI/CD 部署**：合并到 master 后自动触发
-
-### 8.3 数据库约束
-1. 实际使用数据库：`/opt/manim/backend/manim.db`
-2. 修改表结构前先备份
-3. 添加新列使用 `ALTER TABLE`，不删除已有数据
-
-### 8.4 分支合并规范
+### 9.5 分支合并规范
 
 1. **最小修改原则**
    - 修改时不要动之前已有的分支
@@ -184,18 +321,30 @@ backend/app/
    - 修改某个功能时，只能改动该功能相关的代码
 
 2. **分支及时合并**
-   - 分支修改完成后必须及时合并
+   - 功能开发完成后，先部署到开发环境测试
+   - 用户确认无误后，合并到 main 分支
    - 保证所有更新内容不会在下一次更新时丢失
-   - 更新内容必须基于之前所有可用的最新版本
 
 3. **合并流程**
-   - 新功能开发完成后，先合并到主开发分支
-   - 确保合并后的代码包含所有之前的更新
-   - 合并前检查是否有冲突，及时解决
+   ```bash
+   # 开发完成后
+   git checkout develop
+   git merge feature/xxx
+   git push origin develop
+   
+   # 部署到开发环境测试
+   # 用户确认后
+   
+   git checkout main
+   git merge develop
+   git push origin main
+   
+   # 部署到生产环境（用户确认）
+   ```
 
 ---
 
-## 九、更新日志
+## 十、更新日志
 
 | 日期 | 更新内容 |
 |------|----------|
@@ -208,38 +357,85 @@ backend/app/
 | 2026-03-24 | 添加"最小修改原则"约束规则 |
 | 2026-04-01 | 添加分支合并规范约束 |
 | 2026-04-02 | 更新分支结构，添加部署前合并到 main 分支的规则 |
+| 2026-04-07 | 添加开发环境约束（106.52.166.109） |
+| 2026-04-07 | 强制要求：所有优化先在开发环境测试，用户确认后才能部署生产环境 |
+| 2026-04-07 | 添加双环境架构说明（生产 vs 开发） |
+| 2026-04-07 | 添加数据库独立性约束 |
 
 ---
 
-## 十、快速命令参考
+## 十一、快速命令参考
+
+### 开发环境命令
 
 ```bash
-# 切换分支
-git checkout feature-chat-render-button
+# SSH 连接开发环境
+ssh root@106.52.166.109
 
-# 查看状态
-git status && git log --oneline -3
+# 重启开发环境后端
+ssh root@106.52.166.109 "kill $(cat /opt/manim-dev/logs/backend.pid) && \
+  cd /opt/manim-dev/backend && \
+  nohup venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8001 > /opt/manim-dev/logs/backend.log 2>&1 & \
+  echo \$! > /opt/manim-dev/logs/backend.pid"
 
-# SSH 连接服务器
-ssh -i ~/.ssh/id_rsa root@106.52.166.109
+# 查看开发环境日志
+ssh root@106.52.166.109 "tail -50 /opt/manim-dev/logs/backend.log"
 
-# 重启后端服务
-ssh -i ~/.ssh/id_rsa root@106.52.166.109 "systemctl restart manim"
+# 测试开发环境 API
+curl http://106.52.166.109:8001/health
+curl http://106.52.166.109:3000/api/health
 
-# 查看后端日志
-ssh -i ~/.ssh/id_rsa root@106.52.166.109 "journalctl -u manim --no-pager -n 50"
+# 部署前端到开发环境
+cd frontend && npm run build
+scp -r dist/* root@106.52.166.109:/opt/manim-dev/frontend/dist/
+ssh root@106.52.166.109 "systemctl reload nginx"
+```
 
-# 构建并部署前端
-cd frontend && npm run build && scp -i ~/.ssh/id_rsa -r dist/* root@106.52.166.109:/opt/manim/frontend/dist/
+### 生产环境命令（⚠️ 仅用户确认后执行）
 
-# 测试 API
-curl -sk https://manim.asia/health
+```bash
+# SSH 连接生产环境
+ssh root@152.136.218.74
+
+# 重启生产环境后端（⚠️ 仅用户确认）
+ssh root@152.136.218.74 "systemctl restart manim-backend"
+
+# 查看生产环境日志
+ssh root@152.136.218.74 "journalctl -u manim-backend --no-pager -n 50"
+
+# 测试生产环境 API
+curl http://152.136.218.74:8000/health
+curl https://manim.asia/health
+
+# 部署前端到生产环境（⚠️ 仅用户确认）
+cd frontend && npm run build
+scp -r dist/* root@152.136.218.74:/opt/manim/frontend/dist/
+ssh root@152.136.218.74 "systemctl reload nginx"
+```
+
+### Git 操作
+
+```bash
+# 切换到开发分支
+git checkout develop
+
+# 提交开发分支
+git add . && git commit -m "feat: xxx"
+git push origin develop
+
+# 合并到 main（用户确认后）
+git checkout main
+git merge develop
+git push origin main
 ```
 
 ---
 
-*最后更新：2026-04-02*
-## 八、服务器架构变更记录
+*最后更新：2026-04-07*
+
+---
+
+## 十二、服务器架构变更记录
 
 ### 2026-04-02：双服务器架构调整
 
@@ -249,19 +445,16 @@ curl -sk https://manim.asia/health
 - 问题：两台服务器分离，数据不同步
 
 **变更后：**
-- **新服务器 (152.136.218.74)**：主服务器，处理所有请求
-- **旧服务器 (106.52.166.109)**：备份服务器，所有请求重定向到新服务器
+- **新服务器 (152.136.218.74)**：生产环境，处理所有生产请求
+- **旧服务器 (106.52.166.109)**：开发环境，开发测试使用
 
 **配置详情：**
 
 ```
 用户访问流程：
-http://106.52.166.109/* → 301 重定向 → http://152.136.218.74/*
-https://106.52.166.109/* → 301 重定向 → http://152.136.218.74/*
+生产环境：http://152.136.218.74/* 或 https://manim.asia/*
+开发环境：http://106.52.166.109:3000/*
 ```
-
-**重定向配置位置：**
-- 旧服务器：`/etc/nginx/sites-available/manim-redirect`
 
 **数据迁移：**
 - 数据库：已迁移到新服务器（SQLite）
@@ -270,5 +463,37 @@ https://106.52.166.109/* → 301 重定向 → http://152.136.218.74/*
 
 **注意事项：**
 - 旧服务器到期时间：2026-05-02
-- 旧服务器 API 服务已停止
-- 旧服务器 Manim 环境保留作为备份
+- 旧服务器渲染服务（8000端口）继续为生产环境服务
+- 开发环境已独立部署（8001端口后端，3000端口前端）
+
+---
+
+### 2026-04-07：开发环境部署
+
+**部署目标：**
+- 在旧服务器（106.52.166.109）部署独立的开发测试环境
+- 完全不影响生产环境（152.136.218.74）
+
+**部署结果：**
+```
+开发环境：
+├── 后端：端口 8001（FastAPI）
+├── 前端：端口 3000（Nginx 托管）
+├── 数据库：manim_dev.db（生产数据库副本，已清理项目/文章数据）
+└── 渲染服务：端口 8000（继续服务生产环境）
+
+生产环境：
+├── 后端：端口 8000（FastAPI）
+├── 前端：HTTPS manim.asia（Nginx托管）
+├── 数据库：manim.db（完整数据）
+```
+
+**数据库独立性：**
+- 生产数据库：`/opt/manim/backend/manim.db`（2.2MB，26用户，99项目，7文章）
+- 开发数据库：`/opt/manim-dev/backend/manim_dev.db`（26用户，17模板，已清理其他数据）
+- ✅ 两个数据库物理隔离，完全独立
+
+**核心约束：**
+1. ❌ 禁止直接修改生产环境
+2. ✅ 所有优化先在开发环境测试
+3. ✅ 用户确认后才能部署到生产环境

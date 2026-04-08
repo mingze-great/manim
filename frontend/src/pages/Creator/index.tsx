@@ -1,8 +1,11 @@
 import { useState } from 'react'
-import { Card, Button, Input, message } from 'antd'
+import { Button, Input, message, Divider } from 'antd'
 import { RocketOutlined, BulbOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { projectApi } from '@/services/project'
+import TopicCategorySelector from './components/TopicCategorySelector'
+import TopicExamples from './components/TopicExamples'
+import { VideoTopicCategory } from '@/services/videoTopic'
 import './Creator.css'
 
 const { TextArea } = Input
@@ -10,29 +13,37 @@ const { TextArea } = Input
 export default function Creator() {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
-  const [theme, setTheme] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState<VideoTopicCategory | null>(null)
+  const [customTopic, setCustomTopic] = useState('')
 
-  const handleQuickStart = async () => {
-    if (!theme.trim()) {
-      message.warning('请输入视频主题')
-      return
-    }
+  const handleCategorySelect = (category: VideoTopicCategory) => {
+    setSelectedCategory(category)
+  }
 
+  const handleTopicSelect = async (topic: string) => {
     setLoading(true)
     try {
-      const { data: project } = await projectApi.create({ 
-        title: `视频创作-${Date.now()}`,
-        theme: theme 
+      const { data } = await projectApi.create({ 
+        title: `视频创作-${topic}`,
+        theme: topic,
+        category: selectedCategory?.name
       })
-      
-      navigate(`/project/${project.id}/chat`)
+      message.success('创建成功，进入对话')
+      navigate(`/project/${data.id}/chat`)
     } catch (error: any) {
       const detail = error.response?.data?.detail || error.message || '创建失败'
       message.error(detail)
-      console.error('创建项目失败:', error)
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleCustomCreate = async () => {
+    if (!customTopic.trim()) {
+      message.warning('请输入主题')
+      return
+    }
+    await handleTopicSelect(customTopic)
   }
 
   return (
@@ -44,72 +55,79 @@ export default function Creator() {
             视频创作助手
           </h1>
           <p className="hero-subtitle">
-            输入你的主题，智能生成精彩的动画视频
+            选择热门方向或输入主题，智能生成精彩的动画视频
           </p>
         </div>
       </div>
 
       <div className="creator-container">
-        <Card className="quick-create-card">
-          <div className="quick-create-content">
-            <div className="flex items-center gap-2 mb-4">
-              <BulbOutlined className="text-xl text-indigo-500" />
-              <span className="text-lg font-medium">开始创作</span>
+        {selectedCategory ? (
+          <div className="max-w-2xl mx-auto">
+            <Button 
+              onClick={() => setSelectedCategory(null)} 
+              className="mb-4"
+            >
+              返回选择方向
+            </Button>
+            <TopicExamples 
+              category={selectedCategory}
+              onSelect={handleTopicSelect}
+            />
+          </div>
+        ) : (
+          <>
+            <div className="mb-6">
+              <div className="flex items-center gap-2 mb-4">
+                <BulbOutlined className="text-xl text-indigo-500" />
+                <span className="text-lg font-medium">选择热门方向</span>
+              </div>
+              <TopicCategorySelector onSelect={handleCategorySelect} />
             </div>
-            
-            <TextArea
-              value={theme}
-              onChange={(e) => setTheme(e.target.value)}
-              placeholder={`输入你的视频主题...
+
+            <Divider>或直接输入主题</Divider>
+
+            <div className="max-w-xl mx-auto">
+              <TextArea
+                value={customTopic}
+                onChange={(e) => setCustomTopic(e.target.value)}
+                placeholder={`输入你的视频主题...
 
 例如：
 • 世界十大顶级思维：刻意练习、复利思维、终身学习...
 • 勾股定理的证明过程
 • 人生三件事：运动、阅读、赚钱`}
-              rows={6}
-              className="theme-input mb-2"
-            />
+                rows={4}
+                className="theme-input mb-3"
+              />
 
-            <div className="mb-4 p-3 bg-red-50 border-2 border-red-300 rounded-lg">
-              <p className="text-sm text-red-700 font-bold flex items-center gap-2">
-                <span className="text-lg">🚨</span>
-                <span>
-                  只需要输入<span className="text-red-600 underline decoration-2">主题名称</span>，
-                  禁止输入其他内容！如有其他要求，进入对话后再调整。
-                </span>
-              </p>
+              <Button 
+                type="primary" 
+                icon={<RocketOutlined />}
+                onClick={handleCustomCreate}
+                loading={loading}
+                size="large"
+                block
+                disabled={!customTopic.trim()}
+                className="btn-gradient"
+              >
+                开始创作
+              </Button>
             </div>
 
-            <Button 
-              type="primary" 
-              icon={<RocketOutlined />}
-              onClick={handleQuickStart}
-              loading={loading}
-              size="large"
-              block
-              className="btn-gradient"
-            >
-              开始创作
-            </Button>
-
-            <p className="text-gray-500 text-sm text-center mt-4">
-              智能助手会根据你的主题生成内容，询问是否满意后可随时调整
-            </p>
-          </div>
-        </Card>
-
-        <div className="usage-tips">
-          <h3>
-            <BulbOutlined className="mr-2" />
-            使用提示
-          </h3>
-          <ul>
-            <li>直接输入你想要的视频主题内容</li>
-            <li>智能助手会自动规划每个要点的内容和动态效果</li>
-            <li>你可以审核调整内容，直到满意</li>
-            <li>满意后自动生成脚本，一键生成视频</li>
-          </ul>
-        </div>
+            <div className="usage-tips mt-6">
+              <h3>
+                <BulbOutlined className="mr-2" />
+                使用提示
+              </h3>
+              <ul>
+                <li>选择热门方向，直接使用爆款主题示例</li>
+                <li>或让AI生成更多相关主题</li>
+                <li>智能助手会自动规划每个要点的内容和动态效果</li>
+                <li>你可以审核调整内容，直到满意</li>
+              </ul>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )

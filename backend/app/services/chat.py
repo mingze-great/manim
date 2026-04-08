@@ -2,6 +2,7 @@ import json
 from sqlalchemy.orm import Session
 
 from app.models.project import Conversation, Project
+from app.models.video_topic_category import VideoTopicCategory
 from app.utils.llm_factory import LLMFactory
 
 
@@ -216,10 +217,23 @@ class ChatService:
         
         # 提取数据，避免会话问题
         project_final_script = str(project.final_script) if project and project.final_script else ""
+        project_category = str(project.category) if project and project.category else ""
         
         # 检测语言并选择提示词
         language = detect_language(theme + " " + user_message)
-        system_prompt = SYSTEM_PROMPT_ZH if language == 'zh' else SYSTEM_PROMPT_EN_ZH if language == 'zh' else SYSTEM_PROMPT_EN
+        
+        # 如果项目有分类，使用该方向的系统提示词
+        if project_category:
+            category_config = self.db.query(VideoTopicCategory).filter(
+                VideoTopicCategory.name == project_category
+            ).first()
+            
+            if category_config and category_config.system_prompt:
+                system_prompt = category_config.system_prompt
+            else:
+                system_prompt = SYSTEM_PROMPT_ZH if language == 'zh' else SYSTEM_PROMPT_EN
+        else:
+            system_prompt = SYSTEM_PROMPT_ZH if language == 'zh' else SYSTEM_PROMPT_EN
         
         messages = [
             {"role": "system", "content": system_prompt},
@@ -304,6 +318,7 @@ class ChatService:
         # 提取所有需要的数据，避免会话问题
         project_final_script = str(project.final_script) if project.final_script else ""
         project_status = str(project.status) if project.status else "draft"
+        project_category = str(project.category) if project and project.category else ""
         
         # 检测用户意图
         code_keywords = ['生成代码', '写代码', '代码', '调整代码', '修改代码', '更新代码']
@@ -314,7 +329,19 @@ class ChatService:
         
         # 检测语言并选择提示词
         language = detect_language(theme + " " + user_message)
-        system_prompt = SYSTEM_PROMPT_ZH if language == 'zh' else SYSTEM_PROMPT_EN_ZH if language == 'zh' else SYSTEM_PROMPT_EN
+        
+        # 如果项目有分类，使用该方向的系统提示词
+        if project_category:
+            category_config = self.db.query(VideoTopicCategory).filter(
+                VideoTopicCategory.name == project_category
+            ).first()
+            
+            if category_config and category_config.system_prompt:
+                system_prompt = category_config.system_prompt
+            else:
+                system_prompt = SYSTEM_PROMPT_ZH if language == 'zh' else SYSTEM_PROMPT_EN
+        else:
+            system_prompt = SYSTEM_PROMPT_ZH if language == 'zh' else SYSTEM_PROMPT_EN
         
         messages = [
             {"role": "system", "content": system_prompt},
@@ -392,7 +419,7 @@ class ChatService:
             print(f"[DEBUG] Calling stream_chat with {len(messages)} messages")
             response = await self.client.stream_chat(
                 messages=messages,
-                model=LLMFactory.get_chat_model(),
+                # 不传 model 参数，使用默认降级列表
                 temperature=0.7,
                 max_tokens=8000
             )
@@ -551,7 +578,7 @@ class ChatService:
         try:
             response = await self.client.stream_chat(
                 messages=messages,
-                model=LLMFactory.get_chat_model(),
+                # 不传 model 参数，使用默认降级列表
                 temperature=0.7,
                 max_tokens=8000
             )

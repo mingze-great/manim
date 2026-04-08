@@ -20,6 +20,7 @@ class Project(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     title = Column(String(200), nullable=False)
     theme = Column(Text, nullable=False)
+    category = Column(String(50), nullable=True)  # 视频主题方向
     final_script = Column(Text, nullable=True)
     manim_code = Column(Text, nullable=True)
     custom_code = Column(Text, nullable=True)  # 用户自定义参考代码

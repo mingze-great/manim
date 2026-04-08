@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Table, Button, Space, Tag, Modal, Form, Input, message, Popconfirm, Upload, Switch, Tooltip } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, PlayCircleOutlined, UploadOutlined } from '@ant-design/icons'
+import { PlusOutlined, EditOutlined, DeleteOutlined, PlayCircleOutlined, UploadOutlined, SettingOutlined } from '@ant-design/icons'
 import { templateApi, Template } from '@/services/template'
+import api from '@/services/api'
 
 const { TextArea } = Input
 
@@ -14,10 +15,23 @@ export default function AdminTemplates() {
   const [videoPreviewVisible, setVideoPreviewVisible] = useState(false)
   const [previewVideoUrl, setPreviewVideoUrl] = useState<string>('')
   const [uploading, setUploading] = useState(false)
+  const [topicConfigVisible, setTopicConfigVisible] = useState(false)
+  const [topicConfig, setTopicConfig] = useState('')
+  const [savingConfig, setSavingConfig] = useState(false)
 
   useEffect(() => {
     fetchTemplates()
+    loadTopicConfig()
   }, [])
+
+  const loadTopicConfig = async () => {
+    try {
+      const { data } = await api.get('/admin/system-config/video_topic_prompt')
+      setTopicConfig(data.value || '')
+    } catch (err) {
+      // 配置不存在，使用默认值
+    }
+  }
 
   const fetchTemplates = async () => {
     try {
@@ -108,6 +122,19 @@ export default function AdminTemplates() {
       fetchTemplates()
     } catch (err) {
       message.error('视频删除失败')
+    }
+  }
+
+  const handleSaveTopicConfig = async () => {
+    setSavingConfig(true)
+    try {
+      await api.post('/admin/system-config/video_topic_prompt', { value: topicConfig })
+      message.success('配置保存成功')
+      setTopicConfigVisible(false)
+    } catch (err) {
+      message.error('保存失败')
+    } finally {
+      setSavingConfig(false)
     }
   }
 
@@ -240,9 +267,17 @@ export default function AdminTemplates() {
           <h2 className="text-2xl font-bold">视频风格模板管理</h2>
           <p className="text-gray-500 mt-1">管理所有模板，上传示例视频供用户预览</p>
         </div>
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
-          添加模板
-        </Button>
+        <Space>
+          <Button 
+            icon={<SettingOutlined />} 
+            onClick={() => setTopicConfigVisible(true)}
+          >
+            视频主题配置
+          </Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
+            添加模板
+          </Button>
+        </Space>
       </div>
 
       <Table
@@ -354,6 +389,26 @@ class MyScene(Scene):
           controls
           className="w-full rounded-lg"
           autoPlay
+        />
+      </Modal>
+
+      <Modal
+        title="视频主题配置"
+        open={topicConfigVisible}
+        onOk={handleSaveTopicConfig}
+        onCancel={() => setTopicConfigVisible(false)}
+        width={700}
+        confirmLoading={savingConfig}
+        okText="保存"
+      >
+        <div className="mb-3 p-3 bg-blue-50 rounded text-sm text-blue-700">
+          此提示词用于指导AI生成视频主题，用户在选择热门方向后，系统会根据此提示词生成相关的爆款主题示例。
+        </div>
+        <TextArea
+          value={topicConfig}
+          onChange={e => setTopicConfig(e.target.value)}
+          rows={12}
+          placeholder="输入视频主题生成的全局提示词..."
         />
       </Modal>
     </div>
