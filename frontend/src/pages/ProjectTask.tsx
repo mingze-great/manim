@@ -46,7 +46,7 @@ export default function ProjectTask() {
   const readerRef = useRef<ReadableStreamDefaultReader | null>(null)
   const renderStartTimeRef = useRef<number>(0)
   const lastOutputTimeRef = useRef<number>(0)
-  const renderTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const renderTimeoutRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const CLIENT_RENDER_TIMEOUT = 330000
 
   const fetchProject = async () => {
