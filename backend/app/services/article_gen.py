@@ -189,6 +189,79 @@ class ArticleGenService:
         
         return "\n".join(html_parts)
     
+    def _extract_key_paragraphs(self, content: str) -> List[dict]:
+        """智能提取关键段落用于配图"""
+        paragraphs = [p.strip() for p in content.split("\n\n") if p.strip()]
+        key_paras = []
+        
+        for i, para in enumerate(paragraphs):
+            if para.startswith("##"):
+                next_para = paragraphs[i+1] if i+1 < len(paragraphs) else ""
+                heading = para.replace("##", "").strip()
+                
+                keywords = self._extract_keywords(next_para or heading)
+                
+                key_paras.append({
+                    "position": self._calculate_position(content, i),
+                    "heading": heading,
+                    "text": next_para,
+                    "keywords": keywords
+                })
+        
+        return key_paras[:2]
+    
+    def _extract_keywords(self, text: str) -> str:
+        """提取关键词"""
+        import re
+        text = re.sub(r'[#*\n]', '', text)
+        words = text.split()[:10]
+        keywords = ' '.join(words)
+        return keywords[:50] if len(keywords) > 50 else keywords
+    
+    def _calculate_position(self, content: str, paragraph_index: int) -> int:
+        """计算段落位置（字符数）"""
+        paragraphs = content.split("\n\n")
+        position = 0
+        for i in range(paragraph_index):
+            position += len(paragraphs[i])
+        return position
+    
+    async def generate_smart_images(self, content: str, topic: str, category: str) -> List[dict]:
+        """根据内容智能生成配图"""
+        from app.models.article_category import ArticleCategory
+        
+        images = []
+        
+        db_category = self.db.query(ArticleCategory).filter(
+            ArticleCategory.name == category
+        ).first()
+        
+        image_template = "公众号文章配图，主题：{topic}，高质量，专业感"
+        if db_category and db_category.image_prompt_template:
+            image_template = db_category.image_prompt_template
+        
+        cover_prompt = image_template.format(topic=topic)
+        images.append({
+            "url": "",
+            "position": 0,
+            "prompt": cover_prompt,
+            "type": "cover"
+        })
+        
+        key_paragraphs = self._extract_key_paragraphs(content)
+        
+        for para in key_paragraphs:
+            prompt = f"公众号配图，{topic}，{para['keywords']}"
+            images.append({
+                "url": "",
+                "position": para["position"],
+                "prompt": prompt,
+                "related_text": para["text"][:50] if para["text"] else "",
+                "type": "content"
+            })
+        
+        return images
+    
     async def create_article(self, user_id: int, topic: str, category: str = "生活", outline: str = None) -> Article:
         """创建文章"""
         article = Article(

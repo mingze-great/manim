@@ -20,6 +20,7 @@ import AdminSettings from './pages/admin/AdminSettings'
 import AdminTemplates from './pages/admin/AdminTemplates'
 import AdminStatistics from './pages/admin/AdminStatistics'
 import AdminTokenUsage from './pages/admin/AdminTokenUsage'
+import AdminArticleCategories from './pages/admin/AdminArticleCategories'
 import ArticleCreator from './pages/Article/Creator'
 import ArticleEditor from './pages/Article/Editor'
 import ArticleHistory from './pages/Article/History'
@@ -104,6 +105,7 @@ function AppContent() {
         <Route path="/admin/templates" element={<AdminTemplates />} />
         <Route path="/admin/statistics" element={<AdminStatistics />} />
         <Route path="/admin/token-usage" element={<AdminTokenUsage />} />
+        <Route path="/admin/article-categories" element={<AdminArticleCategories />} />
       </Route>
     </Routes>
   )

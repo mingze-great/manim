@@ -132,14 +132,28 @@ async def generate_images(
     if not article.content_text:
         raise HTTPException(status_code=400, detail="请先生成文章内容")
     
-    images = await image_gen_service.generate_images_for_article(
+    smart_images = await service.generate_smart_images(
+        article.content_text,
         article.topic,
-        article.content_text
+        article.category or "生活"
     )
     
-    article = await service.update_article(article_id, images=images)
+    generated_images = []
+    for img_info in smart_images:
+        try:
+            image_url = await image_gen_service.generate_image(img_info["prompt"])
+            generated_images.append({
+                "url": image_url,
+                "position": img_info["position"],
+                "prompt": img_info["prompt"],
+                "type": img_info.get("type", "content")
+            })
+        except Exception as e:
+            print(f"[ImageGen] 生成失败: {e}")
     
-    return {"images": images}
+    article = await service.update_article(article_id, images=generated_images)
+    
+    return {"images": generated_images}
 
 
 @router.post("/{article_id}/generate-html")

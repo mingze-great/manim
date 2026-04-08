@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Card, Button, Input, message, Spin, Typography, Space, Image, Modal } from 'antd'
-import { EditOutlined, CopyOutlined, DeleteOutlined, EyeOutlined, SaveOutlined, ReloadOutlined } from '@ant-design/icons'
+import { Card, Button, Input, message, Spin, Typography, Space, Modal, Divider, Alert } from 'antd'
+import { EditOutlined, CopyOutlined, DeleteOutlined, SaveOutlined, ReloadOutlined, RocketOutlined } from '@ant-design/icons'
 import { articleApi, Article } from '@/services/article'
+import PhonePreview from './components/PhonePreview'
 
 const { TextArea } = Input
 const { Title, Text } = Typography
@@ -14,9 +15,9 @@ export default function ArticleEditor() {
   const [saving, setSaving] = useState(false)
   const [article, setArticle] = useState<Article | null>(null)
   const [editTitle, setEditTitle] = useState('')
+  const [editOutline, setEditOutline] = useState('')
   const [editContent, setEditContent] = useState('')
   const [isEditing, setIsEditing] = useState(false)
-  const [previewVisible, setPreviewVisible] = useState(false)
 
   useEffect(() => {
     loadArticle()
@@ -30,6 +31,7 @@ export default function ArticleEditor() {
       const { data } = await articleApi.get(parseInt(id))
       setArticle(data)
       setEditTitle(data.title || '')
+      setEditOutline(data.outline || '')
       setEditContent(data.content_text || '')
     } catch (error: any) {
       message.error('加载文章失败')
@@ -46,6 +48,7 @@ export default function ArticleEditor() {
     try {
       await articleApi.update(article.id, {
         title: editTitle,
+        outline: editOutline,
         content_text: editContent
       })
       message.success('保存成功')
@@ -56,6 +59,38 @@ export default function ArticleEditor() {
       console.error('Save error:', error)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleGenerateImages = async () => {
+    if (!article) return
+
+    setLoading(true)
+    try {
+      await articleApi.generateImages(article.id)
+      message.success('配图生成成功')
+      loadArticle()
+    } catch (error: any) {
+      message.error(error.response?.data?.detail || '生成失败')
+      console.error('Generate images error:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleGenerateHtml = async () => {
+    if (!article) return
+
+    setLoading(true)
+    try {
+      await articleApi.generateHtml(article.id)
+      message.success('HTML 生成成功')
+      loadArticle()
+    } catch (error: any) {
+      message.error(error.response?.data?.detail || '生成失败')
+      console.error('Generate HTML error:', error)
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -92,22 +127,6 @@ export default function ArticleEditor() {
     })
   }
 
-  const handleRegenerateHtml = async () => {
-    if (!article) return
-
-    setLoading(true)
-    try {
-      await articleApi.generateHtml(article.id)
-      message.success('HTML 重新生成成功')
-      loadArticle()
-    } catch (error: any) {
-      message.error('生成失败')
-      console.error('Regenerate error:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
   if (loading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
@@ -121,116 +140,137 @@ export default function ArticleEditor() {
   }
 
   return (
-    <div style={{ padding: '24px', maxWidth: '900px', margin: '0 auto' }}>
-      <Card>
-        <Space direction="vertical" size="large" style={{ width: '100%' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Title level={3}>{isEditing ? '编辑文章' : article.title || '公众号文章'}</Title>
-            <Space>
-              {!isEditing && (
-                <>
-                  <Button icon={<EditOutlined />} onClick={() => setIsEditing(true)}>
-                    编辑
-                  </Button>
-                  <Button icon={<EyeOutlined />} onClick={() => setPreviewVisible(true)}>
-                    预览
-                  </Button>
-                  <Button icon={<CopyOutlined />} onClick={handleCopyHtml} type="primary">
-                    复制 HTML
-                  </Button>
-                </>
-              )}
-            </Space>
-          </div>
-
-          <div>
-            <Text type="secondary">主题: {article.topic}</Text>
-            <Text type="secondary" style={{ marginLeft: '16px' }}>字数: {article.word_count}</Text>
-          </div>
-
-          {isEditing ? (
-            <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-              <Input
-                value={editTitle}
-                onChange={(e) => setEditTitle(e.target.value)}
-                placeholder="文章标题"
-              />
-              <TextArea
-                value={editContent}
-                onChange={(e) => setEditContent(e.target.value)}
-                rows={12}
-                placeholder="文章内容"
-              />
+    <div style={{ height: 'calc(100vh - 64px)', display: 'flex' }}>
+      <div style={{ flex: '1', padding: '24px', overflowY: 'auto', borderRight: '1px solid #f0f0f0' }}>
+        <Card>
+          <Space direction="vertical" size="large" style={{ width: '100%' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Title level={3}>{isEditing ? '编辑文章' : article.title || '公众号文章'}</Title>
               <Space>
-                <Button icon={<SaveOutlined />} onClick={handleSave} loading={saving} type="primary">
-                  保存
-                </Button>
-                <Button onClick={() => setIsEditing(false)}>
-                  取消
-                </Button>
+                {!isEditing && (
+                  <>
+                    <Button icon={<EditOutlined />} onClick={() => setIsEditing(true)}>
+                      编辑
+                    </Button>
+                    <Button type="primary" icon={<CopyOutlined />} onClick={handleCopyHtml}>
+                      复制 HTML
+                    </Button>
+                  </>
+                )}
               </Space>
-            </Space>
-          ) : (
-            <>
-              {article.images && article.images.length > 0 && (
+            </div>
+
+            <div>
+              <Text type="secondary">主题: {article.topic}</Text>
+              <Text type="secondary" style={{ marginLeft: '16px' }}>创作方向: {article.category}</Text>
+              <Text type="secondary" style={{ marginLeft: '16px' }}>字数: {article.word_count}</Text>
+            </div>
+
+            {isEditing ? (
+              <>
                 <div>
-                  <Text strong>配图:</Text>
-                  <div style={{ marginTop: '8px' }}>
-                    <Image.PreviewGroup>
-                      {article.images.map((img, index) => (
-                        <Image
-                          key={index}
-                          src={img.url}
-                          width={200}
-                          height={150}
-                          style={{ objectFit: 'cover', marginRight: '8px', borderRadius: '4px' }}
-                        />
-                      ))}
-                    </Image.PreviewGroup>
+                  <Text strong>文章标题</Text>
+                  <Input
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    placeholder="文章标题"
+                    style={{ marginTop: '8px' }}
+                  />
+                </div>
+
+                <div>
+                  <Text strong>文章大纲</Text>
+                  <TextArea
+                    value={editOutline}
+                    onChange={(e) => setEditOutline(e.target.value)}
+                    rows={4}
+                    placeholder="文章大纲"
+                    style={{ marginTop: '8px' }}
+                  />
+                </div>
+
+                <div>
+                  <Text strong>文章内容</Text>
+                  <TextArea
+                    value={editContent}
+                    onChange={(e) => setEditContent(e.target.value)}
+                    rows={12}
+                    placeholder="文章内容"
+                    style={{ marginTop: '8px' }}
+                  />
+                </div>
+
+                <Space>
+                  <Button icon={<SaveOutlined />} onClick={handleSave} loading={saving} type="primary">
+                    保存
+                  </Button>
+                  <Button onClick={() => setIsEditing(false)}>
+                    取消
+                  </Button>
+                </Space>
+              </>
+            ) : (
+              <>
+                {article.images && article.images.length > 0 && (
+                  <div>
+                    <Text strong>配图: {article.images.length} 张</Text>
+                  </div>
+                )}
+
+                <div>
+                  <Text strong>文章内容:</Text>
+                  <div
+                    style={{
+                      marginTop: '12px',
+                      padding: '16px',
+                      background: '#f5f5f5',
+                      borderRadius: '8px',
+                      maxHeight: '400px',
+                      overflowY: 'auto',
+                      whiteSpace: 'pre-wrap'
+                    }}
+                  >
+                    {article.content_text}
                   </div>
                 </div>
-              )}
+              </>
+            )}
 
-              <div>
-                <Text strong>文章内容:</Text>
-                <div style={{
-                  marginTop: '12px',
-                  padding: '16px',
-                  background: '#f5f5f5',
-                  borderRadius: '8px',
-                  maxHeight: '400px',
-                  overflowY: 'auto'
-                }}>
-                  <Text>{article.content_text}</Text>
-                </div>
-              </div>
-            </>
-          )}
+            <Divider />
 
-          <Space style={{ marginTop: '16px' }}>
-            <Button icon={<ReloadOutlined />} onClick={handleRegenerateHtml}>
-              重新生成 HTML
-            </Button>
-            <Button icon={<DeleteOutlined />} danger onClick={handleDelete}>
-              删除文章
-            </Button>
+            <Space wrap>
+              <Button 
+                icon={<RocketOutlined />} 
+                onClick={handleGenerateImages}
+                disabled={isEditing}
+              >
+                生成配图
+              </Button>
+              <Button 
+                icon={<ReloadOutlined />} 
+                onClick={handleGenerateHtml}
+                disabled={isEditing}
+              >
+                重新生成 HTML
+              </Button>
+              <Button 
+                icon={<DeleteOutlined />} 
+                danger 
+                onClick={handleDelete}
+                disabled={isEditing}
+              >
+                删除文章
+              </Button>
+            </Space>
           </Space>
-        </Space>
-      </Card>
+        </Card>
+      </div>
 
-      <Modal
-        title="微信公众号预览"
-        open={previewVisible}
-        onCancel={() => setPreviewVisible(false)}
-        width={600}
-        footer={null}
-      >
-        <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
-          {article.content_html && (
-            <div dangerouslySetInnerHTML={{ __html: article.content_html }} />
-          )}
-        </div>
-      </Modal>
+      <div style={{ width: '400px', padding: '24px', background: '#fafafa', overflowY: 'auto' }}>
+        <Card title="手机预览" style={{ height: '100%' }}>
+          <PhonePreview article={article} />
+        </Card>
+      </div>
     </div>
   )
 }
