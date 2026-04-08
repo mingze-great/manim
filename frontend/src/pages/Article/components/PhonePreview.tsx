@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Select, Card } from 'antd'
+import { Select } from 'antd'
 import { Article } from '@/services/article'
 
 interface PhonePreviewProps {

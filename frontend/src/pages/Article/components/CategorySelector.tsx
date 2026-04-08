@@ -7,26 +7,23 @@ const { Text } = Typography
 interface CategorySelectorProps {
   value?: string
   onChange?: (category: string) => void
+  onTopicSelect?: (topic: string) => void
 }
 
-export default function CategorySelector({ value, onChange }: CategorySelectorProps) {
+export default function CategorySelector({ value, onChange, onTopicSelect }: CategorySelectorProps) {
   const [categories, setCategories] = useState<Category[]>([])
-  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     loadCategories()
   }, [])
 
   const loadCategories = async () => {
-    setLoading(true)
     try {
       const { data } = await articleApi.getCategories()
       setCategories(data)
     } catch (error) {
       console.error('Failed to load categories:', error)
       message.error('加载创作方向失败')
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -58,10 +55,17 @@ export default function CategorySelector({ value, onChange }: CategorySelectorPr
           style={{ marginTop: '12px', background: '#fafafa' }}
           bodyStyle={{ padding: '12px' }}
         >
-          <Text type="secondary" style={{ fontSize: '12px' }}>示例主题：</Text>
+          <Text type="secondary" style={{ fontSize: '12px' }}>示例主题（点击选择）：</Text>
           <div style={{ marginTop: '8px' }}>
             {categories.find(c => c.name === value)?.example_topics.map((topic, idx) => (
-              <Tag key={idx} style={{ marginBottom: '4px' }}>{topic}</Tag>
+              <Tag 
+                key={idx} 
+                style={{ marginBottom: '4px', cursor: 'pointer' }}
+                color="blue"
+                onClick={() => onTopicSelect?.(topic)}
+              >
+                {topic}
+              </Tag>
             ))}
           </div>
         </Card>

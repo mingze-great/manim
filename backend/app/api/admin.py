@@ -10,6 +10,7 @@ from app.models.project import Project
 from app.models.task import Task
 from app.models.article_category import ArticleCategory
 from app.schemas.user import UserResponse, UserUpdate, UserStats, AuditLogResponse, SystemStats, UserDetail, ProjectStatus, RecentProject, TaskLog, TokenUsageItem, TokenUsageResponse
+from app.schemas.article import ArticleCategoryCreate, ArticleCategoryUpdate
 from app.api.auth import get_current_user, get_current_admin_user
 from app.config import get_settings
 import psutil
@@ -694,26 +695,22 @@ async def list_article_categories(
 
 @router.post("/article-categories")
 async def create_article_category(
-    name: str,
-    icon: str,
-    system_prompt: str,
-    example_topics: List[str],
-    image_prompt_template: Optional[str] = None,
+    data: ArticleCategoryCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user)
 ):
     """创建新创作方向"""
-    existing = db.query(ArticleCategory).filter(ArticleCategory.name == name).first()
+    existing = db.query(ArticleCategory).filter(ArticleCategory.name == data.name).first()
     if existing:
         raise HTTPException(status_code=400, detail="该创作方向已存在")
     
     import json
     category = ArticleCategory(
-        name=name,
-        icon=icon,
-        system_prompt=system_prompt,
-        example_topics=json.dumps(example_topics, ensure_ascii=False),
-        image_prompt_template=image_prompt_template
+        name=data.name,
+        icon=data.icon,
+        system_prompt=data.system_prompt,
+        example_topics=json.dumps(data.example_topics, ensure_ascii=False),
+        image_prompt_template=data.image_prompt_template
     )
     db.add(category)
     db.commit()
@@ -725,13 +722,7 @@ async def create_article_category(
 @router.put("/article-categories/{category_id}")
 async def update_article_category(
     category_id: int,
-    name: Optional[str] = None,
-    icon: Optional[str] = None,
-    system_prompt: Optional[str] = None,
-    example_topics: Optional[List[str]] = None,
-    image_prompt_template: Optional[str] = None,
-    is_active: Optional[bool] = None,
-    sort_order: Optional[int] = None,
+    data: ArticleCategoryUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user)
 ):
@@ -741,20 +732,20 @@ async def update_article_category(
         raise HTTPException(status_code=404, detail="创作方向不存在")
     
     import json
-    if name:
-        category.name = name
-    if icon:
-        category.icon = icon
-    if system_prompt:
-        category.system_prompt = system_prompt
-    if example_topics:
-        category.example_topics = json.dumps(example_topics, ensure_ascii=False)
-    if image_prompt_template is not None:
-        category.image_prompt_template = image_prompt_template
-    if is_active is not None:
-        category.is_active = is_active
-    if sort_order is not None:
-        category.sort_order = sort_order
+    if data.name is not None:
+        category.name = data.name
+    if data.icon is not None:
+        category.icon = data.icon
+    if data.system_prompt is not None:
+        category.system_prompt = data.system_prompt
+    if data.example_topics is not None:
+        category.example_topics = json.dumps(data.example_topics, ensure_ascii=False)
+    if data.image_prompt_template is not None:
+        category.image_prompt_template = data.image_prompt_template
+    if data.is_active is not None:
+        category.is_active = data.is_active
+    if data.sort_order is not None:
+        category.sort_order = data.sort_order
     
     db.commit()
     db.refresh(category)

@@ -1,21 +1,40 @@
+import asyncio
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
 
 from app.database import get_db
 from app.models.user import User
 from app.models.article import Article
+from app.models.favorite_topic import FavoriteTopic
 from app.api.auth import get_current_user
 from app.schemas.article import (
     ArticleCreate,
     ArticleUpdate,
     ArticleResponse,
     UsageResponse,
-    CategoryResponse
+    CategoryResponse,
+    GenerateOutlineRequest,
+    GenerateContentRequest
 )
 from app.services.article_gen import ArticleGenService
 from app.services.image_gen import image_gen_service
-from app.config.article_prompts import ARTICLE_CATEGORIES
+from app.article_prompts import ARTICLE_CATEGORIES
+
+
+class FavoriteTopicCreate(BaseModel):
+    topic: str
+    category: str = "生活"
+
+
+class FavoriteTopicResponse(BaseModel):
+    id: int
+    topic: str
+    category: str
+    
+    class Config:
+        from_attributes = True
 
 router = APIRouter(prefix="/articles", tags=["articles"])
 
@@ -68,40 +87,55 @@ async def create_article(
 @router.post("/{article_id}/generate-outline")
 async def generate_outline(
     article_id: int,
+    request: GenerateOutlineRequest = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     service = ArticleGenService(db)
-    
+
     article = service.get_article(article_id)
     if not article or article.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="文章不存在")
-    
-    outline = await service.generate_outline(article.topic, article.category)
-    
-    article = await service.update_article(article_id, outline=outline)
-    
-    return {"outline": outline}
+
+    requirement = request.requirement if request else None
+    result = await service.generate_outline(article.topic, article.category, requirement)
+
+    article = await service.update_article(
+        article_id,
+        outline=result["outline"],
+        title=result["title"]
+    )
+
+    return {
+        "outline": result["outline"],
+        "title": result["title"]
+    }
 
 
 @router.post("/{article_id}/generate-content")
 async def generate_content(
     article_id: int,
+    request: GenerateContentRequest = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     service = ArticleGenService(db)
-    
+
     article = service.get_article(article_id)
     if not article or article.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="文章不存在")
-    
+
     if not article.outline:
-        outline = await service.generate_outline(article.topic, article.category)
-        article = await service.update_article(article_id, outline=outline)
-    
-    result = await service.generate_content(article.topic, article.outline, article.category)
-    
+        outline_result = await service.generate_outline(article.topic, article.category)
+        article = await service.update_article(
+            article_id,
+            outline=outline_result["outline"],
+            title=outline_result["title"]
+        )
+
+    requirement = request.requirement if request else None
+    result = await service.generate_content(article.topic, article.outline, article.category, requirement)
+
     article = await service.update_article(
         article_id,
         title=result["title"],
@@ -109,7 +143,7 @@ async def generate_content(
         word_count=result["word_count"],
         status="draft"
     )
-    
+
     return {
         "title": result["title"],
         "content": result["content"],
@@ -138,22 +172,150 @@ async def generate_images(
         article.category or "生活"
     )
     
-    generated_images = []
-    for img_info in smart_images:
+    print(f"[ImageGen] 需要生成 {len(smart_images)} 张配图")
+    
+    # 并发生成所有图片
+    async def generate_single_image(idx: int, img_info: dict):
         try:
+            print(f"[ImageGen] 开始生成第{idx+1}张图片: {img_info['prompt'][:50]}...")
             image_url = await image_gen_service.generate_image(img_info["prompt"])
-            generated_images.append({
-                "url": image_url,
-                "position": img_info["position"],
-                "prompt": img_info["prompt"],
-                "type": img_info.get("type", "content")
-            })
+            print(f"[ImageGen] 第{idx+1}张图片生成成功")
+            return {
+                "success": True,
+                "index": idx,
+                "image": {
+                    "url": image_url,
+                    "position": img_info["position"],
+                    "prompt": img_info["prompt"],
+                    "type": img_info.get("type", "content")
+                }
+            }
         except Exception as e:
-            print(f"[ImageGen] 生成失败: {e}")
+            import logging
+            logging.error(f"[ImageGen] 第{idx+1}张图片生成失败: {e}", exc_info=True)
+            return {
+                "success": False,
+                "index": idx,
+                "error": str(e)
+            }
+    
+    # 使用asyncio.gather并发生成
+    tasks = [generate_single_image(i, img_info) for i, img_info in enumerate(smart_images)]
+    results = await asyncio.gather(*tasks)
+    
+    # 按顺序收集成功的图片
+    generated_images = []
+    for result in sorted(results, key=lambda x: x["index"]):
+        if result["success"]:
+            generated_images.append(result["image"])
+    
+    success_count = len(generated_images)
+    total_count = len(smart_images)
+    print(f"[ImageGen] 配图生成完成，成功{success_count}/{total_count}张")
     
     article = await service.update_article(article_id, images=generated_images)
     
-    return {"images": generated_images}
+    return {
+        "images": generated_images,
+        "total": total_count,
+        "success": success_count,
+        "failed": total_count - success_count
+    }
+
+
+@router.post("/{article_id}/regenerate-image/{image_index}")
+async def regenerate_single_image(
+    article_id: int,
+    image_index: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """重新生成单张图片"""
+    service = ArticleGenService(db)
+    
+    article = service.get_article(article_id)
+    if not article or article.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="文章不存在")
+    
+    import json
+    images = article.images
+    if isinstance(images, str):
+        images = json.loads(images)
+    
+    if not images or image_index < 0 or image_index >= len(images):
+        raise HTTPException(status_code=400, detail="图片索引无效")
+    
+    old_image = images[image_index]
+    
+    try:
+        print(f"[ImageGen] 重新生成第{image_index+1}张图片...")
+        new_url = await image_gen_service.generate_image(old_image["prompt"])
+        
+        images[image_index]["url"] = new_url
+        article = await service.update_article(article_id, images=images)
+        
+        print(f"[ImageGen] 第{image_index+1}张图片重新生成成功")
+        return {
+            "message": "图片重新生成成功",
+            "image": images[image_index]
+        }
+    except Exception as e:
+        import logging
+        logging.error(f"[ImageGen] 图片重新生成失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"图片生成失败: {str(e)}")
+
+
+@router.put("/{article_id}/images")
+async def update_article_images(
+    article_id: int,
+    images: List[dict],
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """更新文章图片（支持排序和删除）"""
+    service = ArticleGenService(db)
+    
+    article = service.get_article(article_id)
+    if not article or article.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="文章不存在")
+    
+    article = await service.update_article(article_id, images=images)
+    
+    return {
+        "message": "图片更新成功",
+        "images": images
+    }
+
+
+@router.delete("/{article_id}/images/{image_index}")
+async def delete_article_image(
+    article_id: int,
+    image_index: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """删除单张图片"""
+    service = ArticleGenService(db)
+    
+    article = service.get_article(article_id)
+    if not article or article.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="文章不存在")
+    
+    import json
+    images = article.images
+    if isinstance(images, str):
+        images = json.loads(images)
+    
+    if not images or image_index < 0 or image_index >= len(images):
+        raise HTTPException(status_code=400, detail="图片索引无效")
+    
+    deleted_image = images.pop(image_index)
+    article = await service.update_article(article_id, images=images)
+    
+    return {
+        "message": "图片删除成功",
+        "images": images
+    }
 
 
 @router.post("/{article_id}/generate-html")
@@ -300,3 +462,66 @@ async def delete_article(
         return {"message": "删除成功"}
     else:
         raise HTTPException(status_code=500, detail="删除失败")
+
+
+# ==================== 收藏主题管理 ====================
+
+@router.post("/favorites", response_model=FavoriteTopicResponse)
+async def add_favorite_topic(
+    data: FavoriteTopicCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """添加收藏主题"""
+    existing = db.query(FavoriteTopic).filter(
+        FavoriteTopic.user_id == current_user.id,
+        FavoriteTopic.topic == data.topic
+    ).first()
+    
+    if existing:
+        raise HTTPException(status_code=400, detail="该主题已收藏")
+    
+    favorite = FavoriteTopic(
+        user_id=current_user.id,
+        topic=data.topic,
+        category=data.category
+    )
+    db.add(favorite)
+    db.commit()
+    db.refresh(favorite)
+    
+    return favorite
+
+
+@router.get("/favorites", response_model=List[FavoriteTopicResponse])
+async def list_favorite_topics(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """获取收藏主题列表"""
+    favorites = db.query(FavoriteTopic).filter(
+        FavoriteTopic.user_id == current_user.id
+    ).order_by(FavoriteTopic.created_at.desc()).all()
+    
+    return favorites
+
+
+@router.delete("/favorites/{favorite_id}")
+async def delete_favorite_topic(
+    favorite_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """删除收藏主题"""
+    favorite = db.query(FavoriteTopic).filter(
+        FavoriteTopic.id == favorite_id,
+        FavoriteTopic.user_id == current_user.id
+    ).first()
+    
+    if not favorite:
+        raise HTTPException(status_code=404, detail="收藏主题不存在")
+    
+    db.delete(favorite)
+    db.commit()
+    
+    return {"message": "删除成功"}

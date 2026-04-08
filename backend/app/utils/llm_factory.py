@@ -70,6 +70,35 @@ class DashScopeAdapter(LLMAdapter):
         
         raise Exception("所有模型均失败")
     
+    async def chat_stream(self, messages: list[dict], model: str = None, **kwargs):
+        """流式对话 - 实时返回生成内容"""
+        models_to_try = [model] if model else self.chat_models
+        
+        for i, current_model in enumerate(models_to_try):
+            try:
+                print(f"[DashScope] 尝试流式对话模型: {current_model}")
+                response = await self.client.chat.completions.create(
+                    model=current_model,
+                    messages=messages,
+                    stream=True,
+                    **kwargs
+                )
+                
+                async for chunk in response:
+                    if chunk.choices[0].delta.content:
+                        yield chunk.choices[0].delta.content
+                
+                return  # 成功完成，退出函数
+                
+            except Exception as e:
+                print(f"[DashScope] 流式模型 {current_model} 失败: {e}")
+                if i < len(models_to_try) - 1:
+                    print(f"[DashScope] 降级到: {models_to_try[i+1]}")
+                else:
+                    raise e
+        
+        raise Exception("所有模型均失败")
+    
     async def generate_code(self, messages: list[dict], model: str = None, **kwargs):
         """代码生成 - 使用更长的超时时间（120秒）"""
         from openai import AsyncOpenAI

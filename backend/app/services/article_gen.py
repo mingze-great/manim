@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.models.article import Article
 from app.models.daily_usage import UserDailyUsage
 from app.config import get_settings
-from app.config.article_prompts import get_category_prompt
+from app.article_prompts import get_category_prompt
 
 settings = get_settings()
 
@@ -52,82 +52,111 @@ class ArticleGenService:
         
         self.db.commit()
     
-    async def generate_outline(self, topic: str, category: str = "生活") -> str:
-        """生成文章大纲"""
+    async def generate_outline(self, topic: str, category: str = "生活", requirement: str = None) -> dict:
+        """生成文章大纲，包含标题"""
         from app.utils.llm_factory import LLMFactory
         from app.models.article_category import ArticleCategory
         import json
-        
+
         client = LLMFactory.get_client()
-        
+
         # 从数据库读取系统提示词
         db_category = self.db.query(ArticleCategory).filter(
             ArticleCategory.name == category
         ).first()
-        
+
         if db_category:
             system_prompt = db_category.system_prompt
         else:
             system_prompt = get_category_prompt(category)
-        
-        prompt = f"""请为以下主题生成一个公众号文章大纲，要求：
-1. 包含标题和3-5个要点
-2. 每个要点一行，简洁明了
-3. 总字数100-200字
 
-主题：{topic}
+        # 优化prompt模板
+        prompt = f"""请为以下主题生成一个专业的公众号文章大纲：
+
+【创作方向】{category}
+【主题】{topic}
+{f'【补充要求】{requirement}' if requirement else ''}
+
+【输出格式】
+标题：[吸引人的标题]
+
+一、[第一个要点]
+二、[第二个要点]
+三、[第三个要点]
+...
+
+【要求】
+1. 标题要吸引眼球，符合{category}风格，20字以内
+2. 要点要具体、可展开，每个要点10-20字
+3. 结构清晰，逻辑连贯
+4. 总字数100-200字
 
 请直接输出大纲，不要其他解释。"""
-        
+
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt}
         ]
-        
+
         response = await client.chat(messages=messages)
-        return response
+
+        # 提取标题
+        title = self._extract_title(response)
+
+        return {
+            "outline": response,
+            "title": title
+        }
     
-    async def generate_content(self, topic: str, outline: str, category: str = "生活") -> dict:
+    async def generate_content(self, topic: str, outline: str, category: str = "生活", requirement: str = None) -> dict:
         """生成完整文章内容"""
         from app.utils.llm_factory import LLMFactory
         from app.models.article_category import ArticleCategory
-        
+
         client = LLMFactory.get_client()
-        
+
         # 从数据库读取系统提示词
         db_category = self.db.query(ArticleCategory).filter(
             ArticleCategory.name == category
         ).first()
-        
+
         if db_category:
             system_prompt = db_category.system_prompt
         else:
             system_prompt = get_category_prompt(category)
-        
-        prompt = f"""请根据以下主题和大纲，生成一篇公众号文章，要求：
-1. 字数700-1000字
-2. 每个要点详细展开，有深度有见解
-3. 语言通俗易懂，有感染力
-4. 段落清晰，使用二级标题分隔
-5. 结尾有总结
 
-主题：{topic}
+        # 优化prompt模板
+        prompt = f"""请根据以下信息生成一篇高质量公众号文章：
 
-大纲：
+【创作方向】{category}
+【主题】{topic}
+
+【大纲】
 {outline}
 
-请直接输出文章正文，不要输出标题和大纲。"""
-        
+{f'【补充要求】{requirement}' if requirement else ''}
+
+【写作要求】
+1. 字数700-1000字
+2. 符合{category}的风格特点
+3. 语言通俗易懂，有感染力
+4. 段落清晰，使用小标题分隔
+5. 开头吸引人，结尾有升华
+6. 可适当加入案例或数据支撑
+
+【输出要求】
+直接输出文章正文内容，不要输出标题和大纲。"""
+
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt}
         ]
-        
+
         content = await client.chat(messages=messages)
-        
+
         title = self._extract_title(outline)
         word_count = len(content.replace("\n", "").replace(" ", ""))
-        
+
         return {
             "title": title,
             "content": content,
@@ -195,10 +224,29 @@ class ArticleGenService:
         key_paras = []
         
         for i, para in enumerate(paragraphs):
+            # 支持多种标题格式
+            is_heading = False
+            heading = ""
+            
+            # 格式1: ## 标题
             if para.startswith("##"):
-                next_para = paragraphs[i+1] if i+1 < len(paragraphs) else ""
+                is_heading = True
                 heading = para.replace("##", "").strip()
-                
+            
+            # 格式2: **一、标题** 或 **1. 标题**
+            elif para.startswith("**") and ("、" in para[:15] or para[2:3].isdigit()):
+                is_heading = True
+                # 提取标题：移除 ** 和数字编号
+                heading = para.replace("**", "")
+                if "、" in heading:
+                    heading = heading.split("、", 1)[-1].strip()
+                elif heading[0].isdigit():
+                    # 移除数字和点号
+                    parts = heading.split(".", 1)
+                    heading = parts[-1].strip() if len(parts) > 1 else heading
+            
+            if is_heading:
+                next_para = paragraphs[i+1] if i+1 < len(paragraphs) else ""
                 keywords = self._extract_keywords(next_para or heading)
                 
                 key_paras.append({
@@ -229,18 +277,21 @@ class ArticleGenService:
     async def generate_smart_images(self, content: str, topic: str, category: str) -> List[dict]:
         """根据内容智能生成配图"""
         from app.models.article_category import ArticleCategory
+        from app.services.prompt_builder import PromptBuilderService
         
         images = []
         
-        db_category = self.db.query(ArticleCategory).filter(
-            ArticleCategory.name == category
-        ).first()
+        # 使用提示词构建服务
+        prompt_builder = PromptBuilderService(self.db)
         
-        image_template = "公众号文章配图，主题：{topic}，高质量，专业感"
-        if db_category and db_category.image_prompt_template:
-            image_template = db_category.image_prompt_template
+        # 生成封面图提示词
+        cover_prompt = prompt_builder.build_prompt(
+            topic=topic,
+            category=category,
+            context="",
+            image_type="cover"
+        )
         
-        cover_prompt = image_template.format(topic=topic)
         images.append({
             "url": "",
             "position": 0,
@@ -248,14 +299,22 @@ class ArticleGenService:
             "type": "cover"
         })
         
+        # 提取关键段落用于内容图
         key_paragraphs = self._extract_key_paragraphs(content)
         
         for para in key_paragraphs:
-            prompt = f"公众号配图，{topic}，{para['keywords']}"
+            # 使用提示词构建服务生成内容图提示词
+            content_prompt = prompt_builder.build_prompt(
+                topic=topic,
+                category=category,
+                context=para["text"] or para["heading"],
+                image_type="content"
+            )
+            
             images.append({
                 "url": "",
                 "position": para["position"],
-                "prompt": prompt,
+                "prompt": content_prompt,
                 "related_text": para["text"][:50] if para["text"] else "",
                 "type": "content"
             })

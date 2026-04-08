@@ -67,3 +67,29 @@ class CategoryResponse(BaseModel):
     name: str
     icon: str
     example_topics: List[str]
+
+
+class ArticleCategoryCreate(BaseModel):
+    name: str
+    icon: str
+    system_prompt: str
+    example_topics: List[str] = []
+    image_prompt_template: Optional[str] = None
+
+
+class ArticleCategoryUpdate(BaseModel):
+    name: Optional[str] = None
+    icon: Optional[str] = None
+    system_prompt: Optional[str] = None
+    example_topics: Optional[List[str]] = None
+    image_prompt_template: Optional[str] = None
+    is_active: Optional[bool] = None
+    sort_order: Optional[int] = None
+
+
+class GenerateOutlineRequest(BaseModel):
+    requirement: Optional[str] = None
+
+
+class GenerateContentRequest(BaseModel):
+    requirement: Optional[str] = None

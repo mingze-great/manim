@@ -15,7 +15,7 @@ export interface Article {
   outline: string | null
   content_html: string | null
   content_text: string | null
-  images: Array<{ url: string; position: number; prompt: string }> | null
+  images: Array<{ url: string; position: number; prompt: string; type?: string }> | null
   status: string
   word_count: number
   created_at: string
@@ -51,14 +51,175 @@ export const articleApi = {
   list: (limit: number = 10) =>
     api.get<Article[]>(`/articles?limit=${limit}`),
   
-  generateOutline: (id: number) =>
-    api.post<{ outline: string }>(`/articles/${id}/generate-outline`),
+  generateOutline: (id: number, requirement?: string) =>
+    api.post<{ outline: string; title: string }>(`/articles/${id}/generate-outline`, { requirement }),
   
-  generateContent: (id: number) =>
-    api.post<{ title: string; content: string; word_count: number }>(`/articles/${id}/generate-content`),
+  generateContent: (id: number, requirement?: string) =>
+    api.post<{ title: string; content: string; word_count: number }>(`/articles/${id}/generate-content`, { requirement }),
+  
+  // 流式生成大纲
+  generateOutlineStream: async (id: number, requirement?: string, onChunk?: (chunk: string) => void) => {
+    // 从localStorage获取token
+    const authStorage = localStorage.getItem('auth-storage')
+    const token = authStorage ? JSON.parse(authStorage).state.token : null
+    
+    const response = await fetch(`/api/articles-stream/${id}/generate-outline-stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ requirement })
+    })
+    
+    if (!response.ok) {
+      throw new Error('生成失败')
+    }
+    
+    const reader = response.body?.getReader()
+    const decoder = new TextDecoder()
+    
+    if (!reader) {
+      throw new Error('无法读取响应流')
+    }
+    
+    let fullContent = ''
+    let title = ''
+    
+    while (true) {
+      const { done, value } = await reader.read()
+      
+      if (done) {
+        break
+      }
+      
+      const chunk = decoder.decode(value, { stream: true })
+      const lines = chunk.split('\n')
+      
+      let shouldBreak = false
+      
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(6))
+            
+            if (data.done) {
+              title = data.title
+              shouldBreak = true
+              break
+            } else if (data.content) {
+              fullContent += data.content
+              onChunk?.(fullContent)
+            } else if (data.error) {
+              throw new Error(data.error)
+            }
+          } catch (e) {
+            // 忽略解析错误
+          }
+        }
+      }
+      
+      if (shouldBreak) {
+        break
+      }
+    }
+    
+    return { outline: fullContent, title }
+  },
+  
+  // 流式生成文案
+  generateContentStream: async (id: number, requirement?: string, onChunk?: (chunk: string) => void) => {
+    // 从localStorage获取token
+    const authStorage = localStorage.getItem('auth-storage')
+    const token = authStorage ? JSON.parse(authStorage).state.token : null
+    
+    const response = await fetch(`/api/articles-stream/${id}/generate-content-stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ requirement })
+    })
+    
+    if (!response.ok) {
+      throw new Error('生成失败')
+    }
+    
+    const reader = response.body?.getReader()
+    const decoder = new TextDecoder()
+    
+    if (!reader) {
+      throw new Error('无法读取响应流')
+    }
+    
+    let fullContent = ''
+    let wordCount = 0
+    
+    while (true) {
+      const { done, value } = await reader.read()
+      
+      if (done) {
+        break
+      }
+      
+      const chunk = decoder.decode(value, { stream: true })
+      const lines = chunk.split('\n')
+      
+      let shouldBreak = false
+      
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(6))
+            
+            if (data.done) {
+              wordCount = data.word_count
+              shouldBreak = true
+              break
+            } else if (data.content) {
+              fullContent += data.content
+              onChunk?.(fullContent)
+            } else if (data.error) {
+              throw new Error(data.error)
+            }
+          } catch (e) {
+            // 忽略解析错误
+          }
+        }
+      }
+      
+      if (shouldBreak) {
+        break
+      }
+    }
+    
+    return { content: fullContent, word_count: wordCount }
+  },
   
   generateImages: (id: number) =>
-    api.post<{ images: Array<{ url: string; position: number; prompt: string }> }>(`/articles/${id}/generate-images`),
+    api.post<{ 
+      images: Array<{ url: string; position: number; prompt: string; type?: string }>,
+      total: number,
+      success: number,
+      failed: number
+    }>(`/articles/${id}/generate-images`),
+  
+  regenerateImage: (id: number, imageIndex: number) =>
+    api.post<{ message: string; image: { url: string; position: number; prompt: string; type?: string } }>(
+      `/articles/${id}/regenerate-image/${imageIndex}`
+    ),
+  
+  updateImages: (id: number, images: Array<{ url: string; position: number; prompt: string; type?: string }>) =>
+    api.put<{ message: string; images: Array<{ url: string; position: number; prompt: string; type?: string }> }>(
+      `/articles/${id}/images`,
+      images
+    ),
+  
+  deleteImage: (id: number, imageIndex: number) =>
+    api.delete<{ message: string; images: Array<{ url: string; position: number; prompt: string; type?: string }> }>(
+      `/articles/${id}/images/${imageIndex}`
+    ),
   
   generateHtml: (id: number) =>
     api.post<{ html: string }>(`/articles/${id}/generate-html`),

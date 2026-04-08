@@ -1,9 +1,7 @@
 import { useState, useEffect } from 'react'
-import { Card, Table, Button, Space, Modal, Form, Input, Select, Switch, message, Popconfirm } from 'antd'
+import { Card, Table, Button, Space, Modal, Form, Input, Switch, message, Popconfirm } from 'antd'
 import { EditOutlined, DeleteOutlined, PlusOutlined } from '@ant-design/icons'
-import axios from 'axios'
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api'
+import api from '@/services/api'
 
 interface Category {
   id: number
@@ -19,6 +17,7 @@ interface Category {
 export default function AdminArticleCategories() {
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [modalVisible, setModalVisible] = useState(false)
   const [editingCategory, setEditingCategory] = useState<Category | null>(null)
   const [form] = Form.useForm()
@@ -30,10 +29,7 @@ export default function AdminArticleCategories() {
   const loadCategories = async () => {
     setLoading(true)
     try {
-      const token = localStorage.getItem('token')
-      const { data } = await axios.get(`${API_BASE}/admin/article-categories`, {
-        headers: { Authorization: `Bearer ${token}` }
-      })
+      const { data } = await api.get('/admin/article-categories')
       setCategories(data)
     } catch (error) {
       message.error('加载创作方向失败')
@@ -59,10 +55,7 @@ export default function AdminArticleCategories() {
 
   const handleDelete = async (id: number) => {
     try {
-      const token = localStorage.getItem('token')
-      await axios.delete(`${API_BASE}/admin/article-categories/${id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      })
+      await api.delete(`/admin/article-categories/${id}`)
       message.success('删除成功')
       loadCategories()
     } catch (error) {
@@ -71,26 +64,18 @@ export default function AdminArticleCategories() {
   }
 
   const handleSubmit = async (values: any) => {
+    setSaving(true)
     try {
-      const token = localStorage.getItem('token')
       const data = {
         ...values,
         example_topics: values.example_topics.split('\n').filter((t: string) => t.trim())
       }
 
       if (editingCategory) {
-        await axios.put(
-          `${API_BASE}/admin/article-categories/${editingCategory.id}`,
-          data,
-          { headers: { Authorization: `Bearer ${token}` } }
-        )
+        await api.put(`/admin/article-categories/${editingCategory.id}`, data)
         message.success('更新成功')
       } else {
-        await axios.post(
-          `${API_BASE}/admin/article-categories`,
-          data,
-          { headers: { Authorization: `Bearer ${token}` } }
-        )
+        await api.post('/admin/article-categories', data)
         message.success('创建成功')
       }
 
@@ -98,6 +83,8 @@ export default function AdminArticleCategories() {
       loadCategories()
     } catch (error: any) {
       message.error(error.response?.data?.detail || '操作失败')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -180,6 +167,8 @@ export default function AdminArticleCategories() {
         onCancel={() => setModalVisible(false)}
         onOk={() => form.submit()}
         width={600}
+        confirmLoading={saving}
+        okButtonProps={{ loading: saving }}
       >
         <Form
           form={form}
@@ -198,7 +187,13 @@ export default function AdminArticleCategories() {
           <Form.Item
             name="icon"
             label="图标（Emoji）"
-            rules={[{ required: true, message: '请输入图标' }]}
+            rules={[
+              { required: true, message: '请输入图标' },
+              { 
+                pattern: /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/u,
+                message: '请输入有效的Emoji表情'
+              }
+            ]}
           >
             <Input placeholder="例如：❤️、👶、⚽" />
           </Form.Item>
@@ -214,6 +209,17 @@ export default function AdminArticleCategories() {
           <Form.Item
             name="example_topics"
             label="示例主题（每行一个）"
+            rules={[
+              { 
+                required: true,
+                validator: (_, value) => {
+                  if (!value || value.trim().split('\n').filter((t: string) => t.trim()).length === 0) {
+                    return Promise.reject(new Error('请至少输入一个示例主题'));
+                  }
+                  return Promise.resolve();
+                }
+              }
+            ]}
           >
             <Input.TextArea rows={4} placeholder="异地恋维护&#10;情侣吵架和解&#10;如何让感情保鲜" />
           </Form.Item>
