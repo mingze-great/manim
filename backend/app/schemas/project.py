@@ -53,6 +53,7 @@ class ConversationUpdate(BaseModel):
 
 class CustomScriptRequest(BaseModel):
     script: str
+    auto_format: bool = False  # 是否自动转换为标准格式
 
 
 class ConversationResponse(BaseModel):

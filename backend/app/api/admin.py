@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+import json
 
 from app.database import get_db
 from app.models.user import User, AuditLog
@@ -677,3 +678,194 @@ async def get_token_usage(
         "total_code_tokens": sum(u["code_token_usage"] for u in result),
         "total_tokens": sum(u["total_token_usage"] for u in result)
     }
+
+
+# ============ 视频主题方向管理 ============
+
+@router.get("/video-topic-categories")
+async def list_video_topic_categories(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """获取所有视频主题方向"""
+    from app.models.video_topic_category import VideoTopicCategory
+    
+    categories = db.query(VideoTopicCategory).order_by(
+        VideoTopicCategory.sort_order
+    ).all()
+    
+    return [{
+        "id": c.id,
+        "name": c.name,
+        "icon": c.icon,
+        "description": c.description,
+        "example_topics": json.loads(c.example_topics) if c.example_topics else [],
+        "topic_generation_prompt": c.topic_generation_prompt,
+        "system_prompt": c.system_prompt,
+        "is_active": c.is_active,
+        "sort_order": c.sort_order,
+        "created_at": c.created_at.isoformat() if c.created_at else None
+    } for c in categories]
+
+
+@router.post("/video-topic-categories")
+async def create_video_topic_category(
+    name: str,
+    icon: str,
+    description: str = "",
+    example_topics: List[str] = [],
+    topic_generation_prompt: str = "",
+    system_prompt: str = "",
+    is_active: bool = True,
+    sort_order: int = 0,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """创建视频主题方向"""
+    from app.models.video_topic_category import VideoTopicCategory
+    
+    existing = db.query(VideoTopicCategory).filter(
+        VideoTopicCategory.name == name
+    ).first()
+    
+    if existing:
+        raise HTTPException(status_code=400, detail="方向名称已存在")
+    
+    category = VideoTopicCategory(
+        name=name,
+        icon=icon,
+        description=description,
+        example_topics=json.dumps(example_topics, ensure_ascii=False),
+        topic_generation_prompt=topic_generation_prompt,
+        system_prompt=system_prompt,
+        is_active=is_active,
+        sort_order=sort_order
+    )
+    
+    db.add(category)
+    db.commit()
+    db.refresh(category)
+    
+    return {
+        "message": "创建成功",
+        "id": category.id
+    }
+
+
+@router.put("/video-topic-categories/{category_id}")
+async def update_video_topic_category(
+    category_id: int,
+    name: str = None,
+    icon: str = None,
+    description: str = None,
+    example_topics: List[str] = None,
+    topic_generation_prompt: str = None,
+    system_prompt: str = None,
+    is_active: bool = None,
+    sort_order: int = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """更新视频主题方向"""
+    from app.models.video_topic_category import VideoTopicCategory
+    
+    category = db.query(VideoTopicCategory).filter(
+        VideoTopicCategory.id == category_id
+    ).first()
+    
+    if not category:
+        raise HTTPException(status_code=404, detail="方向不存在")
+    
+    if name is not None:
+        existing = db.query(VideoTopicCategory).filter(
+            VideoTopicCategory.name == name,
+            VideoTopicCategory.id != category_id
+        ).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="方向名称已存在")
+        category.name = name
+    
+    if icon is not None:
+        category.icon = icon
+    if description is not None:
+        category.description = description
+    if example_topics is not None:
+        category.example_topics = json.dumps(example_topics, ensure_ascii=False)
+    if topic_generation_prompt is not None:
+        category.topic_generation_prompt = topic_generation_prompt
+    if system_prompt is not None:
+        category.system_prompt = system_prompt
+    if is_active is not None:
+        category.is_active = is_active
+    if sort_order is not None:
+        category.sort_order = sort_order
+    
+    db.commit()
+    
+    return {"message": "更新成功"}
+
+
+@router.delete("/video-topic-categories/{category_id}")
+async def delete_video_topic_category(
+    category_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """删除视频主题方向"""
+    from app.models.video_topic_category import VideoTopicCategory
+    
+    category = db.query(VideoTopicCategory).filter(
+        VideoTopicCategory.id == category_id
+    ).first()
+    
+    if not category:
+        raise HTTPException(status_code=404, detail="方向不存在")
+    
+    db.delete(category)
+    db.commit()
+    
+    return {"message": "删除成功"}
+
+
+# ============ 系统配置管理 ============
+
+@router.get("/system-config/{key}")
+async def get_system_config(
+    key: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """获取系统配置"""
+    from app.models.system_config import SystemConfig
+    
+    config = db.query(SystemConfig).filter(SystemConfig.key == key).first()
+    
+    if not config:
+        return {"key": key, "value": ""}
+    
+    return {"key": config.key, "value": config.value}
+
+
+@router.post("/system-config/{key}")
+async def set_system_config(
+    key: str,
+    data: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """设置系统配置"""
+    from app.models.system_config import SystemConfig
+    
+    value = data.get("value", "")
+    
+    config = db.query(SystemConfig).filter(SystemConfig.key == key).first()
+    
+    if config:
+        config.value = value
+    else:
+        config = SystemConfig(key=key, value=value)
+        db.add(config)
+    
+    db.commit()
+    
+    return {"message": "配置保存成功"}

@@ -95,9 +95,9 @@ export const projectApi = {
       `/projects/conversations/${convId}`,
       { content }
     ),
-  useCustomScript: (projectId: number, script: string) =>
-    api.post<{ message: string; final_script: string }>(
+  useCustomScript: (projectId: number, script: string, autoFormat: boolean = true) =>
+    api.post<{ message: string; final_script: string; formatted: boolean }>(
       `/projects/${projectId}/use-custom-script`,
-      { script }
+      { script, auto_format: autoFormat }
     ),
 }

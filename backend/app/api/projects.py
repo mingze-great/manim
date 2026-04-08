@@ -539,18 +539,30 @@ async def use_custom_script(
     db: Annotated[Session, Depends(get_db)]
 ):
     """使用自定义文案"""
+    from app.services.script_formatter import ScriptFormatter
+    
     project = db.query(Project).filter(Project.id == project_id).first()
     
     if not project or project.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="无权限")
     
-    project.final_script = data.script
+    final_script = data.script
+    
+    # 如果启用自动格式化，且不是标准格式，则转换
+    if data.auto_format and not ScriptFormatter.is_formatted_script(data.script):
+        try:
+            final_script = await ScriptFormatter.format_user_script(data.script)
+        except Exception as e:
+            # 格式化失败，使用原始文案
+            print(f"Script formatting failed: {e}")
+    
+    project.final_script = final_script
     project.status = "chatting_completed"
     
     conv = Conversation(
         project_id=project_id,
         role="user",
-        content=f"[自定义文案]\n{data.script}"
+        content=f"[自定义文案]\n{final_script}"
     )
     db.add(conv)
     
@@ -558,5 +570,6 @@ async def use_custom_script(
     
     return {
         "message": "文案已保存",
-        "final_script": data.script
+        "final_script": final_script,
+        "formatted": data.auto_format and final_script != data.script
     }

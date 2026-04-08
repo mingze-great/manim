@@ -39,6 +39,8 @@ export default function ProjectChat() {
   const [editContent, setEditContent] = useState('')
   const [showCustomScriptModal, setShowCustomScriptModal] = useState(false)
   const [customScript, setCustomScript] = useState('')
+  const [autoFormat, setAutoFormat] = useState(true)
+  const [formatting, setFormatting] = useState(false)
 
   useEffect(() => {
     fetchProject()
@@ -299,23 +301,31 @@ export default function ProjectChat() {
       return
     }
     
+    setFormatting(true)
     try {
-      await projectApi.useCustomScript(Number(id), customScript)
+      const { data } = await projectApi.useCustomScript(Number(id), customScript, autoFormat)
       
       if (project) {
         setProject({ 
           ...project, 
-          final_script: customScript,
+          final_script: data.final_script,
           status: 'chatting_completed'
         })
       }
       
       setShowCustomScriptModal(false)
-      message.success('文案已保存，可以生成代码了')
+      
+      if (data.formatted) {
+        message.success('文案已自动格式化并保存')
+      } else {
+        message.success('文案已保存')
+      }
       
       setTimeout(() => navigate(`/project/${id}/task`), 500)
-    } catch (error) {
-      message.error('保存失败')
+    } catch (error: any) {
+      message.error(error.response?.data?.detail || '保存失败')
+    } finally {
+      setFormatting(false)
     }
   }
 
@@ -565,34 +575,61 @@ export default function ProjectChat() {
         open={showCustomScriptModal}
         onCancel={() => setShowCustomScriptModal(false)}
         footer={null}
-        width={600}
+        width={700}
       >
         <Alert 
           type="info" 
-          message="输入你的完整文案，系统将直接使用此文案生成代码"
+          message="粘贴你的文案，系统会自动转换为标准格式并生成代码"
           className="mb-3"
         />
+        
+        <div className="mb-3 p-3 bg-gray-50 rounded">
+          <div className="flex items-center gap-2 mb-2">
+            <Switch 
+              checked={autoFormat} 
+              onChange={setAutoFormat}
+              size="small"
+            />
+            <span className="text-sm font-medium">自动格式化</span>
+          </div>
+          <p className="text-xs text-gray-500">
+            {autoFormat 
+              ? "开启后，系统会自动将你的文案转换为标准视频格式，但不会改变你的核心内容"
+              : "关闭后，将直接使用你的原始文案（需要符合标准格式）"
+            }
+          </p>
+        </div>
+
         <TextArea
           value={customScript}
           onChange={e => setCustomScript(e.target.value)}
-          placeholder={`按照以下格式输入文案：
+          placeholder={`可以直接粘贴任意格式的文案，例如：
 
+方式一：直接粘贴你的内容
+人工智能正在改变世界
+机器学习让计算机学会思考
+深度学习突破图像识别
+...
+
+方式二：使用标准格式
 【视频内容】
 
-### 第 1 点：[标题]
-- 内容：[详细内容]
-- 动态图：[动态效果描述]
-
-### 第 2 点：[标题]
-...`}
-          rows={10}
+### 第 1 点：人工智能改变世界
+- 内容：AI技术正在重塑各行各业...
+- 动态图：机器人手臂挥舞`}
+          rows={12}
         />
+        
         <div className="flex gap-2 justify-end mt-3">
           <Button onClick={() => setShowCustomScriptModal(false)}>
             取消
           </Button>
-          <Button type="primary" onClick={handleUseCustomScript}>
-            确认使用
+          <Button 
+            type="primary" 
+            onClick={handleUseCustomScript}
+            loading={formatting}
+          >
+            {autoFormat ? '格式化并保存' : '直接保存'}
           </Button>
         </div>
       </Modal>
