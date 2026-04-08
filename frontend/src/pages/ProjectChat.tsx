@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
-import { Input, Button, message, Modal, Alert } from 'antd'
+import { Input, Button, message, Modal, Alert, Switch } from 'antd'
 import { SendOutlined, PlayCircleOutlined, RobotOutlined, UserOutlined, ReloadOutlined, CheckCircleOutlined, StopOutlined, EditOutlined } from '@ant-design/icons'
 import { projectApi, Conversation, Project } from '@/services/project'
 import { useAuthStore } from '@/stores/authStore'
