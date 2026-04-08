@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { Input, Button, message, Modal, Alert } from 'antd'
-import { SendOutlined, PlayCircleOutlined, RobotOutlined, UserOutlined, ReloadOutlined, CheckCircleOutlined, StopOutlined } from '@ant-design/icons'
+import { SendOutlined, PlayCircleOutlined, RobotOutlined, UserOutlined, ReloadOutlined, CheckCircleOutlined, StopOutlined, EditOutlined } from '@ant-design/icons'
 import { projectApi, Conversation, Project } from '@/services/project'
 import { useAuthStore } from '@/stores/authStore'
 
@@ -35,6 +35,10 @@ export default function ProjectChat() {
   const [pendingCode, setPendingCode] = useState<string | null>(null)
   const [showCodeConfirm, setShowCodeConfirm] = useState(false)
   const [fixingCode, setFixingCode] = useState<string | null>(null)
+  const [editingConvId, setEditingConvId] = useState<number | null>(null)
+  const [editContent, setEditContent] = useState('')
+  const [showCustomScriptModal, setShowCustomScriptModal] = useState(false)
+  const [customScript, setCustomScript] = useState('')
 
   useEffect(() => {
     fetchProject()
@@ -270,6 +274,51 @@ export default function ProjectChat() {
     }
   }
 
+  const handleSaveEdit = async (convId: number) => {
+    try {
+      const { data } = await projectApi.updateConversation(convId, editContent)
+      
+      setConversations(prev => prev.map(c => 
+        c.id === convId ? { ...c, content: editContent } : c
+      ))
+      
+      if (data.final_script_updated && project) {
+        setProject({ ...project, final_script: editContent })
+      }
+      
+      setEditingConvId(null)
+      message.success('内容已更新')
+    } catch (error) {
+      message.error('保存失败')
+    }
+  }
+
+  const handleUseCustomScript = async () => {
+    if (!customScript.trim()) {
+      message.warning('请输入文案内容')
+      return
+    }
+    
+    try {
+      await projectApi.useCustomScript(Number(id), customScript)
+      
+      if (project) {
+        setProject({ 
+          ...project, 
+          final_script: customScript,
+          status: 'chatting_completed'
+        })
+      }
+      
+      setShowCustomScriptModal(false)
+      message.success('文案已保存，可以生成代码了')
+      
+      setTimeout(() => navigate(`/project/${id}/task`), 500)
+    } catch (error) {
+      message.error('保存失败')
+    }
+  }
+
   return (
     <div className="h-full flex flex-col bg-white dark:bg-gray-800">
       {/* 头部 */}
@@ -283,7 +332,16 @@ export default function ProjectChat() {
             {statusBadgeMap[project?.status || 'draft']?.text}
           </span>
         </div>
-        <Button icon={<ReloadOutlined />} size="small" onClick={() => { fetchProject(); fetchConversations(); }} />
+        <div className="flex gap-2">
+          <Button 
+            size="small" 
+            icon={<EditOutlined />}
+            onClick={() => setShowCustomScriptModal(true)}
+          >
+            使用我的文案
+          </Button>
+          <Button icon={<ReloadOutlined />} size="small" onClick={() => { fetchProject(); fetchConversations(); }} />
+        </div>
       </div>
 
       {/* 消息列表 */}
@@ -311,9 +369,47 @@ export default function ProjectChat() {
                 ? 'bg-indigo-500 text-white' 
                 : 'bg-gray-100 dark:bg-gray-700'
             }`}>
-              <pre className="whitespace-pre-wrap text-inherit" style={{ fontFamily: 'inherit' }}>
-                {conv.content}
-              </pre>
+              {editingConvId === conv.id ? (
+                <div className="bg-white dark:bg-gray-800 rounded p-2">
+                  <TextArea
+                    value={editContent}
+                    onChange={e => setEditContent(e.target.value)}
+                    autoSize={{ minRows: 3, maxRows: 10 }}
+                  />
+                  <div className="flex gap-2 mt-2">
+                    <Button size="small" onClick={() => setEditingConvId(null)}>
+                      取消
+                    </Button>
+                    <Button 
+                      type="primary" 
+                      size="small"
+                      onClick={() => handleSaveEdit(conv.id)}
+                    >
+                      保存
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <pre className="whitespace-pre-wrap text-inherit" style={{ fontFamily: 'inherit' }}>
+                    {conv.content}
+                  </pre>
+                  {conv.role === 'assistant' && (
+                    <div className="mt-2 flex gap-2">
+                      <Button 
+                        size="small" 
+                        icon={<EditOutlined />}
+                        onClick={() => {
+                          setEditingConvId(conv.id)
+                          setEditContent(conv.content)
+                        }}
+                      >
+                        编辑
+                      </Button>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
         ))}
@@ -459,6 +555,44 @@ export default function ProjectChat() {
           </Button>
           <Button type="primary" icon={<CheckCircleOutlined />} onClick={handleConfirmCode}>
             使用此脚本并渲染
+          </Button>
+        </div>
+      </Modal>
+
+      {/* 自定义文案弹窗 */}
+      <Modal
+        title="使用自定义文案"
+        open={showCustomScriptModal}
+        onCancel={() => setShowCustomScriptModal(false)}
+        footer={null}
+        width={600}
+      >
+        <Alert 
+          type="info" 
+          message="输入你的完整文案，系统将直接使用此文案生成代码"
+          className="mb-3"
+        />
+        <TextArea
+          value={customScript}
+          onChange={e => setCustomScript(e.target.value)}
+          placeholder={`按照以下格式输入文案：
+
+【视频内容】
+
+### 第 1 点：[标题]
+- 内容：[详细内容]
+- 动态图：[动态效果描述]
+
+### 第 2 点：[标题]
+...`}
+          rows={10}
+        />
+        <div className="flex gap-2 justify-end mt-3">
+          <Button onClick={() => setShowCustomScriptModal(false)}>
+            取消
+          </Button>
+          <Button type="primary" onClick={handleUseCustomScript}>
+            确认使用
           </Button>
         </div>
       </Modal>

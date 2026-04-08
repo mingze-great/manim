@@ -5,6 +5,7 @@ export interface Project {
   user_id: number
   title: string
   theme: string
+  category: string | null
   final_script: string | null
   manim_code: string | null
   custom_code: string | null
@@ -58,7 +59,7 @@ export interface PendingResponse {
 export const projectApi = {
   list: () => api.get<Project[]>('/projects'),
   get: (id: number) => api.get<Project>(`/projects/${id}`),
-  create: (data: { title: string; theme: string }) => api.post<Project>('/projects', data),
+  create: (data: { title: string; theme: string; category?: string }) => api.post<Project>('/projects', data),
   update: (id: number, data: Partial<Project>) => api.put<Project>(`/projects/${id}`, data),
   delete: (id: number) => api.delete(`/projects/${id}`),
   batchDelete: (ids: number[]) => api.post('/projects/batch-delete', { project_ids: ids }),
@@ -88,5 +89,15 @@ export const projectApi = {
   getLatestCodeTask: (projectId: number) =>
     api.get<{ task_id: number | null; status: string | null; progress: number; message: string | null; error: string | null }>(
       `/tasks/${projectId}/latest-code-task`
+    ),
+  updateConversation: (convId: number, content: string) =>
+    api.put<{ message: string; conversation: Conversation; final_script_updated: boolean }>(
+      `/projects/conversations/${convId}`,
+      { content }
+    ),
+  useCustomScript: (projectId: number, script: string) =>
+    api.post<{ message: string; final_script: string }>(
+      `/projects/${projectId}/use-custom-script`,
+      { script }
     ),
 }
