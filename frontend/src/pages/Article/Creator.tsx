@@ -165,11 +165,18 @@ export default function ArticleCreator() {
   ]
 
   return (
-    <div style={{ padding: '24px', maxWidth: '1200px', margin: '0 auto' }}>
-      <Steps current={currentStep} items={steps} style={{ marginBottom: '24px' }} />
+    <div style={{ 
+      padding: '24px', 
+      maxWidth: '1200px', 
+      margin: '0 auto',
+      height: 'calc(100vh - 64px)',
+      display: 'flex',
+      flexDirection: 'column'
+    }}>
+      <Steps current={currentStep} items={steps} style={{ marginBottom: '24px', flexShrink: 0 }} />
 
-      <div style={{ display: 'flex', gap: '24px' }}>
-        <div style={{ flex: '1' }}>
+      <div style={{ display: 'flex', gap: '24px', flex: 1, minHeight: 0 }}>
+        <div style={{ flex: '1', overflow: 'auto' }}>
           <Card>
             <Space direction="vertical" size="large" style={{ width: '100%' }}>
               <div style={{ textAlign: 'center' }}>
@@ -352,8 +359,12 @@ export default function ArticleCreator() {
           </Card>
         </div>
 
-        <div style={{ width: '400px' }}>
-          <Card title="手机预览" style={{ height: '100%' }}>
+        <div style={{ width: '400px', flexShrink: 0 }}>
+          <Card 
+            title="手机预览" 
+            style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+            bodyStyle={{ flex: 1, overflow: 'hidden', padding: '16px' }}
+          >
             <PhonePreview article={article} />
           </Card>
         </div>

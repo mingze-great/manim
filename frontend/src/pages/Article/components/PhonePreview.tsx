@@ -18,8 +18,8 @@ export default function PhonePreview({ article }: PhonePreviewProps) {
   const currentDevice = devices[device]
   
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div style={{ marginBottom: '16px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+      <div style={{ marginBottom: '16px', flexShrink: 0 }}>
         <Select 
           value={device} 
           onChange={setDevice}
@@ -37,7 +37,8 @@ export default function PhonePreview({ article }: PhonePreviewProps) {
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'flex-start',
-          overflow: 'auto'
+          overflow: 'auto',
+          minHeight: 0
         }}
       >
         <div
@@ -48,14 +49,16 @@ export default function PhonePreview({ article }: PhonePreviewProps) {
             borderRadius: '30px',
             overflow: 'hidden',
             backgroundColor: '#fff',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            flexShrink: 0
           }}
         >
           <div
             style={{
               width: '100%',
               height: '100%',
-              overflow: 'auto'
+              overflow: 'auto',
+              WebkitOverflowScrolling: 'touch'
             }}
           >
             {article?.content_html ? (
