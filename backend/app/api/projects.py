@@ -14,7 +14,7 @@ from app.models.project import Project, Conversation
 from app.models.task import Task
 from app.schemas.project import (
     ProjectCreate, ProjectUpdate, ProjectResponse,
-    ConversationCreate, ConversationResponse
+    ConversationCreate, ConversationResponse, ConversationUpdate, CustomScriptRequest
 )
 from app.schemas.task import TaskCreate, TaskResponse
 from app.api.auth import get_current_user
@@ -494,3 +494,69 @@ async def optimize_code_stream(
             "X-Accel-Buffering": "no",
         }
     )
+
+
+@router.put("/conversations/{conv_id}")
+async def update_conversation(
+    conv_id: int,
+    data: ConversationUpdate,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)]
+):
+    """修改对话内容"""
+    conv = db.query(Conversation).filter(Conversation.id == conv_id).first()
+    
+    if not conv:
+        raise HTTPException(status_code=404, detail="对话不存在")
+    
+    project = db.query(Project).filter(Project.id == conv.project_id).first()
+    if not project or project.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="无权限")
+    
+    conv.content = data.content
+    
+    if conv.role == 'assistant':
+        project.final_script = data.content
+    
+    db.commit()
+    
+    return {
+        "message": "更新成功",
+        "conversation": {
+            "id": conv.id,
+            "content": conv.content,
+            "role": conv.role
+        },
+        "final_script_updated": conv.role == 'assistant'
+    }
+
+
+@router.post("/{project_id}/use-custom-script")
+async def use_custom_script(
+    project_id: int,
+    data: CustomScriptRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)]
+):
+    """使用自定义文案"""
+    project = db.query(Project).filter(Project.id == project_id).first()
+    
+    if not project or project.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="无权限")
+    
+    project.final_script = data.script
+    project.status = "chatting_completed"
+    
+    conv = Conversation(
+        project_id=project_id,
+        role="user",
+        content=f"[自定义文案]\n{data.script}"
+    )
+    db.add(conv)
+    
+    db.commit()
+    
+    return {
+        "message": "文案已保存",
+        "final_script": data.script
+    }

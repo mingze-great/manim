@@ -9,7 +9,7 @@ class ProjectBase(BaseModel):
 
 
 class ProjectCreate(ProjectBase):
-    pass
+    category: Optional[str] = None
 
 
 class ProjectUpdate(BaseModel):
@@ -27,6 +27,7 @@ class ProjectUpdate(BaseModel):
 class ProjectResponse(ProjectBase):
     id: int
     user_id: int
+    category: Optional[str] = None
     final_script: Optional[str]
     manim_code: Optional[str]
     custom_code: Optional[str]
@@ -44,6 +45,14 @@ class ProjectResponse(ProjectBase):
 
 class ConversationCreate(BaseModel):
     content: str
+
+
+class ConversationUpdate(BaseModel):
+    content: str
+
+
+class CustomScriptRequest(BaseModel):
+    script: str
 
 
 class ConversationResponse(BaseModel):
