@@ -73,10 +73,10 @@ export default function Dashboard() {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-800 dark:text-white">
-              我的项目
+              我的作品
             </h1>
             <p className="text-gray-500 dark:text-gray-400 text-sm">
-              管理您的动画视频项目
+              管理您的思维可视化、火柴人视频与公众号文章作品
             </p>
           </div>
         </div>
@@ -155,7 +155,7 @@ export default function Dashboard() {
                   <Card
                     hoverable
                     className="project-card hover-lift dark:bg-gray-800 dark:border-gray-700"
-                    onClick={() => navigate(`/project/${project.id}/chat`)}
+                      onClick={() => navigate(`/project/${project.id}/${project.module_type === 'stickman' ? 'task' : 'chat'}`)}
                   >
                     {/* 封面区域 */}
                     <div className="h-32 -mx-4 -mt-4 mb-4 rounded-t-lg bg-gradient-to-br from-[#0066FF]/10 to-[#00CCFF]/10 dark:from-[#00CCFF]/10 dark:to-[#0066FF]/10 flex items-center justify-center">
@@ -188,7 +188,7 @@ export default function Dashboard() {
                       <Button 
                         size="small" 
                         icon={<EditOutlined />}
-                        onClick={() => navigate(`/project/${project.id}/chat`)}
+                          onClick={() => navigate(`/project/${project.id}/${project.module_type === 'stickman' ? 'task' : 'chat'}`)}
                         className="flex-1"
                       >
                         编辑

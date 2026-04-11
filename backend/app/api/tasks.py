@@ -20,6 +20,7 @@ from app.models.task import Task
 from app.models.template import Template
 from app.api.auth import get_current_user
 from app.services.manim import ManimService
+from app.services.stickman_generator import StickmanGenerator
 from app.config import get_settings
 from app.utils.cos_storage import cos_storage
 from app.tasks.celery_tasks import render_video_celery
@@ -241,14 +242,21 @@ async def render_video_stream(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)]
 ):
+    current_user_id = int(current_user.id)
     project = db.query(Project).filter(
         Project.id == project_id,
-        Project.user_id == current_user.id
+        Project.user_id == current_user_id
     ).first()
     
     if not project:
         async def error_gen():
             yield f"data: {json.dumps({'type': 'error', 'content': 'Project not found'})}\n\n"
+        return StreamingResponse(error_gen(), media_type="text/event-stream")
+    
+    allowed, reason = current_user.can_use_module_new(db, "visual")
+    if not allowed:
+        async def error_gen():
+            yield f"data: {json.dumps({'type': 'error', 'content': reason or '配额不足'})}\n\n"
         return StreamingResponse(error_gen(), media_type="text/event-stream")
     
     manim_code_str = str(project.manim_code) if project.manim_code else ""
@@ -446,6 +454,9 @@ async def render_video_stream(
                                 
                                 project_local.status = "completed"
                                 project_local.video_url = video_url
+                                user_local = db_session.query(User).filter(User.id == current_user_id).first()
+                                if user_local:
+                                    user_local.increment_module_usage_new(db_session, "visual")
                                 db_session.commit()
                                 
                                 yield f"data: {json.dumps({'type': 'success', 'content': f'渲染完成！耗时{int(elapsed)}秒', 'video_url': video_url})}\n\n"
@@ -485,6 +496,309 @@ async def render_video_stream(
     )
 
 
+@router.get("/{project_id}/stickman-generate")
+async def generate_stickman_video_stream(
+    project_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)]
+):
+    current_user_id = int(current_user.id)
+    project = db.query(Project).filter(
+        Project.id == project_id,
+        Project.user_id == current_user_id
+    ).first()
+
+    if not project:
+        async def error_gen():
+            yield f"data: {json.dumps({'type': 'error', 'content': 'Project not found'})}\n\n"
+        return StreamingResponse(error_gen(), media_type="text/event-stream")
+
+    if str(project.module_type or "manim") != "stickman":
+        async def error_gen():
+            yield f"data: {json.dumps({'type': 'error', 'content': '当前项目不是火柴人模块'})}\n\n"
+        return StreamingResponse(error_gen(), media_type="text/event-stream")
+
+    task = Task(
+        project_id=project_id,
+        user_id=current_user_id,
+        task_type="stickman_generate",
+        status="pending",
+        progress=0,
+        log="",
+    )
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+
+    async def event_generator():
+        from app.database import SessionLocal
+
+        db_session = SessionLocal()
+        try:
+            project_local = db_session.query(Project).filter(Project.id == project_id).first()
+            task_local = db_session.query(Task).filter(Task.id == task.id).first()
+
+            if not project_local or not task_local:
+                yield f"data: {json.dumps({'type': 'error', 'content': '任务初始化失败'})}\n\n"
+                return
+
+            task_local.status = "processing"
+            task_local.progress = 1
+            project_local.status = "rendering"
+            db_session.commit()
+
+            progress_queue: asyncio.Queue[dict] = asyncio.Queue()
+            loop = asyncio.get_running_loop()
+
+            def report(progress: int, message: str):
+                loop.call_soon_threadsafe(
+                    progress_queue.put_nowait,
+                    {"type": "progress", "progress": progress, "content": message},
+                )
+
+            generator = StickmanGenerator()
+            generation_task = asyncio.create_task(asyncio.to_thread(
+                generator.generate,
+                str(project_local.theme),
+                int(project_local.storyboard_count or 3),
+                report,
+                str(project_local.aspect_ratio or "16:9"),
+                str(project_local.voice_source or "ai"),
+                str(project_local.voice_file_path) if project_local.voice_file_path else None,
+                str(project_local.tts_provider or "edge_tts"),
+                str(project_local.tts_voice or "zh-CN-XiaoxiaoNeural"),
+                str(project_local.tts_rate or "+0%"),
+                str(project_local.style_reference_image_path) if project_local.style_reference_image_path else None,
+                str(project_local.style_reference_notes) if project_local.style_reference_notes else None,
+            ))
+
+            while True:
+                if generation_task.done() and progress_queue.empty():
+                    break
+                try:
+                    event = await asyncio.wait_for(progress_queue.get(), timeout=0.5)
+                    task_local.progress = event.get("progress", task_local.progress)
+                    task_local.status = "processing"
+                    task_local.log = (task_local.log or "") + event.get("content", "") + "\n"
+                    db_session.commit()
+                    yield f"data: {json.dumps(event)}\n\n"
+                except asyncio.TimeoutError:
+                    continue
+
+            result = await generation_task
+
+            video_path = result["video_path"]
+            video_filename = os.path.basename(video_path)
+            video_url = f"/api/videos/{video_filename}"
+
+            if cos_storage.enabled and os.path.exists(video_path):
+                success, _, cos_url = cos_storage.upload_file(video_path, project_id, task.id)
+                if success and cos_url:
+                    video_url = cos_url
+                    try:
+                        os.remove(video_path)
+                    except OSError:
+                        pass
+
+            project_local.final_script = result.get("script")
+            project_local.storyboard_json = json.dumps(result.get("storyboards") or [], ensure_ascii=False)
+            project_local.image_assets_json = json.dumps(result.get("image_assets") or [], ensure_ascii=False)
+            project_local.generation_flags = json.dumps(result.get("generation_flags") or {}, ensure_ascii=False)
+            project_local.video_url = video_url
+            project_local.status = "completed"
+            project_local.error_message = None
+            try:
+                user_local = db_session.query(User).filter(User.id == current_user_id).first()
+                if user_local:
+                    user_local.increment_module_usage("stickman")
+            except Exception:
+                pass
+
+            task_local.progress = 100
+            task_local.status = "completed"
+            task_local.video_url = video_url
+            task_local.error_message = None
+            task_local.log = (task_local.log or "") + "火柴人视频生成完成\n"
+            db_session.commit()
+
+            yield f"data: {json.dumps({'type': 'success', 'content': '火柴人视频生成完成', 'video_url': video_url})}\n\n"
+        except Exception as exc:
+            task_local = db_session.query(Task).filter(Task.id == task.id).first()
+            project_local = db_session.query(Project).filter(Project.id == project_id).first()
+            if task_local:
+                task_local.status = "failed"
+                task_local.error_message = str(exc)
+                task_local.log = (task_local.log or "") + f"失败: {exc}\n"
+            if project_local:
+                project_local.status = "failed"
+                project_local.error_message = str(exc)
+            db_session.commit()
+            yield f"data: {json.dumps({'type': 'error', 'content': str(exc)})}\n\n"
+        finally:
+            db_session.close()
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        }
+    )
+
+
+@router.get("/{project_id}/stickman-compose")
+async def compose_stickman_video_stream(
+    project_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)]
+):
+    current_user_id = int(current_user.id)
+    project = db.query(Project).filter(
+        Project.id == project_id,
+        Project.user_id == current_user_id
+    ).first()
+
+    if not project:
+        async def error_gen():
+            yield f"data: {json.dumps({'type': 'error', 'content': 'Project not found'})}\n\n"
+        return StreamingResponse(error_gen(), media_type="text/event-stream")
+
+    if str(project.module_type or "manim") != "stickman":
+        async def error_gen():
+            yield f"data: {json.dumps({'type': 'error', 'content': '当前项目不是火柴人模块'})}\n\n"
+        return StreamingResponse(error_gen(), media_type="text/event-stream")
+
+    task = Task(
+        project_id=project_id,
+        user_id=current_user_id,
+        task_type="stickman_compose",
+        status="pending",
+        progress=0,
+        log="",
+    )
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+
+    async def event_generator():
+        from app.database import SessionLocal
+
+        db_session = SessionLocal()
+        try:
+            project_local = db_session.query(Project).filter(Project.id == project_id).first()
+            task_local = db_session.query(Task).filter(Task.id == task.id).first()
+
+            if not project_local or not task_local:
+                yield f"data: {json.dumps({'type': 'error', 'content': '任务初始化失败'})}\n\n"
+                return
+
+            storyboards = json.loads(project_local.storyboard_json or "[]")
+            image_assets = json.loads(project_local.image_assets_json or "[]")
+            if not storyboards:
+                yield f"data: {json.dumps({'type': 'error', 'content': '请先生成并确认分镜'})}\n\n"
+                return
+            if not image_assets:
+                yield f"data: {json.dumps({'type': 'error', 'content': '请先生成并确认图片'})}\n\n"
+                return
+
+            task_local.status = "processing"
+            task_local.progress = 1
+            project_local.status = "rendering"
+            db_session.commit()
+
+            progress_queue: asyncio.Queue[dict] = asyncio.Queue()
+            loop = asyncio.get_running_loop()
+
+            def report(progress: int, message: str):
+                loop.call_soon_threadsafe(
+                    progress_queue.put_nowait,
+                    {"type": "progress", "progress": progress, "content": message},
+                )
+
+            generator = StickmanGenerator()
+            generation_task = asyncio.create_task(asyncio.to_thread(
+                generator.compose_from_assets,
+                str(project_local.theme),
+                storyboards,
+                image_assets,
+                report,
+                str(project_local.voice_source or "ai"),
+                str(project_local.voice_file_path) if project_local.voice_file_path else None,
+                str(project_local.tts_provider or "edge_tts"),
+                str(project_local.tts_voice or "zh-CN-XiaoxiaoNeural"),
+                str(project_local.tts_rate or "+0%"),
+            ))
+
+            while True:
+                if generation_task.done() and progress_queue.empty():
+                    break
+                try:
+                    event = await asyncio.wait_for(progress_queue.get(), timeout=0.5)
+                    task_local.progress = event.get("progress", task_local.progress)
+                    task_local.status = "processing"
+                    task_local.log = (task_local.log or "") + event.get("content", "") + "\n"
+                    db_session.commit()
+                    yield f"data: {json.dumps(event)}\n\n"
+                except asyncio.TimeoutError:
+                    continue
+
+            result = await generation_task
+            video_path = result["video_path"]
+            video_filename = os.path.basename(video_path)
+            video_url = f"/api/videos/{video_filename}"
+
+            if cos_storage.enabled and os.path.exists(video_path):
+                success, _, cos_url = cos_storage.upload_file(video_path, project_id, task.id)
+                if success and cos_url:
+                    video_url = cos_url
+                    try:
+                        os.remove(video_path)
+                    except OSError:
+                        pass
+
+            project_local.video_url = video_url
+            project_local.status = "completed"
+            project_local.error_message = None
+            try:
+                user_local = db_session.query(User).filter(User.id == current_user_id).first()
+                if user_local:
+                    user_local.increment_module_usage("stickman")
+            except Exception:
+                pass
+            task_local.progress = 100
+            task_local.status = "completed"
+            task_local.video_url = video_url
+            task_local.error_message = None
+            task_local.log = (task_local.log or "") + "火柴人视频合成完成\n"
+            db_session.commit()
+
+            yield f"data: {json.dumps({'type': 'success', 'content': '火柴人视频合成完成', 'video_url': video_url})}\n\n"
+        except Exception as exc:
+            task_local = db_session.query(Task).filter(Task.id == task.id).first()
+            project_local = db_session.query(Project).filter(Project.id == project_id).first()
+            if task_local:
+                task_local.status = "failed"
+                task_local.error_message = str(exc)
+                task_local.log = (task_local.log or "") + f"失败: {exc}\n"
+            if project_local:
+                project_local.status = "failed"
+                project_local.error_message = str(exc)
+            db_session.commit()
+            yield f"data: {json.dumps({'type': 'error', 'content': str(exc)})}\n\n"
+        finally:
+            db_session.close()
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        }
+    )
+
+
 @router.get("/project/{project_id}")
 def get_project_task(
     project_id: int,
@@ -492,6 +806,8 @@ def get_project_task(
     db: Annotated[Session, Depends(get_db)]
 ):
     task = db.query(Task).filter(Task.project_id == project_id).order_by(Task.created_at.desc()).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
     return task
 
 

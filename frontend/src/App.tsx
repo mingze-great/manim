@@ -13,6 +13,11 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import ProjectChat from './pages/ProjectChat'
 import ProjectTask from './pages/ProjectTask'
+import StickmanStudio from './pages/StickmanStudio'
+import ArticleEntry from './pages/Article/Entry'
+import ArticleQuick from './pages/Article/Quick'
+import ArticleStudio from './pages/Article/Studio'
+import ArticleHistory from './pages/Article/History'
 import AdminDashboard from './pages/admin/AdminDashboard'
 import AdminUsers from './pages/admin/AdminUsers'
 import AdminLogs from './pages/admin/AdminLogs'
@@ -20,6 +25,8 @@ import AdminSettings from './pages/admin/AdminSettings'
 import AdminTemplates from './pages/admin/AdminTemplates'
 import AdminStatistics from './pages/admin/AdminStatistics'
 import AdminTokenUsage from './pages/admin/AdminTokenUsage'
+import AdminArticleCategories from './pages/admin/AdminArticleCategories'
+import AdminModuleStats from './pages/admin/AdminModuleStats'
 import { useState, useEffect } from 'react'
 import { startStatusCheck } from './stores/authStore'
 
@@ -86,6 +93,12 @@ function AppContent() {
         <Route path="/creator" element={<Creator />} />
         <Route path="/project/:id/chat" element={<ProjectChat />} />
         <Route path="/project/:id/task" element={<ProjectTask />} />
+        <Route path="/project/:id/stickman" element={<StickmanStudio />} />
+        <Route path="/article" element={<ArticleEntry />} />
+        <Route path="/article/quick" element={<ArticleQuick />} />
+        <Route path="/article/studio" element={<ArticleStudio />} />
+        <Route path="/article/:id" element={<ArticleStudio />} />
+        <Route path="/article/history" element={<ArticleHistory />} />
         <Route path="/history" element={<History />} />
         <Route path="/profile" element={<Profile />} />
       </Route>
@@ -96,6 +109,8 @@ function AppContent() {
         <Route path="/admin/logs" element={<AdminLogs />} />
         <Route path="/admin/settings" element={<AdminSettings />} />
         <Route path="/admin/templates" element={<AdminTemplates />} />
+        <Route path="/admin/article-categories" element={<AdminArticleCategories />} />
+        <Route path="/admin/module-stats" element={<AdminModuleStats />} />
         <Route path="/admin/statistics" element={<AdminStatistics />} />
         <Route path="/admin/token-usage" element={<AdminTokenUsage />} />
       </Route>

@@ -1,12 +1,12 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
   Table, Card, Input, Button, Space, Tag, Popconfirm,
-  Modal, Descriptions, message, Row, Col, Avatar, Badge, Radio, InputNumber, Statistic
+  Modal, Descriptions, message, Row, Col, Avatar, Badge, Radio, InputNumber, Statistic, Switch, Select
 } from 'antd'
 import {
   ReloadOutlined, DeleteOutlined, SearchOutlined,
   LockOutlined, UnlockOutlined, EyeOutlined, UserOutlined,
-  ProjectOutlined, VideoCameraOutlined, CheckCircleOutlined, CloseCircleOutlined,
+  ProjectOutlined, CheckCircleOutlined, CloseCircleOutlined,
   EditOutlined, ClockCircleOutlined, TeamOutlined, CrownOutlined, HourglassOutlined, SettingOutlined
 } from '@ant-design/icons'
 import { adminApi, User, UserStats } from '../../services/admin'
@@ -48,6 +48,57 @@ export default function AdminUsers() {
   const [videoLimitUser, setVideoLimitUser] = useState<User | null>(null)
   const [videoLimitValue, setVideoLimitValue] = useState<number>(5)
   const [videoLimitLoading, setVideoLimitLoading] = useState(false)
+  const [selectedRowKeys, setSelectedRowKeys] = useState<number[]>([])
+  const [permissionModalVisible, setPermissionModalVisible] = useState(false)
+  const [permissionUser, setPermissionUser] = useState<User | null>(null)
+  const [permissionDraft, setPermissionDraft] = useState<Record<string, any>>({})
+  const [permissionLoading, setPermissionLoading] = useState(false)
+  const [batchPermissionModalVisible, setBatchPermissionModalVisible] = useState(false)
+
+  const defaultPermissions = (user?: User | null) => user?.module_permissions || {
+    visual: { enabled: true, daily_limit: user?.daily_video_limit || 5, used_today: 0, period: 'daily' },
+    stickman: { enabled: false, daily_limit: 30, used_today: 0, period: 'monthly' },
+    article: { enabled: false, daily_limit: 45, used_today: 0, period: 'monthly' },
+  }
+
+  const permissionTemplates: Record<string, Record<string, any>> = {
+    article_only: {
+      visual: { enabled: false, daily_limit: 0, period: 'daily' },
+      stickman: { enabled: false, daily_limit: 0, period: 'monthly' },
+      article: { enabled: true, daily_limit: 45, period: 'monthly' },
+    },
+    video_only: {
+      visual: { enabled: true, daily_limit: 5, period: 'daily' },
+      stickman: { enabled: true, daily_limit: 30, period: 'monthly' },
+      article: { enabled: false, daily_limit: 0, period: 'monthly' },
+    },
+    all_enabled: {
+      visual: { enabled: true, daily_limit: 8, period: 'daily' },
+      stickman: { enabled: true, daily_limit: 30, period: 'monthly' },
+      article: { enabled: true, daily_limit: 45, period: 'monthly' },
+    },
+    trial: {
+      visual: { enabled: true, daily_limit: 2, period: 'daily' },
+      stickman: { enabled: true, daily_limit: 2, period: 'monthly' },
+      article: { enabled: true, daily_limit: 2, period: 'monthly' },
+    },
+    enterprise: {
+      visual: { enabled: true, daily_limit: 50, period: 'daily' },
+      stickman: { enabled: true, daily_limit: 30, period: 'monthly' },
+      article: { enabled: true, daily_limit: 45, period: 'monthly' },
+    },
+  }
+
+  const applyPermissionTemplate = (templateKey: keyof typeof permissionTemplates) => {
+    const template = permissionTemplates[templateKey]
+    setPermissionDraft((prev) => {
+      const next = { ...prev }
+      Object.entries(template).forEach(([moduleKey, value]) => {
+        next[moduleKey] = { ...(next[moduleKey] || {}), ...value }
+      })
+      return next
+    })
+  }
 
   useEffect(() => {
     fetchUsers()
@@ -165,8 +216,12 @@ export default function AdminUsers() {
   const handleViewUser = async (user: User) => {
     setSelectedUser(user)
     try {
-      const res = await adminApi.getUserStats(user.id)
-      setUserStats(res.data)
+      const [statsRes, detailRes] = await Promise.all([
+        adminApi.getUserStats(user.id),
+        adminApi.getUserDetail(user.id),
+      ])
+      setUserStats(statsRes.data)
+      setSelectedUser(detailRes.data)
     } catch (err) {
       setUserStats(null)
     }
@@ -190,6 +245,49 @@ export default function AdminUsers() {
       message.error(err.response?.data?.detail || '操作失败')
     } finally {
       setVideoLimitLoading(false)
+    }
+  }
+
+  const openPermissionModal = (user: User) => {
+    setPermissionUser(user)
+    setPermissionDraft(defaultPermissions(user))
+    setPermissionModalVisible(true)
+  }
+
+  const updatePermissionDraft = (moduleKey: string, patch: Record<string, any>) => {
+    setPermissionDraft((prev) => ({
+      ...prev,
+      [moduleKey]: { ...(prev[moduleKey] || {}), ...patch },
+    }))
+  }
+
+  const handleSavePermissions = async () => {
+    if (!permissionUser) return
+    setPermissionLoading(true)
+    try {
+      await adminApi.updateUserModulePermissions(permissionUser.id, permissionDraft)
+      message.success('模块权限已更新')
+      setPermissionModalVisible(false)
+      fetchUsers()
+    } catch (err: any) {
+      message.error(err.response?.data?.detail || '更新失败')
+    } finally {
+      setPermissionLoading(false)
+    }
+  }
+
+  const handleBatchPermissions = async () => {
+    if (!selectedRowKeys.length) return
+    setPermissionLoading(true)
+    try {
+      await adminApi.batchUpdateUserModulePermissions(selectedRowKeys as number[], permissionDraft)
+      message.success('批量模块权限已更新')
+      setBatchPermissionModalVisible(false)
+      fetchUsers()
+    } catch (err: any) {
+      message.error(err.response?.data?.detail || '批量更新失败')
+    } finally {
+      setPermissionLoading(false)
     }
   }
 
@@ -249,15 +347,37 @@ export default function AdminUsers() {
       ),
     },
     {
-      title: '每日配额',
-      dataIndex: 'daily_video_limit',
-      key: 'daily_video_limit',
-      width: 100,
-      render: (limit: number | undefined, record: User) => (
-        record.is_admin 
-          ? <Tag color="blue">无限制</Tag>
-          : <span>{limit || 5} 条/天</span>
-      ),
+      title: '思维可视化',
+      key: 'visual_limit',
+      width: 120,
+      render: (_: any, record: User) => {
+        const permission: any = defaultPermissions(record).visual
+        const period = permission?.period || 'daily'
+        const label = period === 'monthly' ? '本月' : '今日'
+        return record.is_admin ? <Tag color="blue">无限制</Tag> : permission?.enabled ? <Tag color="green">{label} {permission.used_today || 0}/{permission.daily_limit}</Tag> : <Tag>关闭</Tag>
+      },
+    },
+    {
+      title: '火柴人',
+      key: 'stickman_limit',
+      width: 120,
+      render: (_: any, record: User) => {
+        const permission: any = defaultPermissions(record).stickman
+        const period = permission?.period || 'monthly'
+        const label = period === 'monthly' ? '本月' : '今日'
+        return record.is_admin ? <Tag color="blue">无限制</Tag> : permission?.enabled ? <Tag color="orange">{label} {permission.used_today || 0}/{permission.daily_limit}</Tag> : <Tag>关闭</Tag>
+      },
+    },
+    {
+      title: '公众号',
+      key: 'article_limit',
+      width: 120,
+      render: (_: any, record: User) => {
+        const permission: any = defaultPermissions(record).article
+        const period = permission?.period || 'monthly'
+        const label = period === 'monthly' ? '本月' : '今日'
+        return record.is_admin ? <Tag color="blue">无限制</Tag> : permission?.enabled ? <Tag color="purple">{label} {permission.used_today || 0}/{permission.daily_limit}</Tag> : <Tag>关闭</Tag>
+      },
     },
     {
       title: '有效期',
@@ -317,6 +437,7 @@ export default function AdminUsers() {
               配额
             </Button>
           )}
+          <Button size="small" icon={<SettingOutlined />} onClick={() => openPermissionModal(record)}>模块权限</Button>
           <Button 
             type="primary" 
             ghost
@@ -421,6 +542,18 @@ export default function AdminUsers() {
               刷新列表
             </Button>
           </Col>
+          <Col>
+          <Button
+              icon={<TeamOutlined />}
+              disabled={!selectedRowKeys.length}
+              onClick={() => {
+                setPermissionDraft(defaultPermissions(null))
+                setBatchPermissionModalVisible(true)
+              }}
+            >
+              批量模块权限
+            </Button>
+          </Col>
         </Row>
       </Card>
 
@@ -429,6 +562,7 @@ export default function AdminUsers() {
           columns={columns}
           dataSource={users}
           rowKey="id"
+          rowSelection={{ selectedRowKeys, onChange: (keys) => setSelectedRowKeys(keys as number[]) }}
           loading={loading}
           pagination={{ 
             pageSize: 10, 
@@ -473,6 +607,18 @@ export default function AdminUsers() {
                 <Descriptions.Item label="注册时间">
                   {new Date(selectedUser.created_at).toLocaleString('zh-CN')}
                 </Descriptions.Item>
+                <Descriptions.Item label="模块权限">
+                  <Space wrap>
+                    {Object.entries(selectedUser.module_permissions || {}).map(([moduleKey, permission]) => {
+                      const labels: Record<string, string> = { visual: '思维可视化', stickman: '火柴人视频', article: '公众号文章' }
+                      return (
+                        <Tag key={moduleKey} color={permission.enabled ? 'green' : 'default'}>
+                          {labels[moduleKey] || moduleKey}: {permission.enabled ? `${permission.used_today || 0}/${permission.daily_limit}` : '关闭'}
+                        </Tag>
+                      )
+                    })}
+                  </Space>
+                </Descriptions.Item>
                 <Descriptions.Item label="操作">
                   <Button 
                     size="small" 
@@ -491,14 +637,14 @@ export default function AdminUsers() {
                   <Card size="small" className="text-center" style={{ borderRadius: '12px' }}>
                     <ProjectOutlined style={{ fontSize: '24px', color: '#6366f1' }} />
                     <div className="text-2xl font-bold mt-2" style={{ color: '#6366f1' }}>{userStats.total_projects}</div>
-                    <div className="text-gray-500 text-sm">项目数</div>
+                    <div className="text-gray-500 text-sm">视频项目</div>
                   </Card>
                 </Col>
                 <Col span={6}>
                   <Card size="small" className="text-center" style={{ borderRadius: '12px' }}>
-                    <VideoCameraOutlined style={{ fontSize: '24px', color: '#8b5cf6' }} />
-                    <div className="text-2xl font-bold mt-2" style={{ color: '#8b5cf6' }}>{userStats.total_tasks}</div>
-                    <div className="text-gray-500 text-sm">任务数</div>
+                    <EditOutlined style={{ fontSize: '24px', color: '#8b5cf6' }} />
+                    <div className="text-2xl font-bold mt-2" style={{ color: '#8b5cf6' }}>{selectedUser.total_articles || 0}</div>
+                    <div className="text-gray-500 text-sm">公众号文章</div>
                   </Card>
                 </Col>
                 <Col span={6}>
@@ -516,6 +662,48 @@ export default function AdminUsers() {
                   </Card>
                 </Col>
               </Row>
+            )}
+
+            <Row gutter={[12, 12]} className="mt-4">
+              <Col span={12}>
+                <Card size="small" title="最近视频作品" style={{ borderRadius: '12px' }}>
+                  <Space direction="vertical" style={{ width: '100%' }}>
+                    {(selectedUser.recent_projects || []).length ? (selectedUser.recent_projects || []).map((project) => (
+                      <div key={project.id} className="flex items-center justify-between">
+                        <div>
+                          <div className="font-medium">{project.title}</div>
+                          <div className="text-xs text-gray-500">{project.status_text}</div>
+                        </div>
+                        <div className="text-xs text-gray-400">{formatDateTime(project.created_at, false)}</div>
+                      </div>
+                    )) : <div className="text-gray-400 text-sm">暂无视频作品</div>}
+                  </Space>
+                </Card>
+              </Col>
+              <Col span={12}>
+                <Card size="small" title="最近公众号文章" style={{ borderRadius: '12px' }}>
+                  <Space direction="vertical" style={{ width: '100%' }}>
+                    {(selectedUser.recent_articles || []).length ? (selectedUser.recent_articles || []).map((article) => (
+                      <div key={article.id} className="flex items-center justify-between">
+                        <div>
+                          <div className="font-medium">{article.title}</div>
+                          <div className="text-xs text-gray-500">{article.status_text}</div>
+                        </div>
+                        <div className="text-xs text-gray-400">{formatDateTime(article.created_at, false)}</div>
+                      </div>
+                    )) : <div className="text-gray-400 text-sm">暂无公众号文章</div>}
+                  </Space>
+                </Card>
+              </Col>
+            </Row>
+
+            {selectedUser.latest_task && (
+              <Card size="small" className="mt-4" title="最近任务日志" style={{ borderRadius: '12px' }}>
+                <div className="font-medium mb-2">{selectedUser.latest_task.project_title}</div>
+                <div className="text-sm text-gray-500 mb-2">状态：{selectedUser.latest_task.status}</div>
+                {selectedUser.latest_task.error_message && <div className="text-red-500 text-sm mb-2">{selectedUser.latest_task.error_message}</div>}
+                {selectedUser.latest_task.log && <pre style={{ whiteSpace: 'pre-wrap', fontSize: 12, maxHeight: 180, overflow: 'auto' }}>{selectedUser.latest_task.log}</pre>}
+              </Card>
             )}
           </>
         )}
@@ -613,6 +801,100 @@ export default function AdminUsers() {
           />
           <p className="text-xs text-gray-500 mt-2">配额范围：5-20 条/天</p>
         </div>
+      </Modal>
+
+      <Modal
+        title={`模块权限设置 - ${permissionUser?.username || ''}`}
+        open={permissionModalVisible}
+        onCancel={() => setPermissionModalVisible(false)}
+        onOk={handleSavePermissions}
+        confirmLoading={permissionLoading}
+        width={720}
+      >
+        <div className="mb-4">
+          <p className="text-gray-500 mb-2">快捷模板</p>
+          <Space wrap>
+            <Button onClick={() => applyPermissionTemplate('article_only')}>仅公众号</Button>
+            <Button onClick={() => applyPermissionTemplate('video_only')}>仅视频</Button>
+            <Button onClick={() => applyPermissionTemplate('all_enabled')}>三模块全开</Button>
+            <Button onClick={() => applyPermissionTemplate('trial')}>体验版</Button>
+            <Button type="primary" ghost onClick={() => applyPermissionTemplate('enterprise')}>企业版</Button>
+          </Space>
+        </div>
+        <div className="mb-3 text-gray-500 text-sm">管理员账号默认无限制，批量设置时将自动跳过管理员。</div>
+        {['visual', 'stickman', 'article'].map((moduleKey) => {
+          const labels: Record<string, string> = { visual: '思维可视化', stickman: '火柴人视频', article: '公众号文章' }
+          const current: any = permissionDraft[moduleKey] || { enabled: false, daily_limit: 0, used_today: 0, period: moduleKey === 'visual' ? 'daily' : 'monthly' }
+          const period = current.period || (moduleKey === 'visual' ? 'daily' : 'monthly')
+          return (
+            <Card key={moduleKey} size="small" className="mb-3" title={labels[moduleKey]}>
+              <Space align="center" wrap>
+                <span>启用</span>
+                <Switch checked={!!current.enabled} onChange={(checked) => updatePermissionDraft(moduleKey, { enabled: checked })} />
+                <span>次数限制</span>
+                <InputNumber min={0} max={999} value={current.daily_limit} onChange={(value) => updatePermissionDraft(moduleKey, { daily_limit: value || 0 })} />
+                <span>周期</span>
+                <Select
+                  value={period}
+                  onChange={(value: string) => updatePermissionDraft(moduleKey, { period: value })}
+                  options={[
+                    { label: '每日', value: 'daily' },
+                    { label: '每月', value: 'monthly' },
+                  ]}
+                  style={{ width: 100 }}
+                />
+                <span>当前已用</span>
+                <InputNumber min={0} max={999} value={current.used_today || 0} onChange={(value) => updatePermissionDraft(moduleKey, { used_today: value || 0 })} disabled />
+              </Space>
+            </Card>
+          )
+        })}
+      </Modal>
+
+      <Modal
+        title={`批量模块权限设置（已选 ${selectedRowKeys.length} 个用户）`}
+        open={batchPermissionModalVisible}
+        onCancel={() => setBatchPermissionModalVisible(false)}
+        onOk={handleBatchPermissions}
+        confirmLoading={permissionLoading}
+        width={720}
+      >
+        <div className="mb-4">
+          <p className="text-gray-500 mb-2">批量套用模板</p>
+          <Space wrap>
+            <Button onClick={() => applyPermissionTemplate('article_only')}>仅公众号</Button>
+            <Button onClick={() => applyPermissionTemplate('video_only')}>仅视频</Button>
+            <Button onClick={() => applyPermissionTemplate('all_enabled')}>三模块全开</Button>
+            <Button onClick={() => applyPermissionTemplate('trial')}>体验版</Button>
+            <Button type="primary" ghost onClick={() => applyPermissionTemplate('enterprise')}>企业版</Button>
+          </Space>
+        </div>
+        <div className="mb-3 text-gray-500 text-sm">批量设置时会自动排除管理员账号，仅作用于普通用户。</div>
+        {['visual', 'stickman', 'article'].map((moduleKey) => {
+          const labels: Record<string, string> = { visual: '思维可视化', stickman: '火柴人视频', article: '公众号文章' }
+          const current: any = permissionDraft[moduleKey] || { enabled: true, daily_limit: moduleKey === 'article' ? 45 : moduleKey === 'stickman' ? 30 : 5, period: moduleKey === 'visual' ? 'daily' : 'monthly' }
+          const period = current.period || (moduleKey === 'visual' ? 'daily' : 'monthly')
+          return (
+            <Card key={moduleKey} size="small" className="mb-3" title={labels[moduleKey]}>
+              <Space align="center" wrap>
+                <span>启用</span>
+                <Switch checked={!!current.enabled} onChange={(checked) => updatePermissionDraft(moduleKey, { enabled: checked })} />
+                <span>次数限制</span>
+                <InputNumber min={0} max={999} value={current.daily_limit} onChange={(value) => updatePermissionDraft(moduleKey, { daily_limit: value || 0 })} />
+                <span>周期</span>
+                <Select
+                  value={period}
+                  onChange={(value: string) => updatePermissionDraft(moduleKey, { period: value })}
+                  options={[
+                    { label: '每日', value: 'daily' },
+                    { label: '每月', value: 'monthly' },
+                  ]}
+                  style={{ width: 100 }}
+                />
+              </Space>
+            </Card>
+          )
+        })}
       </Modal>
     </div>
   )

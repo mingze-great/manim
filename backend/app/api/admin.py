@@ -6,9 +6,12 @@ from sqlalchemy import func
 import json
 
 from app.database import get_db
+from app.models.article_category import ArticleCategory
 from app.models.user import User, AuditLog
 from app.models.project import Project
+from app.models.article import Article
 from app.models.task import Task
+from app.schemas.article import ArticleCategoryCreate, ArticleCategoryUpdate
 from app.schemas.user import UserResponse, UserUpdate, UserStats, AuditLogResponse, SystemStats, UserDetail, ProjectStatus, RecentProject, TaskLog, TokenUsageItem, TokenUsageResponse
 from app.api.auth import get_current_user, get_current_admin_user
 from app.config import get_settings
@@ -17,6 +20,54 @@ import psutil
 router = APIRouter(prefix="/admin", tags=["admin"])
 settings = get_settings()
 
+MODULE_KEYS = ["visual", "stickman", "article"]
+
+
+def _normalize_module_permissions(payload: dict, user: User) -> dict:
+    permissions = user.get_module_permissions()
+    for module_key in MODULE_KEYS:
+        if module_key in payload and isinstance(payload[module_key], dict):
+            current = permissions.get(module_key, {})
+            current.update({
+                "enabled": bool(payload[module_key].get("enabled", current.get("enabled", False))),
+                "daily_limit": int(payload[module_key].get("daily_limit", current.get("daily_limit", 0)) or 0),
+                "used_today": int(payload[module_key].get("used_today", current.get("used_today", 0)) or 0),
+                "last_reset_date": payload[module_key].get("last_reset_date", current.get("last_reset_date")),
+                "period": payload[module_key].get("period", current.get("period", "daily")),
+            })
+            permissions[module_key] = current
+    return permissions
+
+
+def _sync_permissions_to_db(db, user: User, permissions: dict):
+    from app.models.user_module_permission import UserModulePermission
+    for module_key in MODULE_KEYS:
+        perm_data = permissions.get(module_key, {})
+        record = db.query(UserModulePermission).filter(
+            UserModulePermission.user_id == user.id,
+            UserModulePermission.module_key == module_key
+        ).first()
+        
+        if not record:
+            record = UserModulePermission(
+                user_id=user.id,
+                module_key=module_key,
+                enabled=perm_data.get("enabled", True),
+                quota_limit=perm_data.get("daily_limit", 0),
+                quota_used=perm_data.get("used_today", 0),
+                period=perm_data.get("period", "daily"),
+            )
+            db.add(record)
+        else:
+            record.enabled = perm_data.get("enabled", record.enabled)
+            record.quota_limit = perm_data.get("daily_limit", record.quota_limit)
+            record.quota_used = perm_data.get("used_today", record.quota_used)
+            record.period = perm_data.get("period", record.period)
+    
+    db.commit()
+def _count_admin_users(users: list[User]) -> int:
+    return sum(1 for user in users if bool(user.is_admin))
+
 
 @router.get("/available-models")
 async def get_available_models(
@@ -24,6 +75,83 @@ async def get_available_models(
 ):
     """获取可用模型列表（已废弃，返回空列表）"""
     return {"models": []}
+
+
+@router.get("/article-categories")
+async def list_article_categories(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    categories = db.query(ArticleCategory).order_by(ArticleCategory.sort_order).all()
+    return [{
+        "id": c.id,
+        "name": c.name,
+        "icon": c.icon,
+        "system_prompt": c.system_prompt,
+        "example_topics": c.example_topics,
+        "image_prompt_template": c.image_prompt_template,
+        "is_active": c.is_active,
+        "sort_order": c.sort_order,
+    } for c in categories]
+
+
+@router.post("/article-categories")
+async def create_article_category(
+    data: ArticleCategoryCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    existing = db.query(ArticleCategory).filter(ArticleCategory.name == data.name).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="方向名称已存在")
+
+    category = ArticleCategory(
+        name=data.name,
+        icon=data.icon,
+        system_prompt=data.system_prompt,
+        example_topics=json.dumps(data.example_topics, ensure_ascii=False),
+        image_prompt_template=data.image_prompt_template,
+        is_active=True,
+        sort_order=0,
+    )
+    db.add(category)
+    db.commit()
+    db.refresh(category)
+    return {"message": "创建成功", "id": category.id}
+
+
+@router.put("/article-categories/{category_id}")
+async def update_article_category(
+    category_id: int,
+    data: ArticleCategoryUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    category = db.query(ArticleCategory).filter(ArticleCategory.id == category_id).first()
+    if not category:
+        raise HTTPException(status_code=404, detail="方向不存在")
+
+    update_dict = data.model_dump(exclude_unset=True)
+    for key, value in update_dict.items():
+        if key == "example_topics" and value is not None:
+            value = json.dumps(value, ensure_ascii=False)
+        setattr(category, key, value)
+    db.commit()
+    return {"message": "更新成功"}
+
+
+@router.delete("/article-categories/{category_id}")
+async def delete_article_category(
+    category_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    category = db.query(ArticleCategory).filter(ArticleCategory.id == category_id).first()
+    if not category:
+        raise HTTPException(status_code=404, detail="方向不存在")
+    db.delete(category)
+    db.commit()
+    return {"message": "删除成功"}
 
 
 @router.get("/users", response_model=List[UserResponse])
@@ -77,8 +205,13 @@ async def get_user_stats(
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
-    
+
     total_projects = db.query(Project).filter(Project.user_id == user_id).count()
+    total_articles = db.query(Article).filter(Article.user_id == user_id).count()
+    total_articles = db.query(Article).filter(Article.user_id == user_id).count()
+    total_articles = db.query(Article).filter(Article.user_id == user_id).count()
+    total_articles = db.query(Article).filter(Article.user_id == user_id).count()
+    total_articles = db.query(Article).filter(Article.user_id == user_id).count()
     total_tasks = db.query(Task).filter(Task.project_id.in_(
         db.query(Project.id).filter(Project.user_id == user_id)
     )).count()
@@ -113,8 +246,9 @@ async def get_user_detail(
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
-    
+
     total_projects = db.query(Project).filter(Project.user_id == user_id).count()
+    total_articles = db.query(Article).filter(Article.user_id == user_id).count()
     
     def get_status_text(status: str) -> str:
         status_map = {
@@ -129,6 +263,7 @@ async def get_user_detail(
     
     current_status = None
     recent_projects = []
+    recent_articles = []
     latest_task = None
     
     projects = db.query(Project).filter(
@@ -179,6 +314,25 @@ async def get_user_detail(
             "log": latest_task_query.log,
             "created_at": latest_task_query.created_at
         }
+
+    articles = db.query(Article).filter(Article.user_id == user_id).order_by(Article.created_at.desc()).limit(3).all()
+    for article in articles:
+        recent_articles.append({
+            "id": article.id,
+            "title": article.title or article.topic,
+            "status": article.status or "draft",
+            "status_text": "已排版" if article.content_html else "草稿中",
+            "created_at": article.created_at,
+            "has_video": False,
+            "error_message": None,
+        })
+
+    permissions = user.get_module_permissions()
+    module_usage = {
+        "visual": permissions.get("visual", {}),
+        "stickman": permissions.get("stickman", {}),
+        "article": permissions.get("article", {}),
+    }
     
     return {
         "id": user.id,
@@ -191,10 +345,14 @@ async def get_user_detail(
         "created_at": user.created_at,
         "last_active_at": user.last_active_at,
         "total_projects": total_projects,
+        "total_articles": total_articles,
         "videos_count": user.videos_count or 0,
         "token_usage": user.token_usage or 0,
+        "module_permissions": permissions,
+        "module_usage": module_usage,
         "current_status": current_status,
         "recent_projects": recent_projects,
+        "recent_articles": recent_articles,
         "latest_task": latest_task
     }
 
@@ -215,6 +373,8 @@ async def update_user(
         user.is_active = user_update.is_active
     if user_update.is_admin is not None:
         user.is_admin = user_update.is_admin
+    if user_update.module_permissions is not None:
+        user.set_module_permissions(_normalize_module_permissions(user_update.module_permissions, user))
     
     db.commit()
     db.refresh(user)
@@ -225,6 +385,62 @@ async def update_user(
               details=f"更新用户: {user.username}", request=request)
     
     return user
+
+
+@router.put("/users/{user_id}/module-permissions")
+async def update_user_module_permissions(
+    user_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+    request: Request = None,
+):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    if user.is_admin:
+        raise HTTPException(status_code=400, detail="管理员账号默认无限制，请勿修改模块权限")
+
+    permissions = _normalize_module_permissions(payload, user)
+    user.set_module_permissions(permissions)
+    db.commit()
+    db.refresh(user)
+
+    from app.api.auth import log_audit
+    log_audit(db, current_user.id, current_user.username, "USER_MODULE_PERMISSION_UPDATE",
+              resource="user", resource_id=user_id,
+              details=f"更新用户 {user.username} 模块权限", request=request)
+    return {"message": "模块权限已更新", "module_permissions": permissions}
+
+
+@router.post("/users/module-permissions/batch")
+async def batch_update_user_module_permissions(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+    request: Request = None,
+):
+    user_ids = payload.get("user_ids") or []
+    updates = payload.get("module_permissions") or {}
+    if not user_ids:
+        raise HTTPException(status_code=400, detail="请选择用户")
+
+    users = db.query(User).filter(User.id.in_(user_ids)).all()
+    skipped_admins = _count_admin_users(users)
+    updated_count = 0
+    for user in users:
+        if user.is_admin:
+            continue
+        permissions = _normalize_module_permissions(updates, user)
+        user.set_module_permissions(permissions)
+        updated_count += 1
+    db.commit()
+
+    from app.api.auth import log_audit
+    log_audit(db, current_user.id, current_user.username, "USER_MODULE_PERMISSION_BATCH_UPDATE",
+              resource="user", resource_id=None,
+              details=f"批量更新 {updated_count} 个用户模块权限，跳过管理员 {skipped_admins} 个", request=request)
+    return {"message": f"已更新 {updated_count} 个用户的模块权限，跳过管理员 {skipped_admins} 个", "updated_count": updated_count, "skipped_admins": skipped_admins}
 
 
 @router.delete("/users/{user_id}")
@@ -341,6 +557,9 @@ async def set_user_video_limit(
         raise HTTPException(status_code=404, detail="用户不存在")
     
     user.daily_video_limit = limit
+    permissions = user.get_module_permissions()
+    permissions.setdefault("visual", {}).update({"daily_limit": limit, "enabled": True})
+    user.set_module_permissions(permissions)
     db.commit()
     
     from app.api.auth import log_audit
@@ -677,6 +896,45 @@ async def get_token_usage(
         "total_chat_tokens": sum(u["chat_token_usage"] for u in result),
         "total_code_tokens": sum(u["code_token_usage"] for u in result),
         "total_tokens": sum(u["total_token_usage"] for u in result)
+    }
+
+
+@router.get("/module-stats")
+async def get_module_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    today = datetime.utcnow().date()
+    tomorrow = today + timedelta(days=1)
+
+    def build(total: int, today_count: int, success: int, failed: int):
+        return {
+            "total": total,
+            "today": today_count,
+            "success": success,
+            "failed": failed,
+            "success_rate": round((success / total) * 100, 1) if total else 0.0,
+        }
+
+    visual_total = db.query(Project).filter(Project.module_type == "manim").count()
+    visual_today = db.query(Project).filter(Project.module_type == "manim", Project.created_at >= today, Project.created_at < tomorrow).count()
+    visual_success = db.query(Project).filter(Project.module_type == "manim", Project.status == "completed").count()
+    visual_failed = db.query(Project).filter(Project.module_type == "manim", Project.status == "failed").count()
+
+    stickman_total = db.query(Project).filter(Project.module_type == "stickman").count()
+    stickman_today = db.query(Project).filter(Project.module_type == "stickman", Project.created_at >= today, Project.created_at < tomorrow).count()
+    stickman_success = db.query(Project).filter(Project.module_type == "stickman", Project.status == "completed").count()
+    stickman_failed = db.query(Project).filter(Project.module_type == "stickman", Project.status == "failed").count()
+
+    article_total = db.query(Article).count()
+    article_today = db.query(Article).filter(Article.created_at >= today, Article.created_at < tomorrow).count()
+    article_success = db.query(Article).filter(Article.content_html.isnot(None)).count()
+    article_failed = db.query(Article).filter(Article.status == "failed").count()
+
+    return {
+        "visual": build(visual_total, visual_today, visual_success, visual_failed),
+        "stickman": build(stickman_total, stickman_today, stickman_success, stickman_failed),
+        "article": build(article_total, article_today, article_success, article_failed),
     }
 
 

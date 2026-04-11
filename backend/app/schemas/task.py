@@ -11,6 +11,7 @@ class TaskCreate(BaseModel):
 class TaskResponse(BaseModel):
     id: int
     project_id: int
+    task_type: str
     status: str
     progress: int
     video_url: Optional[str]
@@ -25,6 +26,7 @@ class TaskResponse(BaseModel):
 
 
 class TaskStatusResponse(BaseModel):
+    task_type: Optional[str] = None
     status: str
     progress: int
     video_url: Optional[str] = None

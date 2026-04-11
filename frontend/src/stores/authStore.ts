@@ -10,6 +10,7 @@ interface User {
   expires_at?: string | null
   is_expired?: boolean
   can_use?: boolean
+  module_permissions?: Record<string, { enabled: boolean; daily_limit: number; used_today?: number; last_reset_date?: string | null }>
 }
 
 interface AuthState {

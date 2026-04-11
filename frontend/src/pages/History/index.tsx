@@ -4,10 +4,11 @@ import {
   VideoCameraOutlined, EditOutlined, DeleteOutlined, 
   CopyOutlined, DownloadOutlined, PlayCircleOutlined,
   ClockCircleOutlined, CheckCircleOutlined, CloseCircleOutlined, ReloadOutlined,
-  PlusOutlined
+  PlusOutlined, FileTextOutlined
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { projectApi, Project, Task } from '@/services/project'
+import { articleApi, Article } from '@/services/article'
 import './History.css'
 
 const { Title, Text } = Typography
@@ -32,6 +33,7 @@ const getStatusConfig = (status: string) => {
 export default function History() {
   const navigate = useNavigate()
   const [projects, setProjects] = useState<Project[]>([])
+  const [articles, setArticles] = useState<Article[]>([])
   const [tasks, setTasks] = useState<Record<number, Task>>({})
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('all')
@@ -47,8 +49,13 @@ export default function History() {
   const fetchProjects = async () => {
     setLoading(true)
     try {
-      const { data } = await projectApi.list()
+      const [projectRes, articleRes] = await Promise.all([
+        projectApi.list(),
+        articleApi.list(50),
+      ])
+      const data = projectRes.data
       setProjects(data)
+      setArticles(articleRes.data)
       
       const taskMap: Record<number, Task> = {}
       for (const project of data) {
@@ -114,7 +121,7 @@ export default function History() {
   }
 
   const handleContinueProject = (project: Project) => {
-    navigate(`/project/${project.id}/chat`)
+    navigate(`/project/${project.id}/${project.module_type === 'stickman' ? 'task' : 'chat'}`)
   }
 
   const handleViewProject = (project: Project) => {
@@ -205,8 +212,8 @@ export default function History() {
         activeKey={activeTab}
         onChange={(key) => { setActiveTab(key); setSelectedKeys([]) }}
         items={[
-          { key: 'all', label: `全部 (${projects.length})`, children: (
-            projects.length === 0 ? (
+          { key: 'all', label: `全部 (${projects.length + articles.length})`, children: (
+            projects.length + articles.length === 0 ? (
               <Empty description="暂无项目" image={Empty.PRESENTED_IMAGE_SIMPLE}>
                 <Button type="primary" onClick={() => navigate('/creator')}>创建第一个项目</Button>
               </Empty>
@@ -217,6 +224,29 @@ export default function History() {
                   <Button size="small" onClick={handleSelectNone}>取消选择</Button>
                 </div>
                 <div className="projects-grid">
+                  {articles.map((article) => (
+                    <Card key={`article-${article.id}`} className="project-card hover-lift">
+                      <div className="project-thumbnail" onClick={() => navigate(`/article/${article.id}`)}>
+                        <FileTextOutlined className="thumbnail-icon" />
+                        <div className="status-badge green">
+                          <CheckCircleOutlined /> 公众号文章
+                        </div>
+                      </div>
+                      <div className="project-info">
+                        <Title level={5} className="project-name">{article.title || article.topic}</Title>
+                        <div className="project-meta">
+                          <Text type="secondary" className="project-date">{new Date(article.created_at).toLocaleDateString('zh-CN')}</Text>
+                          <Text type="secondary">{article.category}</Text>
+                        </div>
+                        <div className="project-actions">
+                          <Button type="text" size="small" icon={<EditOutlined />} onClick={() => navigate(`/article/${article.id}`)}>继续编辑</Button>
+                          <Popconfirm title="确定删除此文章？" description="删除后无法恢复" onConfirm={async () => { await articleApi.delete(article.id); message.success('文章已删除'); fetchProjects() }} okText="确定" cancelText="取消">
+                            <Button type="text" size="small" danger icon={<DeleteOutlined />} />
+                          </Popconfirm>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
                   {filteredProjects.map((project) => {
                     const statusConfig = getStatusConfig(project.status)
                     const task = tasks[project.id]
@@ -259,7 +289,7 @@ export default function History() {
                             {project.status === 'completed' ? (
                               <>
                                 <Button type="text" size="small" icon={<PlayCircleOutlined />} onClick={() => handleViewProject(project)}>播放</Button>
-                                <Button type="text" size="small" icon={<CopyOutlined />} onClick={() => navigate(`/project/${project.id}/chat`)}>复用</Button>
+                                 <Button type="text" size="small" icon={<CopyOutlined />} onClick={() => navigate(`/project/${project.id}/${project.module_type === 'stickman' ? 'task' : 'chat'}`)}>复用</Button>
                               </>
                             ) : (
                               <Button type="text" size="small" icon={<EditOutlined />} onClick={() => handleContinueProject(project)}>继续编辑</Button>
@@ -280,6 +310,77 @@ export default function History() {
                   })}
                 </div>
               </>
+            )
+          )},
+          { key: 'visual', label: `思维可视化 (${projects.filter(p => p.module_type === 'manim').length})`, children: (
+            <div className="projects-grid">
+              {projects.filter(p => p.module_type === 'manim').map((project) => {
+                const task = tasks[project.id]
+                const statusConfig = getStatusConfig(project.status)
+                return (
+                  <Card key={project.id} className="project-card hover-lift">
+                    <div className="project-thumbnail" onClick={() => navigate(`/project/${project.id}/chat`)}>
+                      <VideoCameraOutlined className="thumbnail-icon" />
+                      {project.status === 'rendering' && task && <div className="progress-overlay"><Progress type="circle" percent={task.progress || 0} size={60} strokeColor="#6366f1" /></div>}
+                      <div className={`status-badge ${statusConfig.color}`}>{statusConfig.icon} {statusConfig.text}</div>
+                    </div>
+                    <div className="project-info">
+                      <Title level={5} className="project-name">{project.title}</Title>
+                      <div className="project-meta"><Text type="secondary">{new Date(project.created_at).toLocaleDateString('zh-CN')}</Text></div>
+                      <div className="project-actions"><Button type="text" size="small" icon={<EditOutlined />} onClick={() => navigate(`/project/${project.id}/chat`)}>继续编辑</Button></div>
+                    </div>
+                  </Card>
+                )
+              })}
+            </div>
+          )},
+          { key: 'stickman', label: `火柴人视频 (${projects.filter(p => p.module_type === 'stickman').length})`, children: (
+            <div className="projects-grid">
+              {projects.filter(p => p.module_type === 'stickman').map((project) => {
+                const task = tasks[project.id]
+                const statusConfig = getStatusConfig(project.status)
+                return (
+                  <Card key={project.id} className="project-card hover-lift">
+                    <div className="project-thumbnail" onClick={() => navigate(`/project/${project.id}/task`)}>
+                      <VideoCameraOutlined className="thumbnail-icon" />
+                      {project.status === 'rendering' && task && <div className="progress-overlay"><Progress type="circle" percent={task.progress || 0} size={60} strokeColor="#ef8f41" /></div>}
+                      <div className={`status-badge ${statusConfig.color}`}>{statusConfig.icon} {statusConfig.text}</div>
+                    </div>
+                    <div className="project-info">
+                      <Title level={5} className="project-name">{project.title}</Title>
+                      <div className="project-meta"><Text type="secondary">{new Date(project.created_at).toLocaleDateString('zh-CN')}</Text></div>
+                      <div className="project-actions"><Button type="text" size="small" icon={<EditOutlined />} onClick={() => navigate(`/project/${project.id}/task`)}>继续创作</Button></div>
+                    </div>
+                  </Card>
+                )
+              })}
+            </div>
+          )},
+          { key: 'article', label: `公众号文章 (${articles.length})`, children: (
+            articles.length === 0 ? <Empty description="暂无公众号文章" /> : (
+              <div className="projects-grid">
+                {articles.map((article) => (
+                  <Card key={`article-tab-${article.id}`} className="project-card hover-lift">
+                    <div className="project-thumbnail" onClick={() => navigate(`/article/${article.id}`)}>
+                      <FileTextOutlined className="thumbnail-icon" />
+                      <div className="status-badge green"><CheckCircleOutlined /> 公众号文章</div>
+                    </div>
+                    <div className="project-info">
+                      <Title level={5} className="project-name">{article.title || article.topic}</Title>
+                      <div className="project-meta">
+                        <Text type="secondary">{new Date(article.created_at).toLocaleDateString('zh-CN')}</Text>
+                        <Text type="secondary">{article.category}</Text>
+                      </div>
+                      <div className="project-actions">
+                        <Button type="text" size="small" icon={<EditOutlined />} onClick={() => navigate(`/article/${article.id}`)}>继续编辑</Button>
+                        <Popconfirm title="确定删除此文章？" description="删除后无法恢复" onConfirm={async () => { await articleApi.delete(article.id); message.success('文章已删除'); fetchProjects() }} okText="确定" cancelText="取消">
+                          <Button type="text" size="small" danger icon={<DeleteOutlined />} />
+                        </Popconfirm>
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
             )
           )},
           { key: 'completed', label: `已完成 (${completedCount})`, children: (
@@ -409,7 +510,7 @@ export default function History() {
             
             {selectedProject.manim_code && (
               <div className="mt-4">
-                <Text type="secondary">脚本预览</Text>
+                <Text type="secondary">思维可视化脚本预览</Text>
                 <Card size="small" className="mt-2" bodyStyle={{ maxHeight: 200, overflow: 'auto' }}>
                   <pre style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>{selectedProject.manim_code.slice(0, 500)}...</pre>
                 </Card>

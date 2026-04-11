@@ -1,6 +1,6 @@
 from pydantic import BaseModel, EmailStr, field_validator, Field
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict, Any
 import re
 
 
@@ -36,6 +36,8 @@ class UserResponse(UserBase):
     api_calls_count: int = 0
     videos_count: int = 0
     daily_video_limit: int = 5
+    module_permissions: Dict[str, Any] = Field(default_factory=dict)
+    custom_voices: list[Dict[str, Any]] = Field(default_factory=list)
     last_active_at: Optional[datetime] = None
     created_at: datetime
     
@@ -55,6 +57,7 @@ class TokenData(BaseModel):
 class UserUpdate(BaseModel):
     is_active: Optional[bool] = None
     is_admin: Optional[bool] = None
+    module_permissions: Optional[Dict[str, Any]] = None
 
 
 class UserStats(BaseModel):
@@ -128,13 +131,17 @@ class UserDetail(BaseModel):
     created_at: datetime
     last_active_at: Optional[datetime] = None
     daily_video_limit: int = 5
+    module_permissions: Dict[str, Any] = Field(default_factory=dict)
     
     total_projects: int = 0
+    total_articles: int = 0
     videos_count: int = 0
     token_usage: int = 0
+    module_usage: Dict[str, Any] = Field(default_factory=dict)
     
     current_status: Optional[ProjectStatus] = None
     recent_projects: list[RecentProject] = []
+    recent_articles: list[RecentProject] = []
     latest_task: Optional[TaskLog] = None
 
 

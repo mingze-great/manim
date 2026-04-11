@@ -18,6 +18,7 @@ class Task(Base):
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     celery_task_id = Column(String(100), nullable=True)
+    task_type = Column(String(50), default="manim_render", nullable=False)
     status = Column(String(20), default=TaskStatus.PENDING.value)
     progress = Column(Integer, default=0)
     video_url = Column(Text, nullable=True)

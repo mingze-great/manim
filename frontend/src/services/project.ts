@@ -6,6 +6,24 @@ export interface Project {
   title: string
   theme: string
   category: string | null
+  module_type: 'manim' | 'stickman'
+  storyboard_count: number
+  aspect_ratio: string
+  generation_mode: 'one_click' | 'step_by_step'
+  voice_source: 'ai' | 'upload' | 'record'
+  voice_file_path: string | null
+  voice_duration: number | null
+  tts_provider: string
+  tts_voice: string
+  tts_rate: string
+  style_reference_image_path: string | null
+  style_reference_notes: string | null
+  style_reference_profile: string | null
+  preview_image_asset_json: string | null
+  preview_regen_count: number
+  storyboard_json: string | null
+  image_assets_json: string | null
+  generation_flags: string | null
   final_script: string | null
   manim_code: string | null
   custom_code: string | null
@@ -29,10 +47,12 @@ export interface Conversation {
 export interface Task {
   id: number
   project_id: number
+  task_type: string
   status: string
   progress: number
   video_url: string | null
   error_message: string | null
+  log?: string | null
   created_at: string
 }
 
@@ -49,6 +69,15 @@ export interface BackgroundTask {
   completed_at: string | null
 }
 
+export interface StickmanVoiceOption {
+  label: string
+  value: string
+  provider: string
+  gender?: string
+  style?: string
+  preview_url?: string
+}
+
 export interface PendingResponse {
   status: 'no_message' | 'pending' | 'completed' | 'error'
   response?: Conversation
@@ -59,8 +88,40 @@ export interface PendingResponse {
 export const projectApi = {
   list: () => api.get<Project[]>('/projects'),
   get: (id: number) => api.get<Project>(`/projects/${id}`),
-  create: (data: { title: string; theme: string; category?: string }) => api.post<Project>('/projects', data),
+  create: (data: { title: string; theme: string; category?: string; module_type?: 'manim' | 'stickman'; storyboard_count?: number; aspect_ratio?: string; generation_mode?: 'one_click' | 'step_by_step'; voice_source?: 'ai' | 'upload' | 'record'; tts_provider?: string; tts_voice?: string; tts_rate?: string }) => api.post<Project>('/projects', data),
   update: (id: number, data: Partial<Project>) => api.put<Project>(`/projects/${id}`, data),
+  uploadVoiceReference: (id: number, file: File, source: 'upload' | 'record') => {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('source', source)
+    return api.post<Project>(`/projects/${id}/voice-reference`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  uploadStyleReference: (id: number, file: File, notes?: string) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    if (notes) formData.append('notes', notes)
+    return api.post<Project>(`/projects/${id}/style-reference`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  generateStickmanPreviewImage: (id: number, regenerate: boolean = false) => api.post<Project>(`/projects/${id}/stickman/preview-image`, { regenerate }),
+  getStickmanVoiceLibrary: () => api.get<{ voices: StickmanVoiceOption[] }>(`/projects/stickman/voice-library`),
+  previewStickmanVoice: (data: { text?: string; tts_provider?: string; tts_voice?: string; tts_rate?: string }) =>
+    api.post<Blob>(`/projects/stickman/preview-voice`, data, { responseType: 'blob' as any }),
+  createCustomStickmanVoice: (file: File, label: string) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('label', label)
+    return api.post<{ message: string; voice: StickmanVoiceOption }>(`/projects/stickman/custom-voice`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  generateStickmanScript: (id: number) => api.post<Project>(`/projects/${id}/stickman/script`),
+  updateStickmanStoryboards: (id: number, data: { storyboards: any[]; final_script?: string }) => api.put<Project>(`/projects/${id}/stickman/storyboards`, data),
+  generateStickmanImages: (id: number) => api.post<Project>(`/projects/${id}/stickman/images`),
+  regenerateStickmanImage: (id: number, sceneIndex: number, data?: { prompt?: string }) => api.post<Project>(`/projects/${id}/stickman/images/${sceneIndex}/regenerate`, data || {}),
   delete: (id: number) => api.delete(`/projects/${id}`),
   batchDelete: (ids: number[]) => api.post('/projects/batch-delete', { project_ids: ids }),
   getConversations: (id: number) => api.get<Conversation[]>(`/projects/${id}/conversations`),
@@ -72,6 +133,8 @@ export const projectApi = {
   optimizeCodeStream: (id: number, feedback: string) => 
     `/api/projects/${id}/optimize-code/stream?feedback=${encodeURIComponent(feedback)}`,
   getTask: (projectId: number) => api.get<Task>(`/tasks/project/${projectId}`),
+  generateStickmanStream: (projectId: number) => `/api/tasks/${projectId}/stickman-generate`,
+  generateStickmanComposeStream: (projectId: number) => `/api/tasks/${projectId}/stickman-compose`,
   regenerateCode: (id: number) => api.post(`/projects/${id}/regenerate-code`),
   fixCode: (projectId: number, data: { error_message: string; current_code: string }) =>
     api.post<{ success: boolean; fixed_code?: string; fix_description?: string; message?: string }>(

@@ -34,7 +34,8 @@ export default function Login() {
         email: userData.email, 
         is_admin: userData.is_admin,
         is_approved: userData.is_approved,
-        expires_at: userData.expires_at
+        expires_at: userData.expires_at,
+        module_permissions: userData.module_permissions,
       })
       message.success('登录成功')
       if (userData.is_admin) {

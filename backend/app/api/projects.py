@@ -1,13 +1,20 @@
 from typing import Annotated, List
-from fastapi import APIRouter, Depends, HTTPException, status, Request
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException, status, Request, UploadFile, File, Form
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 import json
 import asyncio
 import re
+import os
+import uuid
+from pathlib import Path
 
+from pydub import AudioSegment
+import imageio_ffmpeg
+
+from app.config import get_settings
 from app.database import get_db
 from app.models.user import User
 from app.models.project import Project, Conversation
@@ -20,9 +27,45 @@ from app.schemas.task import TaskCreate, TaskResponse
 from app.api.auth import get_current_user
 from app.services.chat import ChatService
 from app.services.manim import ManimService
+from app.services.stickman_generator import StickmanGenerator
+from app.services.audio_enhancement import enhance_voice_audio
+
+
+MODULE_LABELS = {
+    "manim": "思维可视化",
+    "stickman": "火柴人视频",
+}
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 limiter = Limiter(key_func=get_remote_address)
+
+
+@router.get("/stickman/voice-library")
+def get_stickman_voice_library(
+    current_user: Annotated[User, Depends(get_current_user)],
+): 
+    generator = StickmanGenerator()
+    voices = generator.get_tts_voice_library()
+    custom_voices = current_user.get_custom_voices() if hasattr(current_user, 'get_custom_voices') else []
+    return {"voices": voices + custom_voices}
+
+
+@router.post("/stickman/preview-voice")
+def preview_stickman_voice(
+    payload: dict,
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    generator = StickmanGenerator()
+    sample_text = str(payload.get("text") or "你好，这是一段火柴人视频的配音试听。")
+    provider = str(payload.get("tts_provider") or "dashscope_cosyvoice")
+    voice = str(payload.get("tts_voice") or "longshuo_v3")
+    rate = str(payload.get("tts_rate") or "+0%")
+
+    temp_dir = Path(__file__).resolve().parents[2] / "uploads" / "voice_previews"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    preview_path = temp_dir / f"preview_{uuid.uuid4().hex[:12]}.mp3"
+    generator._generate_audio(sample_text, str(preview_path), provider, voice, rate)
+    return FileResponse(preview_path, media_type="audio/mpeg", filename=preview_path.name)
 
 
 @router.post("", response_model=ProjectResponse)
@@ -32,6 +75,14 @@ def create_project(
     db: Annotated[Session, Depends(get_db)]
 ):
     MAX_PROJECTS = 3
+    module_key = str(project.module_type or "manim")
+    stickman_storyboard_limit = 20 if current_user.is_admin else 6
+    if module_key == "stickman":
+        project.storyboard_count = max(2, min(int(project.storyboard_count or 3), stickman_storyboard_limit))
+    allowed, reason = current_user.can_use_module(module_key)
+    if not allowed:
+        raise HTTPException(status_code=403, detail=reason or f"当前账号未开通{MODULE_LABELS.get(module_key, module_key)}模块")
+
     if not current_user.is_admin:
         project_count = db.query(Project).filter(Project.user_id == current_user.id).count()
         if project_count >= MAX_PROJECTS:
@@ -43,7 +94,16 @@ def create_project(
     new_project = Project(
         user_id=current_user.id,
         title=project.title,
-        theme=project.theme
+        theme=project.theme,
+        category=project.category,
+        module_type=project.module_type,
+        storyboard_count=project.storyboard_count,
+        aspect_ratio=project.aspect_ratio,
+        generation_mode=project.generation_mode,
+        voice_source=project.voice_source,
+        tts_provider=project.tts_provider,
+        tts_voice=project.tts_voice,
+        tts_rate=project.tts_rate,
     )
     db.add(new_project)
     db.commit()
@@ -72,6 +132,7 @@ def get_project(
     ).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+
     return project
 
 
@@ -88,10 +149,358 @@ def update_project(
     ).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+
+    if project.module_type == "stickman":
+        data = project_update.model_dump(exclude_unset=True)
+        if "storyboard_count" in data and data["storyboard_count"] is not None:
+            limit = 20 if current_user.is_admin else 6
+            data["storyboard_count"] = max(2, min(int(data["storyboard_count"]), limit))
+    else:
+        data = project_update.model_dump(exclude_unset=True)
     
-    for key, value in project_update.model_dump(exclude_unset=True).items():
+    for key, value in data.items():
         setattr(project, key, value)
     
+    db.commit()
+    db.refresh(project)
+    return project
+
+
+def _get_stickman_project(db: Session, current_user: User, project_id: int) -> Project:
+    project = db.query(Project).filter(
+        Project.id == project_id,
+        Project.user_id == current_user.id
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if project.module_type != "stickman":
+        raise HTTPException(status_code=400, detail="Only stickman projects support this operation")
+    return project
+
+
+@router.post("/{project_id}/stickman/script", response_model=ProjectResponse)
+def generate_stickman_script(
+    project_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)]
+):
+    project = _get_stickman_project(db, current_user, project_id)
+    if not getattr(project, 'quota_consumed', 0):
+        allowed, reason = current_user.can_use_module('stickman')
+        if not allowed:
+            raise HTTPException(status_code=403, detail=reason or '本月火柴人视频使用次数已达上限')
+    generator = StickmanGenerator()
+    script_data = generator.generate_script_data(str(project.theme), int(project.storyboard_count or 3))
+    project.final_script = script_data.get("script")
+    project.storyboard_json = json.dumps(script_data.get("storyboards") or [], ensure_ascii=False)
+    project.status = "draft"
+    if not getattr(project, 'quota_consumed', 0):
+        current_user.increment_module_usage('stickman')
+        project.quota_consumed = 1
+    db.commit()
+    db.refresh(project)
+    return project
+
+
+@router.put("/{project_id}/stickman/storyboards", response_model=ProjectResponse)
+def update_stickman_storyboards(
+    project_id: int,
+    payload: dict,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)]
+):
+    project = _get_stickman_project(db, current_user, project_id)
+    storyboards = payload.get("storyboards") or []
+    final_script = payload.get("final_script")
+    if not isinstance(storyboards, list) or not storyboards:
+        raise HTTPException(status_code=400, detail="storyboards 不能为空")
+    project.storyboard_json = json.dumps(storyboards, ensure_ascii=False)
+    if isinstance(final_script, str):
+        project.final_script = final_script
+    db.commit()
+    db.refresh(project)
+    return project
+
+
+@router.post("/{project_id}/stickman/images", response_model=ProjectResponse)
+def generate_stickman_images(
+    project_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)]
+):
+    project = _get_stickman_project(db, current_user, project_id)
+    storyboards = json.loads(project.storyboard_json or "[]")
+    if not storyboards:
+        raise HTTPException(status_code=400, detail="请先生成并确认分镜")
+    generator = StickmanGenerator()
+    assets, flags = generator.generate_images(
+        storyboards,
+        str(project.aspect_ratio or "16:9"),
+        project_id,
+        style_reference_image_path=str(project.style_reference_image_path) if project.style_reference_image_path else None,
+        style_reference_notes=str(project.style_reference_notes) if project.style_reference_notes else None,
+    )
+    project.image_assets_json = json.dumps(assets, ensure_ascii=False)
+    project.generation_flags = json.dumps(flags, ensure_ascii=False)
+    db.commit()
+    db.refresh(project)
+    return project
+
+
+@router.post("/{project_id}/stickman/preview-image", response_model=ProjectResponse)
+def generate_stickman_preview_image(
+    project_id: int,
+    payload: dict,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)]
+):
+    project = _get_stickman_project(db, current_user, project_id)
+    storyboards = json.loads(project.storyboard_json or "[]")
+    if not storyboards:
+        raise HTTPException(status_code=400, detail="请先生成并确认分镜")
+
+    regenerate = bool(payload.get("regenerate"))
+    if regenerate and (not current_user.is_admin) and int(project.preview_regen_count or 0) >= 1:
+        raise HTTPException(status_code=400, detail="普通用户预览图只支持重生 1 次，请确认后生成全部分镜图")
+
+    generator = StickmanGenerator()
+    preview_index = 0
+    preview_scene = storyboards[preview_index]
+    asset, _ = generator.regenerate_single_image(
+        preview_scene,
+        preview_index + 1,
+        str(project.aspect_ratio or "16:9"),
+        project_id,
+        None,
+        str(project.style_reference_image_path) if project.style_reference_image_path else None,
+        str(project.style_reference_notes) if project.style_reference_notes else None,
+    )
+    project.preview_image_asset_json = json.dumps(asset, ensure_ascii=False)
+    if regenerate:
+        project.preview_regen_count = int(project.preview_regen_count or 0) + 1
+    db.commit()
+    db.refresh(project)
+    return project
+
+
+@router.post("/{project_id}/stickman/images/{scene_index}/regenerate", response_model=ProjectResponse)
+def regenerate_stickman_image(
+    project_id: int,
+    scene_index: int,
+    payload: dict,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)]
+):
+    project = _get_stickman_project(db, current_user, project_id)
+    if not current_user.is_admin:
+        raise HTTPException(status_code=400, detail="正式分镜图不支持重生，请先修改文案或使用预览图确认风格")
+    storyboards = json.loads(project.storyboard_json or "[]")
+    assets = json.loads(project.image_assets_json or "[]")
+    if not (0 <= scene_index < len(storyboards)):
+        raise HTTPException(status_code=404, detail="分镜不存在")
+    generator = StickmanGenerator()
+    prompt_override = payload.get("prompt")
+    asset, used_fallback = generator.regenerate_single_image(
+        storyboards[scene_index],
+        scene_index + 1,
+        str(project.aspect_ratio or "16:9"),
+        project_id,
+        prompt_override if isinstance(prompt_override, str) else None,
+        str(project.style_reference_image_path) if project.style_reference_image_path else None,
+        str(project.style_reference_notes) if project.style_reference_notes else None,
+    )
+    while len(assets) <= scene_index:
+        assets.append({})
+    assets[scene_index] = asset
+    flags = json.loads(project.generation_flags or "{}")
+    flags[f"scene_{scene_index + 1}_fallback"] = used_fallback
+    project.image_assets_json = json.dumps(assets, ensure_ascii=False)
+    project.generation_flags = json.dumps(flags, ensure_ascii=False)
+    db.commit()
+    db.refresh(project)
+    return project
+
+
+@router.post("/{project_id}/voice-reference", response_model=ProjectResponse)
+async def upload_voice_reference(
+    project_id: int,
+    file: UploadFile = File(...),
+    source: str = Form("upload"),
+    current_user: Annotated[User, Depends(get_current_user)] = None,
+    db: Annotated[Session, Depends(get_db)] = None,
+):
+    project = db.query(Project).filter(
+        Project.id == project_id,
+        Project.user_id == current_user.id
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    if project.module_type != "stickman":
+        raise HTTPException(status_code=400, detail="Only stickman projects support voice upload")
+
+    suffix = Path(file.filename or "voice.wav").suffix.lower()
+    if suffix not in {".mp3", ".wav", ".m4a", ".aac", ".ogg", ".webm"}:
+        raise HTTPException(status_code=400, detail="仅支持 mp3/wav/m4a/aac/ogg/webm 音频文件")
+
+    base_dir = Path(__file__).resolve().parents[2] / "uploads" / "voice_references"
+    base_dir.mkdir(parents=True, exist_ok=True)
+    raw_path = base_dir / f"project_{project_id}_{uuid.uuid4().hex}{suffix}"
+    normalized_path = raw_path.with_suffix(".mp3")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="音频文件为空")
+
+    with open(raw_path, "wb") as buffer:
+        buffer.write(content)
+
+    try:
+        duration_ms = enhance_voice_audio(str(raw_path), str(normalized_path), imageio_ffmpeg.get_ffmpeg_exe(), output_format='mp3')
+    except Exception as exc:
+        if raw_path.exists():
+            os.remove(raw_path)
+        raise HTTPException(status_code=400, detail=f"音频处理失败: {exc}") from exc
+    finally:
+        if raw_path.exists():
+            os.remove(raw_path)
+
+    if project.voice_file_path and os.path.exists(project.voice_file_path):
+        try:
+            os.remove(project.voice_file_path)
+        except OSError:
+            pass
+
+    project.voice_file_path = str(normalized_path)
+    project.voice_duration = duration_ms
+    project.voice_source = source if source in {"upload", "record"} else "upload"
+    db.commit()
+    db.refresh(project)
+    return project
+
+
+@router.post("/stickman/custom-voice")
+async def create_custom_voice(
+    file: UploadFile = File(...),
+    label: str = Form(...),
+    current_user: Annotated[User, Depends(get_current_user)] = None,
+    db: Annotated[Session, Depends(get_db)] = None,
+):
+    suffix = Path(file.filename or 'voice.wav').suffix.lower()
+    if suffix not in {'.mp3', '.wav', '.m4a', '.aac', '.ogg', '.webm'}:
+        raise HTTPException(status_code=400, detail='仅支持 mp3/wav/m4a/aac/ogg/webm 音频文件')
+
+    base_dir = Path(__file__).resolve().parents[2] / 'uploads' / 'custom_voice_sources'
+    base_dir.mkdir(parents=True, exist_ok=True)
+    raw_path = base_dir / f'user_{current_user.id}_{uuid.uuid4().hex}{suffix}'
+    normalized_path = raw_path.with_suffix('.mp3')
+    clone_source_path = raw_path.with_suffix('.wav')
+    content = await file.read()
+    with open(raw_path, 'wb') as buffer:
+        buffer.write(content)
+
+    try:
+        enhanced_ms = enhance_voice_audio(str(raw_path), str(normalized_path), imageio_ffmpeg.get_ffmpeg_exe(), output_format='mp3')
+        enhance_voice_audio(str(raw_path), str(clone_source_path), imageio_ffmpeg.get_ffmpeg_exe(), output_format='wav')
+        if enhanced_ms < 8000:
+            raise HTTPException(status_code=400, detail='样本音频有效时长过短，建议至少录制 8 秒清晰人声后再创建自定义音色')
+        from app.utils.cos_storage import cos_storage
+        public_url = None
+        if cos_storage.enabled:
+          with open(clone_source_path, 'rb') as f:
+            uploaded = cos_storage.upload_image(f.read(), f'voices/samples/user_{current_user.id}_{uuid.uuid4().hex}.wav', content_type='audio/wav')
+            if uploaded:
+              public_url = cos_storage.get_public_url(uploaded)
+        if not public_url:
+            raise HTTPException(status_code=400, detail='当前未启用可访问的音频样本地址，无法创建自定义音色')
+
+        import requests as pyrequests
+        api_key = get_settings().DASHSCOPE_API_KEY
+        headers = {'Authorization': f'Bearer {api_key}', 'Content-Type': 'application/json'}
+        payload = {
+            'model': 'voice-enrollment',
+            'input': {
+                'action': 'create_voice',
+                'target_model': 'cosyvoice-v3.5-plus',
+                'prefix': f'u{current_user.id}'[:8],
+                'url': public_url,
+            },
+        }
+        response = pyrequests.post('https://dashscope.aliyuncs.com/api/v1/services/audio/tts/customization', headers=headers, json=payload, timeout=120)
+        if response.status_code != 200:
+            raise HTTPException(status_code=400, detail=f'创建自定义音色失败: {response.text[:500]}')
+        result = response.json()
+        voice_id = (result.get('output') or {}).get('voice_id')
+        if not voice_id:
+            raise HTTPException(status_code=400, detail=f'创建自定义音色失败: {result}')
+        preview_audio = ((result.get('output') or {}).get('preview_audio') or {}).get('url')
+        custom_voice = {
+            'label': label,
+            'value': voice_id,
+            'provider': 'dashscope_cosyvoice',
+            'gender': 'custom',
+            'style': 'personal',
+            'preview_url': preview_audio,
+        }
+        user = db.query(User).filter(User.id == current_user.id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail='用户不存在')
+        user.add_custom_voice(custom_voice)
+        db.commit()
+        return {'message': '自定义音色创建成功', 'voice': custom_voice}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f'创建自定义音色异常: {exc}') from exc
+    finally:
+        if raw_path.exists():
+            os.remove(raw_path)
+        if clone_source_path.exists():
+            os.remove(clone_source_path)
+
+
+@router.post("/{project_id}/style-reference", response_model=ProjectResponse)
+async def upload_style_reference(
+    project_id: int,
+    file: UploadFile = File(...),
+    notes: str = Form(""),
+    current_user: Annotated[User, Depends(get_current_user)] = None,
+    db: Annotated[Session, Depends(get_db)] = None,
+):
+    project = db.query(Project).filter(
+        Project.id == project_id,
+        Project.user_id == current_user.id
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    if project.module_type != "stickman":
+        raise HTTPException(status_code=400, detail="Only stickman projects support style reference")
+
+    suffix = Path(file.filename or "style.png").suffix.lower()
+    if suffix not in {".png", ".jpg", ".jpeg", ".webp"}:
+        raise HTTPException(status_code=400, detail="仅支持 png/jpg/jpeg/webp 图片")
+
+    base_dir = Path(__file__).resolve().parents[2] / "uploads" / "style_references"
+    base_dir.mkdir(parents=True, exist_ok=True)
+    image_path = base_dir / f"project_{project_id}_{uuid.uuid4().hex}{suffix}"
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="图片文件为空")
+    with open(image_path, "wb") as buffer:
+        buffer.write(content)
+
+    if project.style_reference_image_path and os.path.exists(project.style_reference_image_path):
+        try:
+            os.remove(project.style_reference_image_path)
+        except OSError:
+            pass
+
+    project.style_reference_image_path = str(image_path)
+    project.style_reference_notes = notes or None
+    generator = StickmanGenerator()
+    project.style_reference_profile = generator.extract_style_reference_profile(str(image_path), notes or None)
     db.commit()
     db.refresh(project)
     return project
@@ -134,6 +543,11 @@ def batch_delete_projects(
             Project.user_id == current_user.id
         ).first()
         if project:
+            if project.voice_file_path and os.path.exists(project.voice_file_path):
+                try:
+                    os.remove(project.voice_file_path)
+                except OSError:
+                    pass
             db.query(Conversation).filter(Conversation.project_id == project_id).delete()
             db.query(Task).filter(Task.project_id == project_id).delete()
             db.delete(project)

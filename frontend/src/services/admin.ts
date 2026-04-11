@@ -37,6 +37,12 @@ export interface User {
   expires_at?: string
   created_at: string
   daily_video_limit?: number
+  module_permissions?: Record<string, { enabled: boolean; daily_limit: number; used_today?: number; last_reset_date?: string | null }>
+  total_articles?: number
+  token_usage?: number
+  recent_articles?: Array<{ id: number; title: string; status_text: string; created_at: string }>
+  recent_projects?: Array<{ id: number; title: string; status_text: string; created_at: string }>
+  latest_task?: { project_title: string; status: string; error_message?: string | null; log?: string | null; created_at?: string | null } | null
 }
 
 export interface UserStats {
@@ -94,6 +100,20 @@ export interface TokenUsageResponse {
   total_tokens: number
 }
 
+export interface ModuleStatsItem {
+  total: number
+  today: number
+  success: number
+  failed: number
+  success_rate: number
+}
+
+export interface ModuleStatsResponse {
+  visual: ModuleStatsItem
+  stickman: ModuleStatsItem
+  article: ModuleStatsItem
+}
+
 export const adminApi = {
   getUsers: (params?: { skip?: number; limit?: number; search?: string }) =>
     api.get<{ users: User[]; total: number }>('/admin/users', { params }),
@@ -102,10 +122,18 @@ export const adminApi = {
 
   getUser: (id: number) => api.get<User>(`/admin/users/${id}`),
 
+  getUserDetail: (id: number) => api.get<User>(`/admin/users/${id}/detail`),
+
   getUserStats: (id: number) => api.get<UserStats>(`/admin/users/${id}/stats`),
 
   updateUser: (id: number, data: { is_active?: boolean; is_admin?: boolean }) =>
     api.put<User>(`/admin/users/${id}`, data),
+
+  updateUserModulePermissions: (id: number, modulePermissions: Record<string, any>) =>
+    api.put<{ message: string; module_permissions: Record<string, any> }>(`/admin/users/${id}/module-permissions`, modulePermissions),
+
+  batchUpdateUserModulePermissions: (userIds: number[], modulePermissions: Record<string, any>) =>
+    api.post<{ message: string }>(`/admin/users/module-permissions/batch`, { user_ids: userIds, module_permissions: modulePermissions }),
 
   deleteUser: (id: number) => api.delete(`/admin/users/${id}`),
 
@@ -159,6 +187,8 @@ export const adminApi = {
 
   getTokenUsage: (period: 'day' | 'week' | 'month' = 'day') =>
     api.get<TokenUsageResponse>('/admin/token-usage', { params: { period } }),
+
+  getModuleStats: () => api.get<ModuleStatsResponse>('/admin/module-stats'),
 }
 
 export default api

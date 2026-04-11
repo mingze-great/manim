@@ -12,6 +12,17 @@ const api = axios.create({
   timeout: 60000,
 })
 
+export function resolveBackendUrl(path?: string | null) {
+  if (!path) return ''
+  if (path.startsWith('http')) return path
+  const explicitBase = (import.meta as any)?.env?.VITE_API_BASE_URL as string | undefined
+  if (explicitBase) return `${explicitBase}${path}`
+  if (typeof window !== 'undefined') {
+    return `${window.location.origin}${path}`
+  }
+  return path
+}
+
 api.interceptors.request.use((config) => {
   const token = useAuthStore.getState().token
   if (token) {

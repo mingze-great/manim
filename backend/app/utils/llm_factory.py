@@ -18,6 +18,9 @@ class LLMAdapter(ABC):
         content = await self.chat(messages, model, **kwargs)
         return {"content": content, "usage": None}
 
+    async def chat_stream(self, messages: list[dict], model: str = None, **kwargs):
+        return await self.stream_chat(messages, model, **kwargs)
+
 
 class DashScopeAdapter(LLMAdapter):
     """阿里云百炼适配器 - 支持代码生成和文本对话的独立降级"""
@@ -147,6 +150,13 @@ class DashScopeAdapter(LLMAdapter):
                     raise e
         
         raise Exception("所有模型均失败")
+
+    async def chat_stream(self, messages: list[dict], model: str = None, **kwargs):
+        response = await self.stream_chat(messages, model, **kwargs)
+        async for chunk in response:
+            delta = chunk.choices[0].delta if chunk.choices else None
+            if delta and getattr(delta, 'content', None):
+                yield delta.content
     
     async def generate_code_stream(self, messages: list[dict], model: str = None, **kwargs):
         """流式代码生成 - 使用代码模型链"""

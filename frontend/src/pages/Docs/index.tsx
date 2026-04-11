@@ -1,139 +1,134 @@
-import { Card, Typography, Button, Steps, Alert } from 'antd'
-import { 
-  PlayCircleOutlined, MessageOutlined, DownloadOutlined,
-  CodeOutlined, ToolOutlined
+import { Alert, Button, Card, Col, Collapse, Divider, Row, Steps, Tag, Typography } from 'antd'
+import {
+  BulbOutlined,
+  FileTextOutlined,
+  HighlightOutlined,
+  PlayCircleOutlined,
+  SafetyOutlined,
+  VideoCameraOutlined,
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 
-const { Title, Paragraph, Text } = Typography
+const { Title, Paragraph } = Typography
 
 export default function Docs() {
   const navigate = useNavigate()
 
-  const steps = [
-    {
-      title: '第一步：输入主题',
-      description: '在首页输入你想要制作的视频主题，例如"世界公认十大顶级思维"。注意：只需要输入主题名称，禁止输入其他内容！',
-      icon: <PlayCircleOutlined />,
-    },
-    {
-      title: '第二步：生成内容',
-      description: '系统会自动生成视频内容要点，包含文字描述和动态效果说明。如有其他要求，可在对话中调整',
-      icon: <MessageOutlined />,
-    },
-    {
-      title: '第三步：生成代码',
-      description: '点击下方"生成代码"按钮，系统会根据内容自动生成 Manim 动画代码',
-      icon: <CodeOutlined />,
-    },
-    {
-      title: '第四步：渲染视频',
-      description: '点击"开始渲染"按钮，等待视频生成完成，下载到本地',
-      icon: <DownloadOutlined />,
-    },
+  const visualSteps = [
+    { title: '进入开始创作', description: '在开始创作里选择思维可视化模块。普通用户默认开放此模块。' },
+    { title: '选择主题', description: '可以选择热门方向、热门主题，也可以直接输入自己的主题。' },
+    { title: '对话打磨', description: '进入对话页后补充要求，系统会流式输出文案内容。' },
+    { title: '生成脚本', description: '确认后生成思维可视化脚本。' },
+    { title: '渲染视频', description: '在任务页查看进度并下载最终视频。' },
   ]
 
-  const tips = [
-    '⚠️ 只需要输入主题名称，禁止输入其他内容！如有其他要求，进入对话后再调整',
-    '代码自动生成，如多次失败请联系我',
-    '可以多次调整内容直到满意',
-    '视频生成后可随时重新生成',
-    '注意：最多保存3个作品，请及时下载',
+  const stickmanSteps = [
+    { title: '进入开始创作', description: '在开始创作里切换到火柴人视频模块。未开通时仍可浏览，但创建时会提示未开通。' },
+    { title: '选择主题与音色', description: '支持热门主题、AI 选题、音色选择、语速选择、录音或上传音频。' },
+    { title: '一键或分步', description: '可选择一键生成，也可进入分步创作：脚本、图片、配音、合成。' },
+    { title: '试听与参考图', description: '支持试听音色，也可上传风格参考图增强图片一致性。' },
+    { title: '合成视频', description: '在任务页或分步页直接合成视频并查看结果。' },
+  ]
+
+  const articleSteps = [
+    { title: '进入开始创作', description: '在开始创作里切换到公众号文章模块。未开通时可浏览入口，但进入创作时会提示权限。' },
+    { title: '选择轻量版或专业版', description: '轻量版适合快速出稿，专业版适合大纲、正文、配图、排版精修。' },
+    { title: '生成文案', description: '支持 AI 草稿、自己写文案、段落编辑和局部 AI 重写。' },
+    { title: '生成并调整配图', description: '图片与正文段落位置绑定，支持重生、调整插图位置、手机预览。' },
+    { title: '排版与复制', description: '生成排版后，直接复制图文内容到公众号编辑器，而不是复制源码。' },
   ]
 
   return (
-    <div className="docs-page" style={{ padding: '40px 20px', maxWidth: '900px', margin: '0 auto' }}>
-      <Title level={2} style={{ textAlign: 'center', marginBottom: '40px' }}>
-        使用教程
-      </Title>
-
-      <Card style={{ marginBottom: '24px' }}>
-        <Title level={4}>快速开始</Title>
-        <Paragraph type="secondary" style={{ marginBottom: '24px' }}>
-          只需4步，即可完成你的视频创作
+    <div style={{ padding: '32px 20px', maxWidth: 1180, margin: '0 auto' }}>
+      <div style={{ padding: 28, borderRadius: 24, background: 'linear-gradient(135deg, #123555 0%, #2a6b84 50%, #efb26c 100%)', color: '#fff', marginBottom: 24 }}>
+        <Title level={2} style={{ color: '#fff', marginBottom: 8 }}>使用教程</Title>
+        <Paragraph style={{ color: 'rgba(255,255,255,0.88)', marginBottom: 0 }}>
+          这是一套统一的内容创作平台，支持思维可视化、火柴人视频和公众号文章三个模块。以下教程按模块拆分，帮助普通用户和管理员快速上手。
         </Paragraph>
-        <Steps current={4} items={steps} direction="vertical" />
-        <Button 
-          type="primary" 
-          size="large" 
-          icon={<PlayCircleOutlined />}
-          onClick={() => navigate('/creator')}
-          style={{ marginTop: '24px' }}
-        >
-          开始创作
-        </Button>
+      </div>
+
+      <Alert
+        type="info"
+        showIcon
+        style={{ marginBottom: 24 }}
+        message="默认权限说明"
+        description="普通用户默认只开放思维可视化模块。火柴人视频与公众号文章需要管理员在后台按用户单独或批量开通。管理员账号三模块默认无限制。"
+      />
+
+      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+        <Col xs={24} lg={8}>
+          <Card style={{ borderRadius: 20, border: '1px solid #d7e6ef', background: 'linear-gradient(180deg, #f7fbfd 0%, #ffffff 100%)' }}>
+            <HighlightOutlined style={{ fontSize: 28, color: '#2563eb' }} />
+            <Title level={4} style={{ marginTop: 12 }}>思维可视化</Title>
+            <Paragraph type="secondary">适合知识讲解、公式推导、思维模型拆解。先对话，再生成脚本和视频。</Paragraph>
+            <Steps direction="vertical" size="small" current={5} items={visualSteps} />
+          </Card>
+        </Col>
+        <Col xs={24} lg={8}>
+          <Card style={{ borderRadius: 20, border: '1px solid #f3d5a8', background: 'linear-gradient(180deg, #fff9ef 0%, #ffffff 100%)' }}>
+            <VideoCameraOutlined style={{ fontSize: 28, color: '#d97706' }} />
+            <Title level={4} style={{ marginTop: 12 }}>火柴人视频</Title>
+            <Paragraph type="secondary">适合口播讲解、观点表达和人物叙事。支持多音色、参考风格图、分步创作。</Paragraph>
+            <Steps direction="vertical" size="small" current={5} items={stickmanSteps} />
+          </Card>
+        </Col>
+        <Col xs={24} lg={8}>
+          <Card style={{ borderRadius: 20, border: '1px solid #ddd6fe', background: 'linear-gradient(180deg, #fbfaff 0%, #ffffff 100%)' }}>
+            <FileTextOutlined style={{ fontSize: 28, color: '#7c3aed' }} />
+            <Title level={4} style={{ marginTop: 12 }}>公众号文章</Title>
+            <Paragraph type="secondary">适合公众号运营和图文创作，支持轻量版快速出稿和专业版精修工作台。</Paragraph>
+            <Steps direction="vertical" size="small" current={5} items={articleSteps} />
+          </Card>
+        </Col>
+      </Row>
+
+      <Card style={{ marginBottom: 24, borderRadius: 20 }}>
+        <Title level={4}><BulbOutlined /> 平台入口说明</Title>
+        <ul style={{ paddingLeft: 20, color: '#4b5563', lineHeight: 1.8 }}>
+          <li>左侧 <Tag color="blue">开始创作</Tag> 是所有创作模块的统一入口。</li>
+          <li>左侧 <Tag color="blue">我的作品</Tag> 统一查看思维可视化、火柴人视频、公众号文章历史作品。</li>
+          <li>左侧不再单独放“公众号文章”，避免与开始创作重复。</li>
+        </ul>
       </Card>
 
-      <Card style={{ marginBottom: '24px' }}>
-        <Title level={4}><ToolOutlined /> 代码模板选择</Title>
-        <Alert 
-          type="info" 
-          showIcon
-          style={{ marginBottom: '16px' }}
-          message="不同模板适合不同类型的视频，选择合适的模板可以提高成功率"
+      <Card style={{ marginBottom: 24, borderRadius: 20 }}>
+        <Title level={4}><SafetyOutlined /> 管理员怎么用</Title>
+        <Collapse
+          items={[
+            {
+              key: '1',
+              label: '用户权限与次数设置',
+              children: <div style={{ color: '#4b5563', lineHeight: 1.8 }}>后台支持为每个用户设置三模块开关和每日使用次数，也支持批量设置。管理员默认无限制，批量设置会自动跳过管理员。</div>,
+            },
+            {
+              key: '2',
+              label: '权限模板',
+              children: <div style={{ color: '#4b5563', lineHeight: 1.8 }}>支持“仅公众号”“仅视频”“三模块全开”“体验版”“企业版”等模板，方便快速下发权限。</div>,
+            },
+            {
+              key: '3',
+              label: '模块看板',
+              children: <div style={{ color: '#4b5563', lineHeight: 1.8 }}>可查看思维可视化、火柴人视频、公众号文章三个模块的累计、今日、成功数、失败数和成功率。</div>,
+            },
+          ]}
         />
-        <ul style={{ paddingLeft: '20px' }}>
-          <li style={{ marginBottom: '12px', color: '#666' }}>
-            <strong>治愈系多维动态引擎（推荐）</strong>
-            <br />
-            <Text type="secondary">默认模板，适合大多数思维可视化、情绪治愈类视频，稳定性高</Text>
-          </li>
-          <li style={{ marginBottom: '12px', color: '#666' }}>
-            <strong>高定专属模板（千人千面版）</strong>
-            <br />
-            <Text type="secondary">效果更精美，但容易出错。如果修复2-3次仍失败，建议切换到默认模板</Text>
-          </li>
-          <li style={{ marginBottom: '12px', color: '#666' }}>
-            <strong>数学可视化模板</strong>
-            <br />
-            <Text type="secondary">专门用于数学、物理概念的可视化，如傅里叶变换、欧拉公式等</Text>
-          </li>
+      </Card>
+
+      <Card style={{ marginBottom: 24, borderRadius: 20 }}>
+        <Title level={4}><PlayCircleOutlined /> 常见问题</Title>
+        <ul style={{ paddingLeft: 20, color: '#4b5563', lineHeight: 1.8 }}>
+          <li>如果火柴人或公众号入口显示可浏览但创建时提示未开通，这是正常的权限拦截行为。</li>
+          <li>思维可视化模块始终可用，不受其他模块权限影响。</li>
+          <li>公众号文章配图后，请先在手机预览中确认图文顺序，再复制图文内容到公众号编辑器。</li>
+          <li>如果火柴人视频音色没有变化，建议先在试听入口确认音色，再重新生成视频。</li>
         </ul>
       </Card>
 
-      <Card style={{ marginBottom: '24px' }}>
-        <Title level={4}>渲染失败怎么办？</Title>
-        <Paragraph type="secondary" style={{ marginBottom: '12px' }}>
-          渲染失败时，系统会显示错误信息并提供自动修复功能，你可以：
-        </Paragraph>
-        <ol style={{ paddingLeft: '20px' }}>
-          <li style={{ marginBottom: '8px', color: '#666' }}>
-            <strong>点击"自动修复"</strong>：系统会自动分析错误并修复代码，实时显示修复进度（推荐）
-          </li>
-          <li style={{ marginBottom: '8px', color: '#666' }}>
-            <strong>切换模板重新生成</strong>：高定模板容易出错，可切换到默认模板（治愈系多维动态引擎）
-          </li>
-          <li style={{ marginBottom: '8px', color: '#666' }}>
-            <strong>新建项目</strong>：如果以上方法都失败，请新建项目重新开始
-          </li>
-        </ol>
-      </Card>
+      <Divider />
 
-      <Card style={{ marginBottom: '24px' }}>
-        <Title level={4}>使用提示</Title>
-        <ul style={{ paddingLeft: '20px' }}>
-          {tips.map((tip, i) => (
-            <li key={i} style={{ marginBottom: '8px', color: '#666' }}>
-              {tip}
-            </li>
-          ))}
-        </ul>
-      </Card>
-
-      <Card>
-        <Title level={4}>注意事项</Title>
-        <ul style={{ paddingLeft: '20px' }}>
-          <li style={{ marginBottom: '8px', color: '#666' }}>
-            免费用户最多保存3个作品，生成视频后请及时下载到本地
-          </li>
-          <li style={{ marginBottom: '8px', color: '#666' }}>
-            账号有使用期限，过期后请联系管理员续费
-          </li>
-          <li style={{ marginBottom: '8px', color: '#666' }}>
-            10分钟无操作会自动退出登录
-          </li>
-        </ul>
-      </Card>
+      <div style={{ textAlign: 'center' }}>
+        <Button type="primary" size="large" onClick={() => navigate('/creator')}>进入开始创作</Button>
+      </div>
     </div>
   )
 }

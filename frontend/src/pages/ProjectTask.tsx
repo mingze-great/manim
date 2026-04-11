@@ -6,6 +6,7 @@ import { projectApi, Task, Project } from '@/services/project'
 import { templateApi, Template } from '@/services/template'
 import { useAuthStore } from '@/stores/authStore'
 import { motion } from 'framer-motion'
+import StickmanProjectTask from './StickmanProjectTask'
 
 const statusMap: Record<string, { text: string; color: string }> = {
   pending: { text: '等待中', color: '#faad14' },
@@ -227,6 +228,17 @@ useEffect(() => {
     if (!generatedCode) {
       message.warning('请先生成脚本')
       return
+    }
+    
+    const visualPermission: any = user?.module_permissions?.visual
+    if (visualPermission && !user?.is_admin) {
+      const used = visualPermission.used_today || 0
+      const limit = visualPermission.daily_limit || 0
+      if (limit > 0 && used >= limit) {
+        const periodLabel = visualPermission.period === 'monthly' ? '本月' : '今日'
+        message.error(`${periodLabel}配额已用完（${used}/${limit}），请明天再试`)
+        return
+      }
     }
     
     setGeneratingVideo(true)
@@ -454,6 +466,10 @@ useEffect(() => {
         <Spin size="large" />
       </div>
     )
+  }
+
+  if (project?.module_type === 'stickman') {
+    return <StickmanProjectTask />
   }
 
   return (

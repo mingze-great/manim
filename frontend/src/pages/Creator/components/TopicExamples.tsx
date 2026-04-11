@@ -1,22 +1,32 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Button, Input, message } from 'antd'
 import { BulbOutlined } from '@ant-design/icons'
-import { videoTopicApi, VideoTopicCategory } from '@/services/videoTopic'
+import { videoTopicApi } from '@/services/videoTopic'
 
-interface Props {
-  category: VideoTopicCategory
-  onSelect: (topic: string) => void
+type TopicLikeCategory = {
+  name: string
+  icon: string
+  example_topics: string[]
 }
 
-export default function TopicExamples({ category, onSelect }: Props) {
+interface Props {
+  category: TopicLikeCategory
+  onSelect: (topic: string) => void
+  generateTopics?: (category: string, keyword?: string) => Promise<{ data: { topics: string[] } }>
+  titlePrefix?: string
+}
+
+export default function TopicExamples({ category, onSelect, generateTopics, titlePrefix = '热门主题' }: Props) {
   const [aiTopics, setAiTopics] = useState<string[]>([])
   const [generating, setGenerating] = useState(false)
   const [keyword, setKeyword] = useState('')
 
+  const generator = useMemo(() => generateTopics || videoTopicApi.generateTopics, [generateTopics])
+
   const handleAiGenerate = async () => {
     setGenerating(true)
     try {
-      const { data } = await videoTopicApi.generateTopics(category.name, keyword)
+      const { data } = await generator(category.name, keyword)
       setAiTopics(data.topics)
     } catch (error) {
       message.error('生成失败')
@@ -31,7 +41,7 @@ export default function TopicExamples({ category, onSelect }: Props) {
     <div className="bg-white rounded-lg shadow-md p-4">
       <h3 className="text-lg font-medium mb-3 flex items-center gap-2">
         <span className="text-2xl">{category.icon}</span>
-        {category.name} - 热门主题
+        {category.name} - {titlePrefix}
       </h3>
 
       <div className="mb-3">
