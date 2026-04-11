@@ -8,9 +8,12 @@ import json
 from app.database import get_db
 from app.models.article_category import ArticleCategory
 from app.models.user import User, AuditLog
-from app.models.project import Project
+from app.models.project import Project, Conversation
 from app.models.article import Article
 from app.models.task import Task
+from app.models.subscription import Order, Subscription
+from app.models.favorite_topic import FavoriteTopic
+from app.models.user_module_permission import UserModulePermission
 from app.schemas.article import ArticleCategoryCreate, ArticleCategoryUpdate
 from app.schemas.user import UserResponse, UserUpdate, UserStats, AuditLogResponse, SystemStats, UserDetail, ProjectStatus, RecentProject, TaskLog, TokenUsageItem, TokenUsageResponse
 from app.api.auth import get_current_user, get_current_admin_user
@@ -457,7 +460,27 @@ async def delete_user(
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
     
-    db.query(Project).filter(Project.user_id == user_id).delete()
+    from app.models.task import Task
+from app.models.subscription import Order, Subscription
+from app.models.favorite_topic import FavoriteTopic
+from app.models.user_module_permission import UserModulePermission
+    from app.models.article import Article
+    from app.models.user_module_permission import UserModulePermission
+    
+    project_ids = [p.id for p in db.query(Project.id).filter(Project.user_id == user_id).all()]
+    
+    if project_ids:
+        db.query(Task).filter(Task.project_id.in_(project_ids)).delete(synchronize_session=False)
+        db.query(Conversation).filter(Conversation.project_id.in_(project_ids)).delete(synchronize_session=False)
+    
+    db.query(Project).filter(Project.user_id == user_id).delete(synchronize_session=False)
+    
+    db.query(Article).filter(Article.user_id == user_id).delete(synchronize_session=False)
+    db.query(UserModulePermission).filter(UserModulePermission.user_id == user_id).delete(synchronize_session=False)
+    db.query(Order).filter(Order.user_id == user_id).delete(synchronize_session=False)
+    db.query(Subscription).filter(Subscription.user_id == user_id).delete(synchronize_session=False)
+    db.query(FavoriteTopic).filter(FavoriteTopic.user_id == user_id).delete(synchronize_session=False)
+    
     db.delete(user)
     db.commit()
     
