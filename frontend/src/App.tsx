@@ -28,6 +28,7 @@ import AdminStatistics from './pages/admin/AdminStatistics'
 import AdminTokenUsage from './pages/admin/AdminTokenUsage'
 import AdminArticleCategories from './pages/admin/AdminArticleCategories'
 import AdminModuleStats from './pages/admin/AdminModuleStats'
+import AdminCoverStyles from './pages/admin/AdminCoverStyles'
 import { useState, useEffect } from 'react'
 import { startStatusCheck } from './stores/authStore'
 
@@ -112,6 +113,7 @@ function AppContent() {
         <Route path="/admin/settings" element={<AdminSettings />} />
         <Route path="/admin/templates" element={<AdminTemplates />} />
         <Route path="/admin/article-categories" element={<AdminArticleCategories />} />
+        <Route path="/admin/cover-styles" element={<AdminCoverStyles />} />
         <Route path="/admin/module-stats" element={<AdminModuleStats />} />
         <Route path="/admin/statistics" element={<AdminStatistics />} />
         <Route path="/admin/token-usage" element={<AdminTokenUsage />} />

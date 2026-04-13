@@ -1,7 +1,7 @@
-import { Card, Tabs, Form, Input, Button, Avatar, Space, Tag, List, Typography, Divider, Progress } from 'antd'
+import { Card, Tabs, Form, Input, Button, Avatar, Space, Tag, List, Typography, Divider, Progress, Switch, Select, message, Alert } from 'antd'
 import { 
   UserOutlined, SafetyOutlined, BellOutlined, KeyOutlined, 
-  DownloadOutlined, ClockCircleOutlined, HistoryOutlined, LogoutOutlined
+  DownloadOutlined, ClockCircleOutlined, HistoryOutlined, LogoutOutlined, ApiOutlined, SettingOutlined
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
@@ -17,6 +17,16 @@ export default function Profile() {
   const [subscription, setSubscription] = useState<Subscription | null>(null)
   const [usageStats, setUsageStats] = useState<UsageStats | null>(null)
   const [loading, setLoading] = useState(true)
+  const [apiConfigLoading, setApiConfigLoading] = useState(false)
+  const [llmApiKey, setLlmApiKey] = useState('')
+  const [llmProvider, setLlmProvider] = useState('dashscope')
+  const [llmUseCustom, setLlmUseCustom] = useState(false)
+  const [imageApiKey, setImageApiKey] = useState('')
+  const [imageProvider, setImageProvider] = useState('dashscope')
+  const [imageUseCustom, setImageUseCustom] = useState(false)
+  const [ttsApiKey, setTtsApiKey] = useState('')
+  const [ttsProvider, setTtsProvider] = useState('dashscope')
+  const [ttsUseCustom, setTtsUseCustom] = useState(false)
 
   useEffect(() => {
     const fetchData = async () => {
@@ -185,6 +195,100 @@ export default function Profile() {
                     </List.Item>
                   )}
                 />
+              </Card>
+            ),
+          },
+          {
+            key: 'api',
+            label: 'API 配置',
+            children: (
+              <Card>
+                <Alert type="info" message="默认使用系统 API key。如需使用自己的 API key，请配置后开启对应开关。" showIcon style={{ marginBottom: 24 }} />
+                
+                <Title level={5}><ApiOutlined /> LLM API（文本生成）</Title>
+                <div style={{ marginBottom: 24 }}>
+                  <Space direction="vertical" size="small" style={{ width: '100%' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Text>使用自定义 API Key</Text>
+                      <Switch checked={llmUseCustom} onChange={(checked) => setLlmUseCustom(checked)} />
+                    </div>
+                    <Select value={llmProvider} onChange={setLlmProvider} style={{ width: '100%' }} disabled={!llmUseCustom}>
+                      <Select.Option value="dashscope">阿里云百炼 (DashScope)</Select.Option>
+                      <Select.Option value="openai">OpenAI</Select.Option>
+                      <Select.Option value="gemini">Google Gemini</Select.Option>
+                    </Select>
+                    <Input.Password 
+                      placeholder="输入 API Key" 
+                      value={llmApiKey}
+                      onChange={(e) => setLlmApiKey(e.target.value)}
+                      disabled={!llmUseCustom}
+                    />
+                    <Button type="primary" loading={apiConfigLoading} disabled={!llmUseCustom} onClick={() => {
+                      setApiConfigLoading(true)
+                      // TODO: 调用 API 保存配置
+                      setTimeout(() => {
+                        message.success('LLM API 配置已保存')
+                        setApiConfigLoading(false)
+                      }, 1000)
+                    }}>保存 LLM 配置</Button>
+                  </Space>
+                </div>
+
+                <Divider />
+
+                <Title level={5}><ApiOutlined /> 图片生成 API</Title>
+                <div style={{ marginBottom: 24 }}>
+                  <Space direction="vertical" size="small" style={{ width: '100%' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Text>使用自定义 API Key</Text>
+                      <Switch checked={imageUseCustom} onChange={(checked) => setImageUseCustom(checked)} />
+                    </div>
+                    <Select value={imageProvider} onChange={setImageProvider} style={{ width: '100%' }} disabled={!imageUseCustom}>
+                      <Select.Option value="dashscope">阿里云百炼 (DashScope)</Select.Option>
+                    </Select>
+                    <Input.Password 
+                      placeholder="输入 API Key" 
+                      value={imageApiKey}
+                      onChange={(e) => setImageApiKey(e.target.value)}
+                      disabled={!imageUseCustom}
+                    />
+                    <Button type="primary" loading={apiConfigLoading} disabled={!imageUseCustom} onClick={() => {
+                      setApiConfigLoading(true)
+                      setTimeout(() => {
+                        message.success('图片 API 配置已保存')
+                        setApiConfigLoading(false)
+                      }, 1000)
+                    }}>保存图片配置</Button>
+                  </Space>
+                </div>
+
+                <Divider />
+
+                <Title level={5}><ApiOutlined /> TTS API（配音生成）</Title>
+                <div>
+                  <Space direction="vertical" size="small" style={{ width: '100%' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Text>使用自定义 API Key</Text>
+                      <Switch checked={ttsUseCustom} onChange={(checked) => setTtsUseCustom(checked)} />
+                    </div>
+                    <Select value={ttsProvider} onChange={setTtsProvider} style={{ width: '100%' }} disabled={!ttsUseCustom}>
+                      <Select.Option value="dashscope">阿里云百炼 (DashScope)</Select.Option>
+                    </Select>
+                    <Input.Password 
+                      placeholder="输入 API Key" 
+                      value={ttsApiKey}
+                      onChange={(e) => setTtsApiKey(e.target.value)}
+                      disabled={!ttsUseCustom}
+                    />
+                    <Button type="primary" loading={apiConfigLoading} disabled={!ttsUseCustom} onClick={() => {
+                      setApiConfigLoading(true)
+                      setTimeout(() => {
+                        message.success('TTS API 配置已保存')
+                        setApiConfigLoading(false)
+                      }, 1000)
+                    }}>保存 TTS 配置</Button>
+                  </Space>
+                </div>
               </Card>
             ),
           },

@@ -1143,3 +1143,106 @@ async def set_system_config(
     db.commit()
     
     return {"message": "配置保存成功"}
+
+
+# ==================== 封面风格管理 ====================
+
+from app.models.cover_style import CoverStyle
+from pydantic import BaseModel
+
+
+class CoverStyleCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    base_prompt: str
+    font_recommendation: Optional[str] = "黑体"
+    color_recommendation: Optional[str] = "#333333"
+    example_image_url: Optional[str] = None
+    is_active: Optional[bool] = True
+
+
+class CoverStyleUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    base_prompt: Optional[str] = None
+    font_recommendation: Optional[str] = None
+    color_recommendation: Optional[str] = None
+    example_image_url: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+@router.get("/cover-styles")
+async def get_cover_styles(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    styles = db.query(CoverStyle).order_by(CoverStyle.id).all()
+    return styles
+
+
+@router.post("/cover-styles")
+async def create_cover_style(
+    data: CoverStyleCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    style = CoverStyle(
+        name=data.name,
+        description=data.description,
+        base_prompt=data.base_prompt,
+        font_recommendation=data.font_recommendation,
+        color_recommendation=data.color_recommendation,
+        example_image_url=data.example_image_url,
+        is_active=data.is_active,
+    )
+    db.add(style)
+    db.commit()
+    db.refresh(style)
+    return style
+
+
+@router.put("/cover-styles/{style_id}")
+async def update_cover_style(
+    style_id: int,
+    data: CoverStyleUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    style = db.query(CoverStyle).filter(CoverStyle.id == style_id).first()
+    if not style:
+        raise HTTPException(status_code=404, detail="风格不存在")
+    
+    if data.name is not None:
+        style.name = data.name
+    if data.description is not None:
+        style.description = data.description
+    if data.base_prompt is not None:
+        style.base_prompt = data.base_prompt
+    if data.font_recommendation is not None:
+        style.font_recommendation = data.font_recommendation
+    if data.color_recommendation is not None:
+        style.color_recommendation = data.color_recommendation
+    if data.example_image_url is not None:
+        style.example_image_url = data.example_image_url
+    if data.is_active is not None:
+        style.is_active = data.is_active
+    
+    style.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(style)
+    return style
+
+
+@router.delete("/cover-styles/{style_id}")
+async def delete_cover_style(
+    style_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    style = db.query(CoverStyle).filter(CoverStyle.id == style_id).first()
+    if not style:
+        raise HTTPException(status_code=404, detail="风格不存在")
+    
+    db.delete(style)
+    db.commit()
+    return {"message": "删除成功"}
