@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react'
 import {
-  Card, Table, Button, Space, Modal, Form, Input, Select, Switch, message, Image, Upload, Typography
+  Card, Table, Button, Space, Modal, Form, Input, Select, Switch, message, Image, Typography
 } from 'antd'
 import {
-  PlusOutlined, EditOutlined, DeleteOutlined, PictureOutlined, EyeOutlined
+  PlusOutlined, EditOutlined, DeleteOutlined, PictureOutlined
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import api from '@/services/api'
 
 const { TextArea } = Input
-const { Title, Text } = Typography
+const { Text } = Typography
 
 interface CoverStyle {
   id: number
@@ -141,14 +141,11 @@ export default function AdminCoverStyles() {
       title: '启用',
       dataIndex: 'is_active',
       width: 80,
-      render: (active: boolean) => (
+      render: (active: boolean, record) => (
         <Switch checked={active} onChange={(checked) => {
-          const style = styles.find(s => s.id === active)
-          if (style) {
-            api.put(`/admin/cover-styles/${style.id}`, { is_active: checked })
-              .then(() => loadStyles())
-              .catch(() => message.error('操作失败'))
-          }
+          api.put(`/admin/cover-styles/${record.id}`, { is_active: checked })
+            .then(() => loadStyles())
+            .catch(() => message.error('操作失败'))
         }} />
       ),
     },
@@ -168,7 +165,7 @@ export default function AdminCoverStyles() {
     <div style={{ padding: 24 }}>
       <Card 
         title={<><PictureOutlined /> 封面风格管理</>}
-        extra={<Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>新增风格</>}
+        extra={<Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>新增风格</Button>}
       >
         <Table 
           columns={columns}
@@ -198,7 +195,7 @@ export default function AdminCoverStyles() {
               rows={4} 
               placeholder="公众号封面，主题：{topic}，简约商务风格，专业感，高质量，无文字，9:16比例"
             />
-            <Text type="secondary">使用 {topic} 作为主题占位符</Text>
+            <Text type="secondary">使用 {'{topic}'} 作为主题占位符</Text>
           </Form.Item>
           <Form.Item name="font_recommendation" label="推荐字体">
             <Select>

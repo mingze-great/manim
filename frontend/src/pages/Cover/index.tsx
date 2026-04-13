@@ -1,21 +1,18 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import {
   Card, Input, Button, Select, Space, Typography, message,
-  Row, Col, Image, Divider, Alert, Spin, Empty, Radio
+  Row, Col, Image, Divider, Alert, Spin, Empty
 } from 'antd'
 import {
   DownloadOutlined, ReloadOutlined, PictureOutlined,
-  HistoryOutlined, SettingOutlined
+  HistoryOutlined
 } from '@ant-design/icons'
 import { coverApi, CoverStyle, Cover as CoverItem } from '@/services/cover'
 import './Cover.css'
 
 const { Title, Text } = Typography
-const { TextArea } = Input
 
 export default function CoverPage() {
-  const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
   const [styles, setStyles] = useState<CoverStyle[]>([])
   const [selectedStyleId, setSelectedStyleId] = useState<number | null>(null)
@@ -220,7 +217,7 @@ export default function CoverPage() {
             ) : currentCover ? (
               <div className="cover-preview">
                 <Image
-                  src={currentCover.local_url ? `/api${currentCover.local_url}` : currentCover.image_url}
+                  src={currentCover.local_url ? `/api${currentCover.local_url}` : currentCover.image_url ?? undefined}
                   alt="封面预览"
                   style={{ maxWidth: '100%', borderRadius: 12 }}
                 />
@@ -254,7 +251,7 @@ export default function CoverPage() {
                     style={{ marginBottom: 12 }}
                   >
                     <Image
-                      src={cover.local_url ? `/api${cover.local_url}` : cover.image_url}
+                      src={cover.local_url ? `/api${cover.local_url}` : cover.image_url ?? undefined}
                       alt={`封面 ${cover.id}`}
                       width="100%"
                       style={{ borderRadius: 8 }}

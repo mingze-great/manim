@@ -1,7 +1,7 @@
 import { Card, Tabs, Form, Input, Button, Avatar, Space, Tag, List, Typography, Divider, Progress, Switch, Select, message, Alert } from 'antd'
 import { 
   UserOutlined, SafetyOutlined, BellOutlined, KeyOutlined, 
-  DownloadOutlined, ClockCircleOutlined, HistoryOutlined, LogoutOutlined, ApiOutlined, SettingOutlined
+  DownloadOutlined, ClockCircleOutlined, HistoryOutlined, LogoutOutlined, ApiOutlined
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
