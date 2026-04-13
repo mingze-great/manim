@@ -76,12 +76,14 @@ def create_project(
 ):
     MAX_PROJECTS = 3
     module_key = str(project.module_type or "manim")
+    if module_key == "manim":
+        module_key = "visual"
     stickman_storyboard_limit = 20 if current_user.is_admin else 6
     if module_key == "stickman":
         project.storyboard_count = max(2, min(int(project.storyboard_count or 3), stickman_storyboard_limit))
-    allowed, reason = current_user.can_use_module(module_key)
+    allowed, reason = current_user.can_use_module(module_key, db)
     if not allowed:
-        raise HTTPException(status_code=403, detail=reason or f"当前账号未开通{MODULE_LABELS.get(module_key, module_key)}模块")
+        raise HTTPException(status_code=403, detail=reason or f"系统繁忙，请稍后再试")
 
     if not current_user.is_admin:
         project_count = db.query(Project).filter(Project.user_id == current_user.id).count()
@@ -185,18 +187,11 @@ def generate_stickman_script(
     db: Annotated[Session, Depends(get_db)]
 ):
     project = _get_stickman_project(db, current_user, project_id)
-    if not getattr(project, 'quota_consumed', 0):
-        allowed, reason = current_user.can_use_module('stickman')
-        if not allowed:
-            raise HTTPException(status_code=403, detail=reason or '本月火柴人视频使用次数已达上限')
     generator = StickmanGenerator()
     script_data = generator.generate_script_data(str(project.theme), int(project.storyboard_count or 3))
     project.final_script = script_data.get("script")
     project.storyboard_json = json.dumps(script_data.get("storyboards") or [], ensure_ascii=False)
     project.status = "draft"
-    if not getattr(project, 'quota_consumed', 0):
-        current_user.increment_module_usage('stickman')
-        project.quota_consumed = 1
     db.commit()
     db.refresh(project)
     return project
@@ -232,6 +227,12 @@ def generate_stickman_images(
     storyboards = json.loads(project.storyboard_json or "[]")
     if not storyboards:
         raise HTTPException(status_code=400, detail="请先生成并确认分镜")
+    
+    if not getattr(project, 'quota_consumed', False):
+        allowed, reason = current_user.can_use_module('stickman', db)
+        if not allowed:
+            raise HTTPException(status_code=403, detail=reason or '系统繁忙，请稍后再试')
+    
     generator = StickmanGenerator()
     assets, flags = generator.generate_images(
         storyboards,
@@ -242,6 +243,11 @@ def generate_stickman_images(
     )
     project.image_assets_json = json.dumps(assets, ensure_ascii=False)
     project.generation_flags = json.dumps(flags, ensure_ascii=False)
+    
+    if not getattr(project, 'quota_consumed', False):
+        current_user.increment_module_usage('stickman')
+        project.quota_consumed = True
+    
     db.commit()
     db.refresh(project)
     return project
@@ -259,9 +265,9 @@ def generate_stickman_preview_image(
     if not storyboards:
         raise HTTPException(status_code=400, detail="请先生成并确认分镜")
 
-    regenerate = bool(payload.get("regenerate"))
-    if regenerate and (not current_user.is_admin) and int(project.preview_regen_count or 0) >= 1:
-        raise HTTPException(status_code=400, detail="普通用户预览图只支持重生 1 次，请确认后生成全部分镜图")
+    preview_count = int(project.preview_regen_count or 0)
+    if not current_user.is_admin and preview_count >= 2:
+        raise HTTPException(status_code=403, detail="每个项目最多生成2次预览图，已达上限")
 
     generator = StickmanGenerator()
     preview_index = 0
@@ -276,8 +282,7 @@ def generate_stickman_preview_image(
         str(project.style_reference_notes) if project.style_reference_notes else None,
     )
     project.preview_image_asset_json = json.dumps(asset, ensure_ascii=False)
-    if regenerate:
-        project.preview_regen_count = int(project.preview_regen_count or 0) + 1
+    project.preview_regen_count = preview_count + 1
     db.commit()
     db.refresh(project)
     return project

@@ -84,9 +84,9 @@ async def create_article(
     db: Session = Depends(get_db)
 ):
     service = ArticleGenService(db)
-    allowed, reason = current_user.can_use_module("article")
+    allowed, reason = current_user.can_use_module("article", db)
     if not allowed:
-        raise HTTPException(status_code=403, detail=reason or "当前账号未开通公众号文章模块")
+        raise HTTPException(status_code=403, detail=reason or "系统繁忙，请稍后再试")
     
     article = await service.create_article(
         user_id=current_user.id,
@@ -110,14 +110,6 @@ async def generate_outline(
     article = service.get_article(article_id)
     if not article or article.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="文章不存在")
-    if not getattr(article, 'quota_consumed', 0):
-        usage = await service.check_daily_limit(current_user.id)
-        if usage["remaining"] == 0:
-            raise HTTPException(status_code=429, detail="本月公众号文章使用次数已达上限")
-    if not getattr(article, 'quota_consumed', 0):
-        usage = await service.check_daily_limit(current_user.id)
-        if usage["remaining"] == 0:
-            raise HTTPException(status_code=429, detail="本月公众号文章使用次数已达上限")
 
     requirement = request.requirement if request else None
     result = await service.generate_outline(article.topic, article.category, requirement)
@@ -146,10 +138,6 @@ async def generate_content(
     article = service.get_article(article_id)
     if not article or article.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="文章不存在")
-    if not getattr(article, 'quota_consumed', 0):
-        usage = await service.check_daily_limit(current_user.id)
-        if usage["remaining"] == 0:
-            raise HTTPException(status_code=429, detail="本月公众号文章使用次数已达上限")
 
     if not article.outline:
         outline_result = await service.generate_outline(article.topic, article.category)
@@ -169,9 +157,6 @@ async def generate_content(
         word_count=result["word_count"],
         status="draft"
     )
-    if not getattr(article, 'quota_consumed', 0):
-        await service.increment_usage(current_user.id)
-        article = await service.update_article(article_id, quota_consumed=1)
 
     return {
         "title": result["title"],
@@ -191,15 +176,8 @@ async def generate_draft(
     article = service.get_article(article_id)
     if not article or article.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="文章不存在")
-    if not getattr(article, 'quota_consumed', 0):
-        usage = await service.check_daily_limit(current_user.id)
-        if usage["remaining"] == 0:
-            raise HTTPException(status_code=429, detail="本月公众号文章使用次数已达上限")
 
     updated = await service.generate_draft(article_id, request.requirement if request else None)
-    if not getattr(updated, 'quota_consumed', 0):
-        await service.increment_usage(current_user.id)
-        updated = await service.update_article(article_id, quota_consumed=1)
     return ArticleResponse.from_orm(updated)
 
 
@@ -263,6 +241,11 @@ async def generate_images(
     if not article.content_text:
         raise HTTPException(status_code=400, detail="请先生成文章内容")
     
+    if not getattr(article, 'quota_consumed', False):
+        allowed, reason = current_user.can_use_module('article', db)
+        if not allowed:
+            raise HTTPException(status_code=403, detail=reason or '系统繁忙，请稍后再试')
+    
     smart_images = await service.generate_smart_images(
         article.content_text,
         article.topic,
@@ -271,7 +254,6 @@ async def generate_images(
     
     print(f"[ImageGen] 需要生成 {len(smart_images)} 张配图")
     
-    # 并发生成所有图片
     async def generate_single_image(idx: int, img_info: dict):
         try:
             print(f"[ImageGen] 开始生成第{idx+1}张图片: {img_info['prompt'][:50]}...")
@@ -302,11 +284,9 @@ async def generate_images(
                 "error": str(e)
             }
     
-    # 使用asyncio.gather并发生成
     tasks = [generate_single_image(i, img_info) for i, img_info in enumerate(smart_images)]
     results = await asyncio.gather(*tasks)
     
-    # 按顺序收集成功的图片
     generated_images = []
     for result in sorted(results, key=lambda x: x["index"]):
         if result["success"]:
@@ -317,6 +297,11 @@ async def generate_images(
     print(f"[ImageGen] 配图生成完成，成功{success_count}/{total_count}张")
     
     article = await service.update_article(article_id, images=generated_images)
+    
+    if not getattr(article, 'quota_consumed', False):
+        current_user.increment_module_usage('article')
+        article.quota_consumed = True
+        db.commit()
     
     return {
         "images": generated_images,
@@ -333,41 +318,8 @@ async def regenerate_single_image(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """重新生成单张图片"""
-    service = ArticleGenService(db)
-    
-    article = service.get_article(article_id)
-    if not article or article.user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="文章不存在")
-    
-    import json
-    images = article.images
-    if isinstance(images, str):
-        images = json.loads(images)
-    
-    if not images or image_index < 0 or image_index >= len(images):
-        raise HTTPException(status_code=400, detail="图片索引无效")
-    
-    old_image = images[image_index]
-    
-    try:
-        print(f"[ImageGen] 重新生成第{image_index+1}张图片...")
-        new_local_url, new_url, storage = await image_gen_service.generate_image(old_image["prompt"])
-        
-        images[image_index]["url"] = new_url
-        images[image_index]["local_url"] = new_local_url
-        images[image_index]["storage"] = storage
-        article = await service.update_article(article_id, images=images)
-        
-        print(f"[ImageGen] 第{image_index+1}张图片重新生成成功")
-        return {
-            "message": "图片重新生成成功",
-            "image": images[image_index]
-        }
-    except Exception as e:
-        import logging
-        logging.error(f"[ImageGen] 图片重新生成失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"图片生成失败: {str(e)}")
+    """重新生成单张图片 - 已禁用"""
+    raise HTTPException(status_code=403, detail="图片生成后不支持重新生成，请创建新文章")
 
 
 @router.put("/{article_id}/images")
@@ -566,6 +518,37 @@ async def delete_article(
         return {"message": "删除成功"}
     else:
         raise HTTPException(status_code=500, detail="删除失败")
+
+
+@router.post("/{article_id}/humanize")
+async def humanize_article_content(
+    article_id: int,
+    payload: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """去除AI痕迹，让文章更具个人特色"""
+    service = ArticleGenService(db)
+    
+    article = service.get_article(article_id)
+    if not article or article.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="文章不存在")
+    
+    if not article.content_text:
+        raise HTTPException(status_code=400, detail="请先生成文章内容")
+    
+    intensity = payload.get("intensity", "medium")
+    if intensity not in ["light", "medium", "strong"]:
+        intensity = "medium"
+    
+    result = await service.humanize_content(
+        topic=article.topic or "",
+        category=article.category or "生活感悟",
+        content=article.content_text,
+        intensity=intensity,
+    )
+    
+    return result
 
 
 # ==================== 收藏主题管理 ====================

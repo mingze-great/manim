@@ -630,3 +630,103 @@ class ArticleGenService:
             self.db.commit()
             return True
         return False
+    
+    async def humanize_content(
+        self,
+        topic: str,
+        category: str,
+        content: str,
+        intensity: str = "medium",
+    ) -> dict:
+        """去除AI痕迹，让文章更具个人特色"""
+        from app.utils.llm_factory import LLMFactory
+        from app.models.article_category import ArticleCategory
+        
+        client = LLMFactory.get_client()
+        db_category = self.db.query(ArticleCategory).filter(ArticleCategory.name == category).first()
+        base_prompt = db_category.system_prompt if db_category else get_category_prompt(category)
+        
+        intensity_desc = {
+            "light": "轻微调整，仅去除最明显的AI套路表达",
+            "medium": "适度润色，让文章更自然但仍保持原有结构",
+            "strong": "大幅改写，让文章更具个人特色和真实感"
+        }
+        
+        prompt = f"""你是一位擅长润色文章的编辑，需要将以下AI生成的公众号文章改写得更自然、更具个人特色。
+
+【主题】{topic}
+【创作方向】{category}
+
+【原文内容】
+{content}
+
+【润色要求】
+1. {intensity_desc.get(intensity, intensity_desc["medium"])}
+2. 去除AI写作的典型特征：
+   - 套路化开头如"首先""其次""最后""综上所述"
+   - 空洞套话如"值得注意的是""不容忽视的是""毋庸置疑"
+   - 千篇一律的情感表达如"让我们...""相信..."
+   - 过于书面化的句式如"对于...来说""是...的"
+3. 增加个人特色：
+   - 加入口语化表达，像朋友聊天一样
+   - 可以用"其实""说实话""很多人可能没意识到"等自然过渡
+   - 适当加入个人观点语气，如"我觉得""在我看来"
+   - 句式多样化，长短句交替
+4. 保留核心观点和逻辑结构，只改变表达方式
+5. 不得改变文章主题和核心内容
+
+【输出格式】
+请按段落输出润色后的内容，并在每个段落后面用【修改说明】标注主要改动点。
+
+示例格式：
+第一段润色后内容...
+【修改说明】去除了"首先"开头，改用口语化引入
+
+第二段润色后内容...
+【修改说明】将"值得注意的是"改为更自然的表达
+
+请直接开始输出，不要有任何开场白。"""
+
+        messages = [
+            {"role": "system", "content": f"{base_prompt}\n你还需要擅长将AI生成的文章改写得更自然、更具个人特色。"},
+            {"role": "user", "content": prompt}
+        ]
+        
+        result = await client.chat(messages=messages)
+        result = self.clean_generated_text(result)
+        
+        # 解析结果，提取润色内容和修改说明
+        changes = []
+        paragraphs_text = result
+        
+        parts = result.split("【修改说明】")
+        if len(parts) > 1:
+            paragraphs_text = parts[0].strip()
+            for i in range(1, len(parts)):
+                change_desc = parts[i].strip().split("\n")[0].strip() if parts[i].strip() else ""
+                if change_desc:
+                    changes.append(change_desc)
+        
+        # 将润色内容按段落分割
+        humanized_paragraphs = [p.strip() for p in paragraphs_text.split("\n\n") if p.strip()]
+        
+        # 匹配原文段落和润色后段落
+        original_paragraphs = [p.strip() for p in content.split("\n\n") if p.strip()]
+        
+        paragraph_changes = []
+        for i, orig in enumerate(original_paragraphs):
+            humanized = humanized_paragraphs[i] if i < len(humanized_paragraphs) else orig
+            change = changes[i] if i < len(changes) else "保持原样"
+            paragraph_changes.append({
+                "original": orig,
+                "humanized": humanized,
+                "change": change
+            })
+        
+        humanized_content = "\n\n".join(humanized_paragraphs)
+        
+        return {
+            "original_content": content,
+            "humanized_content": humanized_content,
+            "paragraph_changes": paragraph_changes
+        }

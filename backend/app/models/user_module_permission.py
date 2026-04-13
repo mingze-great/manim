@@ -50,16 +50,15 @@ class UserModulePermission(Base):
     
     def can_use(self):
         if not self.enabled:
-            return False, "该模块未开通"
+            return False, "系统繁忙，请稍后再试"
         
         if self.expires_at and datetime.utcnow() > self.expires_at:
-            return False, "该模块已过期"
+            return False, "系统繁忙，请稍后再试"
         
         self.check_and_reset_quota()
         
         if self.quota_limit > 0 and self.quota_used >= self.quota_limit:
-            period_label = "本月" if self.period == "monthly" else "今日"
-            return False, f"{period_label}配额已用完"
+            return False, "系统繁忙，请稍后再试"
         
         return True, None
     

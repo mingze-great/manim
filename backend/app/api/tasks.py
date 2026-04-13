@@ -256,7 +256,7 @@ async def render_video_stream(
     allowed, reason = current_user.can_use_module_new(db, "visual")
     if not allowed:
         async def error_gen():
-            yield f"data: {json.dumps({'type': 'error', 'content': reason or '配额不足'})}\n\n"
+            yield f"data: {json.dumps({'type': 'error', 'content': '系统繁忙，请稍后再试'})}\n\n"
         return StreamingResponse(error_gen(), media_type="text/event-stream")
     
     manim_code_str = str(project.manim_code) if project.manim_code else ""

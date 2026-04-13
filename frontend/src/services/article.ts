@@ -238,4 +238,15 @@ export const articleApi = {
   
   generateAll: (id: number) =>
     api.post<Article>(`/articles/${id}/generate-all`),
+  
+  humanize: (id: number, intensity: string) =>
+    api.post<{
+      original_content: string
+      humanized_content: string
+      paragraph_changes: Array<{
+        original: string
+        humanized: string
+        change: string
+      }>
+    }>(`/articles/${id}/humanize`, { intensity }),
 }

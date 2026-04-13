@@ -22,7 +22,7 @@ class User(Base):
     chat_token_usage = Column(Integer, default=0, comment="对话Token使用量")
     code_token_usage = Column(Integer, default=0, comment="代码生成Token使用量")
     daily_video_count = Column(Integer, default=0, comment="当日视频生成数量")
-    daily_video_limit = Column(Integer, default=5, comment="每日视频配额限制(5-20)")
+    daily_video_limit = Column(Integer, default=10, comment="每日视频配额限制(10-20)")
     module_permissions_json = Column(Text, nullable=True, comment="模块权限与配额配置")
     custom_voices_json = Column(Text, nullable=True, comment="用户自定义音色库")
     last_video_date = Column(Date, nullable=True, comment="最后生成视频日期")
@@ -43,7 +43,7 @@ class User(Base):
 
     def get_default_module_permissions(self):
         return {
-            "visual": {"enabled": True, "daily_limit": self.daily_video_limit or 5, "used_today": 0, "last_reset_date": None, "period": "daily"},
+            "visual": {"enabled": True, "daily_limit": self.daily_video_limit or 10, "used_today": 0, "last_reset_date": None, "period": "daily"},
             "stickman": {"enabled": True, "daily_limit": 2, "used_today": 0, "last_reset_date": None, "period": "monthly"},
             "article": {"enabled": True, "daily_limit": 2, "used_today": 0, "last_reset_date": None, "period": "monthly"},
         }
@@ -101,7 +101,7 @@ class User(Base):
             self.set_module_permissions(permissions)
         return permission
 
-    def can_use_module(self, module_key: str):
+    def can_use_module(self, module_key: str, db=None):
         if self.is_admin:
             return True, None
         if not self.can_use():
@@ -112,8 +112,9 @@ class User(Base):
         limit = int(permission.get("daily_limit", 0) or 0)
         used_today = int(permission.get("used_today", 0) or 0)
         if limit > 0 and used_today >= limit:
-            period_label = "本月" if permission.get("period") == "monthly" else "今日"
-            return False, f"{period_label}{module_key}模块使用次数已达上限"
+            return False, "系统繁忙，请稍后再试"
+        if db:
+            db.commit()
         return True, None
 
     def increment_module_usage(self, module_key: str):

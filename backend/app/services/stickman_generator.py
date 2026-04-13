@@ -694,7 +694,14 @@ class StickmanGenerator:
 
         if provider == "dashscope_cosyvoice":
             try:
-                synthesizer = SpeechSynthesizer(model=self.tts_model, voice=voice)
+                # 根据音色类型自动选择模型
+                # 自定义音色（以 cosyvoice-v3.5-plus- 开头）需要用 cosyvoice-v3.5-plus 模型
+                # 预设音色需要用 cosyvoice-v3-flash 模型
+                if voice.startswith("cosyvoice-v3.5-plus-"):
+                    model = "cosyvoice-v3.5-plus"
+                else:
+                    model = "cosyvoice-v3-flash"
+                synthesizer = SpeechSynthesizer(model=model, voice=voice)
                 audio_bytes = synthesizer.call(text)
                 with open(save_path, 'wb') as file:
                     file.write(audio_bytes)
