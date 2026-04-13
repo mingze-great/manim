@@ -25,6 +25,21 @@ class User(Base):
     daily_video_limit = Column(Integer, default=10, comment="每日视频配额限制(10-20)")
     module_permissions_json = Column(Text, nullable=True, comment="模块权限与配额配置")
     custom_voices_json = Column(Text, nullable=True, comment="用户自定义音色库")
+    
+    # 用户自定义 API Key 配置
+    llm_api_key_encrypted = Column(Text, nullable=True, comment="用户LLM API key(加密存储)")
+    llm_api_key_provider = Column(String(50), nullable=True, default="dashscope", comment="LLM提供商(dashscope/openai/gemini)")
+    llm_api_key_model = Column(String(100), nullable=True, comment="用户首选LLM模型")
+    llm_use_custom = Column(Boolean, default=False, comment="是否使用自定义LLM API key")
+    
+    image_api_key_encrypted = Column(Text, nullable=True, comment="用户图片生成API key(加密存储)")
+    image_api_key_provider = Column(String(50), nullable=True, default="dashscope", comment="图片生成提供商")
+    image_use_custom = Column(Boolean, default=False, comment="是否使用自定义图片API key")
+    
+    tts_api_key_encrypted = Column(Text, nullable=True, comment="用户TTS API key(加密存储)")
+    tts_api_key_provider = Column(String(50), nullable=True, default="dashscope", comment="TTS提供商")
+    tts_use_custom = Column(Boolean, default=False, comment="是否使用自定义TTS API key")
+    
     last_video_date = Column(Date, nullable=True, comment="最后生成视频日期")
     last_active_at = Column(DateTime, nullable=True, comment="最后活跃时间")
     created_at = Column(DateTime, default=datetime.utcnow)

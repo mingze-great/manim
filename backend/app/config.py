@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
     
+    # API Key Encryption Key (用于加密用户自定义 API key)
+    API_KEY_ENCRYPTION_KEY: bytes = b"your-api-key-encryption-key-32-bytes-change-in-production"
+    
     # Environment
     ENVIRONMENT: str = "development"  # development/production
     DEBUG: bool = False
