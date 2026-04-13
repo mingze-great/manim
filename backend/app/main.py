@@ -11,7 +11,7 @@ from datetime import datetime
 
 from app.config import get_settings
 from app.database import engine, Base
-from app.api import auth, projects, tasks, templates, admin, payment, monitoring, internal, video_topics, articles, articles_stream
+from app.api import auth, projects, tasks, templates, admin, payment, monitoring, internal, video_topics, articles, articles_stream, covers, user_config
 
 settings = get_settings()
 
@@ -427,6 +427,8 @@ app.include_router(internal.router, prefix="/api")
 app.include_router(video_topics.router, prefix="/api")
 app.include_router(articles.router, prefix="/api")
 app.include_router(articles_stream.router, prefix="/api")
+app.include_router(covers.router, prefix="/api")
+app.include_router(user_config.router, prefix="/api")
 
 
 @app.get("/")

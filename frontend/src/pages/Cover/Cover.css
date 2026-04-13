@@ -1,0 +1,28 @@
+.cover-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.cover-preview {
+  text-align: center;
+}
+
+.cover-preview img {
+  max-width: 100%;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.history-list {
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+.history-list .ant-card-body {
+  padding: 12px;
+}
+
+.history-list img {
+  cursor: pointer;
+}

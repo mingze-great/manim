@@ -18,6 +18,7 @@ import ArticleEntry from './pages/Article/Entry'
 import ArticleQuick from './pages/Article/Quick'
 import ArticleStudio from './pages/Article/Studio'
 import ArticleHistory from './pages/Article/History'
+import CoverPage from './pages/Cover'
 import AdminDashboard from './pages/admin/AdminDashboard'
 import AdminUsers from './pages/admin/AdminUsers'
 import AdminLogs from './pages/admin/AdminLogs'
@@ -91,6 +92,7 @@ function AppContent() {
       
       <Route element={<PrivateRoute><MainLayout /></PrivateRoute>}>
         <Route path="/creator" element={<Creator />} />
+        <Route path="/cover" element={<CoverPage />} />
         <Route path="/project/:id/chat" element={<ProjectChat />} />
         <Route path="/project/:id/task" element={<ProjectTask />} />
         <Route path="/project/:id/stickman" element={<StickmanStudio />} />
