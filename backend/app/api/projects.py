@@ -9,6 +9,7 @@ import asyncio
 import re
 import os
 import uuid
+import logging
 from pathlib import Path
 
 from pydub import AudioSegment
@@ -38,6 +39,7 @@ MODULE_LABELS = {
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 limiter = Limiter(key_func=get_remote_address)
+logger = logging.getLogger(__name__)
 
 
 @router.get("/stickman/voice-library")
@@ -923,21 +925,30 @@ async def update_conversation(
     db: Annotated[Session, Depends(get_db)]
 ):
     """修改对话内容"""
+    logger.info(f"更新对话请求: conv_id={conv_id}, user_id={current_user.id}, content长度={len(data.content)}")
+    
     conv = db.query(Conversation).filter(Conversation.id == conv_id).first()
+    logger.info(f"对话查找结果: conv={conv.id if conv else None}, role={conv.role if conv else None}")
     
     if not conv:
+        logger.warning(f"对话不存在: conv_id={conv_id}")
         raise HTTPException(status_code=404, detail="对话不存在")
     
     project = db.query(Project).filter(Project.id == conv.project_id).first()
+    logger.info(f"项目查找结果: project_id={project.id if project else None}, owner_id={project.user_id if project else None}")
+    
     if not project or project.user_id != current_user.id:
+        logger.warning(f"权限检查失败: project.user_id={project.user_id if project else None}, current_user.id={current_user.id}")
         raise HTTPException(status_code=403, detail="无权限")
     
     conv.content = data.content
     
     if conv.role == 'assistant':
         project.final_script = data.content
+        logger.info(f"更新 final_script: project_id={project.id}")
     
     db.commit()
+    logger.info(f"更新成功: conv_id={conv_id}")
     
     return {
         "message": "更新成功",

@@ -277,8 +277,10 @@ export default function ProjectChat() {
   }
 
   const handleSaveEdit = async (convId: number) => {
+    console.log('保存对话请求:', { convId, editContent })
     try {
       const { data } = await projectApi.updateConversation(convId, editContent)
+      console.log('保存成功:', data)
       
       setConversations(prev => prev.map(c => 
         c.id === convId ? { ...c, content: editContent } : c
@@ -290,8 +292,11 @@ export default function ProjectChat() {
       
       setEditingConvId(null)
       message.success('内容已更新')
-    } catch (error) {
-      message.error('保存失败')
+    } catch (error: any) {
+      console.error('保存失败:', error)
+      console.error('错误响应:', error.response)
+      const detail = error.response?.data?.detail || error.message || '保存失败'
+      message.error(detail)
     }
   }
 
