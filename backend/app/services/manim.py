@@ -407,63 +407,7 @@ Requirements:
         
         return code
     
-    def validate_code(self, code: str) -> tuple:
-        """验证并修复代码，返回 (fixed_code, warnings)"""
-        import re
-        import ast
-        warnings = []
-        
-        if not code:
-            return code, warnings
-        
-        code = code.strip()
-        
-        # 提取代码块
-        if "```python" in code:
-            start = code.find("```python") + len("```python")
-            end = code.find("```", start)
-            if end != -1:
-                code = code[start:end]
-            else:
-                code = code[start:]
-        
-        code = code.strip()
-        
-        # 自动修复常见语法错误
-        code = self._fix_common_syntax_errors(code)
-        
-        # 确保必要的 import
-        if 'from manim import *' not in code and 'import manim' not in code:
-            code = 'from manim import *\n\n' + code
-            warnings.append("已添加必要的 import 语句")
-        
-        # 重命名 Scene 类为 SceneName
-        scene_match = re.search(r'class\s+(\w+)\s*\(\s*Scene\s*\)', code)
-        if scene_match:
-            old_name = scene_match.group(1)
-            if old_name != 'SceneName':
-                code = code.replace(f'class {old_name}(Scene)', 'class SceneName(Scene)')
-                warnings.append(f"已将类名 {old_name} 改为 SceneName")
-        
-        # 调用兼容性修复
-        code = self.fix_manim_compatibility(code)
-        
-        # 语法验证
-        try:
-            ast.parse(code)
-        except SyntaxError as e:
-            warnings.append(f"语法错误: {e.msg} (行 {e.lineno})")
-            # 尝试修复
-            code = self._try_fix_syntax(code, e)
-            try:
-                ast.parse(code)
-                warnings.append("语法错误已自动修复")
-            except:
-                warnings.append("无法自动修复语法错误，请检查代码")
-        
-        return code, warnings
-    
-    def _fix_common_syntax_errors(self, code: str) -> str:
+    def _fix_indentation_errors(self, code: str) -> str:
         """修复常见的语法拼写错误"""
         import re
         
@@ -484,6 +428,186 @@ Requirements:
         code = re.sub(r'"([^"]*)"\s*\+\s*\d+\s*"([^"]*)"', r'"\1\2"', code)
         
         return code
+    
+    def _fix_indentation_errors(self, code: str) -> str:
+        """修复缩进错误 - 统一缩进并修复不一致的缩进"""
+        import re
+        
+        lines = code.split('\n')
+        fixed_lines = []
+        indent_stack = [0]  # 当前缩进级别栈
+        in_class_or_def = False
+        expected_indent = 0
+        
+        for i, line in enumerate(lines):
+            stripped = line.lstrip()
+            
+            # 空行或注释保持原样
+            if not stripped or stripped.startswith('#'):
+                fixed_lines.append(line)
+                continue
+            
+            # 计算当前行的实际缩进
+            actual_indent = len(line) - len(stripped)
+            
+            # 检测代码块开始 (以 : 结尾)
+            is_block_start = stripped.rstrip().endswith(':')
+            
+            # 检测类定义
+            if re.match(r'^class\s+\w+', stripped):
+                expected_indent = 0
+                in_class_or_def = True
+            
+            # 检测函数定义
+            elif re.match(r'^def\s+\w+', stripped):
+                if in_class_or_def:
+                    expected_indent = 4  # 类内方法缩进4空格
+            
+            # 检测控制结构
+            elif stripped.startswith(('if ', 'elif ', 'else:', 'for ', 'while ', 'try:', 'except', 'finally:', 'with ')):
+                pass  # 保持当前期望缩进
+            
+            # 检测 dedent 关键字
+            elif stripped.startswith(('return ', 'break', 'continue', 'pass', 'raise ')):
+                pass
+            
+            # 修复缩进：如果缩进不是4的倍数，调整为最接近的有效缩进
+            if actual_indent % 4 != 0:
+                # 找到最近的4的倍数
+                new_indent = round(actual_indent / 4) * 4
+                line = ' ' * new_indent + stripped
+                actual_indent = new_indent
+            
+            fixed_lines.append(line)
+            
+            # 更新期望缩进
+            if is_block_start:
+                expected_indent = actual_indent + 4
+        
+        return '\n'.join(fixed_lines)
+    
+    def _fix_chinese_variables(self, code: str) -> tuple:
+        """检测并替换中文变量名为拼音或英文
+        
+        Returns:
+            (fixed_code, warnings)
+        """
+        import re
+        warnings = []
+        
+        # 常见中文变量名映射
+        chinese_to_english = {
+            '茧': 'cocoon',
+            '心': 'heart',
+            '人': 'person',
+            '圆': 'circle',
+            '方': 'square',
+            '线': 'line',
+            '点': 'point',
+            '文本': 'text_obj',
+            '组': 'group',
+            '动画': 'animation',
+        }
+        
+        # 找到所有变量赋值中的中文标识符
+        # 匹配: 中文标识符 = 或 中文标识符.方法
+        chinese_var_pattern = r'([\u4e00-\u9fff]+)\s*='
+        chinese_var_usage = r'([\u4e00-\u9fff]+)\.'
+        
+        # 找出所有中文变量名
+        chinese_vars = set()
+        for match in re.finditer(chinese_var_pattern, code):
+            chinese_vars.add(match.group(1))
+        for match in re.finditer(chinese_var_usage, code):
+            chinese_vars.add(match.group(1))
+        
+        if chinese_vars:
+            warnings.append(f"检测到中文变量名: {', '.join(chinese_vars)}，已自动替换为英文")
+            
+            # 替换中文变量名
+            for cn_var in chinese_vars:
+                en_var = chinese_to_english.get(cn_var, f'var_{hash(cn_var) % 10000}')
+                # 替换变量定义和使用
+                code = re.sub(rf'\b{cn_var}\b', en_var, code)
+        
+        return code, warnings
+    
+    def validate_code(self, code: str) -> tuple:
+        """验证并修复代码，返回 (fixed_code, warnings)"""
+        import re
+        import ast
+        import logging
+        logger = logging.getLogger(__name__)
+        warnings = []
+        
+        if not code:
+            return code, warnings
+        
+        code = code.strip()
+        
+        # 提取代码块
+        if "```python" in code:
+            start = code.find("```python") + len("```python")
+            end = code.find("```", start)
+            if end != -1:
+                code = code[start:end]
+            else:
+                code = code[start:]
+        
+        code = code.strip()
+        
+        # 1. 修复中文变量名
+        code, cn_warnings = self._fix_chinese_variables(code)
+        warnings.extend(cn_warnings)
+        
+        # 2. 自动修复常见语法错误
+        code = self._fix_common_syntax_errors(code)
+        
+        # 3. 确保必要的 import
+        if 'from manim import *' not in code and 'import manim' not in code:
+            code = 'from manim import *\n\n' + code
+            warnings.append("已添加必要的 import 语句")
+        
+        # 4. 重命名 Scene 类为 SceneName
+        scene_match = re.search(r'class\s+(\w+)\s*\(\s*Scene\s*\)', code)
+        if scene_match:
+            old_name = scene_match.group(1)
+            if old_name != 'SceneName':
+                code = code.replace(f'class {old_name}(Scene)', 'class SceneName(Scene)')
+                warnings.append(f"已将类名 {old_name} 改为 SceneName")
+        
+        # 5. 调用兼容性修复
+        code = self.fix_manim_compatibility(code)
+        
+        # 6. 语法验证和修复循环
+        max_attempts = 3
+        for attempt in range(max_attempts):
+            try:
+                ast.parse(code)
+                logger.info(f"代码语法检查通过 (尝试 {attempt + 1})")
+                break
+            except SyntaxError as e:
+                warnings.append(f"语法错误: {e.msg} (行 {e.lineno})")
+                logger.warning(f"语法错误 (尝试 {attempt + 1}/{max_attempts}): {e.msg} at line {e.lineno}")
+                
+                # 尝试修复
+                if "indent" in e.msg.lower() or "unindent" in e.msg.lower():
+                    # 缩进错误
+                    code = self._fix_indentation_errors(code)
+                    warnings.append("已尝试修复缩进错误")
+                else:
+                    code = self._try_fix_syntax(code, e)
+                
+                # 如果是最后一次尝试仍然失败
+                if attempt == max_attempts - 1:
+                    try:
+                        ast.parse(code)
+                        warnings.append("语法错误已自动修复")
+                    except SyntaxError as final_e:
+                        warnings.append(f"无法自动修复语法错误: {final_e.msg} (行 {final_e.lineno})")
+                        logger.error(f"无法修复语法错误: {final_e}")
+        
+        return code, warnings
     
     def _try_fix_syntax(self, code: str, error: SyntaxError) -> str:
         """尝试修复语法错误"""
