@@ -124,6 +124,16 @@ def render_video_task(task_id: int, project_id: int, template_id: int = None, cu
                     update_task_progress(task_id, 20, "failed", error_message="Code generation timeout", log="代码生成超时！\n")
                     return
             
+            # 语法检查和自动修复
+            update_task_progress(task_id, 18, "processing", log="正在验证和修复代码语法...\n")
+            manim_service = ManimService(db)
+            fixed_code, warnings = manim_service.validate_code(manim_code)
+            
+            if warnings:
+                warning_log = "代码修复提示: " + "; ".join(warnings) + "\n"
+                update_task_progress(task_id, 19, "processing", log=warning_log)
+            
+            manim_code = fixed_code
             project.manim_code = manim_code
             db.commit()
             update_task_progress(task_id, 20, "processing", log=f"代码生成完成 (长度: {len(manim_code)})\n")

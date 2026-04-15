@@ -400,11 +400,18 @@ async def regenerate_code(
         video_title=project.theme
     )
     
-    project.manim_code = manim_code
+    # 语法检查和自动修复
+    fixed_code, warnings = manim_service.validate_code(manim_code)
+    
+    project.manim_code = fixed_code
     project.status = "chatting"
     db.commit()
     
-    return {"message": "代码已重新生成", "code_updated": True}
+    return {
+        "message": "代码已重新生成", 
+        "code_updated": True,
+        "warnings": warnings if warnings else None
+    }
 
 
 @router.post("/{project_id}/optimize-code")
@@ -433,10 +440,17 @@ async def optimize_code(
         feedback
     )
     
-    project.manim_code = optimized_code
+    # 语法检查和自动修复
+    fixed_code, warnings = manim_service.validate_code(optimized_code)
+    
+    project.manim_code = fixed_code
     db.commit()
     
-    return {"message": "代码已根据反馈优化", "code_updated": True}
+    return {
+        "message": "代码已根据反馈优化", 
+        "code_updated": True,
+        "warnings": warnings if warnings else None
+    }
 
 
 @router.post("/{project_id}/optimize-code/stream")

@@ -375,6 +375,16 @@ class ChatService:
                     user_id=project.user_id if project else None
                 )
                 
+                # 语法检查和自动修复
+                fixed_code, warnings = manim_service.validate_code(generated_code)
+                if warnings:
+                    warning_msg = "⚠️ 代码已自动修复: " + "; ".join(warnings)
+                    yield {
+                        "type": "warning",
+                        "content": warning_msg
+                    }
+                    generated_code = fixed_code
+                
                 yield {
                     "type": "final",
                     "content": f"✅ 代码生成完成！\n\n```python\n{generated_code[:500]}...\n```\n\n请点击「使用此代码」保存并渲染视频。",
