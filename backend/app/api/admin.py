@@ -1143,3 +1143,100 @@ async def set_system_config(
     db.commit()
     
     return {"message": "配置保存成功"}
+
+
+@router.post("/fix-user-quota/{user_id}")
+async def fix_user_quota(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """修复用户配额数据（根据实际成功渲染数校准）"""
+    from datetime import date
+    
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    
+    today = str(date.today())
+    
+    # 计算今日实际成功渲染数
+    actual_renders = db.query(Project).filter(
+        Project.user_id == user_id,
+        Project.video_url.isnot(None),
+        Project.video_url != "",
+        func.date(Project.created_at) == today
+    ).count()
+    
+    # 获取当前配额
+    permissions = user.get_module_permissions()
+    visual = permissions.get("visual", {})
+    old_used_today = visual.get("used_today", 0)
+    
+    # 修复配额
+    visual["used_today"] = actual_renders
+    visual["last_reset_date"] = today
+    permissions["visual"] = visual
+    user.set_module_permissions(permissions)
+    
+    db.commit()
+    
+    return {
+        "message": "配额已修复",
+        "user_id": user_id,
+        "username": user.username,
+        "old_used_today": old_used_today,
+        "new_used_today": actual_renders,
+        "actual_renders_today": actual_renders
+    }
+
+
+@router.post("/fix-all-quotas")
+async def fix_all_quotas(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """修复所有用户配额数据"""
+    from datetime import date
+    
+    today = str(date.today())
+    users = db.query(User).filter(User.is_admin == False).all()
+    
+    fixed_count = 0
+    results = []
+    
+    for user in users:
+        # 计算今日实际成功渲染数
+        actual_renders = db.query(Project).filter(
+            Project.user_id == user.id,
+            Project.video_url.isnot(None),
+            Project.video_url != "",
+            func.date(Project.created_at) == today
+        ).count()
+        
+        # 获取当前配额
+        permissions = user.get_module_permissions()
+        visual = permissions.get("visual", {})
+        old_used_today = visual.get("used_today", 0)
+        
+        # 只有配额不一致时才修复
+        if old_used_today != actual_renders:
+            visual["used_today"] = actual_renders
+            visual["last_reset_date"] = today
+            permissions["visual"] = visual
+            user.set_module_permissions(permissions)
+            
+            results.append({
+                "username": user.username,
+                "old_used_today": old_used_today,
+                "new_used_today": actual_renders
+            })
+            fixed_count += 1
+    
+    db.commit()
+    
+    return {
+        "message": f"已修复 {fixed_count} 个用户的配额",
+        "fixed_count": fixed_count,
+        "details": results
+    }

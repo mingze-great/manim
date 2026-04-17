@@ -524,6 +524,21 @@ def delete_project(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
+    # 如果项目已成功渲染，回退配额
+    if project.video_url and not current_user.is_admin:
+        # 根据模块类型回退配额
+        module_type = project.module_type or "visual"
+        if module_type == "manim":
+            module_type = "visual"
+        
+        # 回退配额
+        permissions = current_user.get_module_permissions()
+        permission = permissions.get(module_type, {})
+        if permission.get("used_today", 0) > 0:
+            permission["used_today"] = permission.get("used_today", 1) - 1
+            permissions[module_type] = permission
+            current_user.set_module_permissions(permissions)
+    
     db.query(Conversation).filter(Conversation.project_id == project_id).delete()
     db.query(Task).filter(Task.project_id == project_id).delete()
     db.delete(project)
