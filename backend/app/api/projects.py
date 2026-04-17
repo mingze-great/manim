@@ -183,12 +183,34 @@ def _get_stickman_project(db: Session, current_user: User, project_id: int) -> P
 @router.post("/{project_id}/stickman/script", response_model=ProjectResponse)
 def generate_stickman_script(
     project_id: int,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)]
+    payload: dict = None,
+    current_user: Annotated[User, Depends(get_current_user)] = None,
+    db: Annotated[Session, Depends(get_db)] = None
 ):
+    """生成火柴人分镜脚本
+    
+    payload:
+        - custom_script: 用户自定义文案（可选），如果提供则根据文案生成分镜
+    """
     project = _get_stickman_project(db, current_user, project_id)
     generator = StickmanGenerator()
-    script_data = generator.generate_script_data(str(project.theme), int(project.storyboard_count or 3))
+    
+    custom_script = payload.get("custom_script") if payload else None
+    
+    if custom_script and custom_script.strip():
+        # 用户提供了文案：根据文案生成分镜（文案内容不变）
+        script_data = generator.generate_script_data_from_text(
+            user_text=custom_script.strip(),
+            topic=str(project.theme),
+            storyboard_count=int(project.storyboard_count or 3)
+        )
+    else:
+        # 无文案：原有逻辑，AI 自动生成
+        script_data = generator.generate_script_data(
+            topic=str(project.theme),
+            storyboard_count=int(project.storyboard_count or 3)
+        )
+    
     project.final_script = script_data.get("script")
     project.storyboard_json = json.dumps(script_data.get("storyboards") or [], ensure_ascii=False)
     project.status = "draft"

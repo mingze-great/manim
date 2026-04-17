@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Alert, Button, Card, Col, Input, Row, Select, Space, Spin, Steps, Tabs, Tag, Upload, message } from 'antd'
+import { Alert, Button, Card, Col, Input, Row, Select, Space, Spin, Steps, Tabs, Tag, Upload, message, Radio } from 'antd'
 import { EditOutlined, PlayCircleOutlined, PictureOutlined, RocketOutlined, UploadOutlined } from '@ant-design/icons'
 import { Project, projectApi, StickmanVoiceOption } from '@/services/project'
 import { useAuthStore } from '@/stores/authStore'
+
+const { TextArea } = Input
 
 type Storyboard = {
   scene_id: number
@@ -58,6 +60,8 @@ export default function StickmanStudio() {
   const [previewImageAsset, setPreviewImageAsset] = useState<ImageAsset | null>(null)
   const [composeProgress, setComposeProgress] = useState(0)
   const [composeMessage, setComposeMessage] = useState('')
+  const [useCustomScript, setUseCustomScript] = useState(false)
+  const [customScript, setCustomScript] = useState('')
 
   const parsedFlags = useMemo(() => {
     try {
@@ -125,13 +129,19 @@ export default function StickmanStudio() {
   }
 
   const handleGenerateScript = async () => {
+    if (useCustomScript && !customScript.trim()) {
+      message.warning('请输入文案内容')
+      return
+    }
+    
     setSaving(true)
     try {
-      const { data } = await projectApi.generateStickmanScript(Number(id))
+      const payload = useCustomScript ? { custom_script: customScript.trim() } : {}
+      const { data } = await projectApi.generateStickmanScript(Number(id), payload)
       setProject(data)
       setFinalScript(data.final_script || '')
       setStoryboards(JSON.parse(data.storyboard_json || '[]'))
-      message.success('脚本和分镜已生成')
+      message.success(useCustomScript ? '已根据您的文案生成分镜' : '脚本和分镜已生成')
     } catch (error: any) {
       message.error(error.response?.data?.detail || '生成脚本失败')
     } finally {
@@ -393,8 +403,43 @@ export default function StickmanStudio() {
                 label: '脚本与分镜',
                 children: (
                   <Space direction="vertical" size="large" style={{ width: '100%' }}>
+                    <Card size="small">
+                      <Space direction="vertical" style={{ width: '100%' }}>
+                        <Radio.Group value={useCustomScript ? 'custom' : 'auto'} onChange={e => setUseCustomScript(e.target.value === 'custom')}>
+                          <Radio.Button value="auto">AI 自动生成（根据主题）</Radio.Button>
+                          <Radio.Button value="custom">使用自定义文案</Radio.Button>
+                        </Radio.Group>
+                        
+                        {useCustomScript && (
+                          <>
+                            <Alert 
+                              message="文案将按段落或句子自动分割成多个分镜，原文内容保持不变" 
+                              type="info" 
+                              showIcon 
+                            />
+                            <TextArea
+                              rows={6}
+                              placeholder="请输入您的文案内容，每个段落或句子将自动生成为一个分镜..."
+                              value={customScript}
+                              onChange={e => setCustomScript(e.target.value)}
+                              maxLength={2000}
+                              showCount
+                            />
+                          </>
+                        )}
+                      </Space>
+                    </Card>
+                    
                     <Space>
-                      <Button type="primary" icon={<RocketOutlined />} onClick={handleGenerateScript} loading={saving}>生成脚本和分镜</Button>
+                      <Button 
+                        type="primary" 
+                        icon={<RocketOutlined />} 
+                        onClick={handleGenerateScript} 
+                        loading={saving}
+                        disabled={useCustomScript && !customScript.trim()}
+                      >
+                        {useCustomScript ? '根据文案生成分镜' : '生成脚本和分镜'}
+                      </Button>
                       <Button onClick={handleSaveStoryboards} loading={saving}>保存修改</Button>
                     </Space>
                     <Input.TextArea rows={5} value={finalScript} onChange={(e) => setFinalScript(e.target.value)} placeholder="完整脚本文案" />

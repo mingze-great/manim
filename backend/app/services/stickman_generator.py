@@ -299,6 +299,178 @@ class StickmanGenerator:
             scene.setdefault("duration_range", "2-4")
         return script_data
 
+    def generate_script_data_from_text(self, user_text: str, topic: str, storyboard_count: int) -> dict:
+        """
+        根据用户提供的文案生成分镜
+        
+        关键：用户文案原文不变，只做分割和场景描述生成
+        
+        Args:
+            user_text: 用户提供的完整文案（旁白原文）
+            topic: 视频主题
+            storyboard_count: 期望的分镜数量
+        
+        Returns:
+            {
+                "title": topic,
+                "script": user_text,  # 原文不变
+                "storyboards": [...]
+            }
+        """
+        # 1. 将用户文案分割成多个片段（原文不变）
+        narration_segments = self._split_text_into_scenes(user_text, storyboard_count)
+        
+        # 2. 为每个片段生成场景描述（视觉信息）
+        storyboards = []
+        for index, narration in enumerate(narration_segments, start=1):
+            # narration 是用户原文片段，不做任何修改
+            scene = self._generate_scene_visuals(
+                narration=narration,
+                topic=topic,
+                scene_index=index,
+                total_scenes=len(narration_segments)
+            )
+            storyboards.append(scene)
+        
+        # 3. 补充默认字段
+        for index, scene in enumerate(storyboards, start=1):
+            scene.setdefault("scene_id", index)
+            scene.setdefault("scene_title", f"第{index}幕")
+            scene.setdefault("camera_type", self._camera_type_for_index(index))
+            scene.setdefault("character_action", self._action_for_index(index))
+            scene.setdefault("layout_hint", self._layout_for_index(index))
+            scene.setdefault("duration_range", "2-4")
+        
+        return {
+            "title": topic,
+            "script": user_text,
+            "storyboards": storyboards,
+        }
+
+    def _split_text_into_scenes(self, text: str, target_count: int) -> list:
+        """
+        将用户文案分割成指定数量的场景片段
+        
+        关键：原文分割，不做任何修改
+        """
+        if not text or not text.strip():
+            return [text] if text else []
+        
+        text = text.strip()
+        
+        # 策略1：按段落分割（换行符）
+        paragraphs = re.split(r'\n\s*\n|\n', text)
+        paragraphs = [p.strip() for p in paragraphs if p.strip()]
+        
+        if len(paragraphs) >= target_count:
+            # 段落数足够，按段落分配
+            return self._merge_segments(paragraphs, target_count)
+        
+        # 策略2：段落不足，按句子分割后组合
+        sentences = self._split_sentences(text)
+        
+        if len(sentences) <= target_count:
+            # 句子数不超过目标数，每个句子一个场景
+            return sentences if sentences else [text]
+        
+        # 句子数超过目标数，组合句子
+        return self._combine_sentences(sentences, target_count)
+
+    def _merge_segments(self, segments: list, target_count: int) -> list:
+        """合并片段以达到目标数量"""
+        if len(segments) == target_count:
+            return segments
+        
+        result = []
+        merge_size = len(segments) / target_count
+        
+        for i in range(target_count):
+            start = int(i * merge_size)
+            end = int((i + 1) * merge_size)
+            if i == target_count - 1:
+                end = len(segments)  # 最后一个包含所有剩余
+            merged = "".join(segments[start:end])
+            if merged:
+                result.append(merged)
+        
+        return result if result else segments[:target_count]
+
+    def _combine_sentences(self, sentences: list, target_count: int) -> list:
+        """组合句子以达到目标数量"""
+        if not sentences:
+            return []
+        
+        result = []
+        sentences_per_scene = len(sentences) / target_count
+        
+        for i in range(target_count):
+            start = int(i * sentences_per_scene)
+            if i == target_count - 1:
+                end = len(sentences)  # 最后一个包含所有剩余
+            else:
+                end = int((i + 1) * sentences_per_scene)
+            combined = "".join(sentences[start:end])
+            if combined:
+                result.append(combined)
+        
+        return result if result else ["".join(sentences)]
+
+    def _generate_scene_visuals(self, narration: str, topic: str, scene_index: int, total_scenes: int) -> dict:
+        """
+        根据旁白文本生成场景的视觉描述
+        
+        重要：narration（用户原文）不做任何修改
+        """
+        prompt = f"""请为以下火柴人视频旁白生成场景的视觉描述。
+
+【重要】旁白内容必须保持原样，不要修改！
+
+主题：{topic}
+场景序号：{scene_index}/{total_scenes}
+旁白内容：
+{narration}
+
+请返回 JSON 格式：
+{{
+  "scene_description": "简洁的场景描述，描述火柴人的动作和场景元素（50字以内）",
+  "keywords": ["关键词1", "关键词2", "关键词3"],
+  "visual_focus": "视觉焦点关键词"
+}}
+
+只返回 JSON，不要其他解释。"""
+
+        try:
+            response = self.llm_client.chat.completions.create(
+                model=self.llm_model,
+                messages=[
+                    {"role": "system", "content": "你是火柴人动画场景设计师。你的任务是根据旁白内容生成视觉描述，但绝对不能修改旁白原文。"},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.7,
+                max_tokens=300,
+            )
+            content = response.choices[0].message.content or ""
+            
+            match = re.search(r'\{[\s\S]*\}', content)
+            if match:
+                data = json.loads(match.group())
+                return {
+                    "narration": narration,
+                    "scene_description": data.get("scene_description", f"火柴人讲解{topic}"),
+                    "keywords": data.get("keywords", [topic]),
+                    "visual_focus": data.get("visual_focus", topic),
+                }
+        except Exception as e:
+            print(f"生成场景视觉描述失败: {e}")
+        
+        # 默认返回（用户原文不变）
+        return {
+            "narration": narration,
+            "scene_description": f"火柴人围绕{topic}进行第{scene_index}段讲解",
+            "keywords": [topic],
+            "visual_focus": topic,
+        }
+
     def generate_images(self, storyboards: list[dict], aspect_ratio: str, project_id: Optional[int] = None, progress_callback=None, style_reference_image_path: Optional[str] = None, style_reference_notes: Optional[str] = None):
         assets = []
         flags = {"image_fallback_used": False, "fallback_count": 0, "image_provider_status": "model"}
