@@ -54,8 +54,14 @@ function AppContent() {
         try {
           const { data } = await authApi.me(token)
           login(token, data)
-        } catch (error) {
-          logout()
+        } catch (error: any) {
+          // 只有在 401 (token无效/过期) 时才登出
+          // 其他错误（网络/服务器）保留登录状态，避免刷新时被踢出
+          if (error?.response?.status === 401) {
+            logout()
+          } else {
+            console.warn('Token validation failed due to network/server error, keeping session')
+          }
         }
       }
       setValidating(false)
