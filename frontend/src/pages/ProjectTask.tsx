@@ -1,7 +1,7 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
-import { Card, Progress, Button, Space, message, Spin, Tabs, Select, Modal } from 'antd'
-import { DownloadOutlined, PlayCircleOutlined, PlaySquareOutlined, CloudUploadOutlined, EyeOutlined } from '@ant-design/icons'
+import { Card, Progress, Button, Space, message, Spin, Tabs, Select, Modal, Badge } from 'antd'
+import { DownloadOutlined, PlayCircleOutlined, PlaySquareOutlined, CloudUploadOutlined, EyeOutlined, StopOutlined, SyncOutlined } from '@ant-design/icons'
 import { projectApi, Task, Project } from '@/services/project'
 import { templateApi, Template } from '@/services/template'
 import { useAuthStore } from '@/stores/authStore'
@@ -13,6 +13,57 @@ const statusMap: Record<string, { text: string; color: string }> = {
   code_generated: { text: '脚本就绪', color: '#00CCFF' },
   completed: { text: '已完成', color: '#52c41a' },
   failed: { text: '失败', color: '#ff4d4f' },
+  cancelled: { text: '已取消', color: '#8c8c8c' },
+}
+
+// 带重试的轮询 Hook
+function usePollingWithRetry() {
+  const retryCountRef = useRef(0)
+  const retryDelayRef = useRef(3000)
+  const maxRetries = 10
+
+  const pollWithRetry = useCallback(async (
+    taskId: number,
+    onUpdate: (status: any) => void,
+    onComplete: (status: any) => void,
+    onError: (error: string) => void
+  ) => {
+    const poll = async (): Promise<boolean> => {
+      try {
+        const { data: status } = await projectApi.getAsyncTaskStatus(taskId)
+        retryCountRef.current = 0
+        retryDelayRef.current = 3000
+        onUpdate(status)
+        
+        if (status.status === 'completed' || status.status === 'failed' || status.status === 'cancelled') {
+          onComplete(status)
+          return true
+        }
+        return false
+      } catch (error: any) {
+        retryCountRef.current++
+        
+        if (retryCountRef.current >= maxRetries) {
+          onError(`网络连接失败，已重试 ${maxRetries} 次`)
+          return true
+        }
+        
+        // 指数退避
+        retryDelayRef.current = Math.min(retryDelayRef.current * 2, 30000)
+        console.log(`轮询失败，${retryDelayRef.current / 1000}秒后重试 (${retryCountRef.current}/${maxRetries})`)
+        return false
+      }
+    }
+    
+    return poll
+  }, [])
+
+  const resetRetry = useCallback(() => {
+    retryCountRef.current = 0
+    retryDelayRef.current = 3000
+  }, [])
+
+  return { pollWithRetry, resetRetry, retryCount: retryCountRef.current, retryDelay: retryDelayRef.current }
 }
 
 export default function ProjectTask() {
@@ -41,13 +92,13 @@ export default function ProjectTask() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null)
   const [videoPreviewVisible, setVideoPreviewVisible] = useState(false)
   const [previewVideoUrl, setPreviewVideoUrl] = useState<string>('')
+  const [celeryStatus, setCeleryStatus] = useState<{ redis_connected: boolean; celery_active: boolean } | null>(null)
+  const [currentTaskId, setCurrentTaskId] = useState<number | null>(null)
+  const [isRecovering, setIsRecovering] = useState(false)
   const terminalRef = useRef<HTMLDivElement>(null)
-  const abortControllerRef = useRef<AbortController | null>(null)
-  const readerRef = useRef<ReadableStreamDefaultReader | null>(null)
-  const renderStartTimeRef = useRef<number>(0)
-  const lastOutputTimeRef = useRef<number>(0)
   const renderTimeoutRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const CLIENT_RENDER_TIMEOUT = 330000
+  const codePollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const { pollWithRetry, resetRetry } = usePollingWithRetry()
 
   const fetchProject = async () => {
     try {
@@ -105,17 +156,156 @@ export default function ProjectTask() {
     }
   }
 
-useEffect(() => {
+  // 检查 Celery 状态
+  const checkCeleryStatus = async () => {
+    try {
+      const { data } = await projectApi.getCeleryStatus()
+      setCeleryStatus({
+        redis_connected: data.redis_connected,
+        celery_active: data.celery_active
+      })
+      
+      if (!data.redis_connected || !data.celery_active) {
+        console.warn('Celery 状态异常:', data)
+      }
+    } catch (error) {
+      console.error('检查 Celery 状态失败:', error)
+      setCeleryStatus({ redis_connected: false, celery_active: false })
+    }
+  }
+
+  // 检查并恢复进行中的任务
+  const checkAndRecoverTasks = async () => {
+    try {
+      const { data } = await projectApi.getInProgressTasks()
+      
+      if (data.tasks && data.tasks.length > 0) {
+        // 找到当前项目的进行中任务
+        const currentProjectTask = data.tasks.find(t => t.project_id === Number(id))
+        
+        if (currentProjectTask) {
+          setIsRecovering(true)
+          setTerminalLog('检测到进行中的任务，正在恢复...\n')
+          setShowTerminal(true)
+          
+          // 恢复轮询
+          startPolling(currentProjectTask.task_id, 'video')
+        }
+      }
+    } catch (error) {
+      console.error('检查进行中任务失败:', error)
+    }
+  }
+
+  // 开始轮询（带重试机制）
+  const startPolling = (taskId: number, type: 'code' | 'video') => {
+    setCurrentTaskId(taskId)
+    resetRetry()
+    
+    let retryCount = 0
+    const maxRetries = 10
+    let retryDelay = 3000
+    
+    const pollInterval = setInterval(async () => {
+      try {
+        const { data: status } = await projectApi.getAsyncTaskStatus(taskId)
+        retryCount = 0
+        retryDelay = 3000
+        
+        if (type === 'video') {
+          setVideoProgress(status.progress || 0)
+          setVideoMessage(getStatusMessage(status.status))
+          
+          if (status.status === 'completed') {
+            clearInterval(pollInterval)
+            setTerminalLog(prev => prev + '\n✅ 渲染完成！\n')
+            setVideoProgress(100)
+            setVideoMessage('渲染完成！')
+            message.success('视频渲染完成！')
+            setGeneratingVideo(false)
+            setIsRecovering(false)
+            await fetchProject()
+          } else if (status.status === 'failed') {
+            clearInterval(pollInterval)
+            const errorMsg = status.error_message || '渲染失败'
+            setTerminalLog(prev => prev + `\n❌ ${errorMsg}\n`)
+            setRenderError(errorMsg)
+            message.error(errorMsg)
+            setGeneratingVideo(false)
+            setIsRecovering(false)
+          } else if (status.status === 'cancelled') {
+            clearInterval(pollInterval)
+            setTerminalLog(prev => prev + '\n⚠️ 任务已取消\n')
+            setGeneratingVideo(false)
+            setIsRecovering(false)
+          } else {
+            setTerminalLog(prev => prev + `⏳ ${getStatusMessage(status.status)} (${status.progress}%)\n`)
+          }
+        } else {
+          setCodeProgress(status.progress || 0)
+          setCodeMessage(getCodeStatusMessage(status.status))
+          
+          if (status.status === 'completed') {
+            clearInterval(pollInterval)
+            setCodeProgress(100)
+            setCodeMessage('代码生成完成！')
+            message.success('脚本生成完成！')
+            setGeneratingCode(false)
+            await fetchProject()
+          } else if (status.status === 'failed' || status.status === 'cancelled') {
+            clearInterval(pollInterval)
+            const errorMsg = status.error_message || '代码生成失败'
+            setCodeMessage(errorMsg)
+            message.error(errorMsg)
+            setGeneratingCode(false)
+          }
+        }
+      } catch (e: any) {
+        retryCount++
+        console.error(`Poll error (${retryCount}/${maxRetries}):`, e)
+        
+        if (retryCount >= maxRetries) {
+          clearInterval(pollInterval)
+          const errorMsg = `网络连接失败，已重试 ${maxRetries} 次`
+          if (type === 'video') {
+            setRenderError(errorMsg)
+            setTerminalLog(prev => prev + `\n❌ ${errorMsg}\n`)
+          } else {
+            setCodeMessage(errorMsg)
+          }
+          message.error(errorMsg)
+          setGeneratingVideo(false)
+          setGeneratingCode(false)
+        } else {
+          retryDelay = Math.min(retryDelay * 2, 30000)
+          const retryMsg = `网络错误，${retryDelay / 1000}秒后重试...`
+          if (type === 'video') {
+            setTerminalLog(prev => prev + `⚠️ ${retryMsg}\n`)
+          }
+        }
+      }
+    }, 3000)
+    
+    if (type === 'video') {
+      renderTimeoutRef.current = pollInterval as any
+    } else {
+      codePollRef.current = pollInterval as any
+    }
+  }
+  
+  useEffect(() => {
     if (id) {
       fetchProject()
       fetchTemplates()
       fetchAvailableModels()
+      checkCeleryStatus()
     }
   }, [id])
 
   useEffect(() => {
     if (project) {
       fetchTask()
+      checkAndRecoverTasks()
     }
   }, [project])
 
@@ -131,95 +321,41 @@ useEffect(() => {
   }, [project, generatedCode])
 
   const handleGenerateCode = async () => {
+    // 检查 Celery 状态
+    if (celeryStatus && (!celeryStatus.redis_connected || !celeryStatus.celery_active)) {
+      message.warning('后台服务暂时不可用，请稍后再试')
+      return
+    }
+    
     setGeneratingCode(true)
     setCodeProgress(0)
-    setCodeMessage('正在开始生成...')
+    setCodeMessage('正在提交生成任务...')
     setGeneratedCode('')
+    setRenderError(null)
 
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
-      const token = (useAuthStore.getState().token) || ''
-      let streamUrl = `${API_BASE}/api/tasks/${id}/generate-code`
-      if (selectedTemplateId) {
-        streamUrl += `?template_id=${selectedTemplateId}`
-        if (selectedModel) {
-          streamUrl += `&model=${selectedModel}`
-        }
-      } else if (selectedModel) {
-        streamUrl += `?model=${selectedModel}`
-      }
-      let headers: any = {
-        'Content-Type': 'application/json'
-      }
-      if (token) headers['Authorization'] = `Bearer ${token}`
-
-      let response = await fetch(streamUrl, {
-        headers
-      })
-
-      if (response.status === 401) {
-        message.error('未通过身份验证，请重新登录后再试')
-        setLoading(false)
-        return
-      }
-
-      if (!response.ok) {
-        const err = await response.text()
-        throw new Error(err || '请求失败')
-      }
-
-      const reader = response.body?.getReader()
-      const decoder = new TextDecoder()
-
-      if (!reader) {
-        throw new Error('无法读取响应')
-      }
-
-      let buffer = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        buffer += decoder.decode(value, { stream: true })
-        
-        const parts = buffer.split('data: ')
-        buffer = parts.pop() || ''
-
-        for (const part of parts) {
-          const trimmed = part.trim()
-          if (!trimmed) continue
-          
-          try {
-            const data = JSON.parse(trimmed)
-            setCodeProgress(data.progress || 0)
-            setCodeMessage(data.message || '')
-            
-            if (data.code) {
-              setGeneratedCode(data.code)
-            }
-            
-            if (data.step === 'error') {
-              message.error(data.message)
-            }
-          } catch (e) {}
-        }
-      }
-
-      if (buffer.trim()) {
-        try {
-          const data = JSON.parse(buffer.trim())
-          if (data.code) setGeneratedCode(data.code)
-        } catch (e) {}
-      }
-
-      message.success('脚本生成完成！')
-      await fetchProject()
+      const { data: asyncResult } = await projectApi.generateCodeAsyncV2(
+        Number(id),
+        selectedTemplateId || undefined,
+        selectedModel || undefined
+      )
+      
+      setCodeMessage(asyncResult.message)
+      startPolling(asyncResult.task_id, 'code')
+      
     } catch (error: any) {
-      console.error('生成脚本失败:', error)
-      message.error(error.message || '生成失败')
-    } finally {
+      const errorMsg = error.response?.data?.detail || error.message || '提交生成任务失败'
+      message.error(errorMsg)
+      setCodeMessage(errorMsg)
       setGeneratingCode(false)
+    }
+  }
+  
+  const getCodeStatusMessage = (status: string) => {
+    switch (status) {
+      case 'pending': return '等待中...'
+      case 'processing': return '正在生成代码...'
+      default: return status
     }
   }
 
@@ -229,160 +365,93 @@ useEffect(() => {
       return
     }
     
+    // 检查 Celery 状态
+    if (celeryStatus && (!celeryStatus.redis_connected || !celeryStatus.celery_active)) {
+      message.warning('后台服务暂时不可用，请稍后再试')
+      return
+    }
+    
     setGeneratingVideo(true)
     setVideoProgress(5)
-    setVideoMessage('正在准备渲染...')
+    setVideoMessage('正在提交渲染任务...')
     setTerminalLog('')
     setShowTerminal(true)
     setRenderError(null)
     setTask(null)
     
-    abortControllerRef.current = new AbortController()
-    renderStartTimeRef.current = Date.now()
-    lastOutputTimeRef.current = Date.now()
-    
-    const checkTimeout = () => {
-      const now = Date.now()
-      const elapsed = now - renderStartTimeRef.current
-      const noOutputElapsed = now - lastOutputTimeRef.current
-      
-      if (elapsed > CLIENT_RENDER_TIMEOUT) {
-        setRenderError(`渲染超时（超过${Math.floor(CLIENT_RENDER_TIMEOUT / 60000)}分钟）`)
-        setTerminalLog(prev => prev + `\n⚠️ 客户端检测：渲染超时，正在终止...\n`)
-        abortControllerRef.current?.abort()
-        return true
-      }
-      
-      if (noOutputElapsed > 120000) {
-        setTerminalLog(prev => prev + `\n⚠️ 警告：${Math.floor(noOutputElapsed / 1000)}秒无输出\n`)
-      }
-      
-      return false
-    }
-    
-    renderTimeoutRef.current = setInterval(checkTimeout, 10000)
-    
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
-      const token = useAuthStore.getState().token
-      const streamUrl = `${API_BASE}/api/tasks/${id}/render`
+      const { data: asyncResult } = await projectApi.renderVideoAsync(Number(id))
       
-      setTerminalLog(prev => prev + `⏱️ 渲染开始时间: ${new Date().toLocaleTimeString()}\n`)
-      setTerminalLog(prev => prev + `🛡️ 超时保护: 服务器${300}秒, 客户端${Math.floor(CLIENT_RENDER_TIMEOUT / 60000)}分钟\n\n`)
+      setTerminalLog(prev => prev + `✅ ${asyncResult.message}\n`)
+      setTerminalLog(prev => prev + `📋 任务ID: ${asyncResult.task_id}\n`)
+      setTerminalLog(prev => prev + `🔄 Celery Task: ${asyncResult.celery_task_id}\n\n`)
       
-      const response = await fetch(streamUrl, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        signal: abortControllerRef.current.signal
-      })
+      startPolling(asyncResult.task_id, 'video')
       
-      if (response.status === 401) {
-        message.error('登录已过期，请重新登录')
-        setGeneratingVideo(false)
-        setTerminalLog(prev => prev + '\n❌ 登录已过期，请重新登录\n')
-        return
-      }
-      
-      if (!response.ok) {
-        throw new Error(`请求失败 (${response.status})`)
-      }
-      
-      const reader = response.body?.getReader()
-      const decoder = new TextDecoder()
-      
-      if (!reader) {
-        throw new Error('无法读取服务器响应')
-      }
-      
-      readerRef.current = reader
-      
-      let buffer = ''
-      
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        
-        buffer += decoder.decode(value, { stream: true })
-        
-        const lines = buffer.split('\n')
-        buffer = lines.pop() || ''
-        
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6)
-            try {
-              const parsed = JSON.parse(data)
-              
-              if (parsed.type === 'error') {
-                lastOutputTimeRef.current = Date.now()
-                setTerminalLog(prev => prev + `\n❌ ${parsed.content}\n`)
-                setRenderError(parsed.content)
-                message.error(parsed.content)
-              } else if (parsed.type === 'success') {
-                lastOutputTimeRef.current = Date.now()
-                const elapsed = Math.floor((Date.now() - renderStartTimeRef.current) / 1000)
-                setTerminalLog(prev => prev + `\n✅ ${parsed.content} (总耗时: ${elapsed}秒)\n`)
-                setVideoProgress(100)
-                setVideoMessage('渲染完成！')
-                if (parsed.video_url) {
-                  setProject(prev => prev ? { ...prev, video_url: parsed.video_url, status: 'completed' } : null)
-                }
-                message.success('视频渲染完成！')
-              } else if (parsed.type === 'info' || parsed.type === 'output') {
-                lastOutputTimeRef.current = Date.now()
-                setTerminalLog(prev => prev + parsed.content + '\n')
-                const content = parsed.content.toLowerCase()
-                if (content.includes('animation') || content.includes('rendering')) {
-                  setVideoProgress(prev => Math.min(prev + 2, 90))
-                  setVideoMessage('正在渲染动画...')
-                } else if (content.includes('combining') || content.includes('writing')) {
-                  setVideoProgress(prev => Math.min(prev + 3, 95))
-                  setVideoMessage('正在合成视频...')
-                } else if (content.includes('file')) {
-                  setVideoProgress(15)
-                  setVideoMessage('准备渲染环境...')
-                }
-              }
-              
-              setTimeout(() => {
-                terminalRef.current?.scrollTo({ top: terminalRef.current.scrollHeight, behavior: 'smooth' })
-              }, 50)
-            } catch (e) {
-              console.error('Parse error:', e)
-            }
-          }
-        }
-      }
     } catch (error: any) {
-      if (error.name === 'AbortError') {
-        const errorMsg = '渲染已取消（超时保护）'
-        message.warning(errorMsg)
-        setRenderError(errorMsg)
-        setTerminalLog(prev => prev + `\n⚠️ ${errorMsg}\n`)
-      } else {
-        const errorMsg = error.message || '未知错误'
-        message.error('渲染失败: ' + errorMsg)
-        setRenderError(errorMsg)
-        setTerminalLog(prev => prev + `\n❌ 渲染失败: ${errorMsg}\n`)
-      }
-      setVideoProgress(0)
-    } finally {
+      const errorMsg = error.response?.data?.detail || error.message || '提交渲染任务失败'
+      message.error(errorMsg)
+      setRenderError(errorMsg)
+      setTerminalLog(prev => prev + `\n❌ ${errorMsg}\n`)
+      setGeneratingVideo(false)
+    }
+  }
+  
+  const getStatusMessage = (status: string) => {
+    switch (status) {
+      case 'pending': return '等待中...'
+      case 'processing': return '渲染中...'
+      case 'rendering': return '正在渲染动画...'
+      case 'completed': return '渲染完成'
+      case 'failed': return '渲染失败'
+      default: return status
+    }
+  }
+
+  // 取消任务
+  const handleCancelTask = async () => {
+    if (!currentTaskId) {
+      // 仅取消轮询
       if (renderTimeoutRef.current) {
         clearInterval(renderTimeoutRef.current)
         renderTimeoutRef.current = null
       }
+      if (codePollRef.current) {
+        clearInterval(codePollRef.current)
+        codePollRef.current = null
+      }
+      setTerminalLog(prev => prev + '\n⚠️ 已停止监控\n')
+      message.warning('已停止监控')
       setGeneratingVideo(false)
-      await fetchProject()
+      setGeneratingCode(false)
+      return
+    }
+    
+    try {
+      const { data } = await projectApi.cancelTask(currentTaskId)
+      setTerminalLog(prev => prev + `\n⚠️ ${data.message}\n`)
+      message.warning('任务已取消')
+      
+      // 清除轮询
+      if (renderTimeoutRef.current) {
+        clearInterval(renderTimeoutRef.current)
+        renderTimeoutRef.current = null
+      }
+      if (codePollRef.current) {
+        clearInterval(codePollRef.current)
+        codePollRef.current = null
+      }
+      
+      setGeneratingVideo(false)
+      setGeneratingCode(false)
+      setCurrentTaskId(null)
+    } catch (error: any) {
+      message.error('取消任务失败: ' + (error.message || '未知错误'))
     }
   }
 
   const handleCancelRender = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort()
-      setTerminalLog(prev => prev + '\n⚠️ 用户取消渲染\n')
-      message.warning('正在取消渲染...')
-    }
+    handleCancelTask()
   }
 
   const handleDownloadVideo = async () => {
@@ -459,6 +528,37 @@ useEffect(() => {
   return (
     <>
       <div className="max-w-6xl mx-auto p-6">
+        {/* Celery 状态提示 */}
+        {celeryStatus && (!celeryStatus.redis_connected || !celeryStatus.celery_active) && (
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg"
+          >
+            <div className="flex items-center gap-2 text-yellow-700 dark:text-yellow-400">
+              <SyncOutlined spin />
+              <span className="font-medium">后台服务暂时不可用</span>
+              <span className="text-sm">
+                ({!celeryStatus.redis_connected ? 'Redis ' : ''}{!celeryStatus.celery_active ? 'Celery ' : ''}未运行)
+              </span>
+            </div>
+          </motion.div>
+        )}
+        
+        {/* 任务恢复提示 */}
+        {isRecovering && (
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg"
+          >
+            <div className="flex items-center gap-2 text-blue-700 dark:text-blue-400">
+              <SyncOutlined spin />
+              <span className="font-medium">检测到进行中的任务，正在恢复...</span>
+            </div>
+          </motion.div>
+        )}
+        
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -468,16 +568,22 @@ useEffect(() => {
             <Space>
               <span className="text-lg font-bold">{project?.title}</span>
               {task && (
-                <span style={{ color: statusMap[task.status]?.color }}>
-                  ({statusMap[task.status]?.text})
-                </span>
+                <Badge 
+                  status={task.status === 'completed' ? 'success' : task.status === 'failed' ? 'error' : 'processing'} 
+                  text={statusMap[task.status]?.text}
+                />
+              )}
+              {generatingVideo && currentTaskId && (
+                <Badge status="processing" text="后台运行中" />
               )}
             </Space>
           }
           extra={
-            <Button onClick={() => navigate(`/project/${id}/chat`)}>
-              返回编辑
-            </Button>
+            <Space>
+              <Button onClick={() => navigate(`/project/${id}/chat`)}>
+                返回编辑
+              </Button>
+            </Space>
           }
         >
           <Tabs activeKey={activeTab} onChange={setActiveTab}>
@@ -493,6 +599,7 @@ useEffect(() => {
                     <div className="flex items-center gap-3 mb-3">
                       <Spin />
                       <span className="text-blue-600 dark:text-blue-400 font-medium">{codeMessage}</span>
+                      <span className="text-xs text-gray-400 ml-auto">可关闭页面，任务在后台运行</span>
                     </div>
                     <Progress 
                       percent={codeProgress} 
@@ -621,6 +728,7 @@ useEffect(() => {
                     <div className="flex items-center gap-3 mb-3">
                       <Spin />
                       <span className="text-purple-600 dark:text-purple-400 font-medium">{videoMessage}</span>
+                      <span className="text-xs text-gray-400 ml-auto">可关闭页面，任务在后台运行</span>
                     </div>
                     <Progress 
                       percent={videoProgress} 
@@ -630,6 +738,11 @@ useEffect(() => {
                         '100%': '#eb2f96',
                       }}
                     />
+                    {currentTaskId && (
+                      <div className="mt-2 text-xs text-gray-500">
+                        任务ID: {currentTaskId}
+                      </div>
+                    )}
                   </motion.div>
                 )}
 
@@ -642,15 +755,14 @@ useEffect(() => {
                   >
                     <div className="flex items-center justify-between mb-4">
                       <span className="font-medium">渲染状态</span>
-                      <span 
-                        className="status-badge"
-                        style={{ 
-                          backgroundColor: `${statusMap[task?.status || (generatingVideo ? 'processing' : 'completed')]?.color}20`,
-                          color: statusMap[task?.status || (generatingVideo ? 'processing' : 'completed')]?.color 
-                        }}
-                      >
-                        {statusMap[task?.status || (generatingVideo ? 'processing' : 'completed')]?.text}
-                      </span>
+                      <Badge 
+                        status={
+                          task?.status === 'completed' || project?.video_url ? 'success' : 
+                          task?.status === 'failed' || renderError ? 'error' : 
+                          task?.status === 'cancelled' ? 'default' : 'processing'
+                        }
+                        text={statusMap[task?.status || (generatingVideo ? 'processing' : 'completed')]?.text}
+                      />
                     </div>
                     <Progress 
                       percent={task?.progress || videoProgress} 
@@ -672,11 +784,11 @@ useEffect(() => {
                   </div>
                 )}
 
-                {/* 终端输出 - 仅管理员可见 */}
-                {(showTerminal || terminalLog) && user?.is_admin && (
+                {/* 终端输出 - 所有人可见简化版 */}
+                {(showTerminal || terminalLog) && (
                   <div className="mt-4">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="font-medium">终端输出</span>
+                      <span className="font-medium">任务日志</span>
                       <Button size="small" onClick={() => setShowTerminal(!showTerminal)}>
                         {showTerminal ? '收起' : '展开'}
                       </Button>
@@ -703,13 +815,13 @@ useEffect(() => {
                 )}
 
                 {/* 渲染按钮 */}
-                <div className="flex gap-3">
+                <div className="flex gap-3 flex-wrap">
                   <Button 
                     type="primary"
                     icon={<PlayCircleOutlined />}
                     onClick={handleGenerateVideo}
                     loading={generatingVideo}
-                    disabled={!generatedCode}
+                    disabled={!generatedCode || (celeryStatus && (!celeryStatus.redis_connected || !celeryStatus.celery_active))}
                     size="large"
                     className="btn-gradient"
                   >
@@ -719,10 +831,11 @@ useEffect(() => {
                   {generatingVideo && (
                     <Button 
                       danger
-                      onClick={handleCancelRender}
+                      icon={<StopOutlined />}
+                      onClick={handleCancelTask}
                       size="large"
                     >
-                      取消渲染
+                      取消任务
                     </Button>
                   )}
 
@@ -740,6 +853,13 @@ useEffect(() => {
                     </Button>
                   )}
                 </div>
+
+                {/* 提示信息 */}
+                {generatingVideo && (
+                  <div className="text-sm text-gray-500 mt-2">
+                    💡 提示：您可以关闭此页面，渲染任务将在后台继续运行。重新打开时会自动恢复进度。
+                  </div>
+                )}
 
                 {/* 视频预览 */}
                 {project?.video_url && (
