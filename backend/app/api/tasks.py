@@ -852,7 +852,7 @@ async def render_video_async(
     return {
         "task_id": task.id,
         "celery_task_id": celery_result.id,
-        "message": "任务已提交，后台运行中，可关闭浏览器"
+        "message": "视频渲染已开始，可关闭页面"
     }
 
 
@@ -888,7 +888,7 @@ async def generate_code_async(
     current_user: Annotated[User, Depends(get_current_user)] = None,
     db: Annotated[Session, Depends(get_db)] = None
 ):
-    """异步后台生成代码（可关闭浏览器）"""
+    """异步后台生成脚本（可关闭页面）"""
     project = db.query(Project).filter(
         Project.id == project_id,
         Project.user_id == current_user.id
@@ -926,7 +926,7 @@ async def generate_code_async(
     return {
         "task_id": task.id,
         "celery_task_id": celery_result.id,
-        "message": "代码生成任务已提交，后台运行中，可关闭浏览器"
+        "message": "脚本生成已开始，可关闭页面"
     }
 
 

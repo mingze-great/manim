@@ -177,12 +177,12 @@ useEffect(() => {
           if (data.status === 'completed') {
             setGeneratingCode(false)
             setGeneratingVideo(false)
-            message.success('任务完成！')
+            message.success('生成完成！')
             fetchProject()
           } else if (data.status === 'failed') {
             setGeneratingCode(false)
             setGeneratingVideo(false)
-            message.error(data.error_message || '任务失败')
+            message.error(data.error_message || '生成失败')
           }
         }
         if (data.log) {
@@ -216,17 +216,17 @@ useEffect(() => {
         if (data.status === 'completed') {
           setGeneratingCode(false)
           setGeneratingVideo(false)
-          message.success('任务完成！')
+          message.success('生成完成！')
           if (pollingRef.current) clearInterval(pollingRef.current)
           fetchProject()
         } else if (data.status === 'failed') {
           setGeneratingCode(false)
           setGeneratingVideo(false)
-          message.error(data.error_message || '任务失败')
+          message.error(data.error_message || '生成失败')
           if (pollingRef.current) clearInterval(pollingRef.current)
         }
       } catch (error) {
-        console.error('轮询任务状态失败:', error)
+        console.error('轮询状态失败:', error)
       }
     }, 2000)
   }, [fetchProject])
@@ -277,7 +277,7 @@ useEffect(() => {
     
     setGeneratingCode(true)
     setCodeProgress(0)
-    setCodeMessage('正在提交任务...')
+    setCodeMessage('正在生成脚本...')
     setGeneratedCode('')
 
     try {
@@ -285,7 +285,7 @@ useEffect(() => {
       const { data } = await projectApi.generateCodeAsyncV2(Number(id), selectedTemplateId || undefined, selectedModel || undefined)
       
       setCurrentTaskId(data.task_id)
-      setCodeMessage('任务已提交，后台运行中...')
+      setCodeMessage('脚本生成中，可关闭页面...')
       
       // 连接 WebSocket
       connectWebSocket(data.task_id)
@@ -293,7 +293,7 @@ useEffect(() => {
       // 同时启动轮询作为备用
       startPolling(data.task_id)
       
-      message.success(data.message)
+      message.success('脚本生成任务已开始')
     } catch (error: any) {
       console.error('提交任务失败:', error)
       message.error(error.response?.data?.detail || error.message || '提交失败')
@@ -326,19 +326,19 @@ useEffect(() => {
     
     setGeneratingVideo(true)
     setVideoProgress(0)
-    setVideoMessage('正在提交渲染任务...')
+    setVideoMessage('正在准备渲染...')
     setShowTerminal(true)
     setRenderError(null)
-    setTerminalLog('⏱️ 提交后台渲染任务...\n')
-    setTask(null)  // 清除旧任务状态
+    setTerminalLog('⏱️ 开始渲染视频...\n')
+    setTask(null)
     
     try {
       // 使用异步渲染 API
       const { data } = await projectApi.renderVideoAsync(Number(id))
       
       setCurrentTaskId(data.task_id)
-      setTerminalLog(prev => prev + `✅ 任务已提交 (ID: ${data.task_id})\n`)
-      setTerminalLog(prev => prev + '🔄 后台运行中，可关闭浏览器...\n')
+      setTerminalLog(prev => prev + `✅ 渲染已开始\n`)
+      setTerminalLog(prev => prev + '🔄 渲染中，可关闭页面...\n')
       
       // 连接 WebSocket
       connectWebSocket(data.task_id)
@@ -346,7 +346,7 @@ useEffect(() => {
       // 同时启动轮询作为备用
       startPolling(data.task_id)
       
-      message.success(data.message)
+      message.success('视频渲染已开始')
     } catch (error: any) {
       console.error('提交渲染任务失败:', error)
       message.error(error.response?.data?.detail || error.message || '提交失败')
