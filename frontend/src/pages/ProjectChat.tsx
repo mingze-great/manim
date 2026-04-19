@@ -21,6 +21,8 @@ export default function ProjectChat() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const location = useLocation()
+  const { user } = useAuthStore()
+  const isAdmin = user?.is_admin
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [project, setProject] = useState<Project | null>(null)
@@ -483,10 +485,12 @@ export default function ProjectChat() {
                 </Button>
               </div>
             </div>
-            <pre className="text-xs bg-gray-900 text-green-400 p-2 rounded overflow-auto max-h-32">
-              {lastAiCode.split('\n').slice(0, 10).join('\n')}
-              {lastAiCode.split('\n').length > 10 && '\n...'}
-            </pre>
+            {isAdmin && (
+              <pre className="text-xs bg-gray-900 text-green-400 p-2 rounded overflow-auto max-h-32">
+                {lastAiCode.split('\n').slice(0, 10).join('\n')}
+                {lastAiCode.split('\n').length > 10 && '\n...'}
+              </pre>
+            )}
           </div>
         )}
         
@@ -554,11 +558,18 @@ export default function ProjectChat() {
         footer={null}
         width={700}
       >
-        <div className="text-xs text-gray-500 mb-2">脚本预览（共 {pendingCode?.split('\n').length || 0} 行）：</div>
-        <pre className="text-xs bg-gray-900 text-green-400 p-3 rounded-lg mb-4 overflow-auto max-h-64">
-          {pendingCode?.split('\n').slice(0, 30).join('\n')}
-          {pendingCode && pendingCode.split('\n').length > 30 && '\n...'}
-        </pre>
+        {isAdmin && (
+          <>
+            <div className="text-xs text-gray-500 mb-2">脚本预览（共 {pendingCode?.split('\n').length || 0} 行）：</div>
+            <pre className="text-xs bg-gray-900 text-green-400 p-3 rounded-lg mb-4 overflow-auto max-h-64">
+              {pendingCode?.split('\n').slice(0, 30).join('\n')}
+              {pendingCode && pendingCode.split('\n').length > 30 && '\n...'}
+            </pre>
+          </>
+        )}
+        {!isAdmin && (
+          <div className="text-gray-500 mb-4">AI 已为您生成新的脚本，是否使用？</div>
+        )}
         <div className="flex gap-2 justify-end">
           <Button onClick={() => { setShowCodeConfirm(false); setPendingCode(null); }}>
             重新生成

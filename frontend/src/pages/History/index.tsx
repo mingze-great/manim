@@ -9,6 +9,7 @@ import {
 import { useNavigate } from 'react-router-dom'
 import { projectApi, Project, Task } from '@/services/project'
 import { articleApi, Article } from '@/services/article'
+import { useAuthStore } from '@/stores/authStore'
 import './History.css'
 
 const { Title, Text } = Typography
@@ -32,6 +33,8 @@ const getStatusConfig = (status: string) => {
 
 export default function History() {
   const navigate = useNavigate()
+  const { user } = useAuthStore()
+  const isAdmin = user?.is_admin
   const [projects, setProjects] = useState<Project[]>([])
   const [articles, setArticles] = useState<Article[]>([])
   const [tasks, setTasks] = useState<Record<number, Task>>({})
@@ -508,9 +511,9 @@ export default function History() {
               </div>
             )}
             
-            {selectedProject.manim_code && (
+            {selectedProject.manim_code && isAdmin && (
               <div className="mt-4">
-                <Text type="secondary">思维可视化脚本预览</Text>
+                <Text type="secondary">思维可视化脚本预览（仅管理员可见）</Text>
                 <Card size="small" className="mt-2" bodyStyle={{ maxHeight: 200, overflow: 'auto' }}>
                   <pre style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>{selectedProject.manim_code.slice(0, 500)}...</pre>
                 </Card>
