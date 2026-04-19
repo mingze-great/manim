@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react'
-import { Card, Row, Col, Button, Empty, Tabs, Typography, Progress, Space, Modal, message, Popconfirm, Checkbox } from 'antd'
+import { Card, Row, Col, Button, Empty, Tabs, Typography, Progress, Space, Modal, message, Popconfirm, Checkbox, Tag } from 'antd'
 import { 
   VideoCameraOutlined, EditOutlined, DeleteOutlined, 
   CopyOutlined, DownloadOutlined, PlayCircleOutlined,
   ClockCircleOutlined, CheckCircleOutlined, CloseCircleOutlined, ReloadOutlined,
-  PlusOutlined
+  PlusOutlined, AppstoreOutlined, UserOutlined, FileTextOutlined
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { projectApi, Project, Task } from '@/services/project'
@@ -12,6 +12,19 @@ import { useAuthStore } from '@/stores/authStore'
 import './History.css'
 
 const { Title, Text } = Typography
+
+const getModuleTypeConfig = (moduleType: string) => {
+  switch (moduleType) {
+    case 'manim':
+      return { color: 'blue', icon: <AppstoreOutlined />, text: '思维可视化' }
+    case 'stickman':
+      return { color: 'purple', icon: <UserOutlined />, text: '火柴人' }
+    case 'article':
+      return { color: 'green', icon: <FileTextOutlined />, text: '公众号文章' }
+    default:
+      return { color: 'default', icon: <AppstoreOutlined />, text: '思维可视化' }
+  }
+}
 
 const getStatusConfig = (status: string) => {
   switch (status) {
@@ -117,7 +130,12 @@ export default function History() {
   }
 
   const handleContinueProject = (project: Project) => {
-    navigate(`/project/${project.id}/chat`)
+    // 根据项目类型跳转到不同页面
+    if (project.module_type === 'stickman') {
+      navigate(`/stickman/project/${project.id}`)
+    } else {
+      navigate(`/project/${project.id}/chat`)
+    }
   }
 
   const handleViewProject = (project: Project) => {
@@ -128,13 +146,22 @@ export default function History() {
   const filteredProjects = projects.filter(p => {
     if (activeTab === 'all') return true
     if (activeTab === 'completed') return p.status === 'completed'
-    if (activeTab === 'running') return ['chatting', 'rendering', 'pending'].includes(p.status)
+    if (activeTab === 'running') return ['chatting', 'rendering', 'pending', 'draft', 'code_generated'].includes(p.status)
     if (activeTab === 'failed') return p.status === 'failed'
+    // 新增：按作品类型过滤
+    if (activeTab === 'manim') return p.module_type === 'manim' || !p.module_type
+    if (activeTab === 'stickman') return p.module_type === 'stickman'
+    if (activeTab === 'article') return p.module_type === 'article'
     return true
   })
 
   const completedCount = projects.filter(p => p.status === 'completed').length
-  const runningCount = projects.filter(p => ['chatting', 'rendering', 'pending'].includes(p.status)).length
+  const runningCount = projects.filter(p => ['chatting', 'rendering', 'pending', 'draft', 'code_generated'].includes(p.status)).length
+  
+  // 按类型统计
+  const manimCount = projects.filter(p => p.module_type === 'manim' || !p.module_type).length
+  const stickmanCount = projects.filter(p => p.module_type === 'stickman').length
+  const articleCount = projects.filter(p => p.module_type === 'article').length
 
   return (
     <div className="history-page">
@@ -235,19 +262,24 @@ export default function History() {
                             onChange={() => toggleSelect(project.id)}
                           />
                         </div>
-                        <div className="project-thumbnail" onClick={() => handleViewProject(project)}>
-                          <VideoCameraOutlined className="thumbnail-icon" />
-                          {project.status === 'rendering' && task && (
-                            <div className="progress-overlay">
-                              <Progress type="circle" percent={task.progress || 0} size={60} strokeColor="#6366f1" />
-                            </div>
-                          )}
-                          <div className={`status-badge ${statusConfig.color}`}>
-                            {statusConfig.icon} {statusConfig.text}
-                          </div>
-                        </div>
-                        <div className="project-info">
-                          <Title level={5} className="project-name">{project.title}</Title>
+                         <div className="project-thumbnail" onClick={() => handleViewProject(project)}>
+                           <VideoCameraOutlined className="thumbnail-icon" />
+                           {project.status === 'rendering' && task && (
+                             <div className="progress-overlay">
+                               <Progress type="circle" percent={task.progress || 0} size={60} strokeColor="#6366f1" />
+                             </div>
+                           )}
+                           <div className={`status-badge ${statusConfig.color}`}>
+                             {statusConfig.icon} {statusConfig.text}
+                           </div>
+                         </div>
+                         <div className="project-info">
+                           <Title level={5} className="project-name">
+                             {project.title}
+                             <Tag color={getModuleTypeConfig(project.module_type || 'manim').color} style={{ marginLeft: 8, fontSize: 10 }}>
+                               {getModuleTypeConfig(project.module_type || 'manim').text}
+                             </Tag>
+                           </Title>
                           <div className="project-meta">
                             <Text type="secondary" className="project-date">
                               {new Date(project.created_at).toLocaleDateString('zh-CN')}
@@ -325,6 +357,7 @@ export default function History() {
               <div className="projects-grid">
                 {filteredProjects.map((project) => {
                   const task = tasks[project.id]
+                  const moduleTypeConfig = getModuleTypeConfig(project.module_type || 'manim')
                   return (
                     <Card key={project.id} className="project-card hover-lift">
                       <div className="project-thumbnail" onClick={() => handleContinueProject(project)}>
@@ -339,7 +372,12 @@ export default function History() {
                         </div>
                       </div>
                       <div className="project-info">
-                        <Title level={5} className="project-name">{project.title}</Title>
+                        <Title level={5} className="project-name">
+                          {project.title}
+                          <Tag color={moduleTypeConfig.color} style={{ marginLeft: 8, fontSize: 10 }}>
+                            {moduleTypeConfig.text}
+                          </Tag>
+                        </Title>
                         <div className="project-meta">
                           <Text type="secondary">{new Date(project.created_at).toLocaleDateString('zh-CN')}</Text>
                         </div>
@@ -347,6 +385,116 @@ export default function History() {
                           <Button type="text" size="small" icon={<EditOutlined />} onClick={() => handleContinueProject(project)}>
                             {project.status === 'rendering' ? '查看进度' : '继续编辑'}
                           </Button>
+                        </div>
+                      </div>
+                    </Card>
+                  )
+                })}
+              </div>
+            )
+          )},
+          { key: 'manim', label: `思维可视化 (${manimCount})`, children: (
+            filteredProjects.length === 0 ? (
+              <Empty description="暂无思维可视化项目" />
+            ) : (
+              <div className="projects-grid">
+                {filteredProjects.map((project) => {
+                  const statusConfig = getStatusConfig(project.status)
+                  const task = tasks[project.id]
+                  return (
+                    <Card key={project.id} className="project-card hover-lift">
+                      <div className="project-thumbnail" onClick={() => handleViewProject(project)}>
+                        <VideoCameraOutlined className="thumbnail-icon" />
+                        {project.status === 'rendering' && task && (
+                          <div className="progress-overlay">
+                            <Progress type="circle" percent={task.progress || 0} size={60} strokeColor="#6366f1" />
+                          </div>
+                        )}
+                        <div className={`status-badge ${statusConfig.color}`}>
+                          {statusConfig.icon} {statusConfig.text}
+                        </div>
+                      </div>
+                      <div className="project-info">
+                        <Title level={5} className="project-name">{project.title}</Title>
+                        <div className="project-meta">
+                          <Text type="secondary">{new Date(project.created_at).toLocaleDateString('zh-CN')}</Text>
+                        </div>
+                        <div className="project-actions">
+                          {project.status === 'completed' ? (
+                            <Button type="text" size="small" icon={<PlayCircleOutlined />} onClick={() => handleViewProject(project)}>播放</Button>
+                          ) : (
+                            <Button type="text" size="small" icon={<EditOutlined />} onClick={() => handleContinueProject(project)}>继续编辑</Button>
+                          )}
+                        </div>
+                      </div>
+                    </Card>
+                  )
+                })}
+              </div>
+            )
+          )},
+          { key: 'stickman', label: `火柴人 (${stickmanCount})`, children: (
+            filteredProjects.length === 0 ? (
+              <Empty description="暂无火柴人项目" />
+            ) : (
+              <div className="projects-grid">
+                {filteredProjects.map((project) => {
+                  const statusConfig = getStatusConfig(project.status)
+                  const task = tasks[project.id]
+                  return (
+                    <Card key={project.id} className="project-card hover-lift">
+                      <div className="project-thumbnail" onClick={() => handleViewProject(project)}>
+                        <UserOutlined className="thumbnail-icon" />
+                        {project.status === 'rendering' && task && (
+                          <div className="progress-overlay">
+                            <Progress type="circle" percent={task.progress || 0} size={60} strokeColor="#6366f1" />
+                          </div>
+                        )}
+                        <div className={`status-badge ${statusConfig.color}`}>
+                          {statusConfig.icon} {statusConfig.text}
+                        </div>
+                      </div>
+                      <div className="project-info">
+                        <Title level={5} className="project-name">{project.title}</Title>
+                        <div className="project-meta">
+                          <Text type="secondary">{new Date(project.created_at).toLocaleDateString('zh-CN')}</Text>
+                        </div>
+                        <div className="project-actions">
+                          {project.status === 'completed' ? (
+                            <Button type="text" size="small" icon={<PlayCircleOutlined />} onClick={() => handleViewProject(project)}>播放</Button>
+                          ) : (
+                            <Button type="text" size="small" icon={<EditOutlined />} onClick={() => handleContinueProject(project)}>继续编辑</Button>
+                          )}
+                        </div>
+                      </div>
+                    </Card>
+                  )
+                })}
+              </div>
+            )
+          )},
+          { key: 'article', label: `公众号文章 (${articleCount})`, children: (
+            filteredProjects.length === 0 ? (
+              <Empty description="暂无公众号文章项目" />
+            ) : (
+              <div className="projects-grid">
+                {filteredProjects.map((project) => {
+                  const statusConfig = getStatusConfig(project.status)
+                  return (
+                    <Card key={project.id} className="project-card hover-lift">
+                      <div className="project-thumbnail" onClick={() => handleViewProject(project)}>
+                        <FileTextOutlined className="thumbnail-icon" />
+                        <div className={`status-badge ${statusConfig.color}`}>
+                          {statusConfig.icon} {statusConfig.text}
+                        </div>
+                      </div>
+                      <div className="project-info">
+                        <Title level={5} className="project-name">{project.title}</Title>
+                        <div className="project-meta">
+                          <Text type="secondary">{new Date(project.created_at).toLocaleDateString('zh-CN')}</Text>
+                        </div>
+                        <div className="project-actions">
+                          <Button type="text" size="small" icon={<EditOutlined />} onClick={() => handleContinueProject(project)}>查看</Button>
                         </div>
                       </div>
                     </Card>
