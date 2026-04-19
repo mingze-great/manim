@@ -553,7 +553,7 @@ class ChatService:
         
         # 检测语言并选择提示词
         language = detect_language(theme + " " + user_message)
-        system_prompt = SYSTEM_PROMPT_ZH if language == 'zh' else SYSTEM_PROMPT_EN_ZH if language == 'zh' else SYSTEM_PROMPT_EN
+        system_prompt = SYSTEM_PROMPT_ZH if language == 'zh' else SYSTEM_PROMPT_EN
         
         messages = [
             {"role": "system", "content": system_prompt},

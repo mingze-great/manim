@@ -618,3 +618,22 @@ Requirements:
                 line = self._fix_common_syntax_errors(line)
                 lines[error.lineno - 1] = line
         return '\n'.join(lines)
+
+    async def optimize_code(self, code: str, script: str, feedback: str) -> str:
+        llm = LLMFactory.get_client()
+        system_prompt = CODE_FIX_PROMPT if feedback else CODE_GENERATE_PROMPT
+        user_msg = f"原始脚本:\n{script}\n\n当前代码:\n```python\n{code}\n```\n\n优化要求:\n{feedback}"
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_msg}
+        ]
+        result = await llm.generate_code(messages)
+        return result
+
+    async def generate_code_with_progress(self, script: str, template_code: str = None, video_title: str = None, model: str = None, progress_callback=None) -> str:
+        if progress_callback:
+            progress_callback(10, "processing", log="正在生成代码...\n")
+        result = await self.generate_code(script, template_code, video_title, model)
+        if progress_callback:
+            progress_callback(90, "processing", log="代码生成完成\n")
+        return result

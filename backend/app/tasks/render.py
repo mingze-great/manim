@@ -88,9 +88,15 @@ def run_async_code_gen(script_val, template_id, code_ref_val):
     try:
         db = SessionLocal()
         manim_service = ManimService(db)
+        template_code = None
+        if template_id:
+            from app.models.template import Template
+            tpl = db.query(Template).filter(Template.id == template_id).first()
+            if tpl:
+                template_code = tpl.code
         result = loop.run_until_complete(
             asyncio.wait_for(
-                manim_service.generate_code(script_val, template_id, code_ref_val),
+                manim_service.generate_code(script_val, template_code or code_ref_val),
                 timeout=120
             )
         )
