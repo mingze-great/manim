@@ -112,13 +112,23 @@ def render_video_task(task_id: int, project_id: int, template_id: int = None, cu
             update_task_progress(task_id, 0, "failed", error_message="Project not found")
             return
         
-        update_task_progress(task_id, 5, "processing", log="开始生成视频...\n")
+        update_task_progress(task_id, 5, "processing", log="开始渲染视频...\n")
         
-        try:
+        # 确定使用的代码：优先使用 custom_code，其次 project.manim_code，最后生成
+        manim_code = None
+        
+        if custom_code:
+            manim_code = custom_code
+            update_task_progress(task_id, 10, "processing", log="使用自定义代码\n")
+        elif project.manim_code:
+            manim_code = project.manim_code
+            update_task_progress(task_id, 10, "processing", log=f"使用已生成的代码 (长度: {len(manim_code)})\n")
+        else:
+            # 需要生成代码
             update_task_progress(task_id, 10, "processing", log="正在生成 Manim 代码...\n")
             
             script_val = str(project.final_script) if project.final_script is not None else ""
-            code_ref_val = custom_code or (str(project.custom_code) if project.custom_code is not None else "")
+            code_ref_val = str(project.custom_code) if project.custom_code is not None else ""
             
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(run_async_code_gen, script_val, template_id, code_ref_val)
@@ -131,10 +141,9 @@ def render_video_task(task_id: int, project_id: int, template_id: int = None, cu
             project.manim_code = manim_code
             db.commit()
             update_task_progress(task_id, 20, "processing", log=f"代码生成完成 (长度: {len(manim_code)})\n")
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            update_task_progress(task_id, 20, "failed", error_message=f"Generate code error: {str(e)}", log=f"生成代码失败: {e}\n")
+        
+        if not manim_code:
+            update_task_progress(task_id, 0, "failed", error_message="No code to render", log="没有可渲染的代码\n")
             return
         
         update_task_progress(task_id, 25, "processing", log="准备渲染...\n")
@@ -316,6 +325,7 @@ class {scene_name}(Scene):
                 update_task_progress(task_id, 90, "processing", log=f"视频保存: {video_filename}\n总耗时: {elapsed_total}秒\n")
                 
                 video_url = f"/api/videos/{video_filename}"
+                project.video_url = video_url
                 project.status = "completed"
                 db.commit()
                 update_task_progress(task_id, 100, "completed", video_url=video_url, log="任务完成！\n")

@@ -710,7 +710,7 @@ useEffect(() => {
                     size="large"
                     className="btn-gradient"
                   >
-                    {task?.status === 'completed' ? '重新渲染' : '开始渲染视频'}
+                    {project?.video_url ? '重新渲染' : '开始渲染视频'}
                   </Button>
                   
                   {generatingVideo && (
