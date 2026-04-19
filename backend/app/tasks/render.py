@@ -100,6 +100,74 @@ def run_async_code_gen(script_val, template_id, code_ref_val):
         loop.close()
 
 
+def generate_code_task(task_id: int, project_id: int, template_id: int = None, model: str = None):
+    """Celery 后台代码生成任务（不渲染）"""
+    db = SessionLocal()
+    try:
+        project = db.query(Project).filter(Project.id == project_id).first()
+        if not project:
+            update_task_progress(task_id, 0, "failed", error_message="Project not found")
+            return
+        
+        update_task_progress(task_id, 5, "processing", log="开始生成代码...\n")
+        
+        if not project.final_script:
+            update_task_progress(task_id, 0, "failed", error_message="请先完成内容对话", log="缺少 final_script\n")
+            return
+        
+        try:
+            update_task_progress(task_id, 10, "processing", log="正在分析内容...\n")
+            
+            template_code = None
+            if template_id:
+                from app.models.template import Template
+                template = db.query(Template).filter(Template.id == template_id).first()
+                if template:
+                    template_code = template.code
+                    update_task_progress(task_id, 15, "processing", log=f"使用模板: {template.name}\n")
+            
+            update_task_progress(task_id, 20, "processing", log="正在生成 Manim 代码...\n")
+            
+            script_val = str(project.final_script)
+            
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(run_async_code_gen, script_val, template_code, None)
+                try:
+                    manim_code = future.result(timeout=180)
+                except concurrent.futures.TimeoutError:
+                    update_task_progress(task_id, 50, "failed", error_message="Code generation timeout", log="代码生成超时！\n")
+                    return
+            
+            # 语法检查和自动修复
+            update_task_progress(task_id, 80, "processing", log="正在验证代码语法...\n")
+            manim_service = ManimService(db)
+            fixed_code, warnings = manim_service.validate_code(manim_code)
+            
+            if warnings:
+                warning_log = "代码修复提示: " + "; ".join(warnings) + "\n"
+                update_task_progress(task_id, 85, "processing", log=warning_log)
+            
+            manim_code = fixed_code
+            project.manim_code = manim_code
+            project.status = "code_generated"
+            db.commit()
+            
+            update_task_progress(task_id, 100, "completed", log=f"代码生成完成 (长度: {len(manim_code)})\n")
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            update_task_progress(task_id, 50, "failed", error_message=f"Generate code error: {str(e)}", log=f"生成代码失败: {e}\n")
+            return
+    
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        update_task_progress(task_id, 0, "failed", error_message=str(e), log=f"任务异常: {e}\n")
+    finally:
+        db.close()
+
+
 def render_video_task(task_id: int, project_id: int, template_id: int = None, custom_code: str = None):
     db = SessionLocal()
     try:

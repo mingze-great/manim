@@ -70,7 +70,6 @@ export default function ProjectTask() {
   const { id } = useParams<{ id: string }>()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
-  const { user } = useAuthStore()
   const [project, setProject] = useState<Project | null>(null)
   const [task, setTask] = useState<Task | null>(null)
   const [loading, setLoading] = useState(true)
@@ -98,7 +97,7 @@ export default function ProjectTask() {
   const terminalRef = useRef<HTMLDivElement>(null)
   const renderTimeoutRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const codePollRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const { pollWithRetry, resetRetry } = usePollingWithRetry()
+  const { pollWithRetry: _pollWithRetry, resetRetry } = usePollingWithRetry()
 
   const fetchProject = async () => {
     try {
@@ -453,6 +452,7 @@ export default function ProjectTask() {
   const handleCancelRender = () => {
     handleCancelTask()
   }
+  void handleCancelRender
 
   const handleDownloadVideo = async () => {
     const videoUrl = task?.video_url || project?.video_url
@@ -821,7 +821,7 @@ export default function ProjectTask() {
                     icon={<PlayCircleOutlined />}
                     onClick={handleGenerateVideo}
                     loading={generatingVideo}
-                    disabled={!generatedCode || (celeryStatus && (!celeryStatus.redis_connected || !celeryStatus.celery_active))}
+                    disabled={!generatedCode || (celeryStatus !== null && (!celeryStatus.redis_connected || !celeryStatus.celery_active))}
                     size="large"
                     className="btn-gradient"
                   >
