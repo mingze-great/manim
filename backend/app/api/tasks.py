@@ -23,7 +23,7 @@ from app.services.manim import ManimService
 from app.services.stickman_generator import StickmanGenerator
 from app.config import get_settings
 from app.utils.cos_storage import cos_storage
-from app.tasks.celery_tasks import render_video_celery
+from app.tasks.celery_tasks import render_video_celery, generate_code_celery
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 settings = get_settings()
@@ -877,4 +877,157 @@ def get_task_status(
         "video_url": task.video_url,
         "error_message": task.error_message,
         "celery_task_id": task.celery_task_id
+    }
+
+
+@router.post("/{project_id}/generate-code-async")
+async def generate_code_async(
+    project_id: int,
+    template_id: Optional[int] = Query(None),
+    model: Optional[str] = Query(None),
+    current_user: Annotated[User, Depends(get_current_user)] = None,
+    db: Annotated[Session, Depends(get_db)] = None
+):
+    """异步后台生成代码（可关闭浏览器）"""
+    project = db.query(Project).filter(
+        Project.id == project_id,
+        Project.user_id == current_user.id
+    ).first()
+    
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    if not project.final_script:
+        raise HTTPException(status_code=400, detail="请先完成内容对话")
+    
+    # 创建任务记录
+    task = Task(
+        project_id=project_id,
+        user_id=current_user.id,
+        task_type="code_generation",
+        status="pending",
+        progress=0
+    )
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+    
+    # 提交 Celery 任务
+    celery_result = generate_code_celery.delay(
+        task.id,
+        project_id,
+        template_id,
+        model
+    )
+    
+    task.celery_task_id = celery_result.id
+    db.commit()
+    
+    return {
+        "task_id": task.id,
+        "celery_task_id": celery_result.id,
+        "message": "代码生成任务已提交，后台运行中，可关闭浏览器"
+    }
+
+
+@router.get("/celery-status")
+async def get_celery_status():
+    """检查 Celery 和 Redis 状态"""
+    import redis
+    from celery import Celery
+    
+    # 检查 Redis
+    redis_connected = False
+    try:
+        r = redis.from_url(settings.REDIS_URL)
+        r.ping()
+        redis_connected = True
+    except Exception:
+        pass
+    
+    # 检查 Celery Worker
+    celery_active = False
+    active_tasks = 0
+    try:
+        from celery_app import celery_app
+        inspect = celery_app.control.inspect()
+        active = inspect.active()
+        if active:
+            celery_active = True
+            for worker, tasks in active.items():
+                active_tasks += len(tasks)
+    except Exception:
+        pass
+    
+    return {
+        "redis_connected": redis_connected,
+        "celery_active": celery_active,
+        "active_tasks": active_tasks,
+        "status": "healthy" if redis_connected and celery_active else "degraded"
+    }
+
+
+@router.get("/in-progress")
+def get_in_progress_tasks(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)]
+):
+    """获取用户进行中的任务"""
+    tasks = db.query(Task).filter(
+        Task.user_id == current_user.id,
+        Task.status.in_(["pending", "processing"])
+    ).order_by(Task.created_at.desc()).all()
+    
+    return {
+        "tasks": [
+            {
+                "task_id": t.id,
+                "project_id": t.project_id,
+                "task_type": t.task_type,
+                "status": t.status,
+                "progress": t.progress or 0,
+                "celery_task_id": t.celery_task_id,
+                "created_at": t.created_at.isoformat() if t.created_at else None
+            }
+            for t in tasks
+        ],
+        "count": len(tasks)
+    }
+
+
+@router.post("/task/{task_id}/cancel")
+async def cancel_task(
+    task_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)]
+):
+    """取消任务"""
+    task = db.query(Task).filter(
+        Task.id == task_id,
+        Task.user_id == current_user.id
+    ).first()
+    
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    if task.status in ["completed", "failed", "cancelled"]:
+        raise HTTPException(status_code=400, detail=f"Task already {task.status}")
+    
+    # 取消 Celery 任务
+    if task.celery_task_id:
+        try:
+            from celery_app import celery_app
+            celery_app.control.revoke(task.celery_task_id, terminate=True)
+        except Exception as e:
+            print(f"Failed to revoke Celery task: {e}")
+    
+    # 更新任务状态
+    task.status = "cancelled"
+    task.error_message = "User cancelled"
+    db.commit()
+    
+    return {
+        "task_id": task.id,
+        "status": "cancelled",
+        "message": "Task cancelled successfully"
     }

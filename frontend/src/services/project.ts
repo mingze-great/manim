@@ -163,4 +163,43 @@ export const projectApi = {
       `/projects/${projectId}/use-custom-script`,
       { script, auto_format: autoFormat }
     ),
+  
+  // 异步渲染（后台运行，可关闭浏览器）
+  renderVideoAsync: (projectId: number) =>
+    api.post<{ task_id: number; celery_task_id: string; message: string }>(`/tasks/${projectId}/render-async`),
+  
+  // 异步生成代码（后台运行，可关闭浏览器）
+  generateCodeAsyncV2: (projectId: number, templateId?: number, model?: string) => {
+    const params = new URLSearchParams()
+    if (templateId) params.append('template_id', String(templateId))
+    if (model) params.append('model', model)
+    const query = params.toString()
+    return api.post<{ task_id: number; celery_task_id: string; message: string }>(
+      `/tasks/${projectId}/generate-code-async${query ? `?${query}` : ''}`
+    )
+  },
+  
+  // 查询异步渲染任务状态
+  getAsyncTaskStatus: (taskId: number) =>
+    api.get<{ task_id: number; status: string; progress: number; video_url: string | null; error_message: string | null; celery_task_id: string }>(`/tasks/task/${taskId}/status`),
+  
+  // 检查 Celery 和 Redis 状态
+  getCeleryStatus: () =>
+    api.get<{ redis_connected: boolean; celery_active: boolean; active_tasks: number; status: string }>('/tasks/celery-status'),
+  
+  // 获取用户进行中的任务
+  getInProgressTasks: () =>
+    api.get<{ tasks: Array<{ task_id: number; project_id: number; task_type: string; status: string; progress: number; celery_task_id: string; created_at: string }>; count: number }>('/tasks/in-progress'),
+  
+  // 取消任务
+  cancelTask: (taskId: number) =>
+    api.post<{ task_id: number; status: string; message: string }>(`/tasks/task/${taskId}/cancel`),
+  
+  // WebSocket 连接
+  connectTaskWebSocket: (taskId: number) => {
+    const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
+    const wsProtocol = API_BASE.startsWith('https') ? 'wss' : 'ws'
+    const host = API_BASE.replace(/^https?:\/\//, '') || window.location.host
+    return `${wsProtocol}://${host}/ws/task/${taskId}`
+  },
 }

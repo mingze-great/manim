@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { Card, Progress, Button, Space, message, Spin, Tabs, Select, Modal } from 'antd'
 import { DownloadOutlined, PlayCircleOutlined, PlaySquareOutlined, CloudUploadOutlined, EyeOutlined } from '@ant-design/icons'
@@ -42,13 +42,14 @@ export default function ProjectTask() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null)
   const [videoPreviewVisible, setVideoPreviewVisible] = useState(false)
   const [previewVideoUrl, setPreviewVideoUrl] = useState<string>('')
+  
+  // WebSocket 和异步任务相关
+  const [currentTaskId, setCurrentTaskId] = useState<number | null>(null)
+  const [celeryStatus, setCeleryStatus] = useState<{ redis_connected: boolean; celery_active: boolean } | null>(null)
+  const wsRef = useRef<WebSocket | null>(null)
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  
   const terminalRef = useRef<HTMLDivElement>(null)
-  const abortControllerRef = useRef<AbortController | null>(null)
-  const readerRef = useRef<ReadableStreamDefaultReader | null>(null)
-  const renderStartTimeRef = useRef<number>(0)
-  const lastOutputTimeRef = useRef<number>(0)
-  const renderTimeoutRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const CLIENT_RENDER_TIMEOUT = 330000
 
   const fetchProject = async () => {
     try {
@@ -131,95 +132,171 @@ useEffect(() => {
     }
   }, [project, generatedCode])
 
+  // 检查 Celery 状态
+  const checkCeleryStatus = async () => {
+    try {
+      const { data } = await projectApi.getCeleryStatus()
+      setCeleryStatus(data)
+    } catch (error) {
+      console.error('检查 Celery 状态失败:', error)
+    }
+  }
+
+  // WebSocket 连接
+  const connectWebSocket = useCallback((taskId: number) => {
+    if (wsRef.current) {
+      wsRef.current.close()
+    }
+    
+    const wsUrl = projectApi.connectTaskWebSocket(taskId)
+    const ws = new WebSocket(wsUrl)
+    wsRef.current = ws
+    
+    ws.onopen = () => {
+      console.log('WebSocket connected')
+      // 发送心跳
+      const heartbeat = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send('ping')
+        }
+      }, 30000)
+      ws.addEventListener('close', () => clearInterval(heartbeat))
+    }
+    
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data)
+        if (data.type === 'pong') return
+        
+        // 更新进度
+        if (data.progress !== undefined) {
+          setCodeProgress(data.progress)
+          setVideoProgress(data.progress)
+        }
+        if (data.status) {
+          if (data.status === 'completed') {
+            setGeneratingCode(false)
+            setGeneratingVideo(false)
+            message.success('任务完成！')
+            fetchProject()
+          } else if (data.status === 'failed') {
+            setGeneratingCode(false)
+            setGeneratingVideo(false)
+            message.error(data.error_message || '任务失败')
+          }
+        }
+        if (data.log) {
+          setTerminalLog(prev => prev + data.log)
+        }
+      } catch (e) {}
+    }
+    
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error)
+    }
+    
+    ws.onclose = () => {
+      console.log('WebSocket closed')
+      wsRef.current = null
+    }
+  }, [fetchProject])
+
+  // 轮询任务状态（备用方案）
+  const startPolling = useCallback((taskId: number) => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current)
+    }
+    
+    pollingRef.current = setInterval(async () => {
+      try {
+        const { data } = await projectApi.getAsyncTaskStatus(taskId)
+        setCodeProgress(data.progress)
+        setVideoProgress(data.progress)
+        
+        if (data.status === 'completed') {
+          setGeneratingCode(false)
+          setGeneratingVideo(false)
+          message.success('任务完成！')
+          if (pollingRef.current) clearInterval(pollingRef.current)
+          fetchProject()
+        } else if (data.status === 'failed') {
+          setGeneratingCode(false)
+          setGeneratingVideo(false)
+          message.error(data.error_message || '任务失败')
+          if (pollingRef.current) clearInterval(pollingRef.current)
+        }
+      } catch (error) {
+        console.error('轮询任务状态失败:', error)
+      }
+    }, 2000)
+  }, [fetchProject])
+
+  // 清理 WebSocket 和轮询
+  useEffect(() => {
+    return () => {
+      if (wsRef.current) wsRef.current.close()
+      if (pollingRef.current) clearInterval(pollingRef.current)
+    }
+  }, [])
+
+  // 恢复进行中的任务
+  useEffect(() => {
+    const recoverTasks = async () => {
+      try {
+        const { data } = await projectApi.getInProgressTasks()
+        if (data.count > 0) {
+          const projectTask = data.tasks.find(t => t.project_id === Number(id))
+          if (projectTask) {
+            setCurrentTaskId(projectTask.task_id)
+            connectWebSocket(projectTask.task_id)
+            startPolling(projectTask.task_id)
+            if (projectTask.task_type === 'code_generation') {
+              setGeneratingCode(true)
+            } else {
+              setGeneratingVideo(true)
+            }
+          }
+        }
+      } catch (error) {
+        console.error('恢复任务失败:', error)
+      }
+    }
+    
+    if (id) {
+      recoverTasks()
+      checkCeleryStatus()
+    }
+  }, [id, connectWebSocket, startPolling])
+
   const handleGenerateCode = async () => {
+    // 检查 Celery 状态
+    if (celeryStatus && (!celeryStatus.redis_connected || !celeryStatus.celery_active)) {
+      message.warning('后台服务暂时不可用，请稍后再试')
+      return
+    }
+    
     setGeneratingCode(true)
     setCodeProgress(0)
-    setCodeMessage('正在开始生成...')
+    setCodeMessage('正在提交任务...')
     setGeneratedCode('')
 
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
-      const token = (useAuthStore.getState().token) || ''
-      let streamUrl = `${API_BASE}/api/tasks/${id}/generate-code`
-      if (selectedTemplateId) {
-        streamUrl += `?template_id=${selectedTemplateId}`
-        if (selectedModel) {
-          streamUrl += `&model=${selectedModel}`
-        }
-      } else if (selectedModel) {
-        streamUrl += `?model=${selectedModel}`
-      }
-      let headers: any = {
-        'Content-Type': 'application/json'
-      }
-      if (token) headers['Authorization'] = `Bearer ${token}`
-
-      let response = await fetch(streamUrl, {
-        headers
-      })
-
-      if (response.status === 401) {
-        message.error('未通过身份验证，请重新登录后再试')
-        setLoading(false)
-        return
-      }
-
-      if (!response.ok) {
-        const err = await response.text()
-        throw new Error(err || '请求失败')
-      }
-
-      const reader = response.body?.getReader()
-      const decoder = new TextDecoder()
-
-      if (!reader) {
-        throw new Error('无法读取响应')
-      }
-
-      let buffer = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        buffer += decoder.decode(value, { stream: true })
-        
-        const parts = buffer.split('data: ')
-        buffer = parts.pop() || ''
-
-        for (const part of parts) {
-          const trimmed = part.trim()
-          if (!trimmed) continue
-          
-          try {
-            const data = JSON.parse(trimmed)
-            setCodeProgress(data.progress || 0)
-            setCodeMessage(data.message || '')
-            
-            if (data.code) {
-              setGeneratedCode(data.code)
-            }
-            
-            if (data.step === 'error') {
-              message.error(data.message)
-            }
-          } catch (e) {}
-        }
-      }
-
-      if (buffer.trim()) {
-        try {
-          const data = JSON.parse(buffer.trim())
-          if (data.code) setGeneratedCode(data.code)
-        } catch (e) {}
-      }
-
-      message.success('脚本生成完成！')
-      await fetchProject()
+      // 使用异步 API
+      const { data } = await projectApi.generateCodeAsyncV2(Number(id), selectedTemplateId || undefined, selectedModel || undefined)
+      
+      setCurrentTaskId(data.task_id)
+      setCodeMessage('任务已提交，后台运行中...')
+      
+      // 连接 WebSocket
+      connectWebSocket(data.task_id)
+      
+      // 同时启动轮询作为备用
+      startPolling(data.task_id)
+      
+      message.success(data.message)
     } catch (error: any) {
-      console.error('生成脚本失败:', error)
-      message.error(error.message || '生成失败')
-    } finally {
+      console.error('提交任务失败:', error)
+      message.error(error.response?.data?.detail || error.message || '提交失败')
       setGeneratingCode(false)
     }
   }
@@ -227,6 +304,12 @@ useEffect(() => {
   const handleGenerateVideo = async () => {
     if (!generatedCode) {
       message.warning('请先生成脚本')
+      return
+    }
+    
+    // 检查 Celery 状态
+    if (celeryStatus && (!celeryStatus.redis_connected || !celeryStatus.celery_active)) {
+      message.warning('后台服务暂时不可用，请稍后再试')
       return
     }
     
@@ -242,159 +325,57 @@ useEffect(() => {
     }
     
     setGeneratingVideo(true)
-    setVideoProgress(5)
-    setVideoMessage('正在准备渲染...')
-    setTerminalLog('')
+    setVideoProgress(0)
+    setVideoMessage('正在提交渲染任务...')
     setShowTerminal(true)
     setRenderError(null)
-    setTask(null)
-    
-    abortControllerRef.current = new AbortController()
-    renderStartTimeRef.current = Date.now()
-    lastOutputTimeRef.current = Date.now()
-    
-    const checkTimeout = () => {
-      const now = Date.now()
-      const elapsed = now - renderStartTimeRef.current
-      const noOutputElapsed = now - lastOutputTimeRef.current
-      
-      if (elapsed > CLIENT_RENDER_TIMEOUT) {
-        setRenderError(`渲染超时（超过${Math.floor(CLIENT_RENDER_TIMEOUT / 60000)}分钟）`)
-        setTerminalLog(prev => prev + `\n⚠️ 客户端检测：渲染超时，正在终止...\n`)
-        abortControllerRef.current?.abort()
-        return true
-      }
-      
-      if (noOutputElapsed > 120000) {
-        setTerminalLog(prev => prev + `\n⚠️ 警告：${Math.floor(noOutputElapsed / 1000)}秒无输出\n`)
-      }
-      
-      return false
-    }
-    
-    renderTimeoutRef.current = setInterval(checkTimeout, 10000)
+    setTerminalLog('⏱️ 提交后台渲染任务...\n')
     
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
-      const token = useAuthStore.getState().token
-      const streamUrl = `${API_BASE}/api/tasks/${id}/render`
+      // 使用异步渲染 API
+      const { data } = await projectApi.renderVideoAsync(Number(id))
       
-      setTerminalLog(prev => prev + `⏱️ 渲染开始时间: ${new Date().toLocaleTimeString()}\n`)
-      setTerminalLog(prev => prev + `🛡️ 超时保护: 服务器${300}秒, 客户端${Math.floor(CLIENT_RENDER_TIMEOUT / 60000)}分钟\n\n`)
+      setCurrentTaskId(data.task_id)
+      setTerminalLog(prev => prev + `✅ 任务已提交 (ID: ${data.task_id})\n`)
+      setTerminalLog(prev => prev + '🔄 后台运行中，可关闭浏览器...\n')
       
-      const response = await fetch(streamUrl, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        signal: abortControllerRef.current.signal
-      })
+      // 连接 WebSocket
+      connectWebSocket(data.task_id)
       
-      if (response.status === 401) {
-        message.error('登录已过期，请重新登录')
-        setGeneratingVideo(false)
-        setTerminalLog(prev => prev + '\n❌ 登录已过期，请重新登录\n')
-        return
-      }
+      // 同时启动轮询作为备用
+      startPolling(data.task_id)
       
-      if (!response.ok) {
-        throw new Error(`请求失败 (${response.status})`)
-      }
-      
-      const reader = response.body?.getReader()
-      const decoder = new TextDecoder()
-      
-      if (!reader) {
-        throw new Error('无法读取服务器响应')
-      }
-      
-      readerRef.current = reader
-      
-      let buffer = ''
-      
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        
-        buffer += decoder.decode(value, { stream: true })
-        
-        const lines = buffer.split('\n')
-        buffer = lines.pop() || ''
-        
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6)
-            try {
-              const parsed = JSON.parse(data)
-              
-              if (parsed.type === 'error') {
-                lastOutputTimeRef.current = Date.now()
-                setTerminalLog(prev => prev + `\n❌ ${parsed.content}\n`)
-                setRenderError(parsed.content)
-                message.error(parsed.content)
-              } else if (parsed.type === 'success') {
-                lastOutputTimeRef.current = Date.now()
-                const elapsed = Math.floor((Date.now() - renderStartTimeRef.current) / 1000)
-                setTerminalLog(prev => prev + `\n✅ ${parsed.content} (总耗时: ${elapsed}秒)\n`)
-                setVideoProgress(100)
-                setVideoMessage('渲染完成！')
-                if (parsed.video_url) {
-                  setProject(prev => prev ? { ...prev, video_url: parsed.video_url, status: 'completed' } : null)
-                }
-                message.success('视频渲染完成！')
-              } else if (parsed.type === 'info' || parsed.type === 'output') {
-                lastOutputTimeRef.current = Date.now()
-                setTerminalLog(prev => prev + parsed.content + '\n')
-                const content = parsed.content.toLowerCase()
-                if (content.includes('animation') || content.includes('rendering')) {
-                  setVideoProgress(prev => Math.min(prev + 2, 90))
-                  setVideoMessage('正在渲染动画...')
-                } else if (content.includes('combining') || content.includes('writing')) {
-                  setVideoProgress(prev => Math.min(prev + 3, 95))
-                  setVideoMessage('正在合成视频...')
-                } else if (content.includes('file')) {
-                  setVideoProgress(15)
-                  setVideoMessage('准备渲染环境...')
-                }
-              }
-              
-              setTimeout(() => {
-                terminalRef.current?.scrollTo({ top: terminalRef.current.scrollHeight, behavior: 'smooth' })
-              }, 50)
-            } catch (e) {
-              console.error('Parse error:', e)
-            }
-          }
-        }
-      }
+      message.success(data.message)
     } catch (error: any) {
-      if (error.name === 'AbortError') {
-        const errorMsg = '渲染已取消（超时保护）'
-        message.warning(errorMsg)
-        setRenderError(errorMsg)
-        setTerminalLog(prev => prev + `\n⚠️ ${errorMsg}\n`)
-      } else {
-        const errorMsg = error.message || '未知错误'
-        message.error('渲染失败: ' + errorMsg)
-        setRenderError(errorMsg)
-        setTerminalLog(prev => prev + `\n❌ 渲染失败: ${errorMsg}\n`)
-      }
-      setVideoProgress(0)
-    } finally {
-      if (renderTimeoutRef.current) {
-        clearInterval(renderTimeoutRef.current)
-        renderTimeoutRef.current = null
-      }
+      console.error('提交渲染任务失败:', error)
+      message.error(error.response?.data?.detail || error.message || '提交失败')
       setGeneratingVideo(false)
-      await fetchProject()
+      setTerminalLog(prev => prev + `\n❌ 提交失败: ${error.message}\n`)
+    }
+  }
+
+  // 取消任务
+  const handleCancelTask = async () => {
+    if (!currentTaskId) return
+    
+    try {
+      await projectApi.cancelTask(currentTaskId)
+      message.success('任务已取消')
+      setGeneratingCode(false)
+      setGeneratingVideo(false)
+      setTerminalLog(prev => prev + '\n⚠️ 用户取消任务\n')
+      
+      // 关闭 WebSocket 和轮询
+      if (wsRef.current) wsRef.current.close()
+      if (pollingRef.current) clearInterval(pollingRef.current)
+      setCurrentTaskId(null)
+    } catch (error: any) {
+      message.error('取消失败: ' + (error.message || '未知错误'))
     }
   }
 
   const handleCancelRender = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort()
-      setTerminalLog(prev => prev + '\n⚠️ 用户取消渲染\n')
-      message.warning('正在取消渲染...')
-    }
+    handleCancelTask()
   }
 
   const handleDownloadVideo = async () => {

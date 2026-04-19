@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, Depends
+from fastapi import FastAPI, Request, Depends, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from contextlib import asynccontextmanager
@@ -427,6 +427,78 @@ app.include_router(internal.router, prefix="/api")
 app.include_router(video_topics.router, prefix="/api")
 app.include_router(articles.router, prefix="/api")
 app.include_router(articles_stream.router, prefix="/api")
+
+
+import asyncio
+import json
+
+
+# WebSocket 连接管理器
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: dict[int, list[WebSocket]] = {}
+    
+    async def connect(self, websocket: WebSocket, task_id: int):
+        await websocket.accept()
+        if task_id not in self.active_connections:
+            self.active_connections[task_id] = []
+        self.active_connections[task_id].append(websocket)
+    
+    def disconnect(self, websocket: WebSocket, task_id: int):
+        if task_id in self.active_connections:
+            if websocket in self.active_connections[task_id]:
+                self.active_connections[task_id].remove(websocket)
+            if not self.active_connections[task_id]:
+                del self.active_connections[task_id]
+    
+    async def send_progress(self, task_id: int, data: dict):
+        if task_id in self.active_connections:
+            for connection in self.active_connections[task_id]:
+                try:
+                    await connection.send_json(data)
+                except:
+                    pass
+
+
+manager = ConnectionManager()
+
+
+async def redis_progress_listener():
+    """监听 Redis 进度消息并推送到 WebSocket"""
+    try:
+        import redis.asyncio as aioredis
+        redis_url = settings.REDIS_URL
+        redis = await aioredis.from_url(redis_url)
+        pubsub = redis.pubsub()
+        await pubsub.psubscribe("task:*:progress")
+        
+        async for message in pubsub.listen():
+            if message["type"] == "pmessage":
+                try:
+                    # 从频道名提取 task_id
+                    channel = message["channel"].decode() if isinstance(message["channel"], bytes) else message["channel"]
+                    task_id = int(channel.split(":")[1])
+                    data = json.loads(message["data"].decode() if isinstance(message["data"], bytes) else message["data"])
+                    await manager.send_progress(task_id, data)
+                except Exception as e:
+                    print(f"Redis listener error: {e}")
+    except Exception as e:
+        print(f"Redis connection error: {e}")
+
+
+@app.websocket("/ws/task/{task_id}")
+async def websocket_task_progress(websocket: WebSocket, task_id: int):
+    """WebSocket 实时推送任务进度"""
+    await manager.connect(websocket, task_id)
+    try:
+        while True:
+            # 等待客户端消息（保持连接）
+            data = await websocket.receive_text()
+            # 如果客户端发送 ping，回复 pong
+            if data == "ping":
+                await websocket.send_json({"type": "pong"})
+    except WebSocketDisconnect:
+        manager.disconnect(websocket, task_id)
 
 
 @app.get("/")

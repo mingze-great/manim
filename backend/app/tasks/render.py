@@ -97,6 +97,10 @@ def run_async_code_gen(script_val, template_id, code_ref_val):
         db.close()
         return result
     finally:
+        try:
+            loop.run_until_complete(loop.shutdown_asyncgens())
+        except:
+            pass
         loop.close()
 
 
@@ -317,6 +321,71 @@ class {scene_name}(Scene):
                 update_task_progress(task_id, 100, "completed", video_url=video_url, log="任务完成！\n")
             else:
                 update_task_progress(task_id, 80, "failed", error_message="No MP4 file found", log="未找到视频文件！\n")
+    
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        update_task_progress(task_id, 0, "failed", error_message=str(e), log=f"任务异常: {e}\n")
+    finally:
+        db.close()
+
+
+def generate_code_task(task_id: int, project_id: int, template_id: int = None, model: str = None):
+    """后台代码生成任务核心逻辑"""
+    db = SessionLocal()
+    try:
+        project = db.query(Project).filter(Project.id == project_id).first()
+        if not project:
+            update_task_progress(task_id, 0, "failed", error_message="Project not found")
+            return
+        
+        update_task_progress(task_id, 5, "processing", log="开始生成代码...\n")
+        
+        try:
+            update_task_progress(task_id, 10, "processing", log="准备生成脚本...\n")
+            
+            script_val = str(project.final_script) if project.final_script is not None else ""
+            
+            # 获取模板代码
+            template_code = None
+            if template_id:
+                from app.models.template import Template
+                template = db.query(Template).filter(Template.id == template_id).first()
+                if template:
+                    template_code = template.code
+                    update_task_progress(task_id, 15, "processing", log=f"使用模板: {template.name}\n")
+            
+            update_task_progress(task_id, 20, "processing", log="正在生成 Manim 代码...\n")
+            
+            # 使用线程池执行异步代码生成
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(run_async_code_gen, script_val, template_code, None)
+                
+                # 等待完成，更新进度
+                progress = 30
+                while not future.done():
+                    time.sleep(2)
+                    progress = min(progress + 5, 80)
+                    update_task_progress(task_id, progress, "processing", log="代码生成中...\n")
+                
+                result = future.result(timeout=180)
+            
+            if result:
+                # 更新项目的 manim_code
+                project.manim_code = result
+                project.status = "code_generated"
+                db.commit()
+                
+                update_task_progress(task_id, 100, "completed", log="代码生成完成！\n")
+            else:
+                update_task_progress(task_id, 0, "failed", error_message="Code generation returned empty result", log="代码生成失败：返回空结果\n")
+        
+        except concurrent.futures.TimeoutError:
+            update_task_progress(task_id, 0, "failed", error_message="Code generation timeout", log="代码生成超时\n")
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            update_task_progress(task_id, 0, "failed", error_message=str(e), log=f"代码生成异常: {e}\n")
     
     except Exception as e:
         import traceback
