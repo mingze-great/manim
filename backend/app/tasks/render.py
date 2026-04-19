@@ -19,8 +19,8 @@ from app.services.manim import ManimService
 
 settings = get_settings()
 
-RENDER_TOTAL_TIMEOUT = 300
-RENDER_NO_OUTPUT_TIMEOUT = 60
+RENDER_TOTAL_TIMEOUT = 600
+RENDER_NO_OUTPUT_TIMEOUT = 180
 
 try:
     import redis
@@ -285,10 +285,11 @@ class {scene_name}(Scene):
                     process.wait()
                 
                 if timed_out:
-                    update_task_progress(task_id, 80, "failed", error_message="渲染超时，强制终止", log="渲染超时，请检查代码或降低视频复杂度\n")
-                    return
+                    # 超时后也要检查是否有视频文件
+                    update_task_progress(task_id, 80, "processing", log="渲染超时，检查是否有输出文件...\n")
+                    # 不直接 return，继续检查视频文件
                 
-                if process.returncode != 0:
+                if process.returncode != 0 and not timed_out:
                     update_task_progress(task_id, 80, "failed", error_message="Render failed", log=f"渲染失败 (code: {process.returncode})\n")
                     return
                     
@@ -330,7 +331,8 @@ class {scene_name}(Scene):
                 db.commit()
                 update_task_progress(task_id, 100, "completed", video_url=video_url, log="任务完成！\n")
             else:
-                update_task_progress(task_id, 80, "failed", error_message="No MP4 file found", log="未找到视频文件！\n")
+                error_msg = "渲染超时" if timed_out else "未找到视频文件"
+                update_task_progress(task_id, 80, "failed", error_message=error_msg, log=f"{error_msg}！\n")
     
     except Exception as e:
         import traceback

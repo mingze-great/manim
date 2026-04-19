@@ -330,6 +330,7 @@ useEffect(() => {
     setShowTerminal(true)
     setRenderError(null)
     setTerminalLog('⏱️ 提交后台渲染任务...\n')
+    setTask(null)  // 清除旧任务状态
     
     try {
       // 使用异步渲染 API
@@ -642,16 +643,16 @@ useEffect(() => {
                       <span 
                         className="status-badge"
                         style={{ 
-                          backgroundColor: `${statusMap[task?.status || (generatingVideo ? 'processing' : 'completed')]?.color}20`,
-                          color: statusMap[task?.status || (generatingVideo ? 'processing' : 'completed')]?.color 
+                          backgroundColor: `${statusMap[generatingVideo ? 'processing' : (project?.video_url ? 'completed' : (task?.status || 'pending'))]?.color}20`,
+                          color: statusMap[generatingVideo ? 'processing' : (project?.video_url ? 'completed' : (task?.status || 'pending'))]?.color 
                         }}
                       >
-                        {statusMap[task?.status || (generatingVideo ? 'processing' : 'completed')]?.text}
+                        {statusMap[generatingVideo ? 'processing' : (project?.video_url ? 'completed' : (task?.status || 'pending'))]?.text}
                       </span>
                     </div>
                     <Progress 
                       percent={task?.progress || videoProgress} 
-                      status={task?.status === 'failed' || renderError ? 'exception' : task?.status === 'completed' || project?.video_url ? 'success' : 'active'}
+                      status={task?.status === 'failed' || renderError ? 'exception' : generatingVideo ? 'active' : (project?.video_url ? 'success' : 'normal')}
                       strokeColor={{
                         '0%': '#0066FF',
                         '100%': '#00CCFF',
