@@ -2,6 +2,7 @@ from .user import User
 from .project import Project, Conversation
 from .task import Task
 from .template import Template
+from .template_category import TemplateCategory
 from .subscription import Order, Subscription
 from .statistics import DailyStatistics
 from .background_task import BackgroundTask
@@ -12,4 +13,4 @@ from .daily_usage import UserDailyUsage
 from .favorite_topic import FavoriteTopic
 from .user_module_permission import UserModulePermission
 
-__all__ = ["User", "Project", "Conversation", "Task", "Template", "Order", "Subscription", "DailyStatistics", "BackgroundTask", "VideoTopicCategory", "Article", "ArticleCategory", "UserDailyUsage", "FavoriteTopic", "UserModulePermission"]
+__all__ = ["User", "Project", "Conversation", "Task", "Template", "TemplateCategory", "Order", "Subscription", "DailyStatistics", "BackgroundTask", "VideoTopicCategory", "Article", "ArticleCategory", "UserDailyUsage", "FavoriteTopic", "UserModulePermission"]

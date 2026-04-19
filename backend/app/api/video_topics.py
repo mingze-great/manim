@@ -30,7 +30,8 @@ async def get_video_topic_categories(
         "name": c.name,
         "icon": c.icon,
         "description": c.description,
-        "example_topics": json.loads(c.example_topics) if c.example_topics else []
+        "example_topics": json.loads(c.example_topics) if c.example_topics else [],
+        "skip_chat": c.skip_chat if c.skip_chat else False
     } for c in categories]
 
 

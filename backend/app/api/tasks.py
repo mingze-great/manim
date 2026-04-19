@@ -885,6 +885,7 @@ async def generate_code_async(
     project_id: int,
     template_id: Optional[int] = Query(None),
     model: Optional[str] = Query(None),
+    skip_chat: bool = Query(False, description="跳过对话验证，直接使用主题生成脚本"),
     current_user: Annotated[User, Depends(get_current_user)] = None,
     db: Annotated[Session, Depends(get_db)] = None
 ):
@@ -898,7 +899,11 @@ async def generate_code_async(
         raise HTTPException(status_code=404, detail="Project not found")
     
     if not project.final_script:
-        raise HTTPException(status_code=400, detail="请先完成内容对话")
+        if skip_chat and project.theme:
+            project.final_script = f"请根据以下主题生成数学可视化动画：\n{project.theme}"
+            db.commit()
+        else:
+            raise HTTPException(status_code=400, detail="请先完成内容对话")
     
     # 创建任务记录
     task = Task(

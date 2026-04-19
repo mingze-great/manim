@@ -142,6 +142,7 @@ export default function Creator() {
     category?: string
     module_type: 'manim' | 'stickman'
     storyboard_count?: number
+    skipChat?: boolean
   }) => {
     setLoading(true)
     try {
@@ -149,6 +150,10 @@ export default function Creator() {
       message.success('创建成功')
       if (payload.module_type === 'stickman') {
         navigate(`/project/${data.id}/task`)
+        return
+      }
+      if (payload.skipChat) {
+        navigate(`/project/${data.id}/task?autoGenerate=true`)
         return
       }
       navigate(`/project/${data.id}/chat`)
@@ -167,6 +172,7 @@ export default function Creator() {
       category: selectedCategory?.name,
       module_type: 'manim',
       storyboard_count: 3,
+      skipChat: selectedCategory?.skip_chat,
     })
   }
 
@@ -175,7 +181,14 @@ export default function Creator() {
       message.warning('请输入主题')
       return
     }
-    await handleTopicSelect(customTopic)
+    await handleCreateProject({
+      title: `视频创作-${customTopic}`,
+      theme: customTopic,
+      category: selectedCategory?.name,
+      module_type: 'manim',
+      storyboard_count: 3,
+      skipChat: selectedCategory?.skip_chat,
+    })
   }
 
   const handleStickmanCreate = async () => {

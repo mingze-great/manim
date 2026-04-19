@@ -7,6 +7,7 @@ export interface VideoTopicCategory {
   icon: string
   description: string
   example_topics: string[]
+  skip_chat?: boolean
 }
 
 

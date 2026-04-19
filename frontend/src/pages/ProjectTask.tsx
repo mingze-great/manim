@@ -1,12 +1,13 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
-import { Card, Progress, Button, Space, message, Spin, Tabs, Select, Modal } from 'antd'
-import { DownloadOutlined, PlayCircleOutlined, PlaySquareOutlined, CloudUploadOutlined, EyeOutlined } from '@ant-design/icons'
+import { Card, Progress, Button, Space, message, Spin, Tabs, Select } from 'antd'
+import { DownloadOutlined, PlayCircleOutlined, PlaySquareOutlined, CloudUploadOutlined } from '@ant-design/icons'
 import { projectApi, Task, Project } from '@/services/project'
-import { templateApi, Template } from '@/services/template'
 import { useAuthStore } from '@/stores/authStore'
 import { motion } from 'framer-motion'
 import StickmanProjectTask from './StickmanProjectTask'
+import TemplateSelector from '@/components/TemplateSelector'
+import '@/components/TemplateSelector.css'
 
 const statusMap: Record<string, { text: string; color: string }> = {
   pending: { text: '等待中', color: '#faad14' },
@@ -38,10 +39,7 @@ export default function ProjectTask() {
   const [renderError, setRenderError] = useState<string | null>(null)
   const [selectedModel, setSelectedModel] = useState<string>('')
   const [availableModels, setAvailableModels] = useState<string[]>([])
-  const [templates, setTemplates] = useState<Template[]>([])
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null)
-  const [videoPreviewVisible, setVideoPreviewVisible] = useState(false)
-  const [previewVideoUrl, setPreviewVideoUrl] = useState<string>('')
   
   // WebSocket 和异步任务相关
   const [currentTaskId, setCurrentTaskId] = useState<number | null>(null)
@@ -77,19 +75,7 @@ export default function ProjectTask() {
     }
   }
 
-  const fetchTemplates = async () => {
-    try {
-      const { data } = await templateApi.list()
-      const allTemplates = [...data.system_templates, ...data.user_templates]
-      const activeTemplates = allTemplates.filter(t => t.is_active !== false)
-      setTemplates(activeTemplates)
-      if (activeTemplates.length > 0 && !selectedTemplateId) {
-        setSelectedTemplateId(activeTemplates[0].id)
-      }
-    } catch (error) {
-      console.error('获取模板失败:', error)
-    }
-  }
+  // 模板在 TemplateSelector 组件内加载
   
   const fetchAvailableModels = async () => {
     try {
@@ -110,7 +96,6 @@ export default function ProjectTask() {
 useEffect(() => {
     if (id) {
       fetchProject()
-      fetchTemplates()
       fetchAvailableModels()
     }
   }, [id])
@@ -282,7 +267,12 @@ useEffect(() => {
 
     try {
       // 使用异步 API
-      const { data } = await projectApi.generateCodeAsyncV2(Number(id), selectedTemplateId || undefined, selectedModel || undefined)
+      const { data } = await projectApi.generateCodeAsyncV2(
+        Number(id), 
+        selectedTemplateId || undefined, 
+        selectedModel || undefined,
+        !project?.final_script
+      )
       
       setCurrentTaskId(data.task_id)
       setCodeMessage('脚本生成中，可关闭页面...')
@@ -507,25 +497,7 @@ useEffect(() => {
                 <div className="mb-4">
                   <div className="flex items-center gap-3 flex-wrap mb-2">
                     <div>
-                      <label className="block text-sm text-gray-500 mb-1">视频风格模板</label>
-                      <Select
-                        style={{ width: 200 }}
-                        placeholder="默认风格"
-                        allowClear
-                        value={selectedTemplateId}
-                        onChange={setSelectedTemplateId}
-                        options={templates.map(t => ({
-                          label: t.name,
-                          value: t.id
-                        }))}
-                      />
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm text-gray-500 mb-1">
-                        AI 模型
-                        <span className="text-xs text-green-500 ml-2">推荐首次使用 DeepSeek V3.2</span>
-                      </label>
+                      <label className="block text-sm text-gray-500 mb-1">AI 模型</label>
                       <Select
                         placeholder="默认 DeepSeek V3.2"
                         style={{ width: 200 }}
@@ -543,34 +515,21 @@ useEffect(() => {
                         ))}
                       </Select>
                     </div>
-                    
-                    {selectedTemplateId && templates.find(t => t.id === selectedTemplateId)?.example_video_url && (
-                      <Button
-                        icon={<EyeOutlined />}
-                        onClick={() => {
-                          const template = templates.find(t => t.id === selectedTemplateId)
-                          if (template?.example_video_url) {
-                            const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
-                            setPreviewVideoUrl(template.example_video_url.startsWith('http') 
-                              ? template.example_video_url 
-                              : `${API_BASE}${template.example_video_url}`)
-                            setVideoPreviewVisible(true)
-                          }
-                        }}
-                        style={{ marginTop: '22px' }}
-                      >
-                        预览示例
-                      </Button>
-                    )}
+                  </div>
+                  
+                  {/* 模板卡片选择器 */}
+                  <div className="mt-4">
+                    <label className="block text-sm text-gray-500 mb-2">视频风格模板</label>
+                    <TemplateSelector
+                      selectedId={selectedTemplateId}
+                      onSelect={(id) => setSelectedTemplateId(id)}
+                    />
                   </div>
                   
                   {/* 提示文字 */}
-                  <div className="text-xs text-gray-400 space-y-1">
-                    <p>• 视频风格模板：选择后生成的脚本会按模板风格渲染，不选则使用默认风格</p>
-                    <p>• AI 模型：推荐首次使用 DeepSeek V3.2，出错时自动切换到 Qwen3 Coder</p>
-                    {selectedTemplateId && templates.find(t => t.id === selectedTemplateId)?.description && (
-                      <p className="text-blue-500">• {templates.find(t => t.id === selectedTemplateId)?.description}</p>
-                    )}
+                  <div className="text-xs text-gray-400 space-y-1 mt-3">
+                    <p>• 模板：选择后生成的脚本会按模板风格渲染，不选则使用默认风格</p>
+                    <p>• AI 模型：推荐首次使用 DeepSeek V3.2，出错时可切换到 Qwen3 Coder</p>
                   </div>
                 </div>
 
@@ -762,33 +721,6 @@ useEffect(() => {
         </Card>
       </motion.div>
       </div>
-      
-      <TemplateVideoPreviewModal 
-        visible={videoPreviewVisible} 
-        videoUrl={previewVideoUrl} 
-        onClose={() => setVideoPreviewVisible(false)} 
-      />
     </>
-  )
-}
-
-
-function TemplateVideoPreviewModal({ visible, videoUrl, onClose }: { visible: boolean; videoUrl: string; onClose: () => void }) {
-  return (
-    <Modal
-      title="模板示例视频"
-      open={visible}
-      onCancel={onClose}
-      footer={null}
-      width={800}
-      centered
-    >
-      <video
-        src={videoUrl}
-        controls
-        className="w-full rounded-lg"
-        autoPlay
-      />
-    </Modal>
   )
 }

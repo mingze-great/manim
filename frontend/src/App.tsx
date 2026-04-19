@@ -23,6 +23,7 @@ import AdminUsers from './pages/admin/AdminUsers'
 import AdminLogs from './pages/admin/AdminLogs'
 import AdminSettings from './pages/admin/AdminSettings'
 import AdminTemplates from './pages/admin/AdminTemplates'
+import AdminTemplateCategories from './pages/admin/AdminTemplateCategories'
 import AdminStatistics from './pages/admin/AdminStatistics'
 import AdminTokenUsage from './pages/admin/AdminTokenUsage'
 import AdminArticleCategories from './pages/admin/AdminArticleCategories'
@@ -109,6 +110,7 @@ function AppContent() {
         <Route path="/admin/logs" element={<AdminLogs />} />
         <Route path="/admin/settings" element={<AdminSettings />} />
         <Route path="/admin/templates" element={<AdminTemplates />} />
+        <Route path="/admin/template-categories" element={<AdminTemplateCategories />} />
         <Route path="/admin/article-categories" element={<AdminArticleCategories />} />
         <Route path="/admin/module-stats" element={<AdminModuleStats />} />
         <Route path="/admin/statistics" element={<AdminStatistics />} />

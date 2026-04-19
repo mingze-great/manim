@@ -12,6 +12,7 @@ from datetime import datetime
 from app.config import get_settings
 from app.database import engine, Base
 from app.api import auth, projects, tasks, templates, admin, payment, monitoring, internal, video_topics, articles, articles_stream
+from app.models.template_category import TemplateCategory
 
 settings = get_settings()
 
@@ -369,6 +370,23 @@ class TheoremScene(Scene):
         if not exists:
             template = Template(**template_data, is_system=True)
             db.add(template)
+    
+    template_categories = [
+        {"name": "思维可视化", "code": "thinking", "description": "思维导图、概念图、流程图等思维可视化模板", "sort_order": 1},
+        {"name": "数学可视化", "code": "math", "description": "数学公式、几何图形、函数图像等数学可视化模板", "sort_order": 2, "skip_chat": True},
+        {"name": "数据可视化", "code": "data", "description": "图表、数据展示、统计分析等数据可视化模板", "sort_order": 3},
+        {"name": "动画效果", "code": "animation", "description": "转场动画、特效演示等动画效果模板", "sort_order": 4},
+        {"name": "教育教学", "code": "education", "description": "知识点讲解、课程演示等教育教学模板", "sort_order": 5},
+    ]
+    
+    for cat_data in template_categories:
+        exists = db.query(TemplateCategory).filter(TemplateCategory.code == cat_data["code"]).first()
+        if not exists:
+            cat = TemplateCategory(**cat_data, is_active=True)
+            db.add(cat)
+            print(f"[Startup] Created template category: {cat_data['name']}")
+    
+    print("[Startup] Template categories initialized")
     
     admin_email = os.getenv("ADMIN_EMAIL")
     if admin_email:

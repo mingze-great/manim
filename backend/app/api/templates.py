@@ -8,6 +8,7 @@ import time
 from app.database import get_db
 from app.models.user import User
 from app.models.template import Template
+from app.models.template_category import TemplateCategory
 from app.schemas.template import TemplateCreate, TemplateResponse, TemplateListResponse, TemplateUpdate
 from app.api.auth import get_current_user
 
@@ -21,25 +22,44 @@ def get_templates(
     skip: int = Query(0, ge=0),
     limit: int = Query(10, ge=1, le=100),
     category: Optional[str] = Query(None),
+    category_id: Optional[int] = Query(None),
+    category_code: Optional[str] = Query(None),
 ):
+    """获取模板列表，支持按分类筛选"""
     current_user_obj = current_user
     
     user_is_admin = bool(current_user_obj.is_admin)
     current_user_id = current_user_obj.id
     
+    # 构建基础查询
+    base_filter = [Template.is_active.is_(True)]
+    
+    # 分类筛选
+    if category_id:
+        base_filter.append(Template.category_id == category_id)
+    elif category_code:
+        # 通过分类代码查找
+        cat = db.query(TemplateCategory).filter(TemplateCategory.code == category_code).first()
+        if cat:
+            base_filter.append(Template.category_id == cat.id)
+    elif category:
+        # 兼容旧的 category 参数
+        base_filter.append(Template.category == category)
+    
     if user_is_admin:
         system_query_result = db.query(Template).filter(
-            Template.is_active.is_(True),
+            *base_filter,
             Template.is_system.is_(True)
         ).offset(skip).limit(limit).all()
         
         user_query_result = db.query(Template).filter(
+            *base_filter,
             Template.is_active.is_(True),
             Template.is_system.is_(False)
         ).offset(skip).limit(limit).all()
     else:
         all_visible = db.query(Template).filter(
-            Template.is_active.is_(True),
+            *base_filter,
             Template.is_visible.is_(True)
         ).offset(skip).limit(limit).all()
         
@@ -53,6 +73,30 @@ def get_templates(
         system_templates=system_responses,
         user_templates=user_responses
     )
+
+
+@router.get("/categories")
+def get_template_categories(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)]
+):
+    """获取模板分类列表（用户端）"""
+    categories = db.query(TemplateCategory).filter(
+        TemplateCategory.is_active.is_(True)
+    ).order_by(TemplateCategory.sort_order).all()
+    
+    return {
+        "categories": [
+            {
+                "id": c.id,
+                "name": c.name,
+                "code": c.code,
+                "description": c.description,
+                "icon": c.icon
+            }
+            for c in categories
+        ]
+    }
 
 
 @router.get("/{template_id}", response_model=TemplateResponse)

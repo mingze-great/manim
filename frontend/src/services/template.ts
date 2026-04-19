@@ -5,6 +5,7 @@ export interface Template {
   name: string
   description: string | null
   category: string | null
+  category_id: number | null
   code: string
   prompt: string | null
   thumbnail: string | null
@@ -17,15 +18,30 @@ export interface Template {
   created_at: string
 }
 
+export interface TemplateCategory {
+  id: number
+  name: string
+  code: string
+  description: string | null
+  icon: string | null
+  skip_chat?: boolean
+}
+
 export interface TemplateList {
   system_templates: Template[]
   user_templates: Template[]
 }
 
 export const templateApi = {
-  list: () => api.get<TemplateList>('/templates'),
+  list: (categoryCode?: string) => {
+    const params = new URLSearchParams()
+    if (categoryCode) params.append('category_code', categoryCode)
+    const query = params.toString()
+    return api.get<TemplateList>(`/templates${query ? `?${query}` : ''}`)
+  },
   listActive: () => api.get<Template[]>('/templates/active'),
   get: (id: number) => api.get<Template>(`/templates/${id}`),
+  categories: () => api.get<{ categories: TemplateCategory[] }>('/templates/categories'),
   create: (data: { name: string; description: string; category: string; code: string; prompt?: string; thumbnail?: string }) =>
     api.post<Template>('/templates', data),
   update: (id: number, data: Partial<{ name: string; description: string; code: string; prompt: string; thumbnail: string; example_video_url: string; is_visible: boolean }>) =>

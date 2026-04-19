@@ -1143,3 +1143,129 @@ async def set_system_config(
     db.commit()
     
     return {"message": "配置保存成功"}
+
+
+# ============ 模板分类管理 ============
+
+@router.get("/template-categories")
+async def list_template_categories(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """获取模板分类列表"""
+    from app.models.template_category import TemplateCategory
+    
+    categories = db.query(TemplateCategory).order_by(TemplateCategory.sort_order).all()
+    
+    return {
+        "categories": [
+            {
+                "id": c.id,
+                "name": c.name,
+                "code": c.code,
+                "description": c.description,
+                "icon": c.icon,
+                "sort_order": c.sort_order,
+                "is_active": c.is_active,
+                "skip_chat": c.skip_chat if c.skip_chat else False,
+                "created_at": c.created_at.isoformat() if c.created_at else None
+            }
+            for c in categories
+        ]
+    }
+
+
+@router.post("/template-categories")
+async def create_template_category(
+    data: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """创建模板分类"""
+    from app.models.template_category import TemplateCategory
+    
+    name = data.get("name")
+    code = data.get("code")
+    
+    if not name or not code:
+        raise HTTPException(status_code=400, detail="名称和代码不能为空")
+    
+    # 检查代码是否已存在
+    existing = db.query(TemplateCategory).filter(TemplateCategory.code == code).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="分类代码已存在")
+    
+    category = TemplateCategory(
+        name=name,
+        code=code,
+        description=data.get("description"),
+        icon=data.get("icon"),
+        sort_order=data.get("sort_order", 0),
+        is_active=data.get("is_active", True),
+        skip_chat=data.get("skip_chat", False)
+    )
+    
+    db.add(category)
+    db.commit()
+    db.refresh(category)
+    
+    return {"message": "分类创建成功", "id": category.id}
+
+
+@router.put("/template-categories/{category_id}")
+async def update_template_category(
+    category_id: int,
+    data: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """更新模板分类"""
+    from app.models.template_category import TemplateCategory
+    
+    category = db.query(TemplateCategory).filter(TemplateCategory.id == category_id).first()
+    
+    if not category:
+        raise HTTPException(status_code=404, detail="分类不存在")
+    
+    if "name" in data:
+        category.name = data["name"]
+    if "description" in data:
+        category.description = data["description"]
+    if "icon" in data:
+        category.icon = data["icon"]
+    if "sort_order" in data:
+        category.sort_order = data["sort_order"]
+    if "is_active" in data:
+        category.is_active = data["is_active"]
+    if "skip_chat" in data:
+        category.skip_chat = data["skip_chat"]
+    
+    db.commit()
+    
+    return {"message": "分类更新成功"}
+
+
+@router.delete("/template-categories/{category_id}")
+async def delete_template_category(
+    category_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """删除模板分类"""
+    from app.models.template_category import TemplateCategory
+    from app.models.template import Template
+    
+    category = db.query(TemplateCategory).filter(TemplateCategory.id == category_id).first()
+    
+    if not category:
+        raise HTTPException(status_code=404, detail="分类不存在")
+    
+    # 检查是否有模板使用此分类
+    template_count = db.query(Template).filter(Template.category_id == category_id).count()
+    if template_count > 0:
+        raise HTTPException(status_code=400, detail=f"该分类下有 {template_count} 个模板，无法删除")
+    
+    db.delete(category)
+    db.commit()
+    
+    return {"message": "分类删除成功"}

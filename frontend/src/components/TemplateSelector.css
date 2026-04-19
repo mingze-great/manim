@@ -1,0 +1,152 @@
+.template-selector {
+  margin-bottom: 16px;
+}
+
+.template-category-tabs {
+  margin-bottom: 12px;
+}
+
+.template-category-tabs .ant-tabs-nav {
+  margin-bottom: 0;
+}
+
+.template-category-tabs .ant-tabs-tab {
+  padding: 4px 12px;
+  font-size: 13px;
+}
+
+.template-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.template-card {
+  border-radius: 8px;
+  border: 2px solid #e8e8e8;
+  background: #fff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  overflow: hidden;
+}
+
+.template-card:hover {
+  border-color: #0066FF;
+  box-shadow: 0 4px 12px rgba(0, 102, 255, 0.15);
+  transform: translateY(-2px);
+}
+
+.template-card-selected {
+  border-color: #0066FF;
+  background: #f0f7ff;
+}
+
+.template-card-thumb {
+  position: relative;
+  width: 100%;
+  height: 90px;
+  background: #f5f5f5;
+  overflow: hidden;
+}
+
+.template-card-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.template-card-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%);
+}
+
+.template-card-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 18px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.template-card:hover .template-card-play {
+  opacity: 1;
+}
+
+.template-card-check {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #0066FF;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+}
+
+.template-card-info {
+  padding: 8px;
+}
+
+.template-card-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: #333;
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.template-card-usage {
+  font-size: 10px;
+  color: #999;
+  margin-top: 2px;
+  display: block;
+}
+
+/* 暗色主题 */
+.dark .template-card {
+  border-color: #333;
+  background: #1a1a1a;
+}
+
+.dark .template-card:hover {
+  border-color: #0066FF;
+}
+
+.dark .template-card-selected {
+  background: #1a2744;
+}
+
+.dark .template-card-placeholder {
+  background: linear-gradient(135deg, #2a2a2a 0%, #333 100%);
+}
+
+.dark .template-card-name {
+  color: #e0e0e0;
+}
+
+.dark .template-card-usage {
+  color: #666;
+}

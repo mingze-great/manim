@@ -14,5 +14,6 @@ class VideoTopicCategory(Base):
     topic_generation_prompt = Column(Text)
     system_prompt = Column(Text)
     is_active = Column(Boolean, default=True)
+    skip_chat = Column(Boolean, default=False, comment="跳过对话，直接生成脚本")
     sort_order = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)

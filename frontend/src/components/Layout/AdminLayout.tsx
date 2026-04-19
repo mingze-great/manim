@@ -31,6 +31,7 @@ export default function AdminLayout() {
     { key: '/admin/token-usage', icon: <ThunderboltOutlined />, label: 'Token统计' },
     { key: '/admin/users', icon: <TeamOutlined />, label: '用户管理' },
     { key: '/admin/templates', icon: <CodeOutlined />, label: '代码模板' },
+    { key: '/admin/template-categories', icon: <SettingOutlined />, label: '模板分类' },
     { key: '/admin/article-categories', icon: <EditOutlined />, label: '公众号配置' },
     { key: '/admin/module-stats', icon: <BarChartOutlined />, label: '模块看板' },
     { key: '/admin/logs', icon: <FileTextOutlined />, label: '操作日志' },

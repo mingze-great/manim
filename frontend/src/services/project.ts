@@ -169,10 +169,11 @@ export const projectApi = {
     api.post<{ task_id: number; celery_task_id: string; message: string }>(`/tasks/${projectId}/render-async`),
   
   // 异步生成代码（后台运行，可关闭浏览器）
-  generateCodeAsyncV2: (projectId: number, templateId?: number, model?: string) => {
+  generateCodeAsyncV2: (projectId: number, templateId?: number, model?: string, skipChat?: boolean) => {
     const params = new URLSearchParams()
     if (templateId) params.append('template_id', String(templateId))
     if (model) params.append('model', model)
+    if (skipChat) params.append('skip_chat', 'true')
     const query = params.toString()
     return api.post<{ task_id: number; celery_task_id: string; message: string }>(
       `/tasks/${projectId}/generate-code-async${query ? `?${query}` : ''}`
