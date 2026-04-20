@@ -262,15 +262,7 @@ class ManimService:
         import asyncio
         return asyncio.run(self.generate_code(script))
     
-    async def generate_code(self, script: str, template_code: str = None, video_title: str = None, model: str = None) -> str:
-        """生成Manim代码
-        
-        Args:
-            script: 视频内容脚本
-            template_code: 模板代码（可选），如果提供则按模板风格生成
-            video_title: 视频标题（可选），将作为视频开头的大标题
-            model: 模型选择（可选），如 "qwen3-coder-next"
-        """
+    async def generate_code(self, script: str, template_code: str = None, video_title: str = None, model: str = None, retry_callback=None) -> tuple:
         language = detect_language(script)
         
         if template_code:
@@ -340,7 +332,8 @@ Requirements:
             ],
             model=model,
             temperature=0.7,
-            max_tokens=8000
+            max_tokens=16000,
+            retry_callback=retry_callback
         )
         
         if "```python" in content:
@@ -354,6 +347,35 @@ Requirements:
             code = content.strip()
         
         code = self.fix_manim_compatibility(code)
+        
+        import ast
+        max_auto_fix = 2
+        auto_fixed = False
+        for fix_attempt in range(max_auto_fix):
+            try:
+                ast.parse(code)
+                auto_fixed = True
+                break
+            except SyntaxError as e:
+                print(f"[ManimService] 脚本语法检查失败(第{fix_attempt+1}次): {e.msg} 行{e.lineno}")
+                if fix_attempt == 0:
+                    code, _ = self.validate_code(code)
+                    try:
+                        ast.parse(code)
+                        auto_fixed = True
+                        break
+                    except SyntaxError:
+                        pass
+                
+                if fix_attempt < max_auto_fix - 1:
+                    print(f"[ManimService] 本地修复失败，请求AI修复...")
+                    if retry_callback:
+                        retry_callback("脚本需要微调，正在自动优化...")
+                    try:
+                        code = await self._ai_fix_syntax(code, str(e), script, system_prompt)
+                        code = self.fix_manim_compatibility(code)
+                    except Exception as fix_err:
+                        print(f"[ManimService] AI修复也失败: {fix_err}")
         
         return code
     
@@ -486,7 +508,6 @@ Requirements:
         return code
     
     def _try_fix_syntax(self, code: str, error: SyntaxError) -> str:
-        """尝试修复语法错误"""
         lines = code.split('\n')
         if error.lineno and error.lineno <= len(lines):
             line = lines[error.lineno - 1]
@@ -494,3 +515,31 @@ Requirements:
                 line = self._fix_common_syntax_errors(line)
                 lines[error.lineno - 1] = line
         return '\n'.join(lines)
+    
+    async def _ai_fix_syntax(self, code: str, error_msg: str, original_script: str, system_prompt: str) -> str:
+        fix_prompt = f"""以下 Manim 脚本存在语法错误，请修复它。
+
+错误信息: {error_msg}
+
+请只修复语法错误，不要改变动画逻辑和内容。直接输出修复后的完整脚本。
+
+```python
+{code}
+```"""
+
+        content = await self.client.generate_code(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": fix_prompt}
+            ],
+            temperature=0.3,
+            max_tokens=16000
+        )
+        
+        if "```python" in content:
+            start = content.find("```python") + len("```python")
+            end = content.find("```", start)
+            if end != -1:
+                return content[start:end].strip()
+            return content[start:].strip()
+        return content.strip()

@@ -35,20 +35,23 @@ class DashScopeAdapter(LLMAdapter):
             timeout=httpx.Timeout(30.0, connect=10.0)
         )
         
-        # 代码生成模型链
+        self.long_timeout_client = AsyncOpenAI(
+            api_key=settings.DASHSCOPE_API_KEY,
+            base_url=settings.DASHSCOPE_BASE_URL,
+            timeout=httpx.Timeout(300.0, connect=15.0)
+        )
+        
         self.code_models = [
             settings.DASHSCOPE_CODE_MODEL,
             settings.DASHSCOPE_CODE_FALLBACK_MODEL
         ]
         
-        # 文本对话模型链
         self.chat_models = [
             settings.DASHSCOPE_CHAT_MODEL,
             settings.DASHSCOPE_CHAT_FALLBACK_MODEL_1,
             settings.DASHSCOPE_CHAT_FALLBACK_MODEL_2
         ]
         
-        # 可用模型列表（供用户选择）
         self.available_models = [m.strip() for m in settings.DASHSCOPE_AVAILABLE_MODELS.split(",")]
     
     async def chat(self, messages: list[dict], model: str = None, **kwargs) -> str:
@@ -73,37 +76,56 @@ class DashScopeAdapter(LLMAdapter):
         
         raise Exception("所有模型均失败")
     
-    async def generate_code(self, messages: list[dict], model: str = None, **kwargs):
-        """代码生成 - 使用更长的超时时间（120秒）"""
-        from openai import AsyncOpenAI
-        import httpx
+    async def generate_code(self, messages: list[dict], model: str = None, retry_callback=None, **kwargs):
+        import asyncio
         
-        # 创建更长超时的客户端（120秒，代码生成需要更长时间）
-        long_timeout_client = AsyncOpenAI(
-            api_key=settings.DASHSCOPE_API_KEY,
-            base_url=settings.DASHSCOPE_BASE_URL,
-            timeout=httpx.Timeout(120.0, connect=10.0)
-        )
+        primary_model = model or self.code_models[0]
+        fallback_model = self.code_models[1] if len(self.code_models) > 1 else None
         
-        models_to_try = [model] if model else self.code_models
+        max_primary_retries = 3
+        max_fallback_retries = 2
         
-        for i, current_model in enumerate(models_to_try):
+        for attempt in range(max_primary_retries):
             try:
-                print(f"[DashScope] 尝试代码生成模型: {current_model}")
-                response = await long_timeout_client.chat.completions.create(
-                    model=current_model,
+                print(f"[DashScope] 主模型 {primary_model} 第{attempt+1}次尝试")
+                if retry_callback:
+                    retry_callback(f"正在生成脚本... (第{attempt+1}次)")
+                response = await self.long_timeout_client.chat.completions.create(
+                    model=primary_model,
                     messages=messages,
                     **kwargs
                 )
                 return response.choices[0].message.content
             except Exception as e:
-                print(f"[DashScope] 代码模型 {current_model} 失败: {e}")
-                if i < len(models_to_try) - 1:
-                    print(f"[DashScope] 降级到: {models_to_try[i+1]}")
-                else:
-                    raise e
+                print(f"[DashScope] 主模型 {primary_model} 第{attempt+1}次失败: {e}")
+                if attempt < max_primary_retries - 1:
+                    wait_time = 2 * (attempt + 1)
+                    if retry_callback:
+                        retry_callback(f"当前模型响应较慢，{wait_time}秒后重试... (第{attempt+2}次)")
+                    await asyncio.sleep(wait_time)
         
-        raise Exception("所有代码模型均失败")
+        if not fallback_model:
+            raise Exception("脚本生成失败，请稍后重试")
+        
+        for attempt in range(max_fallback_retries):
+            try:
+                print(f"[DashScope] 降级模型 {fallback_model} 第{attempt+1}次尝试")
+                if retry_callback:
+                    retry_callback(f"正在切换备用模型重新生成... (第{attempt+1}次)")
+                response = await self.long_timeout_client.chat.completions.create(
+                    model=fallback_model,
+                    messages=messages,
+                    **kwargs
+                )
+                return response.choices[0].message.content
+            except Exception as e:
+                print(f"[DashScope] 降级模型 {fallback_model} 第{attempt+1}次失败: {e}")
+                if attempt < max_fallback_retries - 1:
+                    if retry_callback:
+                        retry_callback(f"备用模型也遇到问题，正在重试...")
+                    await asyncio.sleep(2)
+        
+        raise Exception("脚本生成失败，请稍后重试")
     
     async def chat_with_response(self, messages: list[dict], model: str = None, **kwargs):
         """返回完整的 response 对象"""

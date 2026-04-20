@@ -19,7 +19,7 @@ from app.models.project import Project
 from app.models.task import Task
 from app.models.template import Template
 from app.api.auth import get_current_user
-from app.services.manim import ManimService
+from app.services.manim import ManimService, detect_language
 from app.services.stickman_generator import StickmanGenerator
 from app.config import get_settings
 from app.utils.cos_storage import cos_storage
@@ -149,7 +149,7 @@ async def generate_code_stream(
         try:
             project_local = db_session.query(Project).filter(Project.id == project_id).first()
             if not project_local:
-                yield f"data: {json.dumps({'step': 'error', 'progress': 0, 'message': 'Project not found'})}\n\n"
+                yield f"data: {json.dumps({'step': 'error', 'progress': 0, 'message': '项目未找到'})}\n\n"
                 return
             
             yield f"data: {json.dumps({'step': 'start', 'progress': 5, 'message': '开始生成脚本...'})}\n\n"
@@ -170,44 +170,80 @@ async def generate_code_stream(
             
             manim_service = ManimService(db_session)
             
-            yield f"data: {json.dumps({'step': 'generate', 'progress': 30, 'message': '正在生成脚本，预计需要 1-2 分钟...'})}\n\n"
+            yield f"data: {json.dumps({'step': 'generate', 'progress': 30, 'message': '正在构思视频脚本...'})}\n\n"
             
             progress_messages = [
-                (35, "正在分析内容结构..."),
-                (40, "正在生成动画场景..."),
-                (45, "正在编写脚本..."),
-                (50, "脚本生成中，请耐心等待..."),
-                (55, "继续生成中..."),
-                (60, "即将完成..."),
-                (65, "正在收尾..."),
+                (35, "正在编排动画效果..."),
+                (40, "正在撰写脚本内容..."),
+                (45, "脚本生成中，请稍候..."),
+                (50, "继续生成中..."),
+                (55, "即将完成..."),
+                (60, "正在收尾..."),
+                (65, "最后检查..."),
             ]
+            
+            retry_status = {"msg": None}
+            
+            def on_retry(msg):
+                retry_status["msg"] = msg
             
             generate_task = asyncio.create_task(
                 manim_service.generate_code(
                     project_local.final_script, 
                     template_code,
                     video_title=project_local.theme,
-                    model=model
+                    model=model,
+                    retry_callback=on_retry
                 )
             )
             
             progress_index = 0
+            last_retry_msg = None
             while not generate_task.done():
                 try:
-                    await asyncio.wait_for(asyncio.shield(generate_task), timeout=8)
+                    await asyncio.wait_for(asyncio.shield(generate_task), timeout=6)
                 except asyncio.TimeoutError:
-                    if progress_index < len(progress_messages):
+                    if generate_task.exception():
+                        exc = generate_task.exception()
+                        yield f"data: {json.dumps({'step': 'error', 'progress': 0, 'message': '脚本生成遇到问题，请稍后重试'})}\n\n"
+                        return
+                    
+                    current_retry_msg = retry_status["msg"]
+                    if current_retry_msg and current_retry_msg != last_retry_msg:
+                        last_retry_msg = current_retry_msg
+                        yield f"data: {json.dumps({'step': 'generate', 'progress': min(30 + progress_index * 5, 55), 'message': current_retry_msg})}\n\n"
+                    elif progress_index < len(progress_messages):
                         progress, msg = progress_messages[progress_index]
                         yield f"data: {json.dumps({'step': 'generate', 'progress': progress, 'message': msg})}\n\n"
                         progress_index += 1
             
+            if generate_task.exception():
+                yield f"data: {json.dumps({'step': 'error', 'progress': 0, 'message': '脚本生成遇到问题，请稍后重试'})}\n\n"
+                return
+            
             manim_code = generate_task.result()
             
-            yield f"data: {json.dumps({'step': 'generate', 'progress': 70, 'message': '脚本生成完成，正在验证...'})}\n\n"
+            yield f"data: {json.dumps({'step': 'generate', 'progress': 70, 'message': '脚本生成完成，正在校验...'})}\n\n"
             
             fixed_code, warnings = manim_service.validate_code(manim_code)
             
-            yield f"data: {json.dumps({'step': 'validate', 'progress': 80, 'message': '脚本验证中...'})}\n\n"
+            import ast
+            try:
+                ast.parse(fixed_code)
+            except SyntaxError:
+                yield f"data: {json.dumps({'step': 'generate', 'progress': 75, 'message': '脚本需要微调，正在自动优化...'})}\n\n"
+                try:
+                    fixed_code = await manim_service._ai_fix_syntax(
+                        fixed_code, "语法验证未通过", 
+                        project_local.final_script,
+                        manim_service.MANIM_SYSTEM_PROMPT_ZH if detect_language(project_local.final_script) == 'zh' else manim_service.MANIM_SYSTEM_PROMPT_EN
+                    )
+                    fixed_code = manim_service.fix_manim_compatibility(fixed_code)
+                    fixed_code, warnings = manim_service.validate_code(fixed_code)
+                except Exception:
+                    pass
+            
+            yield f"data: {json.dumps({'step': 'validate', 'progress': 80, 'message': '正在校验脚本完整性...'})}\n\n"
             await asyncio.sleep(0.1)
             
             if warnings:
@@ -222,7 +258,7 @@ async def generate_code_stream(
         except Exception as e:
             import traceback
             traceback.print_exc()
-            yield f"data: {json.dumps({'step': 'error', 'progress': 0, 'message': f'生成失败: {str(e)}'})}\n\n"
+            yield f"data: {json.dumps({'step': 'error', 'progress': 0, 'message': '脚本生成遇到问题，请稍后重试'})}\n\n"
         finally:
             db_session.close()
     
