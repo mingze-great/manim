@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 from app.utils.llm_factory import LLMFactory
+from app.services.math_validator import generate_math_prompt_enhancement
 
 
 def detect_language(text: str) -> str:
@@ -272,6 +273,12 @@ class ManimService:
             model: 模型选择（可选），如 "qwen3-coder-next"
         """
         language = detect_language(script)
+        math_enhancement = ""
+        if any(k in script for k in ['定理', '公式', '函数', '几何', '代数', '微积分', '矩阵', '概率', '三角函数']):
+            try:
+                math_enhancement = generate_math_prompt_enhancement(script)
+            except Exception:
+                math_enhancement = ""
         
         if template_code:
             system_prompt = f"""你是 Manim 动画代码专家。请参考以下模板代码的风格和结构生成新代码：
@@ -325,6 +332,8 @@ Use the exact titles and descriptions from the script below.
 
 SCRIPT CONTENT TO USE (extract from this, keep in English):
 {script}
+
+{math_enhancement}
 
 Requirements:
 1. Extract titles and descriptions from the script above - KEEP IN ENGLISH

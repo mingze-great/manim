@@ -454,6 +454,14 @@ async def render_video_stream(
                                 
                                 project_local.status = "completed"
                                 project_local.video_url = video_url
+                                try:
+                                    from app.services.thumbnail_service import generate_thumbnail
+                                    thumb_path = generate_thumbnail(local_video_path if os.path.exists(local_video_path) else None)
+                                    if thumb_path:
+                                        thumb_filename = os.path.basename(thumb_path)
+                                        project_local.thumbnail = f"/api/videos/{thumb_filename}"
+                                except Exception:
+                                    pass
                                 user_local = db_session.query(User).filter(User.id == current_user_id).first()
                                 if user_local:
                                     user_local.increment_module_usage_new(db_session, "visual")
