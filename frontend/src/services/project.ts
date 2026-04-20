@@ -133,6 +133,7 @@ export const projectApi = {
   optimizeCodeStream: (id: number, feedback: string) => 
     `/api/projects/${id}/optimize-code/stream?feedback=${encodeURIComponent(feedback)}`,
   getTask: (projectId: number) => api.get<Task>(`/tasks/project/${projectId}`),
+  batchTaskStatus: () => api.get<Record<number, Task>>(`/projects/tasks/batch`),
   generateStickmanStream: (projectId: number) => `/api/tasks/${projectId}/stickman-generate`,
   generateStickmanComposeStream: (projectId: number) => `/api/tasks/${projectId}/stickman-compose`,
   regenerateCode: (id: number) => api.post(`/projects/${id}/regenerate-code`),

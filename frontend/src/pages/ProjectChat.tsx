@@ -4,6 +4,8 @@ import { Input, Button, message, Modal, Alert, Switch } from 'antd'
 import { SendOutlined, PlayCircleOutlined, RobotOutlined, UserOutlined, ReloadOutlined, CheckCircleOutlined, StopOutlined, EditOutlined } from '@ant-design/icons'
 import { projectApi, Conversation, Project } from '@/services/project'
 import { useAuthStore } from '@/stores/authStore'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 const { TextArea } = Input
 
@@ -406,9 +408,17 @@ export default function ProjectChat() {
                 </div>
               ) : (
                 <>
-                  <pre className="whitespace-pre-wrap text-inherit" style={{ fontFamily: 'inherit' }}>
-                    {conv.content}
-                  </pre>
+                  {conv.role === 'assistant' ? (
+                    <div className="whitespace-pre-wrap text-inherit markdown-body" style={{ fontFamily: 'inherit', lineHeight: 1.7 }}>
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {conv.content}
+                      </ReactMarkdown>
+                    </div>
+                  ) : (
+                    <pre className="whitespace-pre-wrap text-inherit" style={{ fontFamily: 'inherit' }}>
+                      {conv.content}
+                    </pre>
+                  )}
                   {conv.role === 'assistant' && (
                     <div className="mt-2 flex gap-2">
                       <Button 

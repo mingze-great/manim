@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Alert, Button, Input, message, Divider, Card, InputNumber, Segmented, Select, Upload, Typography } from 'antd'
-import { RocketOutlined, BulbOutlined, VideoCameraOutlined, HighlightOutlined, UploadOutlined, FileTextOutlined, AudioOutlined } from '@ant-design/icons'
+import { RocketOutlined, BulbOutlined, VideoCameraOutlined, HighlightOutlined, UploadOutlined, FileTextOutlined, AudioOutlined, CalculatorOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
 import { projectApi, StickmanVoiceOption } from '@/services/project'
@@ -13,7 +13,7 @@ import './Creator.css'
 
 const { TextArea } = Input
 
-type ModuleType = 'manim' | 'stickman' | 'article'
+type ModuleType = 'manim' | 'math' | 'stickman' | 'article'
 type VoiceSource = 'ai' | 'record' | 'upload'
 type GenerationMode = 'one_click' | 'step_by_step'
 
@@ -52,6 +52,7 @@ export default function Creator() {
   const [moduleType, setModuleType] = useState<ModuleType>('manim')
   const [selectedCategory, setSelectedCategory] = useState<VideoTopicCategory | null>(null)
   const [selectedStickmanCategory, setSelectedStickmanCategory] = useState<VideoTopicCategory | null>(null)
+  const [mathTopic, setMathTopic] = useState('')
   const [customTopic, setCustomTopic] = useState('')
   const [stickmanTopic, setStickmanTopic] = useState('')
   const [storyboardCount, setStoryboardCount] = useState(3)
@@ -152,6 +153,29 @@ export default function Creator() {
         return
       }
       navigate(`/project/${data.id}/chat`)
+    } catch (error: any) {
+      const detail = error.response?.data?.detail || error.message || '创建失败'
+      message.error(detail)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleMathCreate = async () => {
+    if (!mathTopic.trim()) {
+      message.warning('请输入数学主题或定理')
+      return
+    }
+    setLoading(true)
+    try {
+      const { data } = await projectApi.create({
+        title: `数学可视化-${mathTopic}`,
+        theme: mathTopic.trim(),
+        module_type: 'manim',
+        storyboard_count: 3,
+      })
+      message.success('创建成功')
+      navigate(`/project/${data.id}/task?autoGenerate=true`)
     } catch (error: any) {
       const detail = error.response?.data?.detail || error.message || '创建失败'
       message.error(detail)
@@ -285,6 +309,7 @@ export default function Creator() {
               }}
               options={[
                 { label: '思维可视化', value: 'manim' },
+                { label: '数学可视化', value: 'math' },
                 { label: '火柴人视频', value: 'stickman' },
                 { label: '公众号文章', value: 'article' },
               ]}
@@ -298,6 +323,14 @@ export default function Creator() {
               </div>
               <h3>思维可视化</h3>
               <p>多轮打磨文案，生成动画脚本，再进入渲染流程。</p>
+            </Card>
+
+            <Card className={`module-card ${moduleType === 'math' ? 'active' : ''}`} onClick={() => setModuleType('math')}>
+              <div className="module-card-icon module-card-icon-purple">
+                <CalculatorOutlined />
+              </div>
+              <h3>数学可视化</h3>
+              <p>输入定理或公式，直接生成动画脚本，无需对话打磨。</p>
             </Card>
 
             <Card className={`module-card ${moduleType === 'stickman' ? 'active' : ''} ${!stickmanEnabled ? 'module-card-disabled' : ''}`} onClick={() => setModuleType('stickman')}>
@@ -380,6 +413,66 @@ export default function Creator() {
               </div>
             </>
           )
+        ) : moduleType === 'math' ? (
+          <div className="max-w-2xl mx-auto">
+            <div className="mb-6">
+              <div className="flex items-center gap-2 mb-4">
+                <CalculatorOutlined className="text-xl text-purple-500" />
+                <span className="text-lg font-medium">数学可视化</span>
+              </div>
+              <p className="text-gray-500 mb-4">输入数学定理、公式或概念，AI 将直接生成动画脚本，无需对话打磨。</p>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+                {[
+                  { label: '代数', examples: ['二次求根公式推导', '韦达定理的应用'] },
+                  { label: '几何', examples: ['勾股定理的证明', '三角形内角和定理'] },
+                  { label: '微积分', examples: ['导数的几何意义', '牛顿-莱布尼茨公式'] },
+                  { label: '概率统计', examples: ['贝叶斯定理', '大数定律演示'] },
+                  { label: '线性代数', examples: ['矩阵乘法动画', '特征值分解过程'] },
+                  { label: '数论', examples: ['欧几里得算法', '费马小定理'] },
+                ].map(cat => (
+                  <div key={cat.label} className="p-3 rounded-lg border border-gray-200 hover:border-purple-400 hover:shadow-sm transition-all cursor-pointer" onClick={() => setMathTopic(cat.examples[0])}>
+                    <div className="text-sm font-medium text-center mb-1">{cat.label}</div>
+                    <div className="text-xs text-gray-400 text-center">{cat.examples[0]}</div>
+                  </div>
+                ))}
+              </div>
+              <TextArea
+                value={mathTopic}
+                onChange={(e) => setMathTopic(e.target.value)}
+                placeholder={`输入数学主题或定理...
+
+例如：
+• 勾股定理的证明过程
+• 二次函数的图像变换
+• 三角函数的和差公式推导
+• 圆锥曲线的几何性质`}
+                rows={4}
+                className="theme-input mb-3"
+              />
+              <Button
+                type="primary"
+                icon={<RocketOutlined />}
+                onClick={handleMathCreate}
+                loading={loading}
+                size="large"
+                block
+                disabled={!mathTopic.trim()}
+                className="btn-gradient"
+                style={{ background: 'linear-gradient(135deg, #722ed1, #1890ff)' }}
+              >
+                直接生成脚本
+              </Button>
+            </div>
+            <div className="usage-tips mt-6">
+              <h3><BulbOutlined className="mr-2" />使用提示</h3>
+              <ul>
+                <li>直接输入数学定理或公式，无需对话打磨</li>
+                <li>AI 会自动生成对应的动画脚本</li>
+                <li>适合数学教学、公式推导、几何证明等内容</li>
+                <li>生成后可直接渲染视频</li>
+              </ul>
+            </div>
+          </div>
         ) : moduleType === 'stickman' ? (
           selectedStickmanCategory ? (
             <div className="max-w-2xl mx-auto">

@@ -57,18 +57,21 @@ export default function History() {
       setProjects(data)
       setArticles(articleRes.data)
       
-      const taskMap: Record<number, Task> = {}
-      for (const project of data) {
-        if (project.id) {
-          try {
-            const taskRes = await projectApi.getTask(project.id)
-            taskMap[project.id] = taskRes.data
-          } catch {
-            // No task for this project
+      try {
+        const taskRes = await projectApi.batchTaskStatus()
+        setTasks(taskRes.data || {})
+      } catch {
+        const taskMap: Record<number, Task> = {}
+        for (const project of data) {
+          if (project.id) {
+            try {
+              const taskRes = await projectApi.getTask(project.id)
+              taskMap[project.id] = taskRes.data
+            } catch {}
           }
         }
+        setTasks(taskMap)
       }
-      setTasks(taskMap)
     } catch (error) {
       message.error('获取项目列表失败')
     } finally {

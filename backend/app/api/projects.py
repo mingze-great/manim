@@ -124,6 +124,15 @@ def list_projects(
     return projects
 
 
+@router.get("/tasks/batch")
+def batch_task_status(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)]
+):
+    tasks = db.query(Task).filter(Task.user_id == current_user.id).all()
+    return {str(t.project_id): {"id": t.id, "project_id": t.project_id, "status": t.status, "progress": t.progress or 0, "video_url": t.video_url, "error_message": t.error_message, "celery_task_id": t.celery_task_id, "created_at": t.created_at.isoformat() if t.created_at else None, "updated_at": t.updated_at.isoformat() if t.updated_at else None} for t in tasks}
+
+
 @router.get("/{project_id}", response_model=ProjectResponse)
 def get_project(
     project_id: int,
