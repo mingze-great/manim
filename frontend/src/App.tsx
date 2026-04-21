@@ -27,6 +27,7 @@ import AdminStatistics from './pages/admin/AdminStatistics'
 import AdminTokenUsage from './pages/admin/AdminTokenUsage'
 import AdminArticleCategories from './pages/admin/AdminArticleCategories'
 import AdminModuleStats from './pages/admin/AdminModuleStats'
+import AdminChatStyles from './pages/admin/AdminChatStyles'
 import { useState, useEffect } from 'react'
 import { startStatusCheck } from './stores/authStore'
 
@@ -109,6 +110,7 @@ function AppContent() {
         <Route path="/admin/logs" element={<AdminLogs />} />
         <Route path="/admin/settings" element={<AdminSettings />} />
         <Route path="/admin/templates" element={<AdminTemplates />} />
+        <Route path="/admin/chat-styles" element={<AdminChatStyles />} />
         <Route path="/admin/article-categories" element={<AdminArticleCategories />} />
         <Route path="/admin/module-stats" element={<AdminModuleStats />} />
         <Route path="/admin/statistics" element={<AdminStatistics />} />

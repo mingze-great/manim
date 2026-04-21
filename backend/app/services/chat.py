@@ -304,10 +304,11 @@ class ChatService:
         user_message: str,
         manim_code: str = None,
         template_code: str = None,
-        final_script: str = None
+        final_script: str = None,
+        style_code: str = None
     ):
         """流式处理消息 - 返回 SSE 生成器"""
-        print(f"[DEBUG] stream_process_message called: project_id={project_id}, theme={theme}, message={user_message[:50]}...")
+        print(f"[DEBUG] stream_process_message called: project_id={project_id}, theme={theme}, message={user_message[:50]}..., style_code={style_code}")
         
         conversations = self.db.query(Conversation).filter(
             Conversation.project_id == project_id
@@ -330,8 +331,16 @@ class ChatService:
         # 检测语言并选择提示词
         language = detect_language(theme + " " + user_message)
         
+        # 优先使用用户选择的风格
+        if style_code:
+            from app.models.chat_style import ChatStyle
+            chat_style = self.db.query(ChatStyle).filter(ChatStyle.code == style_code).first()
+            if chat_style:
+                system_prompt = chat_style.system_prompt_zh if language == 'zh' else (chat_style.system_prompt_en or chat_style.system_prompt_zh)
+            else:
+                system_prompt = SYSTEM_PROMPT_ZH if language == 'zh' else SYSTEM_PROMPT_EN
         # 如果项目有分类，使用该方向的系统提示词
-        if project_category:
+        elif project_category:
             category_config = self.db.query(VideoTopicCategory).filter(
                 VideoTopicCategory.name == project_category
             ).first()

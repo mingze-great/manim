@@ -44,6 +44,18 @@ export interface Conversation {
   created_at: string
 }
 
+export interface ChatStyle {
+  id: number
+  name: string
+  code: string
+  description: string | null
+  system_prompt_zh: string
+  system_prompt_en: string | null
+  is_default: boolean
+  is_active: boolean
+  created_at: string
+}
+
 export interface Task {
   id: number
   project_id: number
@@ -125,9 +137,11 @@ export const projectApi = {
   delete: (id: number) => api.delete(`/projects/${id}`),
   batchDelete: (ids: number[]) => api.post('/projects/batch-delete', { project_ids: ids }),
   getConversations: (id: number) => api.get<Conversation[]>(`/projects/${id}/conversations`),
-  sendMessage: (id: number, content: string) => api.post<Conversation>(`/projects/${id}/chat`, { content }),
+  sendMessage: (id: number, content: string, styleCode?: string) => 
+    api.post<Conversation>(`/projects/${id}/chat`, { content, style_code: styleCode }),
   getPendingResponse: (id: number) => api.get<PendingResponse>(`/projects/${id}/chat/pending`),
-  sendMessageStream: (id: number, _content: string) => `/api/projects/${id}/chat/stream`,
+  sendMessageStream: (id: number, _content: string, styleCode?: string) => 
+    `/api/projects/${id}/chat/stream${styleCode ? `?style_code=${styleCode}` : ''}`,
   generateCodeStream: (id: number, templateId?: number) => 
     `/api/projects/${id}/generate-code/stream${templateId ? `?template_id=${templateId}` : ''}`,
   optimizeCodeStream: (id: number, feedback: string) => 
@@ -163,4 +177,6 @@ export const projectApi = {
       `/projects/${projectId}/use-custom-script`,
       { script, auto_format: autoFormat }
     ),
+  getChatStyles: () =>
+    api.get<ChatStyle[]>('/chat-styles/'),
 }

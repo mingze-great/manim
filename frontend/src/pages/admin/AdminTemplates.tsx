@@ -366,6 +366,40 @@ class MyScene(Scene):
             />
           </Form.Item>
           
+          <Form.Item
+            noStyle
+            shouldUpdate={(prevValues, currentValues) => prevValues.category !== currentValues.category}
+          >
+            {({ getFieldValue }) => {
+              const category = getFieldValue('category')
+              return category === 'math' ? (
+                <Form.Item
+                  name="reference_code"
+                  label="参考代码（数学可视化专用）"
+                  extra="数学可视化将参考此代码的结构、风格、排版，但替换核心公式和文案。留空则使用普通模板模式。"
+                >
+                  <TextArea
+                    rows={12}
+                    className="font-mono text-sm"
+                    placeholder={`# 参考代码示例：傅里叶级数可视化
+# AI将参考此代码的结构和风格，生成新的数学可视化代码
+# 必须保持：代码结构、动画风格、排版方式
+# 必须替换：核心公式、几何参数、文案内容
+
+from manim import *
+import numpy as np
+
+class Fourier(Scene):
+    def construct(self):
+        # 分阶段动画：开场→过渡→核心→总结
+        ...
+`}
+                  />
+                </Form.Item>
+              ) : null
+            }}
+          </Form.Item>
+          
           {editingTemplate && (
             <Form.Item label="示例视频">
               {editingTemplate.example_video_url ? (

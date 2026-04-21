@@ -1,8 +1,8 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
-import { Input, Button, message, Modal, Alert, Switch } from 'antd'
+import { Input, Button, message, Modal, Alert, Switch, Select } from 'antd'
 import { SendOutlined, PlayCircleOutlined, RobotOutlined, UserOutlined, ReloadOutlined, CheckCircleOutlined, StopOutlined, EditOutlined } from '@ant-design/icons'
-import { projectApi, Conversation, Project } from '@/services/project'
+import { projectApi, Conversation, Project, ChatStyle } from '@/services/project'
 import { useAuthStore } from '@/stores/authStore'
 
 const { TextArea } = Input
@@ -43,10 +43,13 @@ export default function ProjectChat() {
   const [customScript, setCustomScript] = useState('')
   const [autoFormat, setAutoFormat] = useState(true)
   const [formatting, setFormatting] = useState(false)
+  const [chatStyles, setChatStyles] = useState<ChatStyle[]>([])
+  const [selectedStyle, setSelectedStyle] = useState<string>('conservative')
 
   useEffect(() => {
     fetchProject()
     fetchConversations()
+    fetchChatStyles()
     return () => {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort()
@@ -98,6 +101,19 @@ export default function ProjectChat() {
     }
   }
 
+  const fetchChatStyles = async () => {
+    try {
+      const { data } = await projectApi.getChatStyles()
+      setChatStyles(data || [])
+      const defaultStyle = data?.find((s: ChatStyle) => s.is_default)
+      if (defaultStyle) {
+        setSelectedStyle(defaultStyle.code)
+      }
+    } catch (error) {
+      console.error('获取风格失败')
+    }
+  }
+
   const handleSend = async () => {
     if (!input.trim() || loading) return
 
@@ -141,7 +157,7 @@ export default function ProjectChat() {
     
     try {
       const token = useAuthStore.getState().token
-      const streamUrl = projectApi.sendMessageStream(Number(id), userMessage)
+      const streamUrl = projectApi.sendMessageStream(Number(id), userMessage, selectedStyle)
       
       const response = await fetch(streamUrl, {
         method: 'POST',
@@ -203,6 +219,7 @@ export default function ProjectChat() {
                 }, 10)
               } else if (parsed.type === 'final') {
                 await fetchProject()
+                await fetchConversations()
                 setAiThinking(false)
                 
                 if (parsed.generated_code) {
@@ -211,6 +228,7 @@ export default function ProjectChat() {
                 }
               } else if (parsed.type === 'done') {
                 await fetchProject()
+                await fetchConversations()
                 setAiThinking(false)
                 
                 if (parsed.code_updated && parsed.updated_code) {
@@ -526,7 +544,14 @@ export default function ProjectChat() {
         <div className="text-xs text-gray-400 mb-2 text-center">
           ⚠️ 视频将在 3 小时后自动清除 | 对话内容将在 24 小时后清除
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-end">
+          <Select
+            value={selectedStyle}
+            onChange={setSelectedStyle}
+            style={{ width: 100 }}
+            size="small"
+            options={chatStyles.map(s => ({ label: s.name, value: s.code }))}
+          />
           <TextArea
             value={input}
             onChange={(e) => setInput(e.target.value)}

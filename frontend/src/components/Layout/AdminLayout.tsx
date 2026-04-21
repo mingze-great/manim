@@ -4,7 +4,7 @@ import type { MenuProps } from 'antd'
 import {
   DashboardOutlined, UserOutlined, LogoutOutlined, SafetyOutlined,
   TeamOutlined, FileTextOutlined, SettingOutlined, 
-  MenuOutlined, SwapOutlined, HomeOutlined, CodeOutlined, BarChartOutlined, ThunderboltOutlined, EditOutlined
+  MenuOutlined, SwapOutlined, HomeOutlined, CodeOutlined, BarChartOutlined, ThunderboltOutlined, EditOutlined, MessageOutlined
 } from '@ant-design/icons'
 import { useAuthStore } from '@/stores/authStore'
 import { useEffect } from 'react'
@@ -31,6 +31,7 @@ export default function AdminLayout() {
     { key: '/admin/token-usage', icon: <ThunderboltOutlined />, label: 'Token统计' },
     { key: '/admin/users', icon: <TeamOutlined />, label: '用户管理' },
     { key: '/admin/templates', icon: <CodeOutlined />, label: '代码模板' },
+    { key: '/admin/chat-styles', icon: <MessageOutlined />, label: '对话风格' },
     { key: '/admin/article-categories', icon: <EditOutlined />, label: '公众号配置' },
     { key: '/admin/module-stats', icon: <BarChartOutlined />, label: '模块看板' },
     { key: '/admin/logs', icon: <FileTextOutlined />, label: '操作日志' },

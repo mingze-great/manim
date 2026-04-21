@@ -82,7 +82,7 @@ def update_task_progress(task_id: int, progress: int, status: str = None, video_
         db.close()
 
 
-def run_async_code_gen(script_val, template_id, code_ref_val):
+def run_async_code_gen(script_val, template_id, code_ref_val, reference_code=None):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
@@ -90,7 +90,7 @@ def run_async_code_gen(script_val, template_id, code_ref_val):
         manim_service = ManimService(db)
         result = loop.run_until_complete(
             asyncio.wait_for(
-                manim_service.generate_code(script_val, template_id, code_ref_val),
+                manim_service.generate_code(script_val, template_id, code_ref_val, reference_code=reference_code),
                 timeout=120
             )
         )
@@ -130,8 +130,18 @@ def render_video_task(task_id: int, project_id: int, template_id: int = None, cu
             script_val = str(project.final_script) if project.final_script is not None else ""
             code_ref_val = str(project.custom_code) if project.custom_code is not None else ""
             
+            # 获取模板的参考代码
+            reference_code = None
+            template_code = None
+            if template_id:
+                from app.models.template import Template
+                template = db.query(Template).filter(Template.id == template_id).first()
+                if template:
+                    template_code = template.code
+                    reference_code = template.reference_code
+            
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(run_async_code_gen, script_val, template_id, code_ref_val)
+                future = executor.submit(run_async_code_gen, script_val, template_code, code_ref_val, reference_code)
                 try:
                     manim_code = future.result(timeout=180)
                 except concurrent.futures.TimeoutError:
@@ -360,18 +370,23 @@ def generate_code_task(task_id: int, project_id: int, template_id: int = None, m
             
             # 获取模板代码
             template_code = None
+            reference_code = None
             if template_id:
                 from app.models.template import Template
                 template = db.query(Template).filter(Template.id == template_id).first()
                 if template:
                     template_code = template.code
-                    update_task_progress(task_id, 15, "processing", log=f"使用模板: {template.name}\n")
+                    reference_code = template.reference_code
+                    if reference_code:
+                        update_task_progress(task_id, 15, "processing", log=f"使用参考代码模板: {template.name}\n")
+                    else:
+                        update_task_progress(task_id, 15, "processing", log=f"使用模板: {template.name}\n")
             
             update_task_progress(task_id, 20, "processing", log="正在生成 Manim 代码...\n")
             
             # 使用线程池执行异步代码生成
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(run_async_code_gen, script_val, template_code, None)
+                future = executor.submit(run_async_code_gen, script_val, template_code, None, reference_code)
                 
                 # 等待完成，更新进度
                 progress = 30

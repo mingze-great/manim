@@ -262,10 +262,67 @@ class ManimService:
         import asyncio
         return asyncio.run(self.generate_code(script))
     
-    async def generate_code(self, script: str, template_code: str = None, video_title: str = None, model: str = None, retry_callback=None) -> tuple:
+    async def generate_code(self, script: str, template_code: str = None, video_title: str = None, model: str = None, reference_code: str = None, retry_callback=None) -> tuple:
         language = detect_language(script)
         
-        if template_code:
+        # 数学可视化参考代码模式（优先级最高）
+        if reference_code:
+            system_prompt = f"""你是数学可视化专家。
+
+## 参考代码
+```python
+{reference_code}
+```
+
+## 任务
+基于参考代码，生成新的数学可视化代码。
+
+## 必须保持
+1. 代码结构（分阶段动画：开场→过渡→核心→总结）
+2. 动画风格（几何+公式结合，参数化曲线等）
+3. 排版方式（左图右文，严格分区）
+4. 性能优化（及时清除上一幕元素）
+
+## 必须替换
+1. 核心公式（MathTex内容）
+2. 几何参数（频率、半径、相位等）
+3. 文案内容（标题、描述、结论）
+4. 类名（使用有意义的英文名）
+
+## 约束
+- 所有坐标用 3D 格式 [x, y, 0]
+- 不用复杂 updater，优先用 always_redraw
+- 代码风格简洁，注释清晰
+- 代码必须语法正确，能通过 Python ast.parse() 检查
+""" if language == 'zh' else f"""You are a math visualization expert.
+
+## Reference Code
+```python
+{reference_code}
+```
+
+## Task
+Generate new math visualization code based on the reference code.
+
+## Must Maintain
+1. Code structure (phased animation: opening → transition → core → summary)
+2. Animation style (geometry + formula combination, parametric curves, etc.)
+3. Layout (left graph, right text, strict partitioning)
+4. Performance optimization (clear previous scene elements promptly)
+
+## Must Replace
+1. Core formulas (MathTex content)
+2. Geometric parameters (frequency, radius, phase, etc.)
+3. Text content (title, description, conclusion)
+4. Class name (use meaningful English names)
+
+## Constraints
+- All coordinates in 3D format [x, y, 0]
+- Avoid complex updaters, prefer always_redraw
+- Clean code style, clear comments
+- Code must be syntactically correct, pass Python ast.parse()
+"""
+        elif template_code:
             system_prompt = f"""你是 Manim 动画代码专家。请参考以下模板代码的风格和结构生成新代码：
 
 ```python

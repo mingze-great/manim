@@ -616,7 +616,8 @@ async def chat_stream(
     project_id: int,
     message: ConversationCreate,
     current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)]
+    db: Annotated[Session, Depends(get_db)],
+    style_code: str = None
 ):
     """流式聊天 - SSE 输出"""
     project = db.query(Project).filter(
@@ -660,7 +661,8 @@ async def chat_stream(
                 project_id, theme, message.content,
                 manim_code=project_manim_code,
                 template_code=template_code,
-                final_script=project_final_script
+                final_script=project_final_script,
+                style_code=style_code
             ):
                 chunk_type = chunk.get("type")
                 

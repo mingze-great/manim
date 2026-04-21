@@ -8,6 +8,7 @@ class TemplateBase(BaseModel):
     description: Optional[str] = None
     category: Optional[str] = None
     code: str
+    reference_code: Optional[str] = None  # 数学可视化参考代码
     thumbnail: Optional[str] = None
 
 
@@ -20,6 +21,7 @@ class TemplateUpdate(BaseModel):
     description: Optional[str] = None
     category: Optional[str] = None
     code: Optional[str] = None
+    reference_code: Optional[str] = None  # 数学可视化参考代码
     thumbnail: Optional[str] = None
     example_video_url: Optional[str] = None
     is_visible: Optional[bool] = None
