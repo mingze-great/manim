@@ -28,8 +28,8 @@ const voiceLabelMap: Record<string, string> = {
 }
 
 const stageRules = [
-  { key: 'script', title: '脚本生成', match: ['脚本生成完成'] },
-  { key: 'image', title: '图片生成', match: ['图像生成中'] },
+  { key: 'script', title: '文案生成', match: ['脚本生成完成', '文案生成完成'] },
+  { key: 'image', title: '图片生成', match: ['图像生成中', '图片生成中'] },
   { key: 'audio', title: '配音处理', match: ['配音生成中', '已使用用户音频', '音轨合成完成'] },
   { key: 'video', title: '视频合成', match: ['视频片段合成中', '视频拼接完成', '火柴人视频生成完成'] },
 ]
