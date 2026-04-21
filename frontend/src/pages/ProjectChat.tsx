@@ -497,8 +497,6 @@ export default function ProjectChat() {
             </Button>
           </div>
         )}
-          </div>
-        )}
         
         {project?.final_script && !project?.manim_code ? (
           <Button

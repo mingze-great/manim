@@ -21,7 +21,6 @@ export default function ProjectTask() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const { user } = useAuthStore()
-  const isAdmin = user?.is_admin  // 管理员判断
   const [project, setProject] = useState<Project | null>(null)
   const [task, setTask] = useState<Task | null>(null)
   const [loading, setLoading] = useState(true)
@@ -196,119 +195,6 @@ export default function ProjectTask() {
     } catch (error: any) {
       console.error('生成失败:', error)
       message.error(error.message || '生成失败')
-      setGeneratingCode(false)
-    }
-  }
-  }, [project])
-
-  useEffect(() => {
-    if (project && searchParams.get('autoGenerate') === 'true') {
-      const timer = setTimeout(() => {
-        if (!generatedCode && project.final_script) {
-          handleGenerateCode()
-        }
-      }, 500)
-      return () => clearTimeout(timer)
-    }
-  }, [project, generatedCode])
-
-  const handleGenerateCode = async () => {
-    setGeneratingCode(true)
-    setCodeProgress(0)
-    setCodeMessage('正在开始生成...')
-    setGeneratedCode('')
-
-    try {
-      const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
-      const token = (useAuthStore.getState().token) || ''
-      let streamUrl = `${API_BASE}/api/tasks/${id}/generate-code`
-      if (selectedTemplateId) {
-        streamUrl += `?template_id=${selectedTemplateId}`
-        if (selectedModel) {
-          streamUrl += `&model=${selectedModel}`
-        }
-      } else if (selectedModel) {
-        streamUrl += `?model=${selectedModel}`
-      }
-      let headers: any = {
-        'Content-Type': 'application/json'
-      }
-      if (token) headers['Authorization'] = `Bearer ${token}`
-
-      let response = await fetch(streamUrl, {
-        headers
-      })
-
-      if (response.status === 401) {
-        message.error('未通过身份验证，请重新登录后再试')
-        setLoading(false)
-        return
-      }
-
-      if (!response.ok) {
-        const err = await response.text()
-        throw new Error(err || '请求失败')
-      }
-
-      const reader = response.body?.getReader()
-      const decoder = new TextDecoder()
-
-      if (!reader) {
-        throw new Error('无法读取响应')
-      }
-
-      let buffer = ''
-
-      let hasCode = false
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        buffer += decoder.decode(value, { stream: true })
-        
-        const parts = buffer.split('data: ')
-        buffer = parts.pop() || ''
-
-        for (const part of parts) {
-          const trimmed = part.trim()
-          if (!trimmed) continue
-          
-          try {
-            const data = JSON.parse(trimmed)
-            setCodeProgress(data.progress || 0)
-            setCodeMessage(data.message || '')
-            
-            if (data.code) {
-              setGeneratedCode(data.code)
-              hasCode = true
-            }
-            
-            if (data.step === 'error') {
-              message.error(data.message)
-            }
-          } catch (e) {}
-        }
-      }
-
-      if (buffer.trim()) {
-        try {
-          const data = JSON.parse(buffer.trim())
-          if (data.code) {
-            setGeneratedCode(data.code)
-            hasCode = true
-          }
-        } catch (e) {}
-      }
-
-      if (hasCode) {
-        message.success('生成完成！')
-        await fetchProject()
-      }
-    } catch (error: any) {
-      console.error('生成失败:', error)
-      message.error(error.message || '生成失败')
-    } finally {
       setGeneratingCode(false)
     }
   }
