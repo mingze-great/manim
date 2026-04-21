@@ -19,11 +19,11 @@ from app.models.project import Project
 from app.models.task import Task
 from app.models.template import Template
 from app.api.auth import get_current_user
-from app.services.manim import ManimService, detect_language
+from app.services.manim import ManimService
 from app.services.stickman_generator import StickmanGenerator
 from app.config import get_settings
 from app.utils.cos_storage import cos_storage
-from app.tasks.celery_tasks import render_video_celery
+from app.tasks.celery_tasks import render_video_celery, generate_code_celery
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 settings = get_settings()
@@ -138,9 +138,11 @@ async def generate_code_stream(
             yield f"data: {json.dumps({'step': 'error', 'progress': 0, 'message': 'Project not found'})}\n\n"
         return StreamingResponse(error_gen(), media_type="text/event-stream")
     
-    if not project.final_script:
+    # 数学可视化项目可能没有 final_script，使用 theme 作为输入
+    input_content = project.final_script or project.theme
+    if not input_content:
         async def error_gen():
-            yield f"data: {json.dumps({'step': 'error', 'progress': 0, 'message': '请先完成内容对话'})}\n\n"
+            yield f"data: {json.dumps({'step': 'error', 'progress': 0, 'message': '请先输入主题或完成内容对话'})}\n\n"
         return StreamingResponse(error_gen(), media_type="text/event-stream")
     
     async def event_generator():
@@ -149,7 +151,7 @@ async def generate_code_stream(
         try:
             project_local = db_session.query(Project).filter(Project.id == project_id).first()
             if not project_local:
-                yield f"data: {json.dumps({'step': 'error', 'progress': 0, 'message': '项目未找到'})}\n\n"
+                yield f"data: {json.dumps({'step': 'error', 'progress': 0, 'message': 'Project not found'})}\n\n"
                 return
             
             yield f"data: {json.dumps({'step': 'start', 'progress': 5, 'message': '开始生成脚本...'})}\n\n"
@@ -170,80 +172,44 @@ async def generate_code_stream(
             
             manim_service = ManimService(db_session)
             
-            yield f"data: {json.dumps({'step': 'generate', 'progress': 30, 'message': '正在构思视频脚本...'})}\n\n"
+            yield f"data: {json.dumps({'step': 'generate', 'progress': 30, 'message': '正在生成脚本，预计需要 1-2 分钟...'})}\n\n"
             
             progress_messages = [
-                (35, "正在编排动画效果..."),
-                (40, "正在撰写脚本内容..."),
-                (45, "脚本生成中，请稍候..."),
-                (50, "继续生成中..."),
-                (55, "即将完成..."),
-                (60, "正在收尾..."),
-                (65, "最后检查..."),
+                (35, "正在分析内容结构..."),
+                (40, "正在生成动画场景..."),
+                (45, "正在编写脚本..."),
+                (50, "脚本生成中，请耐心等待..."),
+                (55, "继续生成中..."),
+                (60, "即将完成..."),
+                (65, "正在收尾..."),
             ]
-            
-            retry_status = {"msg": None}
-            
-            def on_retry(msg):
-                retry_status["msg"] = msg
             
             generate_task = asyncio.create_task(
                 manim_service.generate_code(
-                    project_local.final_script, 
+                    input_content, 
                     template_code,
                     video_title=project_local.theme,
-                    model=model,
-                    retry_callback=on_retry
+                    model=model
                 )
             )
             
             progress_index = 0
-            last_retry_msg = None
             while not generate_task.done():
                 try:
-                    await asyncio.wait_for(asyncio.shield(generate_task), timeout=6)
+                    await asyncio.wait_for(asyncio.shield(generate_task), timeout=8)
                 except asyncio.TimeoutError:
-                    if generate_task.exception():
-                        exc = generate_task.exception()
-                        yield f"data: {json.dumps({'step': 'error', 'progress': 0, 'message': '脚本生成遇到问题，请稍后重试'})}\n\n"
-                        return
-                    
-                    current_retry_msg = retry_status["msg"]
-                    if current_retry_msg and current_retry_msg != last_retry_msg:
-                        last_retry_msg = current_retry_msg
-                        yield f"data: {json.dumps({'step': 'generate', 'progress': min(30 + progress_index * 5, 55), 'message': current_retry_msg})}\n\n"
-                    elif progress_index < len(progress_messages):
+                    if progress_index < len(progress_messages):
                         progress, msg = progress_messages[progress_index]
                         yield f"data: {json.dumps({'step': 'generate', 'progress': progress, 'message': msg})}\n\n"
                         progress_index += 1
             
-            if generate_task.exception():
-                yield f"data: {json.dumps({'step': 'error', 'progress': 0, 'message': '脚本生成遇到问题，请稍后重试'})}\n\n"
-                return
-            
             manim_code = generate_task.result()
             
-            yield f"data: {json.dumps({'step': 'generate', 'progress': 70, 'message': '脚本生成完成，正在校验...'})}\n\n"
+            yield f"data: {json.dumps({'step': 'generate', 'progress': 70, 'message': '脚本生成完成，正在验证...'})}\n\n"
             
             fixed_code, warnings = manim_service.validate_code(manim_code)
             
-            import ast
-            try:
-                ast.parse(fixed_code)
-            except SyntaxError:
-                yield f"data: {json.dumps({'step': 'generate', 'progress': 75, 'message': '脚本需要微调，正在自动优化...'})}\n\n"
-                try:
-                    fixed_code = await manim_service._ai_fix_syntax(
-                        fixed_code, "语法验证未通过", 
-                        project_local.final_script,
-                        manim_service.MANIM_SYSTEM_PROMPT_ZH if detect_language(project_local.final_script) == 'zh' else manim_service.MANIM_SYSTEM_PROMPT_EN
-                    )
-                    fixed_code = manim_service.fix_manim_compatibility(fixed_code)
-                    fixed_code, warnings = manim_service.validate_code(fixed_code)
-                except Exception:
-                    pass
-            
-            yield f"data: {json.dumps({'step': 'validate', 'progress': 80, 'message': '正在校验脚本完整性...'})}\n\n"
+            yield f"data: {json.dumps({'step': 'validate', 'progress': 80, 'message': '脚本验证中...'})}\n\n"
             await asyncio.sleep(0.1)
             
             if warnings:
@@ -258,7 +224,7 @@ async def generate_code_stream(
         except Exception as e:
             import traceback
             traceback.print_exc()
-            yield f"data: {json.dumps({'step': 'error', 'progress': 0, 'message': '脚本生成遇到问题，请稍后重试'})}\n\n"
+            yield f"data: {json.dumps({'step': 'error', 'progress': 0, 'message': f'生成失败: {str(e)}'})}\n\n"
         finally:
             db_session.close()
     
@@ -888,7 +854,7 @@ async def render_video_async(
     return {
         "task_id": task.id,
         "celery_task_id": celery_result.id,
-        "message": "任务已提交，后台运行中，可关闭浏览器"
+        "message": "视频渲染已开始，可关闭页面"
     }
 
 
@@ -913,4 +879,157 @@ def get_task_status(
         "video_url": task.video_url,
         "error_message": task.error_message,
         "celery_task_id": task.celery_task_id
+    }
+
+
+@router.post("/{project_id}/generate-code-async")
+async def generate_code_async(
+    project_id: int,
+    template_id: Optional[int] = Query(None),
+    model: Optional[str] = Query(None),
+    current_user: Annotated[User, Depends(get_current_user)] = None,
+    db: Annotated[Session, Depends(get_db)] = None
+):
+    """异步后台生成脚本（可关闭页面）"""
+    project = db.query(Project).filter(
+        Project.id == project_id,
+        Project.user_id == current_user.id
+    ).first()
+    
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    if not project.final_script:
+        raise HTTPException(status_code=400, detail="请先完成内容对话")
+    
+    # 创建任务记录
+    task = Task(
+        project_id=project_id,
+        user_id=current_user.id,
+        task_type="code_generation",
+        status="pending",
+        progress=0
+    )
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+    
+    # 提交 Celery 任务
+    celery_result = generate_code_celery.delay(
+        task.id,
+        project_id,
+        template_id,
+        model
+    )
+    
+    task.celery_task_id = celery_result.id
+    db.commit()
+    
+    return {
+        "task_id": task.id,
+        "celery_task_id": celery_result.id,
+        "message": "脚本生成已开始，可关闭页面"
+    }
+
+
+@router.get("/celery-status")
+async def get_celery_status():
+    """检查 Celery 和 Redis 状态"""
+    import redis
+    from celery import Celery
+    
+    # 检查 Redis
+    redis_connected = False
+    try:
+        r = redis.from_url(settings.REDIS_URL)
+        r.ping()
+        redis_connected = True
+    except Exception:
+        pass
+    
+    # 检查 Celery Worker
+    celery_active = False
+    active_tasks = 0
+    try:
+        from celery_app import celery_app
+        inspect = celery_app.control.inspect()
+        active = inspect.active()
+        if active:
+            celery_active = True
+            for worker, tasks in active.items():
+                active_tasks += len(tasks)
+    except Exception:
+        pass
+    
+    return {
+        "redis_connected": redis_connected,
+        "celery_active": celery_active,
+        "active_tasks": active_tasks,
+        "status": "healthy" if redis_connected and celery_active else "degraded"
+    }
+
+
+@router.get("/in-progress")
+def get_in_progress_tasks(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)]
+):
+    """获取用户进行中的任务"""
+    tasks = db.query(Task).filter(
+        Task.user_id == current_user.id,
+        Task.status.in_(["pending", "processing"])
+    ).order_by(Task.created_at.desc()).all()
+    
+    return {
+        "tasks": [
+            {
+                "task_id": t.id,
+                "project_id": t.project_id,
+                "task_type": t.task_type,
+                "status": t.status,
+                "progress": t.progress or 0,
+                "celery_task_id": t.celery_task_id,
+                "created_at": t.created_at.isoformat() if t.created_at else None
+            }
+            for t in tasks
+        ],
+        "count": len(tasks)
+    }
+
+
+@router.post("/task/{task_id}/cancel")
+async def cancel_task(
+    task_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)]
+):
+    """取消任务"""
+    task = db.query(Task).filter(
+        Task.id == task_id,
+        Task.user_id == current_user.id
+    ).first()
+    
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    if task.status in ["completed", "failed", "cancelled"]:
+        raise HTTPException(status_code=400, detail=f"Task already {task.status}")
+    
+    # 取消 Celery 任务
+    if task.celery_task_id:
+        try:
+            from celery_app import celery_app
+            celery_app.control.revoke(task.celery_task_id, terminate=True)
+        except Exception as e:
+            print(f"Failed to revoke Celery task: {e}")
+    
+    # 更新任务状态
+    task.status = "cancelled"
+    task.error_message = "User cancelled"
+    db.commit()
+    
+    return {
+        "task_id": task.id,
+        "status": "cancelled",
+        "message": "Task cancelled successfully"
     }

@@ -33,6 +33,7 @@ from app.services.audio_enhancement import enhance_voice_audio
 
 MODULE_LABELS = {
     "manim": "思维可视化",
+    "math": "数学可视化",
     "stickman": "火柴人视频",
 }
 
@@ -76,7 +77,7 @@ def create_project(
 ):
     MAX_PROJECTS = 3
     module_key = str(project.module_type or "manim")
-    if module_key == "manim":
+    if module_key in ("manim", "math"):
         module_key = "visual"
     stickman_storyboard_limit = 20 if current_user.is_admin else 6
     if module_key == "stickman":

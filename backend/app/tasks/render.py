@@ -19,8 +19,8 @@ from app.services.manim import ManimService
 
 settings = get_settings()
 
-RENDER_TOTAL_TIMEOUT = 300
-RENDER_NO_OUTPUT_TIMEOUT = 60
+RENDER_TOTAL_TIMEOUT = 600
+RENDER_NO_OUTPUT_TIMEOUT = 180
 
 try:
     import redis
@@ -97,6 +97,10 @@ def run_async_code_gen(script_val, template_id, code_ref_val):
         db.close()
         return result
     finally:
+        try:
+            loop.run_until_complete(loop.shutdown_asyncgens())
+        except:
+            pass
         loop.close()
 
 
@@ -108,13 +112,23 @@ def render_video_task(task_id: int, project_id: int, template_id: int = None, cu
             update_task_progress(task_id, 0, "failed", error_message="Project not found")
             return
         
-        update_task_progress(task_id, 5, "processing", log="开始生成视频...\n")
+        update_task_progress(task_id, 5, "processing", log="开始渲染视频...\n")
         
-        try:
+        # 确定使用的代码：优先使用 custom_code，其次 project.manim_code，最后生成
+        manim_code = None
+        
+        if custom_code:
+            manim_code = custom_code
+            update_task_progress(task_id, 10, "processing", log="使用自定义代码\n")
+        elif project.manim_code:
+            manim_code = project.manim_code
+            update_task_progress(task_id, 10, "processing", log=f"使用已生成的代码 (长度: {len(manim_code)})\n")
+        else:
+            # 需要生成代码
             update_task_progress(task_id, 10, "processing", log="正在生成 Manim 代码...\n")
             
             script_val = str(project.final_script) if project.final_script is not None else ""
-            code_ref_val = custom_code or (str(project.custom_code) if project.custom_code is not None else "")
+            code_ref_val = str(project.custom_code) if project.custom_code is not None else ""
             
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(run_async_code_gen, script_val, template_id, code_ref_val)
@@ -127,10 +141,9 @@ def render_video_task(task_id: int, project_id: int, template_id: int = None, cu
             project.manim_code = manim_code
             db.commit()
             update_task_progress(task_id, 20, "processing", log=f"代码生成完成 (长度: {len(manim_code)})\n")
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            update_task_progress(task_id, 20, "failed", error_message=f"Generate code error: {str(e)}", log=f"生成代码失败: {e}\n")
+        
+        if not manim_code:
+            update_task_progress(task_id, 0, "failed", error_message="No code to render", log="没有可渲染的代码\n")
             return
         
         update_task_progress(task_id, 25, "processing", log="准备渲染...\n")
@@ -272,10 +285,11 @@ class {scene_name}(Scene):
                     process.wait()
                 
                 if timed_out:
-                    update_task_progress(task_id, 80, "failed", error_message="渲染超时，强制终止", log="渲染超时，请检查代码或降低视频复杂度\n")
-                    return
+                    # 超时后也要检查是否有视频文件
+                    update_task_progress(task_id, 80, "processing", log="渲染超时，检查是否有输出文件...\n")
+                    # 不直接 return，继续检查视频文件
                 
-                if process.returncode != 0:
+                if process.returncode != 0 and not timed_out:
                     update_task_progress(task_id, 80, "failed", error_message="Render failed", log=f"渲染失败 (code: {process.returncode})\n")
                     return
                     
@@ -312,11 +326,78 @@ class {scene_name}(Scene):
                 update_task_progress(task_id, 90, "processing", log=f"视频保存: {video_filename}\n总耗时: {elapsed_total}秒\n")
                 
                 video_url = f"/api/videos/{video_filename}"
+                project.video_url = video_url
                 project.status = "completed"
                 db.commit()
                 update_task_progress(task_id, 100, "completed", video_url=video_url, log="任务完成！\n")
             else:
-                update_task_progress(task_id, 80, "failed", error_message="No MP4 file found", log="未找到视频文件！\n")
+                error_msg = "渲染超时" if timed_out else "未找到视频文件"
+                update_task_progress(task_id, 80, "failed", error_message=error_msg, log=f"{error_msg}！\n")
+    
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        update_task_progress(task_id, 0, "failed", error_message=str(e), log=f"任务异常: {e}\n")
+    finally:
+        db.close()
+
+
+def generate_code_task(task_id: int, project_id: int, template_id: int = None, model: str = None):
+    """后台代码生成任务核心逻辑"""
+    db = SessionLocal()
+    try:
+        project = db.query(Project).filter(Project.id == project_id).first()
+        if not project:
+            update_task_progress(task_id, 0, "failed", error_message="Project not found")
+            return
+        
+        update_task_progress(task_id, 5, "processing", log="开始生成代码...\n")
+        
+        try:
+            update_task_progress(task_id, 10, "processing", log="准备生成脚本...\n")
+            
+            script_val = str(project.final_script) if project.final_script is not None else ""
+            
+            # 获取模板代码
+            template_code = None
+            if template_id:
+                from app.models.template import Template
+                template = db.query(Template).filter(Template.id == template_id).first()
+                if template:
+                    template_code = template.code
+                    update_task_progress(task_id, 15, "processing", log=f"使用模板: {template.name}\n")
+            
+            update_task_progress(task_id, 20, "processing", log="正在生成 Manim 代码...\n")
+            
+            # 使用线程池执行异步代码生成
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(run_async_code_gen, script_val, template_code, None)
+                
+                # 等待完成，更新进度
+                progress = 30
+                while not future.done():
+                    time.sleep(2)
+                    progress = min(progress + 5, 80)
+                    update_task_progress(task_id, progress, "processing", log="代码生成中...\n")
+                
+                result = future.result(timeout=180)
+            
+            if result:
+                # 更新项目的 manim_code
+                project.manim_code = result
+                project.status = "code_generated"
+                db.commit()
+                
+                update_task_progress(task_id, 100, "completed", log="代码生成完成！\n")
+            else:
+                update_task_progress(task_id, 0, "failed", error_message="Code generation returned empty result", log="代码生成失败：返回空结果\n")
+        
+        except concurrent.futures.TimeoutError:
+            update_task_progress(task_id, 0, "failed", error_message="Code generation timeout", log="代码生成超时\n")
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            update_task_progress(task_id, 0, "failed", error_message=str(e), log=f"代码生成异常: {e}\n")
     
     except Exception as e:
         import traceback

@@ -1,10 +1,22 @@
 import { useState, useEffect } from 'react'
-import { Table, Button, Space, Tag, Modal, Form, Input, message, Popconfirm, Upload, Switch, Tooltip } from 'antd'
+import { Table, Button, Space, Tag, Modal, Form, Input, message, Popconfirm, Upload, Switch, Tooltip, Segmented } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, PlayCircleOutlined, UploadOutlined, SettingOutlined } from '@ant-design/icons'
 import { templateApi, Template } from '@/services/template'
 import api from '@/services/api'
 
 const { TextArea } = Input
+
+const CATEGORY_OPTIONS = [
+  { label: '全部', value: 'all' },
+  { label: '思维可视化', value: 'thinking' },
+  { label: '数学可视化', value: 'math' },
+]
+
+const CATEGORY_MAP: Record<string, string> = {
+  thinking: '思维可视化',
+  math: '数学可视化',
+  custom: '自定义',
+}
 
 export default function AdminTemplates() {
   const [templates, setTemplates] = useState<Template[]>([])
@@ -18,24 +30,25 @@ export default function AdminTemplates() {
   const [topicConfigVisible, setTopicConfigVisible] = useState(false)
   const [topicConfig, setTopicConfig] = useState('')
   const [savingConfig, setSavingConfig] = useState(false)
+  const [categoryFilter, setCategoryFilter] = useState<string>('all')
 
   useEffect(() => {
     fetchTemplates()
     loadTopicConfig()
-  }, [])
+  }, [categoryFilter])
 
   const loadTopicConfig = async () => {
     try {
       const { data } = await api.get('/admin/system-config/video_topic_prompt')
       setTopicConfig(data.value || '')
     } catch (err) {
-      // 配置不存在，使用默认值
     }
   }
 
   const fetchTemplates = async () => {
     try {
-      const { data } = await templateApi.list()
+      const params = categoryFilter !== 'all' ? { category: categoryFilter } : undefined
+      const { data } = await templateApi.list(params)
       setTemplates([...data.system_templates, ...data.user_templates])
     } catch (err) {
       message.error('获取模板失败')
@@ -47,6 +60,7 @@ export default function AdminTemplates() {
   const handleAdd = () => {
     setEditingTemplate(null)
     form.resetFields()
+    form.setFieldsValue({ category: categoryFilter !== 'all' ? categoryFilter : 'thinking' })
     setModalVisible(true)
   }
 
@@ -73,10 +87,7 @@ export default function AdminTemplates() {
         await templateApi.update(editingTemplate.id, values)
         message.success('更新成功')
       } else {
-        await templateApi.create({
-          ...values,
-          category: 'custom',
-        })
+        await templateApi.create(values)
         message.success('创建成功')
       }
       setModalVisible(false)
@@ -158,14 +169,19 @@ export default function AdminTemplates() {
       ellipsis: true,
     },
     {
-      title: '类型',
-      dataIndex: 'is_system',
-      key: 'is_system',
-      width: 80,
-      render: (isSystem: boolean) => (
-        <Tag color={isSystem ? 'blue' : 'green'}>
-          {isSystem ? '系统' : '自定义'}
-        </Tag>
+      title: '分类',
+      dataIndex: 'category',
+      key: 'category',
+      width: 110,
+      render: (category: string | null, record: Template) => (
+        <Space direction="vertical" size={2}>
+          <Tag color={category === 'math' ? 'blue' : category === 'thinking' ? 'purple' : 'default'}>
+            {CATEGORY_MAP[category || ''] || category || '未分类'}
+          </Tag>
+          <Tag color={record.is_system ? 'cyan' : 'green'} style={{ fontSize: 11 }}>
+            {record.is_system ? '系统' : '自定义'}
+          </Tag>
+        </Space>
       ),
     },
     {
@@ -268,6 +284,11 @@ export default function AdminTemplates() {
           <p className="text-gray-500 mt-1">管理所有模板，上传示例视频供用户预览</p>
         </div>
         <Space>
+          <Segmented
+            value={categoryFilter}
+            onChange={(v) => setCategoryFilter(v as string)}
+            options={CATEGORY_OPTIONS}
+          />
           <Button 
             icon={<SettingOutlined />} 
             onClick={() => setTopicConfigVisible(true)}
@@ -304,6 +325,19 @@ export default function AdminTemplates() {
             rules={[{ required: true, message: '请输入模板名称' }]}
           >
             <Input placeholder="如：简洁风格、动态丰富" />
+          </Form.Item>
+
+          <Form.Item
+            name="category"
+            label="模板分类"
+            rules={[{ required: true, message: '请选择模板分类' }]}
+          >
+            <Segmented
+              options={[
+                { label: '思维可视化', value: 'thinking' },
+                { label: '数学可视化', value: 'math' },
+              ]}
+            />
           </Form.Item>
           
           <Form.Item
@@ -371,7 +405,7 @@ class MyScene(Scene):
           )}
           
           <div className="bg-yellow-50 p-3 rounded-lg text-sm text-yellow-700">
-            <strong>提示：</strong>用户选择此模板后，将完全按照此代码的风格（结构、动画、配色）生成新内容。
+            <strong>提示：</strong>用户选择此模板后，将完全按照此代码的风格（结构、动画、配色）生成新内容。分类决定该模板在哪个模块下可用。
           </div>
         </Form>
       </Modal>

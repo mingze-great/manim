@@ -13,7 +13,7 @@ import './Creator.css'
 
 const { TextArea } = Input
 
-type ModuleType = 'manim' | 'stickman' | 'article'
+type ModuleType = 'manim' | 'math' | 'stickman' | 'article'
 type VoiceSource = 'ai' | 'record' | 'upload'
 type GenerationMode = 'one_click' | 'step_by_step'
 
@@ -53,6 +53,7 @@ export default function Creator() {
   const [selectedCategory, setSelectedCategory] = useState<VideoTopicCategory | null>(null)
   const [selectedStickmanCategory, setSelectedStickmanCategory] = useState<VideoTopicCategory | null>(null)
   const [customTopic, setCustomTopic] = useState('')
+  const [mathTopic, setMathTopic] = useState('')
   const [stickmanTopic, setStickmanTopic] = useState('')
   const [storyboardCount, setStoryboardCount] = useState(3)
   const [voiceSource, setVoiceSource] = useState<VoiceSource>('ai')
@@ -170,6 +171,30 @@ export default function Creator() {
     })
   }
 
+  const handleMathCreate = async () => {
+    if (!mathTopic.trim()) {
+      message.warning('请输入数学主题')
+      return
+    }
+    setLoading(true)
+    try {
+      const { data } = await projectApi.create({
+        title: `数学可视化-${mathTopic.trim()}`,
+        theme: mathTopic.trim(),
+        category: 'math',
+        module_type: 'manim',
+        storyboard_count: 3,
+      })
+      message.success('创建成功')
+      navigate(`/project/${data.id}/task`)
+    } catch (error: any) {
+      const detail = error.response?.data?.detail || error.message || '创建失败'
+      message.error(detail)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handleCustomCreate = async () => {
     if (!customTopic.trim()) {
       message.warning('请输入主题')
@@ -285,6 +310,7 @@ export default function Creator() {
               }}
               options={[
                 { label: '思维可视化', value: 'manim' },
+                { label: '数学可视化', value: 'math' },
                 { label: '火柴人视频', value: 'stickman' },
                 { label: '公众号文章', value: 'article' },
               ]}
@@ -298,6 +324,14 @@ export default function Creator() {
               </div>
               <h3>思维可视化</h3>
               <p>多轮打磨文案，生成动画脚本，再进入渲染流程。</p>
+            </Card>
+
+            <Card className={`module-card ${moduleType === 'math' ? 'active' : ''}`} onClick={() => setModuleType('math')}>
+              <div className="module-card-icon" style={{ color: '#0ea5e9' }}>
+                <span style={{ fontSize: 24 }}>📐</span>
+              </div>
+              <h3>数学可视化</h3>
+              <p>输入数学主题，选择模板，直接生成公式推演动画。</p>
             </Card>
 
             <Card className={`module-card ${moduleType === 'stickman' ? 'active' : ''} ${!stickmanEnabled ? 'module-card-disabled' : ''}`} onClick={() => setModuleType('stickman')}>
@@ -375,11 +409,57 @@ export default function Creator() {
                   <li>选择热门方向，直接使用爆款主题示例</li>
                   <li>或输入主题，进入 AI 对话打磨流程</li>
                   <li>确认文案后再生成思维可视化脚本和动画视频</li>
-                  <li>适合讲解类、公式类、演示类内容</li>
+                  <li>适合讲解类、思维类、演示类内容</li>
                 </ul>
               </div>
             </>
           )
+        ) : moduleType === 'math' ? (
+          <div className="stickman-panel">
+            <div className="stickman-panel-head">
+              <h2>数学可视化模块</h2>
+              <p>输入数学主题，选择模板风格，直接生成公式推演、定理证明或几何图解动画。</p>
+            </div>
+
+            <div className="stickman-form-grid">
+              <div>
+                <label className="stickman-label">数学主题</label>
+                <TextArea
+                  value={mathTopic}
+                  onChange={(e) => setMathTopic(e.target.value)}
+                  rows={5}
+                  placeholder={`输入数学主题，例如：
+• 梯度下降算法 (Gradient Descent)
+• 欧拉公式 e^(iπ) + 1 = 0
+• 泰勒展开 (Taylor Expansion)
+• 勾股定理的几何证明
+• 正弦函数的图像变换
+• 柯西-施瓦茨不等式`}
+                />
+              </div>
+
+              <div className="stickman-side-card">
+                <div className="stickman-tips">
+                  <p>支持公式推演、定理证明、几何图解等多种数学场景。</p>
+                  <p>选择主题后将进入模板选择和代码生成流程。</p>
+                  <p>基于 Manim 动画引擎，充分发挥数学可视化优势。</p>
+                </div>
+
+                <Button
+                  type="primary"
+                  icon={<RocketOutlined />}
+                  onClick={handleMathCreate}
+                  loading={loading}
+                  size="large"
+                  block
+                  disabled={!mathTopic.trim()}
+                  className="btn-gradient"
+                >
+                  创建并生成动画
+                </Button>
+              </div>
+            </div>
+          </div>
         ) : moduleType === 'stickman' ? (
           selectedStickmanCategory ? (
             <div className="max-w-2xl mx-auto">

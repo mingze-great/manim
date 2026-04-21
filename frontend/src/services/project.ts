@@ -6,7 +6,7 @@ export interface Project {
   title: string
   theme: string
   category: string | null
-  module_type: 'manim' | 'stickman'
+  module_type: 'manim' | 'math' | 'stickman'
   storyboard_count: number
   aspect_ratio: string
   generation_mode: 'one_click' | 'step_by_step'

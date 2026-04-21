@@ -28,23 +28,32 @@ def get_templates(
     current_user_id = current_user_obj.id
     
     if user_is_admin:
-        system_query_result = db.query(Template).filter(
+        system_q = db.query(Template).filter(
             Template.is_active.is_(True),
             Template.is_system.is_(True)
-        ).offset(skip).limit(limit).all()
-        
-        user_query_result = db.query(Template).filter(
+        )
+        user_q = db.query(Template).filter(
             Template.is_active.is_(True),
             Template.is_system.is_(False)
-        ).offset(skip).limit(limit).all()
+        )
     else:
-        all_visible = db.query(Template).filter(
+        system_q = db.query(Template).filter(
             Template.is_active.is_(True),
-            Template.is_visible.is_(True)
-        ).offset(skip).limit(limit).all()
-        
-        system_query_result = [t for t in all_visible if t.is_system]
-        user_query_result = [t for t in all_visible if not t.is_system]
+            Template.is_visible.is_(True),
+            Template.is_system.is_(True)
+        )
+        user_q = db.query(Template).filter(
+            Template.is_active.is_(True),
+            Template.is_visible.is_(True),
+            Template.is_system.is_(False)
+        )
+
+    if category:
+        system_q = system_q.filter(Template.category == category)
+        user_q = user_q.filter(Template.category == category)
+
+    system_query_result = system_q.offset(skip).limit(limit).all()
+    user_query_result = user_q.offset(skip).limit(limit).all()
     
     system_responses = [TemplateResponse.model_validate(t) for t in system_query_result]
     user_responses = [TemplateResponse.model_validate(t) for t in user_query_result]

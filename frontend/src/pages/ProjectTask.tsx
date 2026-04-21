@@ -1,12 +1,12 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
-import { Card, Progress, Button, Space, message, Spin, Tabs, Select, Modal } from 'antd'
-import { DownloadOutlined, PlayCircleOutlined, PlaySquareOutlined, CloudUploadOutlined, EyeOutlined } from '@ant-design/icons'
+import { Card, Progress, Button, Space, message, Spin, Tabs, Select } from 'antd'
+import { DownloadOutlined, PlayCircleOutlined, PlaySquareOutlined, CloudUploadOutlined } from '@ant-design/icons'
 import { projectApi, Task, Project } from '@/services/project'
-import { templateApi, Template } from '@/services/template'
 import { useAuthStore } from '@/stores/authStore'
 import { motion } from 'framer-motion'
 import StickmanProjectTask from './StickmanProjectTask'
+import TemplateShowcase from '@/components/TemplateShowcase'
 
 const statusMap: Record<string, { text: string; color: string }> = {
   pending: { text: '等待中', color: '#faad14' },
@@ -38,10 +38,7 @@ export default function ProjectTask() {
   const [renderError, setRenderError] = useState<string | null>(null)
   const [selectedModel, setSelectedModel] = useState<string>('')
   const [availableModels, setAvailableModels] = useState<string[]>([])
-  const [templates, setTemplates] = useState<Template[]>([])
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null)
-  const [videoPreviewVisible, setVideoPreviewVisible] = useState(false)
-  const [previewVideoUrl, setPreviewVideoUrl] = useState<string>('')
   const terminalRef = useRef<HTMLDivElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const readerRef = useRef<ReadableStreamDefaultReader | null>(null)
@@ -76,20 +73,6 @@ export default function ProjectTask() {
     }
   }
 
-  const fetchTemplates = async () => {
-    try {
-      const { data } = await templateApi.list()
-      const allTemplates = [...data.system_templates, ...data.user_templates]
-      const activeTemplates = allTemplates.filter(t => t.is_active !== false)
-      setTemplates(activeTemplates)
-      if (activeTemplates.length > 0 && !selectedTemplateId) {
-        setSelectedTemplateId(activeTemplates[0].id)
-      }
-    } catch (error) {
-      console.error('获取模板失败:', error)
-    }
-  }
-  
   const fetchAvailableModels = async () => {
     try {
       const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
@@ -106,10 +89,9 @@ export default function ProjectTask() {
     }
   }
 
-useEffect(() => {
+  useEffect(() => {
     if (id) {
       fetchProject()
-      fetchTemplates()
       fetchAvailableModels()
     }
   }, [id])
@@ -178,6 +160,8 @@ useEffect(() => {
 
       let buffer = ''
 
+      let hasCode = false
+
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
@@ -198,6 +182,7 @@ useEffect(() => {
             
             if (data.code) {
               setGeneratedCode(data.code)
+              hasCode = true
             }
             
             if (data.step === 'error') {
@@ -210,12 +195,17 @@ useEffect(() => {
       if (buffer.trim()) {
         try {
           const data = JSON.parse(buffer.trim())
-          if (data.code) setGeneratedCode(data.code)
+          if (data.code) {
+            setGeneratedCode(data.code)
+            hasCode = true
+          }
         } catch (e) {}
       }
 
-      message.success('脚本生成完成！')
-      await fetchProject()
+      if (hasCode) {
+        message.success('脚本生成完成！')
+        await fetchProject()
+      }
     } catch (error: any) {
       console.error('生成脚本失败:', error)
       message.error(error.message || '生成失败')
@@ -521,32 +511,30 @@ useEffect(() => {
                   </motion.div>
                 )}
 
-                {/* 模板和模型选择 */}
                 <div className="mb-4">
-                  <div className="flex items-center gap-3 flex-wrap mb-2">
-                    <div>
-                      <label className="block text-sm text-gray-500 mb-1">视频风格模板</label>
-                      <Select
-                        style={{ width: 200 }}
-                        placeholder="默认风格"
-                        allowClear
-                        value={selectedTemplateId}
-                        onChange={setSelectedTemplateId}
-                        options={templates.map(t => ({
-                          label: t.name,
-                          value: t.id
-                        }))}
-                      />
-                    </div>
-                    
+                  <label className="block text-sm text-gray-500 mb-2">
+                    选择模板风格
+                    {project?.category && (
+                      <span className="ml-2 text-xs text-blue-500">
+                        ({project.category === 'math' ? '数学可视化' : '思维可视化'}模板)
+                      </span>
+                    )}
+                  </label>
+                  <TemplateShowcase
+                    value={selectedTemplateId}
+                    onChange={setSelectedTemplateId}
+                    category={project?.category === 'math' ? 'math' : undefined}
+                  />
+
+                  <div className="flex items-center gap-3 mt-3">
                     <div>
                       <label className="block text-sm text-gray-500 mb-1">
                         AI 模型
-                        <span className="text-xs text-green-500 ml-2">推荐首次使用 DeepSeek V3.2</span>
+                        <span className="text-xs text-green-500 ml-2">推荐 DeepSeek V3.2</span>
                       </label>
                       <Select
                         placeholder="默认 DeepSeek V3.2"
-                        style={{ width: 200 }}
+                        style={{ width: 220 }}
                         value={selectedModel}
                         onChange={setSelectedModel}
                         allowClear
@@ -561,34 +549,6 @@ useEffect(() => {
                         ))}
                       </Select>
                     </div>
-                    
-                    {selectedTemplateId && templates.find(t => t.id === selectedTemplateId)?.example_video_url && (
-                      <Button
-                        icon={<EyeOutlined />}
-                        onClick={() => {
-                          const template = templates.find(t => t.id === selectedTemplateId)
-                          if (template?.example_video_url) {
-                            const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
-                            setPreviewVideoUrl(template.example_video_url.startsWith('http') 
-                              ? template.example_video_url 
-                              : `${API_BASE}${template.example_video_url}`)
-                            setVideoPreviewVisible(true)
-                          }
-                        }}
-                        style={{ marginTop: '22px' }}
-                      >
-                        预览示例
-                      </Button>
-                    )}
-                  </div>
-                  
-                  {/* 提示文字 */}
-                  <div className="text-xs text-gray-400 space-y-1">
-                    <p>• 视频风格模板：选择后生成的脚本会按模板风格渲染，不选则使用默认风格</p>
-                    <p>• AI 模型：推荐首次使用 DeepSeek V3.2，出错时自动切换到 Qwen3 Coder</p>
-                    {selectedTemplateId && templates.find(t => t.id === selectedTemplateId)?.description && (
-                      <p className="text-blue-500">• {templates.find(t => t.id === selectedTemplateId)?.description}</p>
-                    )}
                   </div>
                 </div>
 
@@ -780,33 +740,6 @@ useEffect(() => {
         </Card>
       </motion.div>
       </div>
-      
-      <TemplateVideoPreviewModal 
-        visible={videoPreviewVisible} 
-        videoUrl={previewVideoUrl} 
-        onClose={() => setVideoPreviewVisible(false)} 
-      />
     </>
-  )
-}
-
-
-function TemplateVideoPreviewModal({ visible, videoUrl, onClose }: { visible: boolean; videoUrl: string; onClose: () => void }) {
-  return (
-    <Modal
-      title="模板示例视频"
-      open={visible}
-      onCancel={onClose}
-      footer={null}
-      width={800}
-      centered
-    >
-      <video
-        src={videoUrl}
-        controls
-        className="w-full rounded-lg"
-        autoPlay
-      />
-    </Modal>
   )
 }
