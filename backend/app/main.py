@@ -11,7 +11,7 @@ from datetime import datetime
 
 from app.config import get_settings
 from app.database import engine, Base
-from app.api import auth, projects, tasks, templates, admin, payment, monitoring, internal, video_topics, articles, articles_stream
+from app.api import auth, projects, tasks, templates, admin, payment, monitoring, internal, video_topics, articles, articles_stream, chat_styles
 
 settings = get_settings()
 
@@ -427,6 +427,7 @@ app.include_router(internal.router, prefix="/api")
 app.include_router(video_topics.router, prefix="/api")
 app.include_router(articles.router, prefix="/api")
 app.include_router(articles_stream.router, prefix="/api")
+app.include_router(chat_styles.router, prefix="/api")
 
 
 import asyncio

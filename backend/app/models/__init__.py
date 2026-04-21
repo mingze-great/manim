@@ -11,5 +11,6 @@ from .article_category import ArticleCategory
 from .daily_usage import UserDailyUsage
 from .favorite_topic import FavoriteTopic
 from .user_module_permission import UserModulePermission
+from .chat_style import ChatStyle
 
-__all__ = ["User", "Project", "Conversation", "Task", "Template", "Order", "Subscription", "DailyStatistics", "BackgroundTask", "VideoTopicCategory", "Article", "ArticleCategory", "UserDailyUsage", "FavoriteTopic", "UserModulePermission"]
+__all__ = ["User", "Project", "Conversation", "Task", "Template", "Order", "Subscription", "DailyStatistics", "BackgroundTask", "VideoTopicCategory", "Article", "ArticleCategory", "UserDailyUsage", "FavoriteTopic", "UserModulePermission", "ChatStyle"]
