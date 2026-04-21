@@ -11,7 +11,7 @@ import TemplateShowcase from '@/components/TemplateShowcase'
 const statusMap: Record<string, { text: string; color: string }> = {
   pending: { text: '等待中', color: '#faad14' },
   processing: { text: '处理中', color: '#0066FF' },
-  code_generated: { text: '脚本就绪', color: '#00CCFF' },
+  code_generated: { text: '准备就绪', color: '#00CCFF' },
   completed: { text: '已完成', color: '#52c41a' },
   failed: { text: '失败', color: '#ff4d4f' },
 }
@@ -21,6 +21,7 @@ export default function ProjectTask() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const { user } = useAuthStore()
+  const isAdmin = user?.is_admin  // 管理员判断
   const [project, setProject] = useState<Project | null>(null)
   const [task, setTask] = useState<Task | null>(null)
   const [loading, setLoading] = useState(true)
@@ -203,11 +204,11 @@ export default function ProjectTask() {
       }
 
       if (hasCode) {
-        message.success('脚本生成完成！')
+        message.success('生成完成！')
         await fetchProject()
       }
     } catch (error: any) {
-      console.error('生成脚本失败:', error)
+      console.error('生成失败:', error)
       message.error(error.message || '生成失败')
     } finally {
       setGeneratingCode(false)
@@ -216,7 +217,7 @@ export default function ProjectTask() {
 
   const handleGenerateVideo = async () => {
     if (!generatedCode) {
-      message.warning('请先生成脚本')
+      message.warning('请先生成内容')
       return
     }
     
@@ -487,7 +488,7 @@ export default function ProjectTask() {
           }
         >
           <Tabs activeKey={activeTab} onChange={setActiveTab}>
-            <Tabs.TabPane tab={<span><PlaySquareOutlined /> 脚本生成</span>} key="code">
+            <Tabs.TabPane tab={<span><PlaySquareOutlined /> 内容生成</span>} key="code">
               <div className="space-y-4">
                 {/* 进度显示 */}
                 {generatingCode && (
@@ -552,17 +553,16 @@ export default function ProjectTask() {
                   </div>
                 </div>
 
-                {/* 生成脚本按钮 */}
+                {/* 生成内容按钮 */}
                 <div className="flex gap-3">
-                  <Button 
-                    type="primary" 
-                    icon={<PlaySquareOutlined />}
+                  <Button
+                    type="primary"
                     onClick={handleGenerateCode}
                     loading={generatingCode}
                     size="large"
                     className="btn-gradient"
                   >
-                    {generatedCode ? '重新生成脚本' : '生成脚本'}
+                    {generatedCode ? '重新生成' : '开始生成'}
                   </Button>
                   {generatedCode && (
                     <Button 
@@ -579,7 +579,7 @@ export default function ProjectTask() {
 
                 {generatedCode && (
                   <div className="text-green-600 text-sm">
-                    ✓ 脚本生成完成，点击"前往渲染"开始制作视频
+                    ✓ 生成完成，点击"前往渲染"开始制作视频
                   </div>
                 )}
               </div>
@@ -671,9 +671,9 @@ export default function ProjectTask() {
                 {/* 渲染失败时的返回按钮 */}
                 {renderError && (
                   <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200">
-                    <p className="text-red-600 mb-3">渲染失败，建议返回脚本生成页面，更换 AI 模型重新生成脚本后再试。</p>
+                    <p className="text-red-600 mb-3">渲染失败，建议返回内容生成页面，更换 AI 模型重新生成后再试。</p>
                     <Button type="primary" onClick={() => setActiveTab('code')}>
-                      返回脚本生成
+                      返回内容生成
                     </Button>
                   </div>
                 )}

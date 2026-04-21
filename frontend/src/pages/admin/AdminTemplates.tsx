@@ -349,21 +349,33 @@ export default function AdminTemplates() {
           </Form.Item>
           
           <Form.Item
-            name="code"
-            label="代码模板"
-            rules={[{ required: true, message: '请输入代码模板' }]}
-            extra="此模板将作为AI生成视频脚本的参考风格，包括动画结构、配色、排版等"
+            noStyle
+            shouldUpdate={(prevValues, currentValues) => prevValues.category !== currentValues.category}
           >
-            <TextArea
-              rows={12}
-              className="font-mono text-sm"
-              placeholder={`from manim import *
+            {({ getFieldValue }) => {
+              const category = getFieldValue('category')
+              return (
+                <Form.Item
+                  name="code"
+                  label="代码模板"
+                  rules={[{ required: category !== 'math', message: '请输入代码模板' }]}
+                  extra={category === 'math' 
+                    ? "数学可视化可只填参考代码，此字段可留空" 
+                    : "此模板将作为AI生成视频脚本的参考风格，包括动画结构、配色、排版等"}
+                >
+                  <TextArea
+                    rows={12}
+                    className="font-mono text-sm"
+                    placeholder={`from manim import *
 
 class MyScene(Scene):
     def construct(self):
         # 在这里编写你的代码模板...
 `}
-            />
+                  />
+                </Form.Item>
+              )
+            }}
           </Form.Item>
           
           <Form.Item

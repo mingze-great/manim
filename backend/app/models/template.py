@@ -10,7 +10,7 @@ class Template(Base):
     name = Column(String(200), nullable=False)
     description = Column(Text, nullable=True)
     category = Column(String(50), nullable=True)
-    code = Column(Text, nullable=False)
+    code = Column(Text, nullable=True)  # 数学可视化可以只填reference_code，允许为空
     reference_code = Column(Text, nullable=True, comment="数学可视化参考代码")
     prompt = Column(Text, nullable=True)
     thumbnail = Column(String(500), nullable=True)
