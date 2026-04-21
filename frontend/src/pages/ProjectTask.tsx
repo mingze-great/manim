@@ -104,6 +104,104 @@ export default function ProjectTask() {
   }, [project])
 
   useEffect(() => {
+    let timer: ReturnType<typeof setInterval> | null = null
+
+    const pollLatestCodeTask = async () => {
+      if (!id) return
+      try {
+        const { data } = await projectApi.getLatestCodeTask(Number(id))
+        if (data?.task_id && data.status && ['pending', 'processing'].includes(data.status)) {
+          setGeneratingCode(true)
+          setCodeProgress(data.progress || 0)
+          setCodeMessage(data.message || '后台生成中...')
+
+          timer = setInterval(async () => {
+            try {
+              const { data: taskData } = await projectApi.getBackgroundTask(data.task_id as number)
+              setCodeProgress(taskData.progress || 0)
+              setCodeMessage(taskData.message || '后台生成中...')
+
+              if (taskData.status === 'completed') {
+                setGeneratingCode(false)
+                setCodeProgress(100)
+                setCodeMessage('生成完成！')
+                await fetchProject()
+                clearInterval(timer!)
+              } else if (taskData.status === 'failed' || taskData.status === 'cancelled') {
+                setGeneratingCode(false)
+                message.error(taskData.error || '生成失败')
+                clearInterval(timer!)
+              }
+            } catch (e) {
+              clearInterval(timer!)
+            }
+          }, 3000)
+        }
+      } catch (e) {}
+    }
+
+    pollLatestCodeTask()
+
+    return () => {
+      if (timer) clearInterval(timer)
+    }
+  }, [id])
+
+  useEffect(() => {
+    if (project && searchParams.get('autoGenerate') === 'true') {
+      const timer = setTimeout(() => {
+        if (!generatedCode && project.final_script) {
+          handleGenerateCode()
+        }
+      }, 500)
+      return () => clearTimeout(timer)
+    }
+  }, [project, generatedCode])
+
+  const handleGenerateCode = async () => {
+    setGeneratingCode(true)
+    setCodeProgress(0)
+    setCodeMessage('正在提交后台任务...')
+    setGeneratedCode('')
+
+    try {
+      const { data } = await projectApi.generateCodeAsync(Number(id), selectedTemplateId || undefined)
+      const taskId = data.task_id
+      message.success('已开始后台生成，可关闭页面')
+
+      const pollTimer = setInterval(async () => {
+        try {
+          const { data: taskData } = await projectApi.getBackgroundTask(taskId)
+          setCodeProgress(taskData.progress || 0)
+          setCodeMessage(taskData.message || '后台生成中...')
+
+          if (taskData.status === 'completed') {
+            clearInterval(pollTimer)
+            setGeneratingCode(false)
+            setCodeProgress(100)
+            setCodeMessage('生成完成！')
+            await fetchProject()
+            message.success('生成完成！')
+          } else if (taskData.status === 'failed' || taskData.status === 'cancelled') {
+            clearInterval(pollTimer)
+            setGeneratingCode(false)
+            message.error(taskData.error || '生成失败')
+          }
+        } catch (error: any) {
+          clearInterval(pollTimer)
+          setGeneratingCode(false)
+          message.error(error.message || '获取任务进度失败')
+        }
+      }, 3000)
+    } catch (error: any) {
+      console.error('生成失败:', error)
+      message.error(error.message || '生成失败')
+      setGeneratingCode(false)
+    }
+  }
+  }, [project])
+
+  useEffect(() => {
     if (project && searchParams.get('autoGenerate') === 'true') {
       const timer = setTimeout(() => {
         if (!generatedCode && project.final_script) {
