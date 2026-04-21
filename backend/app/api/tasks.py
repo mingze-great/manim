@@ -932,6 +932,65 @@ async def generate_code_async(
     }
 
 
+@router.get("/{project_id}/latest-code-task")
+def get_latest_code_task(
+    project_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)]
+):
+    """获取项目最新的代码生成任务"""
+    task = db.query(Task).filter(
+        Task.project_id == project_id,
+        Task.user_id == current_user.id,
+        Task.task_type == "code_generation"
+    ).order_by(Task.created_at.desc()).first()
+    
+    if not task:
+        return {
+            "task_id": None,
+            "status": None,
+            "progress": 0,
+            "message": None,
+            "error": None
+        }
+    
+    return {
+        "task_id": task.id,
+        "status": task.status,
+        "progress": task.progress or 0,
+        "message": task.error_message or None,
+        "error": task.error_message
+    }
+
+
+@router.get("/background/{task_id}")
+def get_background_task(
+    task_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)]
+):
+    """获取后台任务详情"""
+    task = db.query(Task).filter(
+        Task.id == task_id,
+        Task.user_id == current_user.id
+    ).first()
+    
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    return {
+        "task_id": task.id,
+        "task_type": task.task_type,
+        "status": task.status,
+        "progress": task.progress or 0,
+        "message": task.error_message or f"任务{task.status}",
+        "error": task.error_message,
+        "created_at": task.created_at.isoformat() if task.created_at else None,
+        "started_at": None,
+        "completed_at": None
+    }
+
+
 @router.get("/celery-status")
 async def get_celery_status():
     """检查 Celery 和 Redis 状态"""
