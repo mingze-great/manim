@@ -3,6 +3,7 @@ import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { Card, Progress, Button, Space, message, Spin, Tabs, Select, Modal } from 'antd'
 import { DownloadOutlined, PlayCircleOutlined, PlaySquareOutlined, CloudUploadOutlined, EyeOutlined } from '@ant-design/icons'
 import { projectApi, Task, Project } from '@/services/project'
+import { resolveBackendUrl } from '@/services/api'
 import { templateApi, Template } from '@/services/template'
 import { useAuthStore } from '@/stores/authStore'
 import { motion } from 'framer-motion'
@@ -92,8 +93,7 @@ export default function ProjectTask() {
   
   const fetchAvailableModels = async () => {
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
-      const response = await fetch(`${API_BASE}/api/tasks/available-models`)
+      const response = await fetch(resolveBackendUrl('/api/tasks/available-models'))
       if (response.ok) {
         const data = await response.json()
         setAvailableModels(data.models || [])
@@ -138,9 +138,8 @@ useEffect(() => {
     setGeneratedCode('')
 
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
       const token = (useAuthStore.getState().token) || ''
-      let streamUrl = `${API_BASE}/api/tasks/${id}/generate-code`
+      let streamUrl = resolveBackendUrl(`/api/tasks/${id}/generate-code`)
       if (selectedTemplateId) {
         streamUrl += `?template_id=${selectedTemplateId}`
         if (selectedModel) {
@@ -275,9 +274,8 @@ useEffect(() => {
     renderTimeoutRef.current = setInterval(checkTimeout, 10000)
     
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
       const token = useAuthStore.getState().token
-      const streamUrl = `${API_BASE}/api/tasks/${id}/render`
+      const streamUrl = resolveBackendUrl(`/api/tasks/${id}/render`)
       
       setTerminalLog(prev => prev + `⏱️ 渲染开始时间: ${new Date().toLocaleTimeString()}\n`)
       setTerminalLog(prev => prev + `🛡️ 超时保护: 服务器${300}秒, 客户端${Math.floor(CLIENT_RENDER_TIMEOUT / 60000)}分钟\n\n`)
@@ -404,9 +402,8 @@ useEffect(() => {
     setDownloadingVideo(true)
     
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
       const token = useAuthStore.getState().token
-      const fullUrl = videoUrl.startsWith('http') ? videoUrl : `${API_BASE}${videoUrl}`
+      const fullUrl = resolveBackendUrl(videoUrl)
       
       message.loading({ content: '准备下载...', key: 'download', duration: 0 })
       
@@ -568,10 +565,9 @@ useEffect(() => {
                         onClick={() => {
                           const template = templates.find(t => t.id === selectedTemplateId)
                           if (template?.example_video_url) {
-                            const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
                             setPreviewVideoUrl(template.example_video_url.startsWith('http') 
                               ? template.example_video_url 
-                              : `${API_BASE}${template.example_video_url}`)
+                              : resolveBackendUrl(template.example_video_url))
                             setVideoPreviewVisible(true)
                           }
                         }}
