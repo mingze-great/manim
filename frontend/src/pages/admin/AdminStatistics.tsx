@@ -47,7 +47,7 @@ export default function AdminStatistics() {
         adminApi.getStatisticsTrend(period)
       ])
       setOverview(overviewRes.data)
-      setTrend(trendRes.data)
+      setTrend(Array.isArray(trendRes.data) ? trendRes.data : [])
     } catch (error) {
       console.error('获取统计数据失败:', error)
     } finally {
@@ -56,7 +56,8 @@ export default function AdminStatistics() {
   }
 
   const getChartData = () => {
-    return trend.slice(-7).map(item => ({
+    const safeTrend = Array.isArray(trend) ? trend : []
+    return safeTrend.slice(-7).map(item => ({
       ...item,
       date: item.date.slice(5),
       fullDate: item.date

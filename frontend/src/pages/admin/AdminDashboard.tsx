@@ -26,7 +26,7 @@ export default function AdminDashboard() {
         adminApi.getStatisticsTrend('week')
       ])
       setStats(statsRes.data)
-      setTrend(trendRes.data)
+      setTrend(Array.isArray(trendRes.data) ? trendRes.data : [])
     } catch (err) {
       console.error('Failed to fetch stats:', err)
     } finally {
@@ -86,7 +86,8 @@ export default function AdminDashboard() {
   }
 
   const getTrendChartData = () => {
-    return trend.slice(-7).map((item, _index) => ({
+    const safeTrend = Array.isArray(trend) ? trend : []
+    return safeTrend.slice(-7).map((item, _index) => ({
       ...item,
       date: item.date.slice(5),
       fullDate: item.date
