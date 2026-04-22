@@ -54,6 +54,12 @@ function AppContent() {
         try {
           const { data } = await authApi.me(token)
           login(token, data)
+
+          if ((data.is_admin || (data.frontend_version || 'legacy') === 'v2') && V2_APP_URL) {
+            const target = data.is_admin ? `${V2_APP_URL.replace(/\/$/, '')}/admin` : V2_APP_URL
+            window.location.href = target
+            return
+          }
         } catch (error) {
           logout()
         }
