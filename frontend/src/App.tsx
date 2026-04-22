@@ -28,7 +28,6 @@ import AdminTokenUsage from './pages/admin/AdminTokenUsage'
 import AdminArticleCategories from './pages/admin/AdminArticleCategories'
 import AdminModuleStats from './pages/admin/AdminModuleStats'
 import { useState, useEffect } from 'react'
-import { startStatusCheck } from './stores/authStore'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { token } = useAuthStore()
@@ -45,6 +44,7 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
 function AppContent() {
   const { token, login, logout, _hasHydrated } = useAuthStore()
   const [validating, setValidating] = useState(true)
+  const V2_APP_URL = import.meta.env.VITE_V2_APP_URL as string | undefined
 
   useEffect(() => {
     if (!_hasHydrated) return
@@ -65,14 +65,28 @@ function AppContent() {
 
   useEffect(() => {
     if (!token || !_hasHydrated) return
-    
-    const cleanup = startStatusCheck(() => {
-      logout()
-      window.location.href = '/login'
-    })
-    
-    return cleanup
-  }, [token, _hasHydrated, logout])
+
+    const intervalId = setInterval(async () => {
+      try {
+        const { data } = await authApi.me(token)
+        login(token, data)
+
+        if ((data.is_admin || (data.frontend_version || 'legacy') === 'v2') && V2_APP_URL) {
+          const target = data.is_admin ? `${V2_APP_URL.replace(/\/$/, '')}/admin` : V2_APP_URL
+          window.location.href = target
+          return
+        }
+      } catch (error: any) {
+        if (error?.response?.status === 401) {
+          clearInterval(intervalId)
+          logout()
+          window.location.href = '/login'
+        }
+      }
+    }, 30000)
+
+    return () => clearInterval(intervalId)
+  }, [token, _hasHydrated, logout, login, V2_APP_URL])
 
   if (!_hasHydrated || (validating && token)) {
     return (
