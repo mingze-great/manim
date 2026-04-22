@@ -343,6 +343,7 @@ async def get_user_detail(
         "email": user.email,
         "is_active": user.is_active,
         "is_admin": user.is_admin,
+        "frontend_version": user.frontend_version or "legacy",
         "is_approved": user.is_approved,
         "expires_at": user.expires_at,
         "created_at": user.created_at,
@@ -376,6 +377,10 @@ async def update_user(
         user.is_active = user_update.is_active
     if user_update.is_admin is not None:
         user.is_admin = user_update.is_admin
+    if user_update.frontend_version is not None:
+        if user_update.frontend_version not in ["legacy", "v2"]:
+            raise HTTPException(status_code=400, detail="frontend_version 只能是 legacy 或 v2")
+        user.frontend_version = user_update.frontend_version
     if user_update.module_permissions is not None:
         user.set_module_permissions(_normalize_module_permissions(user_update.module_permissions, user))
     

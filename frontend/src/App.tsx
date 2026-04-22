@@ -46,6 +46,7 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
 function AppContent() {
   const { token, login, logout, _hasHydrated } = useAuthStore()
   const [validating, setValidating] = useState(true)
+  const LEGACY_APP_URL = import.meta.env.VITE_LEGACY_APP_URL as string | undefined
 
   useEffect(() => {
     if (!_hasHydrated) return
@@ -55,6 +56,10 @@ function AppContent() {
         try {
           const { data } = await authApi.me(token)
           login(token, data)
+          if (!data.is_admin && (data.frontend_version || 'legacy') === 'legacy' && LEGACY_APP_URL) {
+            window.location.href = LEGACY_APP_URL
+            return
+          }
         } catch (error) {
           logout()
         }

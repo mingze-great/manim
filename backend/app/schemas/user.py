@@ -31,6 +31,7 @@ class UserResponse(UserBase):
     id: int
     is_active: bool
     is_admin: bool = False
+    frontend_version: str = "legacy"
     is_approved: bool = True
     expires_at: Optional[datetime] = None
     api_calls_count: int = 0
@@ -57,6 +58,7 @@ class TokenData(BaseModel):
 class UserUpdate(BaseModel):
     is_active: Optional[bool] = None
     is_admin: Optional[bool] = None
+    frontend_version: Optional[str] = None
     module_permissions: Optional[Dict[str, Any]] = None
 
 
@@ -126,6 +128,7 @@ class UserDetail(BaseModel):
     email: str
     is_active: bool
     is_admin: bool = False
+    frontend_version: str = "legacy"
     is_approved: bool = True
     expires_at: Optional[datetime] = None
     created_at: datetime

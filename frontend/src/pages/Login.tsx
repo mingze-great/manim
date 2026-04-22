@@ -33,6 +33,7 @@ export default function Login() {
         username: userData.username, 
         email: userData.email, 
         is_admin: userData.is_admin,
+        frontend_version: userData.frontend_version || 'legacy',
         is_approved: userData.is_approved,
         expires_at: userData.expires_at,
         module_permissions: userData.module_permissions,
@@ -40,6 +41,8 @@ export default function Login() {
       message.success('登录成功')
       if (userData.is_admin) {
         navigate('/admin')
+      } else if ((userData.frontend_version || 'legacy') === 'legacy' && import.meta.env.VITE_LEGACY_APP_URL) {
+        window.location.href = import.meta.env.VITE_LEGACY_APP_URL
       } else {
         navigate('/')
       }

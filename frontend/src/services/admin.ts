@@ -33,6 +33,7 @@ export interface User {
   email: string
   is_active: boolean
   is_admin: boolean
+  frontend_version?: 'legacy' | 'v2'
   is_approved: boolean
   expires_at?: string
   created_at: string
@@ -126,7 +127,7 @@ export const adminApi = {
 
   getUserStats: (id: number) => api.get<UserStats>(`/admin/users/${id}/stats`),
 
-  updateUser: (id: number, data: { is_active?: boolean; is_admin?: boolean }) =>
+  updateUser: (id: number, data: { is_active?: boolean; is_admin?: boolean; frontend_version?: 'legacy' | 'v2' }) =>
     api.put<User>(`/admin/users/${id}`, data),
 
   updateUserModulePermissions: (id: number, modulePermissions: Record<string, any>) =>
