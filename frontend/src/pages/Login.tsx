@@ -10,7 +10,7 @@ export default function Login() {
   const navigate = useNavigate()
   const { login } = useAuthStore()
   const [loading, setLoading] = useState(false)
-  const V2_APP_URL = import.meta.env.VITE_V2_APP_URL as string | undefined
+  const V2_APP_URL = (import.meta.env.VITE_V2_APP_URL as string | undefined) || '/v2'
 
   const onFinish = async (values: { username: string; password: string }) => {
     setLoading(true)

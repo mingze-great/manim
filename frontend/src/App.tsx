@@ -44,7 +44,7 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
 function AppContent() {
   const { token, login, logout, _hasHydrated } = useAuthStore()
   const [validating, setValidating] = useState(true)
-  const V2_APP_URL = import.meta.env.VITE_V2_APP_URL as string | undefined
+  const V2_APP_URL = (import.meta.env.VITE_V2_APP_URL as string | undefined) || '/v2'
 
   useEffect(() => {
     if (!_hasHydrated) return
