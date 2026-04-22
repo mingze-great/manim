@@ -68,6 +68,7 @@ class Settings(BaseSettings):
     LLM_MODEL: str = ""
     
     REDIS_URL: str = "redis://localhost:6379/0"
+    CELERY_QUEUE: str = "celery"
     
     OSS_ACCESS_KEY_ID: str = ""
     OSS_ACCESS_KEY_SECRET: str = ""

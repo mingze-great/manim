@@ -19,4 +19,5 @@ celery_app.conf.update(
     task_track_started=True,
     task_time_limit=600,
     task_soft_time_limit=540,
+    task_default_queue=settings.CELERY_QUEUE,
 )
