@@ -4,6 +4,7 @@ import { Alert, Button, Card, Col, Input, Row, Select, Space, Spin, Steps, Tabs,
 import { EditOutlined, PlayCircleOutlined, PictureOutlined, RocketOutlined, UploadOutlined } from '@ant-design/icons'
 import { Project, projectApi, StickmanVoiceOption } from '@/services/project'
 import { useAuthStore } from '@/stores/authStore'
+import { resolveBackendUrl } from '@/services/api'
 
 type Storyboard = {
   scene_id: number
@@ -11,6 +12,8 @@ type Storyboard = {
   scene_description: string
   narration: string
   camera_type?: string
+  motion_preset?: string
+  transition_type?: string
   character_action?: string
   layout_hint?: string
   visual_focus?: string
@@ -31,16 +34,14 @@ type ImageAsset = {
 function resolveAssetUrl(url?: string | null) {
   if (!url) return ''
   if (url.startsWith('http')) return url
-  const base = import.meta.env.VITE_API_BASE_URL || ''
-  return `${base}${url}`
+  return resolveBackendUrl(url)
 }
 
 function resolveStyleReferenceUrl(path?: string | null) {
   if (!path) return ''
   const fileName = path.split(/[/\\]/).pop()
   if (!fileName) return ''
-  const base = import.meta.env.VITE_API_BASE_URL || ''
-  return `${base}/api/style-reference-images/${fileName}`
+  return resolveBackendUrl(`/api/style-reference-images/${fileName}`)
 }
 
 export default function StickmanStudio() {
@@ -356,6 +357,7 @@ export default function StickmanStudio() {
           </Card>
           <Card size="small" title="视频合成">
             <Space direction="vertical" style={{ width: '100%' }}>
+              <Alert type="info" message="动态镜头模式已启用" description="合成时会根据分镜的镜头类型、构图提示、镜头运动和转场配置，自动生成推拉、平移和轻转场，不再是简单静态切图。" />
               <Card size="small" title="配音设置">
                 <Space direction="vertical" style={{ width: '100%' }}>
                   <Select
@@ -382,7 +384,7 @@ export default function StickmanStudio() {
               </Card>
               <Button type="primary" onClick={handleComposeVideo} loading={saving} disabled={!imageAssets.length}>直接合成视频</Button>
               {!!composeProgress && <div>合成进度：{composeProgress}% {composeMessage}</div>}
-              {project?.video_url && <video src={project.video_url.startsWith('http') ? project.video_url : `${import.meta.env.VITE_API_BASE_URL || ''}${project.video_url}`} controls style={{ width: '100%', borderRadius: 12 }} />}
+              {project?.video_url && <video src={resolveBackendUrl(project.video_url)} controls style={{ width: '100%', borderRadius: 12 }} />}
             </Space>
           </Card>
 
@@ -407,6 +409,35 @@ export default function StickmanStudio() {
                               <Input.TextArea rows={3} value={scene.scene_description} onChange={(e) => updateScene(index, { scene_description: e.target.value })} placeholder="场景描述" />
                               <Input.TextArea rows={3} value={scene.narration} onChange={(e) => updateScene(index, { narration: e.target.value })} placeholder="旁白" />
                               <Input value={scene.camera_type} onChange={(e) => updateScene(index, { camera_type: e.target.value })} placeholder="镜头类型" />
+                              <Select
+                                value={scene.motion_preset || 'auto'}
+                                onChange={(value) => updateScene(index, { motion_preset: value })}
+                                options={[
+                                  { label: '自动镜头', value: 'auto' },
+                                  { label: '缓慢推进', value: 'push_in' },
+                                  { label: '缓慢拉远', value: 'pull_out' },
+                                  { label: '镜头左移', value: 'pan_left' },
+                                  { label: '镜头右移', value: 'pan_right' },
+                                  { label: '聚焦主体', value: 'focus_subject' },
+                                  { label: '向上漂移', value: 'drift_up' },
+                                  { label: '向下漂移', value: 'drift_down' },
+                                ]}
+                                style={{ width: '100%' }}
+                              />
+                              <Select
+                                value={scene.transition_type || 'auto'}
+                                onChange={(value) => updateScene(index, { transition_type: value })}
+                                options={[
+                                  { label: '自动转场', value: 'auto' },
+                                  { label: '淡入淡出', value: 'fade' },
+                                  { label: '黑场淡入', value: 'fadeblack' },
+                                  { label: '左向平滑切换', value: 'smoothleft' },
+                                  { label: '右向平滑切换', value: 'smoothright' },
+                                  { label: '圆形展开', value: 'circleopen' },
+                                  { label: '圆形闭合', value: 'circleclose' },
+                                ]}
+                                style={{ width: '100%' }}
+                              />
                               <Input value={scene.character_action} onChange={(e) => updateScene(index, { character_action: e.target.value })} placeholder="人物动作" />
                               <Input value={scene.layout_hint} onChange={(e) => updateScene(index, { layout_hint: e.target.value })} placeholder="构图提示" />
                               <Select

@@ -4,6 +4,7 @@ import { Alert, Button, Card, Descriptions, Progress, Space, Spin, Steps, Tag, m
 import { DownloadOutlined, PlayCircleOutlined } from '@ant-design/icons'
 import { Project, Task, projectApi } from '@/services/project'
 import { useAuthStore } from '@/stores/authStore'
+import { resolveBackendUrl } from '@/services/api'
 
 const taskStatusText: Record<string, string> = {
   pending: '等待中',
@@ -171,7 +172,7 @@ export default function StickmanProjectTask() {
     setDownloading(true)
     try {
       const token = useAuthStore.getState().token
-      const fullUrl = videoUrl.startsWith('http') ? videoUrl : `${import.meta.env.VITE_API_BASE_URL || ''}${videoUrl}`
+      const fullUrl = resolveBackendUrl(videoUrl)
       const response = await fetch(fullUrl, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       })
@@ -300,7 +301,7 @@ export default function StickmanProjectTask() {
 
           {project?.video_url && (
             <video
-              src={project.video_url.startsWith('http') ? project.video_url : `${import.meta.env.VITE_API_BASE_URL || ''}${project.video_url}`}
+              src={resolveBackendUrl(project.video_url)}
               controls
               className="w-full rounded-xl shadow-lg"
               style={{ maxHeight: '60vh' }}
