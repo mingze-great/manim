@@ -1,4 +1,4 @@
-import api from './api'
+import api, { buildApiPath } from './api'
 
 export interface Project {
   id: number
@@ -152,14 +152,14 @@ export const projectApi = {
       `/projects/${id}/chat/latest-task`
     ),
   sendMessageStream: (id: number, _content: string, styleCode?: string) => 
-    `/api/projects/${id}/chat/stream${styleCode ? `?style_code=${styleCode}` : ''}`,
+    buildApiPath(`/projects/${id}/chat/stream${styleCode ? `?style_code=${styleCode}` : ''}`),
   generateCodeStream: (id: number, templateId?: number) => 
-    `/api/projects/${id}/generate-code/stream${templateId ? `?template_id=${templateId}` : ''}`,
+    buildApiPath(`/projects/${id}/generate-code/stream${templateId ? `?template_id=${templateId}` : ''}`),
   optimizeCodeStream: (id: number, feedback: string) => 
-    `/api/projects/${id}/optimize-code/stream?feedback=${encodeURIComponent(feedback)}`,
+    buildApiPath(`/projects/${id}/optimize-code/stream?feedback=${encodeURIComponent(feedback)}`),
   getTask: (projectId: number) => api.get<Task>(`/tasks/project/${projectId}`),
-  generateStickmanStream: (projectId: number) => `/api/tasks/${projectId}/stickman-generate`,
-  generateStickmanComposeStream: (projectId: number) => `/api/tasks/${projectId}/stickman-compose`,
+  generateStickmanStream: (projectId: number) => buildApiPath(`/tasks/${projectId}/stickman-generate`),
+  generateStickmanComposeStream: (projectId: number) => buildApiPath(`/tasks/${projectId}/stickman-compose`),
   regenerateCode: (id: number) => api.post(`/projects/${id}/regenerate-code`),
   fixCode: (projectId: number, data: { error_message: string; current_code: string }) =>
     api.post<{ success: boolean; fixed_code?: string; fix_description?: string; message?: string }>(
@@ -167,7 +167,7 @@ export const projectApi = {
       data
     ),
   fixCodeStream: (projectId: number) =>
-    `/api/tasks/${projectId}/fix-code-stream`,
+    buildApiPath(`/tasks/${projectId}/fix-code-stream`),
   generateCodeAsync: (projectId: number, templateId?: number) =>
     api.post<{ task_id: number; status: string; message: string }>(
       `/tasks/${projectId}/generate-code-async${templateId ? `?template_id=${templateId}` : ''}`

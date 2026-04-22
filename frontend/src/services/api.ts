@@ -3,20 +3,33 @@ import { useAuthStore } from '@/stores/authStore'
 
 const MAX_RETRIES = 3
 const RETRY_DELAY = 1000
+const appBase = ((import.meta as any)?.env?.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') || ''
+const apiBase = appBase ? `${appBase}/api` : '/api'
 
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: apiBase,
   headers: {
     'Content-Type': 'application/json',
   },
   timeout: 60000,
 })
 
+export function getAppBase() {
+  return appBase
+}
+
+export function getApiBase() {
+  return apiBase
+}
+
+export function buildApiPath(path: string) {
+  return `${apiBase}${path.startsWith('/') ? path : `/${path}`}`
+}
+
 export function resolveBackendUrl(path?: string | null) {
   if (!path) return ''
   if (path.startsWith('http')) return path
-  const explicitBase = (import.meta as any)?.env?.VITE_API_BASE_URL as string | undefined
-  if (explicitBase) return `${explicitBase}${path}`
+  if (appBase) return `${appBase}${path}`
   if (typeof window !== 'undefined') {
     return `${window.location.origin}${path}`
   }

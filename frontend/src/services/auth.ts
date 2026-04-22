@@ -1,6 +1,7 @@
 import axios from 'axios'
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api'
+const APP_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+const API_BASE = APP_BASE ? `${APP_BASE}/api` : '/api'
 
 export interface LoginRequest {
   username: string
