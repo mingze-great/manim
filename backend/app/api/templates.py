@@ -55,6 +55,27 @@ def get_templates(
     )
 
 
+@router.get("/active", response_model=list[TemplateResponse])
+def get_active_templates(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)]
+):
+    current_user_obj = current_user
+    if bool(current_user_obj.is_admin):
+        templates = db.query(Template).filter(
+            Template.is_active.is_(True),
+            Template.is_visible.is_(True)
+        ).order_by(Template.usage_count.desc(), Template.created_at.desc()).all()
+    else:
+        templates = db.query(Template).filter(
+            Template.is_active.is_(True),
+            Template.is_visible.is_(True)
+        ).all()
+        templates = [t for t in templates if t.is_system or t.user_id == current_user_obj.id]
+
+    return [TemplateResponse.model_validate(t) for t in templates]
+
+
 @router.get("/{template_id}", response_model=TemplateResponse)
 def get_template(
     template_id: int,
