@@ -14,6 +14,7 @@ class User(Base):
     hashed_password = Column(String(255), nullable=False)
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
+    frontend_version = Column(String(20), default="legacy", nullable=False, comment="前端版本: legacy/v2")
     is_approved = Column(Boolean, default=False, comment="是否审核通过")
     expires_at = Column(DateTime, nullable=True, comment="账号有效期")
     api_calls_count = Column(Integer, default=0, comment="API调用次数")

@@ -31,6 +31,7 @@ class UserResponse(UserBase):
     id: int
     is_active: bool
     is_admin: bool = False
+    frontend_version: str = "legacy"
     is_approved: bool = True
     expires_at: Optional[datetime] = None
     api_calls_count: int = 0

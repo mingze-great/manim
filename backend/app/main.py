@@ -139,6 +139,10 @@ async def lifespan(app: FastAPI):
 
         result = conn.execute(text("PRAGMA table_info(users)"))
         user_columns = [row[1] for row in result.fetchall()]
+        if 'frontend_version' not in user_columns:
+            conn.execute(text("ALTER TABLE users ADD COLUMN frontend_version VARCHAR(20) DEFAULT 'legacy'"))
+            conn.commit()
+            print("Added frontend_version column to users")
         if 'module_permissions_json' not in user_columns:
             conn.execute(text("ALTER TABLE users ADD COLUMN module_permissions_json TEXT"))
             conn.commit()
