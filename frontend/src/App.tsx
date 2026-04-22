@@ -55,6 +55,11 @@ function AppContent() {
         try {
           const { data } = await authApi.me(token)
           login(token, data)
+
+          if (!data.is_admin && (data.frontend_version || 'legacy') === 'legacy' && LEGACY_APP_URL) {
+            window.location.href = LEGACY_APP_URL
+            return
+          }
         } catch (error) {
           logout()
         }

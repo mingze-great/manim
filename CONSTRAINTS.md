@@ -41,39 +41,49 @@ git checkout feature/template-preview-video
 
 ---
 
-## 二、服务器架构（双环境）
+## 二、服务器架构（当前真实结构）
 
 ### 生产环境（152.136.218.74）
-| 项目 | 值 |
-|------|-----|
-| 服务器 IP | `152.136.218.74` |
-| SSH 密码 | `010421` |
-| 部署路径 | `/opt/manim` |
-| 后端端口 | `8000` |
-| 数据库 | `/opt/manim/backend/manim.db` (SQLite) |
-| HTTPS 域名 | `https://manim.asia` |
-| 状态 | ✅ 生产运行，**绝对不能影响** |
+| 站点 | 路径 | 分支 | 入口 | 后端 | 说明 |
+|------|------|------|------|------|------|
+| 旧站 | `/opt/manim` | `feature/legacy-v2-redirect` | `/` | `8000` | 旧版业务 + 版本分流能力 |
+| 新站 | `/opt/manim-v2` | `feature/chat-style-and-reference-code` | `/v2/` | `8002` | 新版业务 |
+
+其他说明：
+- 新站服务：`manim-v2-backend.service`
+- 新站 worker：`manim-v2-worker.service`
+- 新站队列：`manim_v2`
+- 生产数据库：`/opt/manim/backend/manim.db`
+- 生产域名：`https://manim.asia`
 
 ### 开发环境（106.52.166.109）
-| 项目 | 值 |
-|------|-----|
-| 服务器 IP | `106.52.166.109` |
-| SSH 认证 | SSH 密钥登录 |
-| 部署路径 | `/opt/manim-dev` |
-| 后端端口 | `8001` |
-| 前端端口 | `3000` |
-| 数据库 | `/opt/manim-dev/backend/manim_dev.db` (SQLite) |
-| 渲染服务 | 端口 8000（服务于生产环境） |
-| 状态 | ✅ 开发测试环境 |
+| 站点 | 路径 | 分支 | 入口 | 后端 | 说明 |
+|------|------|------|------|------|------|
+| 新站 | `/opt/manim-dev` | `feature/chat-style-and-reference-code` | `3000` | `8001` | 开发新版 |
+| 旧站 | `/opt/manim-legacy` | `feature/legacy-v2-redirect` | `3002` | `8002` | 开发旧版 |
+
+数据库：
+- 开发数据库：`/opt/manim-dev/backend/manim_dev.db`
+- 开发新旧站共用这份开发数据库
 
 ### 数据库独立性
 ```
-生产环境数据库：/opt/manim/backend/manim.db (完整数据)
-开发环境数据库：/opt/manim-dev/backend/manim_dev.db (部分数据副本)
+生产环境数据库：/opt/manim/backend/manim.db
+开发环境数据库：/opt/manim-dev/backend/manim_dev.db
 
-✅ 两个数据库完全独立，物理隔离
-✅ 开发环境操作不会影响生产环境
-✅ 生产环境操作不会影响开发环境
+✅ 生产 / 开发 两套数据库物理隔离
+✅ 生产新旧站共用生产数据库
+✅ 开发新旧站共用开发数据库
+```
+
+### 版本分流规则
+```
+1. 登录成功后按版本分流
+2. 刷新浏览器后立即按版本分流
+3. 在线用户每 30 秒重新获取 /auth/me 并自动切版本
+4. 管理员永远进入新版
+5. 普通 legacy 用户进入旧版
+6. 普通 v2 用户进入新版
 ```
 
 ### 环境数据差异
