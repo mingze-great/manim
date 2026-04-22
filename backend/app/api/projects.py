@@ -29,6 +29,7 @@ from app.services.chat import ChatService
 from app.services.manim import ManimService
 from app.services.stickman_generator import StickmanGenerator
 from app.services.audio_enhancement import enhance_voice_audio
+from app.tasks.celery_tasks import generate_chat_celery
 
 
 MODULE_LABELS = {
@@ -720,6 +721,93 @@ async def chat_stream(
             "X-Accel-Buffering": "no",
         }
     )
+
+
+@router.post("/{project_id}/chat/async")
+async def chat_async(
+    project_id: int,
+    message: ConversationCreate,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+    style_code: str = None
+):
+    """后台异步聊天，可关闭页面后继续生成"""
+    project = db.query(Project).filter(
+        Project.id == project_id,
+        Project.user_id == current_user.id
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    user_message = Conversation(
+        project_id=project_id,
+        role="user",
+        content=message.content
+    )
+    db.add(user_message)
+
+    task = Task(
+        project_id=project_id,
+        user_id=current_user.id,
+        task_type="chat_generation",
+        status="pending",
+        progress=0
+    )
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+
+    celery_result = generate_chat_celery.delay(task.id, project_id, message.content, style_code)
+    task.celery_task_id = celery_result.id
+    db.commit()
+
+    return {
+        "task_id": task.id,
+        "celery_task_id": celery_result.id,
+        "message": "对话生成已开始，可关闭页面"
+    }
+
+
+@router.get("/{project_id}/chat/latest-task")
+async def get_latest_chat_task(
+    project_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)]
+):
+    project = db.query(Project).filter(
+        Project.id == project_id,
+        Project.user_id == current_user.id
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    task = db.query(Task).filter(
+        Task.project_id == project_id,
+        Task.user_id == current_user.id,
+        Task.task_type == "chat_generation"
+    ).order_by(Task.created_at.desc()).first()
+
+    if not task:
+        return {
+            "task_id": None,
+            "status": None,
+            "progress": 0,
+            "message": None,
+            "error": None
+        }
+
+    task_message = task.error_message
+    if not task_message and task.log:
+        lines = [line.strip() for line in task.log.splitlines() if line.strip()]
+        task_message = lines[-1] if lines else None
+
+    return {
+        "task_id": task.id,
+        "status": task.status,
+        "progress": task.progress or 0,
+        "message": task_message,
+        "error": task.error_message
+    }
 
 
 @router.get("/{project_id}/chat/pending")

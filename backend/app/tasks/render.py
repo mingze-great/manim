@@ -64,9 +64,11 @@ def update_task_progress(task_id: int, progress: int, status: str = None, video_
                 task.video_url = video_url
             if error_message:
                 task.error_message = error_message
+            if log:
+                task.log = (task.log or "") + log
             if status == "processing" and not task.started_at:
                 task.started_at = datetime.utcnow()
-            if status in ["completed", "failed"]:
+            if status in ["completed", "failed", "cancelled"]:
                 task.completed_at = datetime.utcnow()
             db.commit()
             
@@ -76,6 +78,7 @@ def update_task_progress(task_id: int, progress: int, status: str = None, video_
                 "video_url": video_url,
                 "error_message": error_message,
                 "log": log,
+                "full_log": task.log,
                 "timestamp": datetime.utcnow().isoformat()
             })
     finally:

@@ -59,6 +59,11 @@ async def lifespan(app: FastAPI):
             conn.commit()
             print("Added is_visible column to templates")
 
+        if 'reference_code' not in columns:
+            conn.execute(text("ALTER TABLE templates ADD COLUMN reference_code TEXT"))
+            conn.commit()
+            print("Added reference_code column to templates")
+
         result = conn.execute(text("PRAGMA table_info(projects)"))
         project_columns = [row[1] for row in result.fetchall()]
 
@@ -175,6 +180,21 @@ async def lifespan(app: FastAPI):
             conn.execute(text("ALTER TABLE tasks ADD COLUMN task_type VARCHAR(50) DEFAULT 'manim_render'"))
             conn.commit()
             print("Added task_type column to tasks")
+
+        if 'log' not in task_columns:
+            conn.execute(text("ALTER TABLE tasks ADD COLUMN log TEXT"))
+            conn.commit()
+            print("Added log column to tasks")
+
+        if 'started_at' not in task_columns:
+            conn.execute(text("ALTER TABLE tasks ADD COLUMN started_at DATETIME"))
+            conn.commit()
+            print("Added started_at column to tasks")
+
+        if 'completed_at' not in task_columns:
+            conn.execute(text("ALTER TABLE tasks ADD COLUMN completed_at DATETIME"))
+            conn.commit()
+            print("Added completed_at column to tasks")
 
         result = conn.execute(text("PRAGMA table_info(articles)"))
         article_columns = [row[1] for row in result.fetchall()] if result is not None else []

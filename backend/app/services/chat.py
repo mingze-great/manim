@@ -208,7 +208,7 @@ class ChatService:
         self.db = db
         self.client = LLMFactory.get_client()
     
-    async def process_message(self, project_id: int, theme: str, user_message: str) -> dict:
+    async def process_message(self, project_id: int, theme: str, user_message: str, style_code: str = None) -> dict:
         conversations = self.db.query(Conversation).filter(
             Conversation.project_id == project_id
         ).order_by(Conversation.created_at).all()
@@ -222,8 +222,16 @@ class ChatService:
         # 检测语言并选择提示词
         language = detect_language(theme + " " + user_message)
         
+        # 优先使用用户选择的风格
+        if style_code:
+            from app.models.chat_style import ChatStyle
+            chat_style = self.db.query(ChatStyle).filter(ChatStyle.code == style_code).first()
+            if chat_style:
+                system_prompt = chat_style.system_prompt_zh if language == 'zh' else (chat_style.system_prompt_en or chat_style.system_prompt_zh)
+            else:
+                system_prompt = SYSTEM_PROMPT_ZH if language == 'zh' else SYSTEM_PROMPT_EN
         # 如果项目有分类，使用该方向的系统提示词
-        if project_category:
+        elif project_category:
             category_config = self.db.query(VideoTopicCategory).filter(
                 VideoTopicCategory.name == project_category
             ).first()

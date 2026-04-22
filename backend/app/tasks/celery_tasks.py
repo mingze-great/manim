@@ -1,5 +1,7 @@
+import asyncio
+
 from celery_app import celery_app
-from .render import render_video_task, generate_code_task
+from .render import render_video_task, generate_code_task, update_task_progress
 
 
 @celery_app.task(
@@ -77,6 +79,76 @@ def generate_code_celery(self, task_id: int, project_id: int, template_id: int =
             pass
         
         # 尝试重试
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=e)
+        return {"status": "failed", "error": str(e), "task_id": task_id}
+    finally:
+        db.close()
+
+
+@celery_app.task(
+    bind=True,
+    name="app.tasks.generate_chat_celery",
+    max_retries=2,
+    default_retry_delay=15,
+    acks_late=True,
+    reject_on_worker_lost=True
+)
+def generate_chat_celery(self, task_id: int, project_id: int, user_message: str, style_code: str = None):
+    """Celery 后台对话生成任务（支持重试）"""
+    from app.database import SessionLocal
+    from app.models.task import Task
+    from app.models.project import Project, Conversation
+    from app.services.chat import ChatService
+
+    db = SessionLocal()
+    try:
+        task = db.query(Task).filter(Task.id == task_id).first()
+        if task and task.status == "cancelled":
+            return {"status": "cancelled", "task_id": task_id}
+
+        project = db.query(Project).filter(Project.id == project_id).first()
+        if not project:
+            update_task_progress(task_id, 0, "failed", error_message="Project not found")
+            return {"status": "failed", "task_id": task_id}
+
+        update_task_progress(task_id, 10, "processing", log="开始生成对话内容...\n")
+
+        chat_service = ChatService(db)
+        result = asyncio.run(
+            chat_service.process_message(project_id, str(project.theme), user_message, style_code=style_code)
+        )
+
+        update_task_progress(task_id, 80, "processing", log="AI 响应生成完成，正在保存结果...\n")
+
+        assistant_message = Conversation(
+            project_id=project_id,
+            role="assistant",
+            content=result["content"]
+        )
+        db.add(assistant_message)
+
+        if result.get("is_final"):
+            project.status = "chatting_completed"
+        elif project.status == "draft":
+            project.status = "chatting"
+
+        if result.get("final_script"):
+            project.final_script = result["final_script"]
+
+        db.commit()
+        update_task_progress(task_id, 100, "completed", log="对话内容已保存\n")
+        return {"status": "completed", "task_id": task_id}
+    except Exception as e:
+        try:
+            task = db.query(Task).filter(Task.id == task_id).first()
+            if task:
+                task.status = "failed"
+                task.error_message = f"{str(e)} (retry {self.request.retries}/{self.max_retries})"
+                db.commit()
+        except Exception:
+            pass
+
         if self.request.retries < self.max_retries:
             raise self.retry(exc=e)
         return {"status": "failed", "error": str(e), "task_id": task_id}

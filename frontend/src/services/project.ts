@@ -76,6 +76,8 @@ export interface BackgroundTask {
   message: string | null
   error: string | null
   code?: string
+  video_url?: string | null
+  log?: string | null
   created_at: string | null
   started_at: string | null
   completed_at: string | null
@@ -139,7 +141,16 @@ export const projectApi = {
   getConversations: (id: number) => api.get<Conversation[]>(`/projects/${id}/conversations`),
   sendMessage: (id: number, content: string, styleCode?: string) => 
     api.post<Conversation>(`/projects/${id}/chat`, { content, style_code: styleCode }),
+  sendMessageAsync: (id: number, content: string, styleCode?: string) =>
+    api.post<{ task_id: number; celery_task_id: string; message: string }>(
+      `/projects/${id}/chat/async${styleCode ? `?style_code=${styleCode}` : ''}`,
+      { content }
+    ),
   getPendingResponse: (id: number) => api.get<PendingResponse>(`/projects/${id}/chat/pending`),
+  getLatestChatTask: (id: number) =>
+    api.get<{ task_id: number | null; status: string | null; progress: number; message: string | null; error: string | null }>(
+      `/projects/${id}/chat/latest-task`
+    ),
   sendMessageStream: (id: number, _content: string, styleCode?: string) => 
     `/api/projects/${id}/chat/stream${styleCode ? `?style_code=${styleCode}` : ''}`,
   generateCodeStream: (id: number, templateId?: number) => 
@@ -161,12 +172,20 @@ export const projectApi = {
     api.post<{ task_id: number; status: string; message: string }>(
       `/tasks/${projectId}/generate-code-async${templateId ? `?template_id=${templateId}` : ''}`
     ),
+  renderVideoAsync: (projectId: number) =>
+    api.post<{ task_id: number; celery_task_id: string; message: string }>(`/tasks/${projectId}/render-async`),
   getBackgroundTask: (taskId: number) =>
     api.get<BackgroundTask>(`/tasks/background/${taskId}`),
   getLatestCodeTask: (projectId: number) =>
     api.get<{ task_id: number | null; status: string | null; progress: number; message: string | null; error: string | null }>(
       `/tasks/${projectId}/latest-code-task`
     ),
+  getLatestRenderTask: (projectId: number) =>
+    api.get<{ task_id: number | null; status: string | null; progress: number; message: string | null; error: string | null; video_url?: string | null }>(
+      `/tasks/${projectId}/latest-render-task`
+    ),
+  cancelTask: (taskId: number) =>
+    api.post<{ task_id: number; status: string; message: string }>(`/tasks/task/${taskId}/cancel`),
   updateConversation: (convId: number, content: string) =>
     api.put<{ message: string; conversation: Conversation; final_script_updated: boolean }>(
       `/projects/conversations/${convId}`,

@@ -23,7 +23,7 @@ from app.services.manim import ManimService
 from app.services.stickman_generator import StickmanGenerator
 from app.config import get_settings
 from app.utils.cos_storage import cos_storage
-from app.tasks.celery_tasks import render_video_celery, generate_code_celery
+from app.tasks.celery_tasks import render_video_celery, generate_code_celery, generate_chat_celery
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 settings = get_settings()
@@ -34,6 +34,16 @@ OLD_SERVER_SEMAPHORE = asyncio.Semaphore(2)
 MAX_TOTAL_RENDERS = 6
 RENDER_TOTAL_TIMEOUT = 300
 RENDER_NO_OUTPUT_TIMEOUT = 60
+
+
+def _task_message(task: Task) -> str:
+    if task.error_message and task.status in ["failed", "cancelled"]:
+        return task.error_message
+    if task.log:
+        lines = [line.strip() for line in task.log.splitlines() if line.strip()]
+        if lines:
+            return lines[-1]
+    return f"任务{task.status}"
 
 
 @router.post("/internal/update-video")
@@ -807,6 +817,13 @@ def get_project_task(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)]
 ):
+    project = db.query(Project).filter(
+        Project.id == project_id,
+        Project.user_id == current_user.id
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
     task = db.query(Task).filter(Task.project_id == project_id).order_by(Task.created_at.desc()).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -834,6 +851,7 @@ async def render_video_async(
     task = Task(
         project_id=project_id,
         user_id=current_user.id,
+        task_type="video_render",
         status="pending",
         progress=0
     )
@@ -855,6 +873,37 @@ async def render_video_async(
         "task_id": task.id,
         "celery_task_id": celery_result.id,
         "message": "视频渲染已开始，可关闭页面"
+    }
+
+
+@router.get("/{project_id}/latest-render-task")
+def get_latest_render_task(
+    project_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)]
+):
+    task = db.query(Task).filter(
+        Task.project_id == project_id,
+        Task.user_id == current_user.id,
+        Task.task_type.in_(["video_render", "manim_render"])
+    ).order_by(Task.created_at.desc()).first()
+
+    if not task:
+        return {
+            "task_id": None,
+            "status": None,
+            "progress": 0,
+            "message": None,
+            "error": None
+        }
+
+    return {
+        "task_id": task.id,
+        "status": task.status,
+        "progress": task.progress or 0,
+        "message": _task_message(task),
+        "error": task.error_message,
+        "video_url": task.video_url
     }
 
 
@@ -958,7 +1007,7 @@ def get_latest_code_task(
         "task_id": task.id,
         "status": task.status,
         "progress": task.progress or 0,
-        "message": task.error_message or None,
+        "message": _task_message(task),
         "error": task.error_message
     }
 
@@ -983,11 +1032,13 @@ def get_background_task(
         "task_type": task.task_type,
         "status": task.status,
         "progress": task.progress or 0,
-        "message": task.error_message or f"任务{task.status}",
+        "message": _task_message(task),
         "error": task.error_message,
+        "video_url": task.video_url,
+        "log": task.log,
         "created_at": task.created_at.isoformat() if task.created_at else None,
-        "started_at": None,
-        "completed_at": None
+        "started_at": task.started_at.isoformat() if task.started_at else None,
+        "completed_at": task.completed_at.isoformat() if task.completed_at else None
     }
 
 
