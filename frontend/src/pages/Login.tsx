@@ -41,7 +41,11 @@ export default function Login() {
       })
       message.success('登录成功')
       if (userData.is_admin) {
-        navigate('/admin')
+        if (V2_APP_URL) {
+          window.location.href = `${V2_APP_URL.replace(/\/$/, '')}/admin`
+        } else {
+          navigate('/admin')
+        }
       } else if ((userData.frontend_version || 'legacy') === 'v2' && V2_APP_URL) {
         window.location.href = V2_APP_URL
       } else {
