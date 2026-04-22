@@ -6,6 +6,7 @@ interface User {
   username: string
   email: string
   is_admin?: boolean
+  frontend_version?: 'legacy' | 'v2'
   is_approved?: boolean
   expires_at?: string | null
   is_expired?: boolean
