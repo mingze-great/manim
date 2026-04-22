@@ -128,7 +128,8 @@ export default function AdminUsers() {
     setLoading(true)
     try {
       const res = await adminApi.getUsers({ search: search || searchText, limit: 100 })
-      setUsers(res.data as any)
+      const payload: any = res.data
+      setUsers(Array.isArray(payload) ? payload : (payload?.users || []))
     } catch (err) {
       message.error('获取用户列表失败')
     } finally {
