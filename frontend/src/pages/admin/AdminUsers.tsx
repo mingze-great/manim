@@ -146,6 +146,20 @@ export default function AdminUsers() {
     }
   }
 
+  const handleFrontendVersionChange = async (userId: number, frontendVersion: 'legacy' | 'v2') => {
+    try {
+      await adminApi.updateUser(userId, { frontend_version: frontendVersion })
+      message.success(`已切换为${frontendVersion === 'v2' ? '新版本' : '老版本'}`)
+      fetchUsers()
+      if (selectedUser?.id === userId) {
+        const detailRes = await adminApi.getUserDetail(userId)
+        setSelectedUser(detailRes.data)
+      }
+    } catch (err: any) {
+      message.error(err.response?.data?.detail || '切换版本失败')
+    }
+  }
+
   const handleDeleteUser = async (userId: number) => {
     try {
       await adminApi.deleteUser(userId)
@@ -344,6 +358,23 @@ export default function AdminUsers() {
       width: 100,
       render: (isAdmin: boolean) => (
         isAdmin ? <Tag color="gold">管理员</Tag> : <Tag color="default">用户</Tag>
+      ),
+    },
+    {
+      title: '前端版本',
+      key: 'frontend_version',
+      width: 140,
+      render: (_: any, record: User) => (
+        <Select
+          size="small"
+          style={{ width: 110 }}
+          value={record.frontend_version || 'legacy'}
+          onChange={(value) => handleFrontendVersionChange(record.id, value as 'legacy' | 'v2')}
+          options={[
+            { label: '老版本', value: 'legacy' },
+            { label: '新版本', value: 'v2' },
+          ]}
+        />
       ),
     },
     {
@@ -603,6 +634,11 @@ export default function AdminUsers() {
                 </Descriptions.Item>
                 <Descriptions.Item label="角色">
                   {selectedUser.is_admin ? <Tag color="gold">管理员</Tag> : <Tag color="default">普通用户</Tag>}
+                </Descriptions.Item>
+                <Descriptions.Item label="前端版本">
+                  <Tag color={(selectedUser.frontend_version || 'legacy') === 'v2' ? 'green' : 'default'}>
+                    {(selectedUser.frontend_version || 'legacy') === 'v2' ? '新版本' : '老版本'}
+                  </Tag>
                 </Descriptions.Item>
                 <Descriptions.Item label="注册时间">
                   {new Date(selectedUser.created_at).toLocaleString('zh-CN')}
