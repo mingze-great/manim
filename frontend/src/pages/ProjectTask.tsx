@@ -93,13 +93,18 @@ export default function ProjectTask() {
   
   const fetchAvailableModels = async () => {
     try {
-      const response = await fetch(resolveBackendUrl('/api/tasks/available-models'))
+      const token = useAuthStore.getState().token
+      const response = await fetch(resolveBackendUrl('/api/tasks/available-models'), {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      })
       if (response.ok) {
         const data = await response.json()
         setAvailableModels(data.models || [])
         if (data.default_code_model && !selectedModel) {
           setSelectedModel(data.default_code_model)
         }
+      } else {
+        console.error('获取模型列表失败:', response.status)
       }
     } catch (error) {
       console.error('获取模型列表失败:', error)
