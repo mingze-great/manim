@@ -69,11 +69,15 @@ ssh_err*.txt
 /check_*.py
 /check_*.js
 /create_chat_styles_table.js
+/deploy_*.bundle
 /deploy_*.js
+/deploy_*.py
 /fix_system_config.js
 /inspect_*.py
 /inspect_*.js
 /legacy_index_fixed.html
+/manim-legacy.conf
+/manim-prod.conf
 /migrate_reference_code.py
 /prod_*.js
 /prod_*.py
@@ -87,10 +91,13 @@ ssh_err*.txt
 /update_categories.js
 /update_categories.sql
 /upload_*.js
+/verify_v2_prod.js
 
 # One-off shell helpers
 /scripts/check_*.sh
 /scripts/dev_*.sh
+/scripts/deploy_*.sh
+/scripts/deploy_*.js
 /scripts/prod_*.sh
 /scripts/restart_*.sh
 /scripts/start_*.sh
@@ -101,3 +108,4 @@ ssh_err*.txt
 /scripts/init_*.py
 /scripts/insert_math_templates.sh
 /scripts/rebuild.sh
+/scripts/update_math_templates.sh
