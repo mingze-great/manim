@@ -7,6 +7,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { motion } from 'framer-motion'
 import StickmanProjectTask from './StickmanProjectTask'
 import TemplateShowcase from '@/components/TemplateShowcase'
+import { ChallengeStrip, StepRail, TipCard } from '@/components/GuidedExperience'
 import { resolveBackendUrl } from '@/services/api'
 
 const statusMap: Record<string, { text: string; color: string }> = {
@@ -447,11 +448,32 @@ export default function ProjectTask() {
 
   return (
     <>
-      <div className="max-w-6xl mx-auto p-6">
+      <div className="max-w-6xl mx-auto p-6 premium-dark-page rounded-[28px]">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
         >
+          <div className="mb-6 space-y-4">
+            <StepRail
+              title="脚本与渲染工作台"
+              subtitle="先选模板并生成脚本，再进入渲染。这个页面会持续告诉你当前已经完成到哪一步。"
+              steps={[
+                { title: '内容确认', desc: '对话页里把内容打磨清楚。' },
+                { title: '选择模板', desc: '当前模块只看对应模板。' },
+                { title: '生成脚本', desc: '系统按模板和模型输出脚本。' },
+                { title: '渲染成片', desc: '脚本完成后进入成片阶段。' },
+              ]}
+              active={activeTab === 'code' ? 1 : 3}
+            />
+            <div className="premium-grid-two">
+              <TipCard title="新手提示" tone="gold">
+                如果你想最快出片，可以直接使用推荐模型和对应模板；如果你想更稳，就先选模板，再生成脚本。
+              </TipCard>
+              <TipCard title="当前阶段目标" tone="soft">
+                这一步要完成两件事：先拿到可用脚本，再把脚本渲染成完整视频。完成后就可以预览、下载，或继续优化。
+              </TipCard>
+            </div>
+          </div>
           <Card
           title={
             <Space>
@@ -534,6 +556,17 @@ export default function ProjectTask() {
                     </div>
                   </div>
                 </div>
+
+                <ChallengeStrip
+                  title="脚本阶段推荐动作"
+                  actions={
+                    <>
+                      <Button className="challenge-chip" onClick={() => setSelectedModel('deepseek-v3.2')}>挑战：使用推荐模型</Button>
+                      <Button className="challenge-chip" onClick={handleGenerateCode}>挑战：直接生成第一版</Button>
+                      <Button className="challenge-chip" onClick={() => setActiveTab('video')} disabled={!generatedCode}>挑战：跳到渲染阶段</Button>
+                    </>
+                  }
+                />
 
                 {/* 生成内容按钮 */}
                 <div className="flex gap-3">
@@ -698,6 +731,17 @@ export default function ProjectTask() {
                     </Button>
                   )}
                 </div>
+
+                <ChallengeStrip
+                  title="渲染阶段推荐动作"
+                  actions={
+                    <>
+                      <Button className="challenge-chip" onClick={handleGenerateVideo} disabled={!generatedCode || generatingVideo}>挑战：立即开始渲染</Button>
+                      <Button className="challenge-chip" onClick={() => navigate(`/project/${id}/chat`)}>挑战：回去继续优化内容</Button>
+                      <Button className="challenge-chip" onClick={handleDownloadVideo} disabled={!project?.video_url}>挑战：直接下载成片</Button>
+                    </>
+                  }
+                />
 
                 {/* 视频预览 */}
                 {project?.video_url && (

@@ -4,6 +4,7 @@ import { Input, Button, message, Modal, Alert, Switch, Select } from 'antd'
 import { SendOutlined, PlayCircleOutlined, RobotOutlined, UserOutlined, ReloadOutlined, CheckCircleOutlined, StopOutlined, EditOutlined } from '@ant-design/icons'
 import { projectApi, Conversation, Project, ChatStyle } from '@/services/project'
 import { useAuthStore } from '@/stores/authStore'
+import { ChallengeStrip, StepRail, TipCard } from '@/components/GuidedExperience'
 
 const { TextArea } = Input
 
@@ -15,6 +16,12 @@ const statusBadgeMap: Record<string, { text: string; color: string }> = {
   rendering: { text: '渲染中', color: '#fa8c16' },
   completed: { text: '已完成', color: '#52c41a' },
   failed: { text: '失败', color: '#ff4d4f' },
+}
+
+const styleHints: Record<string, string> = {
+  conservative: '适合讲解、科普和方法论内容，结构更稳，信息更清楚。',
+  emotional: '适合治愈、成长和共鸣表达，情绪感染力更强。',
+  sharp: '适合更强开头、更短节奏和更高注意力抓取。',
 }
 
 export default function ProjectChat() {
@@ -332,7 +339,7 @@ export default function ProjectChat() {
   }
 
   return (
-    <div className="h-full flex flex-col bg-white dark:bg-gray-800">
+    <div className="h-full flex flex-col premium-dark-page">
       {/* 头部 */}
       <div className="p-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
         <div>
@@ -354,6 +361,42 @@ export default function ProjectChat() {
           </Button>
           <Button icon={<ReloadOutlined />} size="small" onClick={() => { fetchProject(); fetchConversations(); }} />
         </div>
+      </div>
+
+      <div className="p-4 space-y-4 border-b border-gray-800/60">
+        <StepRail
+          title="当前正在打磨内容"
+          subtitle="这一步的目标是把讲什么、讲几条、用什么语气讲清楚。等你满意后，再去生成脚本。"
+          steps={[
+            { title: '选题', desc: '明确主题和受众。' },
+            { title: '对话打磨', desc: '继续补条数、风格和重点。' },
+            { title: '确认内容', desc: '满意后进入脚本生成。' },
+            { title: '渲染视频', desc: '脚本完成后去任务页出片。' },
+          ]}
+          active={1}
+        />
+
+        <div className="premium-grid-two">
+          <TipCard title="对话风格提示" tone="gold">
+            当前风格：{chatStyles.find((item) => item.code === selectedStyle)?.name || '默认风格'}
+            <br />
+            {styleHints[selectedStyle] || '系统会按当前风格帮你组织结构、语气和吸引力。'}
+          </TipCard>
+          <TipCard title="你现在该做什么" tone="soft">
+            如果你还没想清楚，就先告诉系统主题、希望做几条内容、想给谁看。AI 会继续追问缺失信息，不需要你一次写完整。
+          </TipCard>
+        </div>
+
+        <ChallengeStrip
+          title="不会开口时，直接点一个挑战动作"
+          actions={
+            <>
+              <Button className="challenge-chip" onClick={() => setInput('请把这个主题整理成适合 60 秒视频的 5 条内容，风格简洁有逻辑。')}>挑战：压缩成 60 秒版</Button>
+              <Button className="challenge-chip" onClick={() => setInput('请给这个主题一个更强开头的版本，前三秒就能抓住注意力。')}>挑战：改成强开头</Button>
+              <Button className="challenge-chip" onClick={() => setInput('请按口播讲解的方式重写，让表达更自然、更好讲。')}>挑战：更适合口播</Button>
+            </>
+          }
+        />
       </div>
 
       {/* 消息列表 */}

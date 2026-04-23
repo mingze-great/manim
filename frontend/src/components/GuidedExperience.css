@@ -1,0 +1,260 @@
+.guided-hero {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(245, 196, 100, 0.18);
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 50% 100%, rgba(255, 196, 93, 0.28), transparent 22%),
+    linear-gradient(180deg, #090909 0%, #111111 100%);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.36);
+}
+
+.guided-hero__glow {
+  position: absolute;
+  inset: auto -10% -30% -10%;
+  height: 65%;
+  background:
+    radial-gradient(circle at 50% 100%, rgba(255, 205, 116, 0.95) 0%, rgba(255, 205, 116, 0.2) 18%, transparent 55%);
+  filter: blur(24px);
+  pointer-events: none;
+}
+
+.guided-hero__content {
+  position: relative;
+  z-index: 1;
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 68px 28px 120px;
+  text-align: center;
+}
+
+.guided-hero__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid rgba(245, 196, 100, 0.35);
+  border-radius: 999px;
+  color: #f4cf8c;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: rgba(255, 215, 130, 0.08);
+}
+
+.guided-hero__title {
+  margin: 18px 0 18px;
+  font-size: clamp(42px, 6vw, 84px);
+  line-height: 1.04;
+  letter-spacing: -0.04em;
+  font-weight: 800;
+  color: #fff8ee;
+}
+
+.guided-hero__desc {
+  margin: 0 auto;
+  max-width: 860px;
+  font-size: clamp(18px, 2vw, 26px);
+  line-height: 1.8;
+  color: rgba(255, 250, 241, 0.76);
+}
+
+.guided-hero__actions {
+  display: flex;
+  gap: 14px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 34px;
+}
+
+.step-rail,
+.section-shell,
+.challenge-strip,
+.tip-card {
+  border: 1px solid rgba(245, 196, 100, 0.12);
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(18, 18, 18, 0.97) 0%, rgba(10, 10, 10, 0.97) 100%);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.22);
+}
+
+.section-shell {
+  padding: 26px;
+}
+
+.step-rail {
+  padding: 22px;
+}
+
+.step-rail__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+
+.step-rail__title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #fff3db;
+}
+
+.step-rail__subtitle {
+  margin-top: 6px;
+  color: rgba(255, 244, 225, 0.62);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.step-rail__badge {
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(245, 196, 100, 0.25);
+  color: #f5ca7d;
+  background: rgba(255, 209, 122, 0.07);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.step-rail__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.step-rail__item {
+  display: flex;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.02);
+}
+
+.step-rail__item.is-active {
+  border-color: rgba(245, 196, 100, 0.38);
+  background: linear-gradient(135deg, rgba(245, 196, 100, 0.18), rgba(255,255,255,0.04));
+}
+
+.step-rail__item.is-done {
+  border-color: rgba(194, 152, 79, 0.22);
+}
+
+.step-rail__index {
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff5e4;
+  background: linear-gradient(135deg, #8a6932, #f0bf63);
+  flex-shrink: 0;
+}
+
+.step-rail__item-title {
+  color: #fff5e3;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.step-rail__item-desc {
+  margin-top: 4px;
+  color: rgba(255, 244, 225, 0.62);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.tip-card {
+  padding: 18px 18px 16px;
+}
+
+.tip-card--gold {
+  background: linear-gradient(180deg, rgba(57, 42, 15, 0.95), rgba(22, 18, 11, 0.96));
+}
+
+.tip-card--soft {
+  background: linear-gradient(180deg, rgba(24, 24, 24, 0.97), rgba(13, 13, 13, 0.97));
+}
+
+.tip-card__title {
+  color: #ffe5b0;
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.tip-card__body {
+  color: rgba(255, 246, 231, 0.76);
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.tip-card__body ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.challenge-strip {
+  padding: 18px;
+}
+
+.challenge-strip__title {
+  color: #fff0cf;
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+.challenge-strip__actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.challenge-chip {
+  border-radius: 999px !important;
+  border: 1px solid rgba(245, 196, 100, 0.4) !important;
+  background: rgba(255, 214, 140, 0.06) !important;
+  color: #ffe2aa !important;
+  box-shadow: none !important;
+}
+
+.challenge-chip:hover {
+  border-color: rgba(255, 216, 153, 0.8) !important;
+  color: #fff4de !important;
+  background: rgba(255, 214, 140, 0.12) !important;
+}
+
+.premium-dark-page {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top, rgba(255, 201, 89, 0.18), transparent 18%),
+    linear-gradient(180deg, #080808 0%, #101010 52%, #0a0a0a 100%);
+  color: #fff4de;
+}
+
+.premium-grid-two {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
+  gap: 20px;
+}
+
+.premium-grid-three {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+@media (max-width: 992px) {
+  .guided-hero__content {
+    padding: 56px 20px 88px;
+  }
+
+  .premium-grid-two,
+  .premium-grid-three {
+    grid-template-columns: 1fr;
+  }
+}

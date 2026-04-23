@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
 import { projectApi, StickmanVoiceOption } from '@/services/project'
 import { articleApi, Category as ArticleCategory } from '@/services/article'
+import { ChallengeStrip, GuidedHero, StepRail, TipCard } from '@/components/GuidedExperience'
 import TopicCategorySelector from './components/TopicCategorySelector'
 import TopicExamples from './components/TopicExamples'
 import AudioRecorder from './components/AudioRecorder'
@@ -77,6 +78,12 @@ export default function Creator() {
   const stickmanEnabled = user?.is_admin || permissions.stickman?.enabled !== false
   const articleEnabled = user?.is_admin || permissions.article?.enabled !== false
   const stickmanStoryboardMax = user?.is_admin ? 20 : 6
+  const flowSteps = [
+    { title: '选择模块', desc: '先选最适合你的内容类型。' },
+    { title: '输入主题', desc: '不会写就直接用推荐挑战题。' },
+    { title: '打磨脚本', desc: '系统会继续提示你补全关键要求。' },
+    { title: '渲染成片', desc: '确认后直接生成并预览最终视频。' },
+  ]
 
   useEffect(() => {
     const loadVoices = async () => {
@@ -282,20 +289,26 @@ export default function Creator() {
   }
 
   return (
-    <div className="creator-page">
-      <div className="creator-hero creator-hero-sunrise">
-        <div className="hero-content">
-          <h1 className="hero-title">
-            <RocketOutlined className="mr-3" />
-            内容创作助手
-          </h1>
-          <p className="hero-subtitle">
-            在统一入口选择动画视频、火柴人视频或公众号文章模块，再进入各自独立的创作流程
-          </p>
-        </div>
-      </div>
+    <div className="creator-page premium-dark-page">
+      <GuidedHero
+        eyebrow="第 1 步 · 先选模块，再进入引导流程"
+        title="跟着提示做，第一次也能完成一条视频"
+        description="这里不是普通功能列表，而是整个创作流程的起点。先选模块，再按系统提示补全主题、风格和脚本要求，零基础用户也能顺着流程做出第一版成片。"
+        actions={
+          <>
+            <Button className="challenge-chip" onClick={() => { setModuleType('manim'); setCustomTopic('世界十大顶级思维：刻意练习、复利思维、终身学习'); }}>
+              挑战：3 分钟开始思维视频
+            </Button>
+            <Button className="challenge-chip" onClick={() => { setModuleType('math'); setMathTopic('欧拉公式 e^(iπ) + 1 = 0'); }}>
+              挑战：直接试数学动画
+            </Button>
+          </>
+        }
+      />
 
       <div className="creator-container">
+        <StepRail title="新版创作路径" subtitle="系统会在后续页面持续告诉你当前在第几步、下一步该做什么。" steps={flowSteps} active={0} />
+
         <div className="module-switcher-wrap">
           <div className="module-switcher-head">
             <span className="module-switcher-label">开始创作</span>
@@ -324,6 +337,7 @@ export default function Creator() {
               </div>
               <h3>思维可视化</h3>
               <p>多轮打磨文案，生成动画脚本，再进入渲染流程。</p>
+              <div className="module-card-meta">适合方法论、成长、科普与观点表达</div>
             </Card>
 
             <Card className={`module-card ${moduleType === 'math' ? 'active' : ''}`} onClick={() => setModuleType('math')}>
@@ -332,6 +346,7 @@ export default function Creator() {
               </div>
               <h3>数学可视化</h3>
               <p>输入数学主题，选择模板，直接生成公式推演动画。</p>
+              <div className="module-card-meta">适合定理、公式、几何、函数和算法推演</div>
             </Card>
 
             <Card className={`module-card ${moduleType === 'stickman' ? 'active' : ''} ${!stickmanEnabled ? 'module-card-disabled' : ''}`} onClick={() => setModuleType('stickman')}>
@@ -340,6 +355,7 @@ export default function Creator() {
               </div>
               <h3>火柴人视频</h3>
               <p>直接填写主题与分镜数，进入图片、配音与合成任务流。</p>
+              <div className="module-card-meta">适合口播、叙事、人物表达和故事拆解</div>
             </Card>
 
             <Card className={`module-card ${moduleType === 'article' ? 'active' : ''} ${!articleEnabled ? 'module-card-disabled' : ''}`} onClick={() => { setModuleType('article'); handleArticleModeEnter() }}>
@@ -348,9 +364,21 @@ export default function Creator() {
               </div>
               <h3>公众号文章</h3>
               <p>生成大纲、正文、配图与公众号 HTML，支持手机预览和复制。</p>
+              <div className="module-card-meta">适合图文运营、知识输出与账号更新</div>
             </Card>
           </div>
         </div>
+
+        <ChallengeStrip
+          title="不想从空白开始？直接用推荐动作启动"
+          actions={
+            <>
+              <Button className="challenge-chip" onClick={() => { setModuleType('manim'); setCustomTopic('世界十大顶级思维：刻意练习、复利思维、终身学习'); }}>挑战：直接填入思维主题</Button>
+              <Button className="challenge-chip" onClick={() => { setModuleType('math'); setMathTopic('梯度下降算法 (Gradient Descent)'); }}>挑战：直接填入数学主题</Button>
+              <Button className="challenge-chip" onClick={() => { setModuleType('stickman'); setStickmanTopic('为什么拖延会越来越严重'); }}>挑战：快速体验火柴人视频</Button>
+            </>
+          }
+        />
 
         {moduleType === 'manim' ? (
           selectedCategory ? (
@@ -362,6 +390,14 @@ export default function Creator() {
             </div>
           ) : (
             <>
+              <div className="premium-grid-two creator-tip-grid">
+                <TipCard title="新手怎么开始最顺" tone="gold">
+                  先从热门方向里选一个你熟悉的话题，再让系统带你进入 AI 对话页。这样你不需要一开始就把所有要求想清楚。
+                </TipCard>
+                <TipCard title="下一步会发生什么" tone="soft">
+                  选定主题后会进入对话页。AI 会继续提示你补充条数、风格和重点，最终再进入脚本与渲染流程。
+                </TipCard>
+              </div>
               <div className="mb-6">
                 <div className="flex items-center gap-2 mb-4">
                   <BulbOutlined className="text-xl text-indigo-500" />
@@ -421,6 +457,15 @@ export default function Creator() {
               <p>输入数学主题，选择模板风格，直接生成公式推演、定理证明或几何图解动画。</p>
             </div>
 
+            <div className="premium-grid-two creator-tip-grid">
+              <TipCard title="推荐输入方式" tone="gold">
+                直接输入一个明确题目即可，例如某个定理、公式、几何问题或算法过程。系统会在后续步骤里帮你匹配更适合的数学模板。
+              </TipCard>
+              <TipCard title="适合零基础用户" tone="soft">
+                你不需要自己写代码，只需要说清“想讲什么”。如果不确定怎么写，可以直接用示例题目开始挑战。
+              </TipCard>
+            </div>
+
             <div className="stickman-form-grid">
               <div>
                 <label className="stickman-label">数学主题</label>
@@ -456,6 +501,9 @@ export default function Creator() {
                   className="btn-gradient"
                 >
                   创建并生成动画
+                </Button>
+                <Button className="challenge-chip w-full mt-3" onClick={() => setMathTopic('欧拉公式 e^(iπ) + 1 = 0')}>
+                  挑战：用经典公式直接开始
                 </Button>
               </div>
             </div>
