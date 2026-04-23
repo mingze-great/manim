@@ -506,7 +506,7 @@ export default function ProjectTask() {
                   <TemplateShowcase
                     value={selectedTemplateId}
                     onChange={setSelectedTemplateId}
-                    category={isMathProjectCategory(project?.category) ? 'math' : undefined}
+                    category={isMathProjectCategory(project?.category) ? 'math' : 'thinking'}
                   />
 
                   <div className="flex items-center gap-3 mt-3">
