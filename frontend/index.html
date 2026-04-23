@@ -12,6 +12,24 @@
       window.addEventListener('unhandledrejection', function(e) {
         console.error('Unhandled rejection:', e.reason);
       });
+
+      try {
+        const raw = localStorage.getItem('auth-storage');
+        if (raw && !window.location.pathname.startsWith('/v2')) {
+          const parsed = JSON.parse(raw);
+          const state = parsed && parsed.state ? parsed.state : null;
+          const token = state && state.token;
+          const user = state && state.user;
+          if (token && user && (user.is_admin || user.frontend_version === 'v2')) {
+            const target = user.is_admin ? '/v2/admin' : '/v2';
+            if (window.location.pathname !== target) {
+              window.location.replace(target);
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Pre-route redirect check failed', e);
+      }
     </script>
   </head>
   <body>
