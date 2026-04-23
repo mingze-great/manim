@@ -37,7 +37,7 @@ def publish_progress(task_id: int, data: dict):
             pass
 
 
-def get_manim_path() -> str:
+def get_manim_command() -> list[str]:
     if sys.platform == "win32":
         possible_paths = [
             os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "Python", "Python311", "Scripts", "manim.exe"),
@@ -46,10 +46,28 @@ def get_manim_path() -> str:
         ]
         for path in possible_paths:
             if os.path.exists(path):
-                return path
-        return "manim"
+                return [path]
+        return ["manim"]
     else:
-        return "/opt/miniconda3/envs/manim311/bin/manim"
+        manim_candidates = [
+            "/root/miniconda3/envs/manim311/bin/manim",
+            "/opt/miniconda3/envs/manim311/bin/manim",
+        ]
+        for path in manim_candidates:
+            if os.path.exists(path):
+                return [path]
+
+        python_candidates = [
+            "/root/miniconda3/envs/manim311/bin/python3.11",
+            "/root/miniconda3/envs/manim311/bin/python",
+            "/opt/miniconda3/envs/manim311/bin/python3.11",
+            "/opt/miniconda3/envs/manim311/bin/python",
+        ]
+        for path in python_candidates:
+            if os.path.exists(path):
+                return [path, "-m", "manim"]
+
+        return ["manim"]
 
 
 def update_task_progress(task_id: int, progress: int, status: str = None, video_url: str = None, error_message: str = None, log: str = None):
@@ -189,21 +207,22 @@ class {scene_name}(Scene):
             
             update_task_progress(task_id, 30, "processing", log=f"保存代码到: {manim_file}\n")
             
-            manim_path = get_manim_path()
-            
+            manim_cmd = get_manim_command()
+            manim_bin = manim_cmd[0]
+
             if sys.platform == "win32":
-                manim_check = shutil.which(manim_path) or (os.path.exists(manim_path) and manim_path)
+                manim_check = shutil.which(manim_bin) or (os.path.exists(manim_bin) and manim_bin)
                 if not manim_check:
                     update_task_progress(task_id, 50, "failed", error_message="Manim not found", log="Manim 未找到！请运行: pip install manim\n")
                     return
-            elif not os.path.exists(manim_path):
+            elif not shutil.which(manim_bin) and not os.path.exists(manim_bin):
                 update_task_progress(task_id, 50, "failed", error_message="Manim not found", log="Manim 未找到！\n")
                 return
             
-            update_task_progress(task_id, 35, "processing", log=f"Manim 路径: {manim_path}\n")
+            update_task_progress(task_id, 35, "processing", log=f"Manim 命令: {' '.join(manim_cmd)}\n")
             
             cmd = [
-                manim_path,
+                *manim_cmd,
                 "-ql",
                 "--disable_caching",
                 "--media_dir", temp_dir,

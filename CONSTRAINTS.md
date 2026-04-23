@@ -47,7 +47,7 @@ git checkout feature/template-preview-video
 | 站点 | 路径 | 分支 | 入口 | 后端 | 说明 |
 |------|------|------|------|------|------|
 | 旧站 | `/opt/manim` | `feature/legacy-v2-redirect` | `/` | `8000` | 旧版业务 + 版本分流能力 |
-| 新站 | `/opt/manim-v2` | `feature/chat-style-and-reference-code` | `/v2/` | `8002` | 新版业务 |
+| 新站 | `/opt/manim-v2` | `feature/chat-style-and-reference-code` | `3002` | `8002` | 新版业务 |
 
 其他说明：
 - 新站服务：`manim-v2-backend.service`
@@ -84,6 +84,66 @@ git checkout feature/template-preview-video
 4. 管理员永远进入新版
 5. 普通 legacy 用户进入旧版
 6. 普通 v2 用户进入新版
+```
+
+### 新旧版构建/部署检查清单
+```
+[旧站 legacy]
+1. 当前分支必须是 feature/legacy-v2-redirect
+2. 入口必须保持 http://<host>/
+3. 前端资源必须是 /assets/...
+4. API 必须是 /api/...
+5. 登录成功 / 刷新恢复 / 30秒轮询 都要把管理员和 v2 用户跳到 http://<host>:3002
+6. 首页 index.html 必须包含预分流脚本
+
+[新版 v2]
+1. 当前分支必须是 feature/chat-style-and-reference-code
+2. 入口必须是 http://<host>:3002/
+3. 前端资源必须是 /assets/...
+4. API 必须是 /api/...
+5. 不允许继续使用 /v2、/v2/api、/v2/assets 作为运行时前缀
+6. 登录成功 / 刷新恢复 / 30秒轮询 都要把 legacy 用户跳回 http://<host>/
+
+[发布前必须核对]
+1. 旧站产物不能发布到 /opt/manim-v2/frontend/dist
+2. 新版产物不能发布到 /opt/manim/frontend/dist
+3. 旧站 bundle 必须包含 frontend_version / is_admin / 3002 跳转逻辑
+4. 新版 bundle 必须包含 chat/async / chat-styles / latest-task，并且请求必须落到当前站点 /api
+5. 生产发布后必须直接验证：
+   - http://<host>/
+   - http://<host>:3002/
+   - /api/auth/login
+   - :3002/api/auth/login
+   - 管理员从旧站登录是否跳 3002/admin
+```
+
+### 历史问题警示（每次发布前必须复查）
+```
+1. 新旧版不能混用构建产物
+   - 旧站发布前检查 index.html 必须引用 /assets/...
+   - 新站发布前检查 index.html 必须引用 /assets/...
+   - 新站绝不能继续使用 /v2/assets 或 /v2/api 作为最终生产入口
+
+2. 新版生产入口固定为 3002 端口
+   - 新版页面的所有请求都必须落到 http://<host>:3002/api/...
+   - 如果浏览器里仍然请求 http://<host>/api/...，说明新版前端包没有更新成功
+
+3. 旧站首页必须包含预分流脚本
+   - 管理员 / v2 用户访问根站时，必须在 React 启动前就跳 3002
+
+4. 新版聊天体验要求
+   - 文案生成必须是流式输出
+   - 不允许把聊天主体验退化成后台轮询任务
+   - 发布前检查新版 bundle 中必须包含 chat/stream / sendMessageStream
+
+5. 模板展示检查
+   - 发布前检查 /api/templates/active（旧站）与 :3002/api/templates/active（新站）都返回 200
+   - 页面如显示“暂无该分类模板”，先确认接口有数据，再检查前端筛选逻辑
+
+6. 渲染环境检查
+   - 新版渲染必须复用生产可用的 Manim 环境
+   - 发布前检查 3002 后端所在环境能找到 manim 或 python -m manim
+   - 首次进入渲染页时状态必须是“未开始”，按钮必须是“开始渲染视频”
 ```
 
 ### 环境数据差异

@@ -8,8 +8,10 @@ import { motion } from 'framer-motion'
 import StickmanProjectTask from './StickmanProjectTask'
 import TemplateShowcase from '@/components/TemplateShowcase'
 import { resolveBackendUrl } from '@/services/api'
+import { resolveBackendUrl } from '@/services/api'
 
 const statusMap: Record<string, { text: string; color: string }> = {
+  not_started: { text: '未开始', color: '#8c8c8c' },
   pending: { text: '等待中', color: '#faad14' },
   processing: { text: '处理中', color: '#0066FF' },
   code_generated: { text: '准备就绪', color: '#00CCFF' },
@@ -51,6 +53,9 @@ export default function ProjectTask() {
   const terminalRef = useRef<HTMLDivElement>(null)
   const codePollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const renderPollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const renderStatus = task?.status || (generatingVideo ? 'processing' : project?.video_url ? 'completed' : 'not_started')
+  const hasRenderedVideo = Boolean(project?.video_url || task?.status === 'completed')
 
   const fetchProject = async () => {
     try {
@@ -598,16 +603,16 @@ export default function ProjectTask() {
                       <span 
                         className="status-badge"
                         style={{ 
-                          backgroundColor: `${statusMap[task?.status || (generatingVideo ? 'processing' : 'completed')]?.color}20`,
-                          color: statusMap[task?.status || (generatingVideo ? 'processing' : 'completed')]?.color 
+                          backgroundColor: `${statusMap[renderStatus]?.color}20`,
+                          color: statusMap[renderStatus]?.color 
                         }}
                       >
-                        {statusMap[task?.status || (generatingVideo ? 'processing' : 'completed')]?.text}
+                        {statusMap[renderStatus]?.text}
                       </span>
                     </div>
                     <Progress 
                       percent={task?.progress || videoProgress} 
-                      status={task?.status === 'failed' || renderError ? 'exception' : task?.status === 'completed' || project?.video_url ? 'success' : 'active'}
+                      status={task?.status === 'failed' || renderError ? 'exception' : hasRenderedVideo ? 'success' : 'active'}
                       strokeColor={{
                         '0%': '#0066FF',
                         '100%': '#00CCFF',
@@ -666,7 +671,7 @@ export default function ProjectTask() {
                     size="large"
                     className="btn-gradient"
                   >
-                    {task?.status === 'completed' ? '重新渲染' : '开始渲染视频'}
+                    {hasRenderedVideo ? '重新渲染' : '开始渲染视频'}
                   </Button>
                   
                   {generatingVideo && (
@@ -702,7 +707,7 @@ export default function ProjectTask() {
                     className="mt-6"
                   >
                     <video
-                      src={project.video_url.startsWith('http') ? project.video_url : `${import.meta.env.VITE_API_BASE_URL || ''}${project.video_url}`}
+                      src={resolveBackendUrl(project.video_url)}
                       controls
                       className="w-full rounded-xl shadow-lg"
                       style={{ maxHeight: '60vh' }}
