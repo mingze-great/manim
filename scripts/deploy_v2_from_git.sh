@@ -8,6 +8,7 @@ BACKEND_SERVICE="${BACKEND_SERVICE:-manim-v2-backend.service}"
 WORKER_SERVICE="${WORKER_SERVICE:-manim-v2-worker.service}"
 NGINX_CONF_SRC="${NGINX_CONF_SRC:-$APP_ROOT/manim-v2.conf}"
 NGINX_CONF_DST="${NGINX_CONF_DST:-/etc/nginx/sites-available/manim-v2.conf}"
+NPM_BIN="${NPM_BIN:-$(command -v npm || true)}"
 
 echo "==> Deploying v2 from git"
 echo "APP_ROOT=$APP_ROOT"
@@ -25,9 +26,14 @@ git fetch "$REMOTE" "$BRANCH"
 git checkout "$BRANCH"
 git pull --ff-only "$REMOTE" "$BRANCH"
 
+if [ -z "$NPM_BIN" ]; then
+  echo "npm not found. Install Node.js or set NPM_BIN before deploy."
+  exit 1
+fi
+
 cd "$APP_ROOT/frontend"
-npm ci
-npm run build
+"$NPM_BIN" ci
+"$NPM_BIN" run build
 
 if [ -f "$NGINX_CONF_SRC" ]; then
   cp "$NGINX_CONF_SRC" "$NGINX_CONF_DST"
