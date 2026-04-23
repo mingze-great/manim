@@ -45,17 +45,15 @@ export default function ProjectChat() {
   const [formatting, setFormatting] = useState(false)
   const [chatStyles, setChatStyles] = useState<ChatStyle[]>([])
   const [selectedStyle, setSelectedStyle] = useState<string>('conservative')
-  const [currentChatTaskId, setCurrentChatTaskId] = useState<number | null>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     fetchProject()
     fetchConversations()
     fetchChatStyles()
-    recoverChatTask()
     return () => {
-      if (chatPollingRef.current) {
-        clearInterval(chatPollingRef.current)
-        chatPollingRef.current = null
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
       }
     }
   }, [id])
@@ -117,55 +115,6 @@ export default function ProjectChat() {
     }
   }
 
-  const startChatTaskPolling = (taskId: number) => {
-    if (chatPollingRef.current) {
-      clearInterval(chatPollingRef.current)
-    }
-
-    chatPollingRef.current = setInterval(async () => {
-      try {
-        const { data } = await projectApi.getBackgroundTask(taskId)
-        if (data.status === 'completed') {
-          clearInterval(chatPollingRef.current!)
-          chatPollingRef.current = null
-          setAiThinking(false)
-          setLoading(false)
-          setCurrentChatTaskId(null)
-          await fetchProject()
-          await fetchConversations()
-        } else if (data.status === 'failed' || data.status === 'cancelled') {
-          clearInterval(chatPollingRef.current!)
-          chatPollingRef.current = null
-          setAiThinking(false)
-          setLoading(false)
-          setCurrentChatTaskId(null)
-          message.error(data.error || '对话生成失败')
-          await fetchConversations()
-        }
-      } catch (error) {
-        clearInterval(chatPollingRef.current!)
-        chatPollingRef.current = null
-        setAiThinking(false)
-        setLoading(false)
-        setCurrentChatTaskId(null)
-      }
-    }, 3000)
-  }
-
-  const recoverChatTask = async () => {
-    try {
-      const { data } = await projectApi.getLatestChatTask(Number(id))
-      if (data?.task_id && data.status && ['pending', 'processing'].includes(data.status)) {
-        setAiThinking(true)
-        setLoading(true)
-        setCurrentChatTaskId(data.task_id)
-        startChatTaskPolling(data.task_id)
-      }
-    } catch (error) {
-      console.error('恢复对话任务失败')
-    }
-  }
-
   const handleSend = async () => {
     if (!input.trim() || loading) return
 
@@ -199,16 +148,99 @@ export default function ProjectChat() {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, 100)
     
+    let aiContent = ''
+    const aiTempId = tempId + 1
+
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+    abortControllerRef.current = new AbortController()
+
     try {
-      const { data } = await projectApi.sendMessageAsync(Number(id), userMessage, selectedStyle)
-      setCurrentChatTaskId(data.task_id)
-      message.success(data.message)
-      startChatTaskPolling(data.task_id)
+      const token = useAuthStore.getState().token
+      const streamUrl = projectApi.sendMessageStream(Number(id), userMessage, selectedStyle)
+
+      const response = await fetch(streamUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ content: userMessage }),
+        signal: abortControllerRef.current.signal
+      })
+
+      if (!response.ok) {
+        throw new Error('请求失败')
+      }
+
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder()
+
+      if (!reader) {
+        throw new Error('无法读取响应流')
+      }
+
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          const data = line.slice(6)
+          if (data === '[DONE]') continue
+
+          try {
+            const parsed = JSON.parse(data)
+
+            if (parsed.type === 'reasoning' || parsed.type === 'content') {
+              aiContent += parsed.content
+              setConversations(prev => {
+                const existing = prev.find(c => c.id === aiTempId)
+                if (existing) {
+                  return prev.map(c => c.id === aiTempId ? { ...c, content: aiContent } : c)
+                }
+                return [...prev, {
+                  id: aiTempId,
+                  project_id: Number(id),
+                  role: 'assistant' as const,
+                  content: aiContent,
+                  created_at: new Date().toISOString()
+                }]
+              })
+              setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 10)
+            } else if (parsed.type === 'final' || parsed.type === 'done') {
+              await fetchProject()
+              await fetchConversations()
+              setAiThinking(false)
+              setLoading(false)
+            } else if (parsed.type === 'error') {
+              message.error(parsed.error || 'AI响应失败')
+              setAiThinking(false)
+              setLoading(false)
+            }
+          } catch (e) {
+            console.error('解析SSE数据失败:', e)
+          }
+        }
+      }
     } catch (error: any) {
-      setConversations(prev => prev.filter(c => c.id !== tempId))
+      if (error.name === 'AbortError') {
+        message.info('已中止生成')
+        setAiThinking(false)
+        setLoading(false)
+        return
+      }
+      setConversations(prev => prev.filter(c => c.id !== tempId && c.id !== aiTempId))
       setAiThinking(false)
+      setLoading(false)
       message.error(error.message || '发送失败')
-    } finally {
     }
   }
 
@@ -411,21 +443,9 @@ export default function ProjectChat() {
                 danger 
                 icon={<StopOutlined />}
                   onClick={() => {
-                    if (!currentChatTaskId) return
-                    projectApi.cancelTask(currentChatTaskId)
-                      .then(() => {
-                        if (chatPollingRef.current) {
-                          clearInterval(chatPollingRef.current)
-                          chatPollingRef.current = null
-                        }
-                        setCurrentChatTaskId(null)
-                        setAiThinking(false)
-                        setLoading(false)
-                        message.info('已中止生成')
-                      })
-                      .catch((error) => {
-                        message.error(error.message || '取消失败')
-                      })
+                    if (abortControllerRef.current) {
+                      abortControllerRef.current.abort()
+                    }
                   }}
                 >
                 中止
