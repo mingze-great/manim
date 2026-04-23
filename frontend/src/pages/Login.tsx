@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { Form, Input, Button, message } from 'antd'
 import { UserOutlined, LockOutlined, RocketOutlined } from '@ant-design/icons'
@@ -8,9 +8,22 @@ import { motion } from 'framer-motion'
 
 export default function Login() {
   const navigate = useNavigate()
-  const { login } = useAuthStore()
+  const { login, token, user, _hasHydrated } = useAuthStore()
   const [loading, setLoading] = useState(false)
-  const V2_APP_URL = (import.meta.env.VITE_V2_APP_URL as string | undefined) || '/v2'
+  const V2_APP_URL = (import.meta.env.VITE_V2_APP_URL as string | undefined) || `${window.location.protocol}//${window.location.hostname}:3002`
+
+  useEffect(() => {
+    if (!_hasHydrated || !token || !user) return
+    if (user.is_admin) {
+      window.location.replace(`${V2_APP_URL.replace(/\/$/, '')}/admin`)
+      return
+    }
+    if ((user.frontend_version || 'legacy') === 'v2') {
+      window.location.replace(V2_APP_URL)
+      return
+    }
+    navigate('/', { replace: true })
+  }, [_hasHydrated, token, user, navigate, V2_APP_URL])
 
   const onFinish = async (values: { username: string; password: string }) => {
     setLoading(true)
@@ -42,14 +55,14 @@ export default function Login() {
       message.success('登录成功')
       if (userData.is_admin) {
         if (V2_APP_URL) {
-          window.location.href = `${V2_APP_URL.replace(/\/$/, '')}/admin`
+          window.location.replace(`${V2_APP_URL.replace(/\/$/, '')}/admin`)
         } else {
-          navigate('/admin')
+          navigate('/admin', { replace: true })
         }
       } else if ((userData.frontend_version || 'legacy') === 'v2' && V2_APP_URL) {
-        window.location.href = V2_APP_URL
+        window.location.replace(V2_APP_URL)
       } else {
-        navigate('/')
+        navigate('/', { replace: true })
       }
     } catch (error: any) {
       const detail = error.response?.data?.detail

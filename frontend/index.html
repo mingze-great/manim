@@ -21,7 +21,8 @@
           const token = state && state.token;
           const user = state && state.user;
           if (token && user && (user.is_admin || user.frontend_version === 'v2')) {
-            const target = user.is_admin ? '/v2/admin' : '/v2';
+            const originV2 = `${window.location.protocol}//${window.location.hostname}:3002`;
+            const target = user.is_admin ? `${originV2}/admin` : originV2;
             if (window.location.pathname !== target) {
               window.location.replace(target);
             }

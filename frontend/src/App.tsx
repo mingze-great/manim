@@ -27,7 +27,7 @@ import AdminStatistics from './pages/admin/AdminStatistics'
 import AdminTokenUsage from './pages/admin/AdminTokenUsage'
 import AdminArticleCategories from './pages/admin/AdminArticleCategories'
 import AdminModuleStats from './pages/admin/AdminModuleStats'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { token } = useAuthStore()
@@ -44,24 +44,32 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
 function AppContent() {
   const { token, login, logout, _hasHydrated } = useAuthStore()
   const [validating, setValidating] = useState(true)
-  const V2_APP_URL = (import.meta.env.VITE_V2_APP_URL as string | undefined) || '/v2'
+  const V2_APP_URL = (import.meta.env.VITE_V2_APP_URL as string | undefined) || `${window.location.protocol}//${window.location.hostname}:3002`
+  const authRequestRef = useRef(0)
 
   useEffect(() => {
     if (!_hasHydrated) return
     
     const validateUser = async () => {
       if (token) {
+        const currentToken = token
+        const requestId = ++authRequestRef.current
         try {
           const { data } = await authApi.me(token)
+          if (useAuthStore.getState().token !== currentToken || authRequestRef.current !== requestId) {
+            return
+          }
           login(token, data)
 
           if ((data.is_admin || (data.frontend_version || 'legacy') === 'v2') && V2_APP_URL) {
             const target = data.is_admin ? `${V2_APP_URL.replace(/\/$/, '')}/admin` : V2_APP_URL
-            window.location.href = target
+            window.location.replace(target)
             return
           }
         } catch (error) {
-          logout()
+          if (useAuthStore.getState().token === currentToken && authRequestRef.current === requestId) {
+            logout()
+          }
         }
       }
       setValidating(false)
@@ -73,20 +81,24 @@ function AppContent() {
     if (!token || !_hasHydrated) return
 
     const intervalId = setInterval(async () => {
+      const currentToken = token
       try {
         const { data } = await authApi.me(token)
+        if (useAuthStore.getState().token !== currentToken) {
+          return
+        }
         login(token, data)
 
         if ((data.is_admin || (data.frontend_version || 'legacy') === 'v2') && V2_APP_URL) {
           const target = data.is_admin ? `${V2_APP_URL.replace(/\/$/, '')}/admin` : V2_APP_URL
-          window.location.href = target
+          window.location.replace(target)
           return
         }
       } catch (error: any) {
-        if (error?.response?.status === 401) {
+        if (error?.response?.status === 401 && useAuthStore.getState().token === currentToken) {
           clearInterval(intervalId)
           logout()
-          window.location.href = '/login'
+          window.location.replace('/login')
         }
       }
     }, 30000)
