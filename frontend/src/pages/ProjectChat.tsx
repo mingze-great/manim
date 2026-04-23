@@ -30,7 +30,6 @@ export default function ProjectChat() {
   const [aiThinking, setAiThinking] = useState(false)
   const [lastMsgCount, setLastMsgCount] = useState(0)
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const chatPollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [lastAiCode, setLastAiCode] = useState<string | null>(null)
   const [showUseCodeButton, setShowUseCodeButton] = useState(false)
   const [errorFromRender, setErrorFromRender] = useState<string | null>(null)
