@@ -8,7 +8,6 @@ import { motion } from 'framer-motion'
 import StickmanProjectTask from './StickmanProjectTask'
 import TemplateShowcase from '@/components/TemplateShowcase'
 import { resolveBackendUrl } from '@/services/api'
-import { resolveBackendUrl } from '@/services/api'
 
 const statusMap: Record<string, { text: string; color: string }> = {
   not_started: { text: '未开始', color: '#8c8c8c' },
