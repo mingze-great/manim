@@ -12,10 +12,24 @@
       window.addEventListener('unhandledrejection', function(e) {
         console.error('Unhandled rejection:', e.reason);
       });
+
+      if (window.location.pathname === '/logout-bridge') {
+        try {
+          localStorage.removeItem('auth-storage');
+          sessionStorage.removeItem('admin_mode');
+        } catch (e) {
+          console.error('V2 logout bridge failed', e);
+        }
+        window.__LOGOUT_BRIDGE__ = true;
+      }
     </script>
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <script type="module">
+      if (!window.__LOGOUT_BRIDGE__) {
+        import('/src/main.tsx')
+      }
+    </script>
   </body>
 </html>

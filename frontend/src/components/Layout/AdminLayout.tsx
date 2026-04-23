@@ -13,6 +13,15 @@ import './Layout.css'
 
 const { Header, Sider, Content } = Layout
 
+function syncLegacyLogout() {
+  const legacyOrigin = `${window.location.protocol}//${window.location.hostname}`
+  const iframe = document.createElement('iframe')
+  iframe.style.display = 'none'
+  iframe.src = `${legacyOrigin}/logout-bridge`
+  document.body.appendChild(iframe)
+  window.setTimeout(() => iframe.remove(), 2000)
+}
+
 export default function AdminLayout() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -66,7 +75,8 @@ export default function AdminLayout() {
         onClick: () => {
           sessionStorage.removeItem('admin_mode')
           logout()
-          navigate('/login')
+          syncLegacyLogout()
+          navigate('/login', { replace: true })
         },
       },
     ],
