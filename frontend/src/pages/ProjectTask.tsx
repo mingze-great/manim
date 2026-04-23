@@ -7,6 +7,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { motion } from 'framer-motion'
 import StickmanProjectTask from './StickmanProjectTask'
 import TemplateShowcase from '@/components/TemplateShowcase'
+import { resolveBackendUrl } from '@/services/api'
 
 const statusMap: Record<string, { text: string; color: string }> = {
   pending: { text: '等待中', color: '#faad14' },
@@ -15,6 +16,12 @@ const statusMap: Record<string, { text: string; color: string }> = {
   completed: { text: '已完成', color: '#52c41a' },
   failed: { text: '失败', color: '#ff4d4f' },
   cancelled: { text: '已取消', color: '#8c8c8c' },
+}
+
+function isMathProjectCategory(category?: string | null) {
+  if (!category) return false
+  const raw = String(category).toLowerCase()
+  return raw === 'math' || raw.includes('数学') || raw.includes('公式') || raw.includes('定理') || raw.includes('几何')
 }
 
 export default function ProjectTask() {
@@ -73,14 +80,18 @@ export default function ProjectTask() {
 
   const fetchAvailableModels = async () => {
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
-      const response = await fetch(`${API_BASE}/api/tasks/available-models`)
+      const token = useAuthStore.getState().token
+      const response = await fetch(resolveBackendUrl('/api/tasks/available-models'), {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      })
       if (response.ok) {
         const data = await response.json()
         setAvailableModels(data.models || [])
         if (data.default_code_model && !selectedModel) {
           setSelectedModel(data.default_code_model)
         }
+      } else {
+        console.error('获取模型列表失败:', response.status)
       }
     } catch (error) {
       console.error('获取模型列表失败:', error)
@@ -490,7 +501,7 @@ export default function ProjectTask() {
                   <TemplateShowcase
                     value={selectedTemplateId}
                     onChange={setSelectedTemplateId}
-                    category={project?.category === 'math' ? 'math' : undefined}
+                    category={isMathProjectCategory(project?.category) ? 'math' : undefined}
                   />
 
                   <div className="flex items-center gap-3 mt-3">

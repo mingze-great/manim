@@ -15,6 +15,12 @@ const CATEGORY_MAP: Record<string, string> = {
   math: '数学可视化',
 }
 
+function inferTemplateCategory(template: Template): 'thinking' | 'math' {
+  const raw = `${template.category || ''} ${template.name || ''} ${template.description || ''}`.toLowerCase()
+  const mathHints = ['math', '数学', '公式', '定理', '几何', '函数', '矩阵', '傅里叶', '欧拉', '微积分', '物理']
+  return mathHints.some((hint) => raw.includes(hint)) ? 'math' : 'thinking'
+}
+
 function TemplateCard({ t, value, onChange, onPreview }: {
   t: Template
   value: number | null
@@ -85,7 +91,7 @@ export default function TemplateShowcase({ value, onChange, category }: Template
   const getVideoUrl = (t: Template) => t.example_video_url || ''
   const categories = ['thinking', 'math']
   const defaultTab = category === 'math' ? 'math' : 'thinking'
-  const getTemplatesByCategory = (cat: string) => templates.filter(t => t.category === cat)
+  const getTemplatesByCategory = (cat: string) => templates.filter(t => inferTemplateCategory(t) === cat)
 
   if (loading) return <Spin />
 
@@ -98,7 +104,7 @@ export default function TemplateShowcase({ value, onChange, category }: Template
         </div>
         <div className="showcase-scroll-wrapper">
           <div className="showcase-card-row" ref={scrollRef}>
-            {templates.map(t => (
+            {getTemplatesByCategory(category).map(t => (
               <TemplateCard
                 key={t.id}
                 t={t}
@@ -107,7 +113,7 @@ export default function TemplateShowcase({ value, onChange, category }: Template
                 onPreview={setPreviewTemplate}
               />
             ))}
-            {templates.length === 0 && (
+            {getTemplatesByCategory(category).length === 0 && (
               <div className="showcase-empty">暂无该分类的模板</div>
             )}
           </div>
