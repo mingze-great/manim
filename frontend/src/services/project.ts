@@ -1,4 +1,4 @@
-import api from './api'
+import api, { buildApiPath } from './api'
 
 export interface Project {
   id: number
@@ -127,14 +127,14 @@ export const projectApi = {
   getConversations: (id: number) => api.get<Conversation[]>(`/projects/${id}/conversations`),
   sendMessage: (id: number, content: string) => api.post<Conversation>(`/projects/${id}/chat`, { content }),
   getPendingResponse: (id: number) => api.get<PendingResponse>(`/projects/${id}/chat/pending`),
-  sendMessageStream: (id: number, _content: string) => `/api/projects/${id}/chat/stream`,
+  sendMessageStream: (id: number, _content: string) => buildApiPath(`/projects/${id}/chat/stream`),
   generateCodeStream: (id: number, templateId?: number) => 
-    `/api/projects/${id}/generate-code/stream${templateId ? `?template_id=${templateId}` : ''}`,
+    buildApiPath(`/projects/${id}/generate-code/stream${templateId ? `?template_id=${templateId}` : ''}`),
   optimizeCodeStream: (id: number, feedback: string) => 
-    `/api/projects/${id}/optimize-code/stream?feedback=${encodeURIComponent(feedback)}`,
+    buildApiPath(`/projects/${id}/optimize-code/stream?feedback=${encodeURIComponent(feedback)}`),
   getTask: (projectId: number) => api.get<Task>(`/tasks/project/${projectId}`),
-  generateStickmanStream: (projectId: number) => `/api/tasks/${projectId}/stickman-generate`,
-  generateStickmanComposeStream: (projectId: number) => `/api/tasks/${projectId}/stickman-compose`,
+  generateStickmanStream: (projectId: number) => buildApiPath(`/tasks/${projectId}/stickman-generate`),
+  generateStickmanComposeStream: (projectId: number) => buildApiPath(`/tasks/${projectId}/stickman-compose`),
   regenerateCode: (id: number) => api.post(`/projects/${id}/regenerate-code`),
   fixCode: (projectId: number, data: { error_message: string; current_code: string }) =>
     api.post<{ success: boolean; fixed_code?: string; fix_description?: string; message?: string }>(
@@ -142,7 +142,7 @@ export const projectApi = {
       data
     ),
   fixCodeStream: (projectId: number) =>
-    `/api/tasks/${projectId}/fix-code-stream`,
+    buildApiPath(`/tasks/${projectId}/fix-code-stream`),
   generateCodeAsync: (projectId: number, templateId?: number) =>
     api.post<{ task_id: number; status: string; message: string }>(
       `/tasks/${projectId}/generate-code-async${templateId ? `?template_id=${templateId}` : ''}`

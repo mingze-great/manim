@@ -1,6 +1,16 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
+function resolveAuthApiPath(path: string) {
+  const normalized = path.startsWith('/') ? path : `/${path}`
+  const explicitBase = (import.meta as any)?.env?.VITE_API_BASE_URL as string | undefined
+  if (explicitBase) return `${explicitBase.replace(/\/$/, '')}/api${normalized}`
+  if (typeof window !== 'undefined' && window.location.port === '3003') {
+    return `${window.location.protocol}//${window.location.hostname}:8003/api${normalized}`
+  }
+  return `/api${normalized}`
+}
+
 interface User {
   id: number
   username: string
@@ -96,7 +106,7 @@ export const startStatusCheck = (onForceLogout: () => void) => {
     if (!token || !user) return
     
     try {
-      const response = await fetch('/api/auth/me', {
+      const response = await fetch(resolveAuthApiPath('/auth/me'), {
         headers: { Authorization: `Bearer ${token}` }
       })
       

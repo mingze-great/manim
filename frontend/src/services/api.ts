@@ -4,8 +4,39 @@ import { useAuthStore } from '@/stores/authStore'
 const MAX_RETRIES = 3
 const RETRY_DELAY = 1000
 
+function getExplicitApiBase() {
+  return (import.meta as any)?.env?.VITE_API_BASE_URL as string | undefined
+}
+
+function getFallbackApiBase() {
+  if (typeof window === 'undefined') return '/api'
+
+  const { protocol, hostname, port } = window.location
+
+  if (port === '3003') {
+    return `${protocol}//${hostname}:8003/api`
+  }
+
+  return '/api'
+}
+
+export function getApiBaseUrl() {
+  const explicitBase = getExplicitApiBase()
+  if (explicitBase) {
+    return `${explicitBase.replace(/\/$/, '')}/api`
+  }
+  return getFallbackApiBase()
+}
+
+export function buildApiPath(path: string) {
+  const normalized = path.startsWith('/') ? path : `/${path}`
+  const base = getApiBaseUrl()
+  if (base === '/api') return `/api${normalized}`
+  return `${base}${normalized}`
+}
+
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: getApiBaseUrl(),
   headers: {
     'Content-Type': 'application/json',
   },
@@ -15,9 +46,12 @@ const api = axios.create({
 export function resolveBackendUrl(path?: string | null) {
   if (!path) return ''
   if (path.startsWith('http')) return path
-  const explicitBase = (import.meta as any)?.env?.VITE_API_BASE_URL as string | undefined
+  const explicitBase = getExplicitApiBase()
   if (explicitBase) return `${explicitBase}${path}`
   if (typeof window !== 'undefined') {
+    if (window.location.port === '3003') {
+      return `${window.location.protocol}//${window.location.hostname}:8003${path}`
+    }
     return `${window.location.origin}${path}`
   }
   return path

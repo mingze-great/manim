@@ -1,4 +1,4 @@
-import api from './api'
+import api, { buildApiPath } from './api'
 
 export interface Category {
   name: string
@@ -75,7 +75,7 @@ export const articleApi = {
     const authStorage = localStorage.getItem('auth-storage')
     const token = authStorage ? JSON.parse(authStorage).state.token : null
     
-    const response = await fetch(`/api/articles-stream/${id}/generate-outline-stream`, {
+    const response = await fetch(buildApiPath(`/articles-stream/${id}/generate-outline-stream`), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -145,7 +145,7 @@ export const articleApi = {
     const authStorage = localStorage.getItem('auth-storage')
     const token = authStorage ? JSON.parse(authStorage).state.token : null
     
-    const response = await fetch(`/api/articles-stream/${id}/generate-content-stream`, {
+    const response = await fetch(buildApiPath(`/articles-stream/${id}/generate-content-stream`), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
