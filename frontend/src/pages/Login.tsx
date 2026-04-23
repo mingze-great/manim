@@ -10,6 +10,7 @@ export default function Login() {
   const navigate = useNavigate()
   const { login } = useAuthStore()
   const [loading, setLoading] = useState(false)
+  const LEGACY_APP_URL = (import.meta.env.VITE_LEGACY_APP_URL as string | undefined) || `${window.location.protocol}//${window.location.hostname}`
 
   const onFinish = async (values: { username: string; password: string }) => {
     setLoading(true)
@@ -41,8 +42,8 @@ export default function Login() {
       message.success('登录成功')
       if (userData.is_admin) {
         navigate('/admin')
-      } else if ((userData.frontend_version || 'legacy') === 'legacy' && import.meta.env.VITE_LEGACY_APP_URL) {
-        window.location.href = import.meta.env.VITE_LEGACY_APP_URL
+      } else if ((userData.frontend_version || 'legacy') === 'legacy' && LEGACY_APP_URL) {
+        window.location.href = LEGACY_APP_URL
       } else {
         navigate('/')
       }

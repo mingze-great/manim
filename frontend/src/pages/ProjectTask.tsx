@@ -22,7 +22,7 @@ const statusMap: Record<string, { text: string; color: string }> = {
 function isMathProjectCategory(category?: string | null) {
   if (!category) return false
   const raw = String(category).toLowerCase()
-  return raw === 'math' || raw.includes('数学') || raw.includes('公式') || raw.includes('定理') || raw.includes('几何')
+  return raw === 'math' || raw === '数学可视化'
 }
 
 export default function ProjectTask() {
@@ -52,9 +52,10 @@ export default function ProjectTask() {
   const terminalRef = useRef<HTMLDivElement>(null)
   const codePollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const renderPollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const renderTask = task && ['video_render', 'manim_render'].includes(task.task_type) ? task : null
 
-  const renderStatus = task?.status || (generatingVideo ? 'processing' : project?.video_url ? 'completed' : 'not_started')
-  const hasRenderedVideo = Boolean(project?.video_url || task?.status === 'completed')
+  const renderStatus = renderTask?.status || (generatingVideo ? 'processing' : project?.video_url ? 'completed' : 'not_started')
+  const hasRenderedVideo = Boolean(project?.video_url || renderTask?.status === 'completed')
 
   const fetchProject = async () => {
     try {
@@ -498,7 +499,7 @@ export default function ProjectTask() {
                     选择模板风格
                     {project?.category && (
                       <span className="ml-2 text-xs text-blue-500">
-                        ({project.category === 'math' ? '数学可视化' : '思维可视化'}模板)
+                        ({isMathProjectCategory(project.category) ? '数学可视化' : '思维可视化'}模板)
                       </span>
                     )}
                   </label>
@@ -591,7 +592,7 @@ export default function ProjectTask() {
                 )}
 
                 {/* 任务状态 */}
-                {(task || generatingVideo || project?.video_url) ? (
+                {(renderTask || generatingVideo || project?.video_url) ? (
                   <motion.div 
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
@@ -610,8 +611,8 @@ export default function ProjectTask() {
                       </span>
                     </div>
                     <Progress 
-                      percent={task?.progress || videoProgress} 
-                      status={task?.status === 'failed' || renderError ? 'exception' : hasRenderedVideo ? 'success' : 'active'}
+                      percent={renderTask?.progress || videoProgress} 
+                      status={renderTask?.status === 'failed' || renderError ? 'exception' : hasRenderedVideo ? 'success' : 'active'}
                       strokeColor={{
                         '0%': '#0066FF',
                         '100%': '#00CCFF',

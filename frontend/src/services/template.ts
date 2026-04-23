@@ -24,8 +24,16 @@ export interface TemplateList {
 }
 
 export const templateApi = {
-  list: (params?: { category?: string }) => {
-    const query = params?.category ? `?category=${params.category}` : ''
+  list: (params?: { category?: string; limit?: number; skip?: number }) => {
+    const searchParams = new URLSearchParams()
+    searchParams.set('limit', String(params?.limit ?? 100))
+    if (params?.skip) {
+      searchParams.set('skip', String(params.skip))
+    }
+    if (params?.category) {
+      searchParams.set('category', params.category)
+    }
+    const query = searchParams.toString() ? `?${searchParams.toString()}` : ''
     return api.get<TemplateList>(`/templates${query}`)
   },
   listActive: () => api.get<Template[]>('/templates/active'),

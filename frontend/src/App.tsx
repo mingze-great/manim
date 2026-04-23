@@ -28,7 +28,7 @@ import AdminTokenUsage from './pages/admin/AdminTokenUsage'
 import AdminArticleCategories from './pages/admin/AdminArticleCategories'
 import AdminModuleStats from './pages/admin/AdminModuleStats'
 import AdminChatStyles from './pages/admin/AdminChatStyles'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { token } = useAuthStore()
@@ -45,15 +45,21 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
 function AppContent() {
   const { token, login, logout, _hasHydrated } = useAuthStore()
   const [validating, setValidating] = useState(true)
-  const LEGACY_APP_URL = import.meta.env.VITE_LEGACY_APP_URL as string | undefined
+  const LEGACY_APP_URL = (import.meta.env.VITE_LEGACY_APP_URL as string | undefined) || `${window.location.protocol}//${window.location.hostname}`
+  const authRequestRef = useRef(0)
 
   useEffect(() => {
     if (!_hasHydrated) return
     
     const validateUser = async () => {
       if (token) {
+        const currentToken = token
+        const requestId = ++authRequestRef.current
         try {
           const { data } = await authApi.me(token)
+          if (useAuthStore.getState().token !== currentToken || authRequestRef.current !== requestId) {
+            return
+          }
           login(token, data)
 
           if (!data.is_admin && (data.frontend_version || 'legacy') === 'legacy' && LEGACY_APP_URL) {
@@ -61,7 +67,9 @@ function AppContent() {
             return
           }
         } catch (error) {
-          logout()
+          if (useAuthStore.getState().token === currentToken && authRequestRef.current === requestId) {
+            logout()
+          }
         }
       }
       setValidating(false)
@@ -73,8 +81,12 @@ function AppContent() {
     if (!token || !_hasHydrated) return
 
     const intervalId = setInterval(async () => {
+      const currentToken = token
       try {
         const { data } = await authApi.me(token)
+        if (useAuthStore.getState().token !== currentToken) {
+          return
+        }
         login(token, data)
 
         if (!data.is_admin && (data.frontend_version || 'legacy') === 'legacy' && LEGACY_APP_URL) {
@@ -82,7 +94,7 @@ function AppContent() {
           return
         }
       } catch (error: any) {
-        if (error?.response?.status === 401) {
+        if (error?.response?.status === 401 && useAuthStore.getState().token === currentToken) {
           clearInterval(intervalId)
           logout()
           window.location.href = '/login'

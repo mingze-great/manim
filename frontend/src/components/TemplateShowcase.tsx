@@ -16,6 +16,13 @@ const CATEGORY_MAP: Record<string, string> = {
 }
 
 function inferTemplateCategory(template: Template): 'thinking' | 'math' {
+  const explicitCategory = String(template.category || '').trim().toLowerCase()
+  if (explicitCategory === 'thinking' || explicitCategory === 'math') {
+    return explicitCategory
+  }
+  if (template.reference_code?.trim()) {
+    return 'math'
+  }
   const raw = `${template.category || ''} ${template.name || ''} ${template.description || ''}`.toLowerCase()
   const mathHints = ['math', '数学', '公式', '定理', '几何', '函数', '矩阵', '傅里叶', '欧拉', '微积分', '物理']
   return mathHints.some((hint) => raw.includes(hint)) ? 'math' : 'thinking'
@@ -78,8 +85,7 @@ export default function TemplateShowcase({ value, onChange, category }: Template
   const fetchTemplates = async () => {
     setLoading(true)
     try {
-      const params = category ? { category } : undefined
-      const { data } = await templateApi.list(params)
+      const { data } = await templateApi.list()
       const all = [...data.system_templates, ...data.user_templates].filter(t => t.is_active !== false)
       setTemplates(all)
     } catch {

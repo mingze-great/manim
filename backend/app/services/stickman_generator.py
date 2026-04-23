@@ -97,6 +97,8 @@ class StickmanGenerator:
             scene.setdefault("character_action", self._action_for_index(index))
             scene.setdefault("layout_hint", self._layout_for_index(index))
             scene.setdefault("visual_focus", (scene.get("keywords") or [topic])[0])
+            scene.setdefault("motion_preset", self._motion_preset_for_scene(scene, index))
+            scene.setdefault("transition_type", self._transition_type_for_index(index))
 
         script_data["storyboards"] = expanded
         script_data["script"] = "\n".join(scene.get("narration", "") for scene in expanded)
@@ -182,14 +184,15 @@ class StickmanGenerator:
             clip_paths = []
             for index, (image_path, segment) in enumerate(zip(image_paths, timeline), start=1):
                 clip_path = clip_dir / f"clip_{index}.mp4"
-                self._create_image_clip(image_path, str(clip_path), segment["video_duration"])
+                scene = scenes[index - 1] if index - 1 < len(scenes) else {}
+                self._create_image_clip(image_path, str(clip_path), segment["video_duration"], scene, index)
                 clip_paths.append(str(clip_path))
                 report(70 + int(index / len(timeline) * 10), f"视频片段合成中 ({index}/{len(timeline)})")
 
             report(82, "音轨合成完成")
 
             merged_clip = str(Path(temp_dir) / "merged_video.mp4")
-            self._concat_video_clips(clip_paths, merged_clip)
+            self._concat_video_clips(clip_paths, timeline, scenes, merged_clip)
             report(90, "视频拼接完成")
 
             final_path = self._merge_video_and_audio(merged_clip, audio_track)
@@ -266,12 +269,13 @@ class StickmanGenerator:
             clip_paths = []
             for index, (image_path, segment) in enumerate(zip(image_paths, timeline), start=1):
                 clip_path = clip_dir / f"clip_{index}.mp4"
-                self._create_image_clip(image_path, str(clip_path), segment["video_duration"])
+                scene = storyboards[index - 1] if index - 1 < len(storyboards) else {}
+                self._create_image_clip(image_path, str(clip_path), segment["video_duration"], scene, index)
                 clip_paths.append(str(clip_path))
                 report(60 + int(index / len(timeline) * 20), f"视频片段合成中 ({index}/{len(timeline)})")
 
             merged_clip = str(Path(temp_dir) / "merged_video.mp4")
-            self._concat_video_clips(clip_paths, merged_clip)
+            self._concat_video_clips(clip_paths, timeline, storyboards, merged_clip)
             report(88, "视频拼接完成")
 
             final_path = self._merge_video_and_audio(merged_clip, audio_track)
@@ -297,6 +301,8 @@ class StickmanGenerator:
             scene.setdefault("layout_hint", self._layout_for_index(index))
             scene.setdefault("visual_focus", (scene.get("keywords") or [topic])[0])
             scene.setdefault("duration_range", "2-4")
+            scene.setdefault("motion_preset", self._motion_preset_for_scene(scene, index))
+            scene.setdefault("transition_type", self._transition_type_for_index(index))
         return script_data
 
     def generate_images(self, storyboards: list[dict], aspect_ratio: str, project_id: Optional[int] = None, progress_callback=None, style_reference_image_path: Optional[str] = None, style_reference_notes: Optional[str] = None):
@@ -414,6 +420,8 @@ class StickmanGenerator:
                     "layout_hint": scene.get("layout_hint") or self._layout_for_index(index),
                     "visual_focus": scene.get("visual_focus") or topic,
                     "duration_range": scene.get("duration_range") or "2-4",
+                    "motion_preset": scene.get("motion_preset") or self._motion_preset_for_scene(scene, index),
+                    "transition_type": scene.get("transition_type") or self._transition_type_for_index(index),
                 }
             )
 
@@ -438,6 +446,8 @@ class StickmanGenerator:
                     "layout_hint": self._layout_for_index(index),
                     "visual_focus": topic,
                     "duration_range": "2-4",
+                    "motion_preset": self._motion_preset_for_index(index),
+                    "transition_type": self._transition_type_for_index(index),
                 }
             )
         return {
@@ -864,6 +874,121 @@ class StickmanGenerator:
     def _layout_for_index(self, index: int):
         return ["subject on left, empty space on right", "subject centered", "subject on right, diagram on left"][(index - 1) % 3]
 
+    def _motion_preset_for_index(self, index: int):
+        return ["push_in", "pan_right", "focus_subject", "pan_left", "drift_down", "pull_out"][(index - 1) % 6]
+
+    def _motion_preset_for_scene(self, scene: dict, index: int):
+        preset = str(scene.get("motion_preset") or "").strip().lower()
+        if preset in {"auto", "", "none"}:
+            camera_type = str(scene.get("camera_type") or self._camera_type_for_index(index)).lower()
+            layout_hint = str(scene.get("layout_hint") or self._layout_for_index(index)).lower()
+            if "close" in camera_type:
+                return "focus_subject"
+            if "wide" in camera_type:
+                return "push_in" if index % 2 else "pan_right"
+            if "left" in layout_hint:
+                return "pan_right"
+            if "right" in layout_hint:
+                return "pan_left"
+            return self._motion_preset_for_index(index)
+        allowed = {"push_in", "pull_out", "pan_left", "pan_right", "focus_subject", "drift_up", "drift_down"}
+        return preset if preset in allowed else self._motion_preset_for_index(index)
+
+    def _transition_type_for_index(self, index: int):
+        return ["fade", "smoothleft", "fade", "smoothright"][(index - 1) % 4]
+
+    def _transition_type_for_scene(self, scene: dict, index: int):
+        transition = str(scene.get("transition_type") or "").strip().lower()
+        allowed = {"fade", "fadeblack", "smoothleft", "smoothright", "circleopen", "circleclose"}
+        if transition in {"", "auto", "none"}:
+            return self._transition_type_for_index(index)
+        return transition if transition in allowed else self._transition_type_for_index(index)
+
+    def _anchor_from_layout(self, layout_hint: str | None):
+        text = str(layout_hint or "").lower()
+        if "subject on left" in text or ("left" in text and "right" in text):
+            return 0.18
+        if "subject on right" in text:
+            return 0.82
+        if "left" in text:
+            return 0.25
+        if "right" in text:
+            return 0.75
+        return 0.5
+
+    def _vertical_anchor_from_camera(self, camera_type: str | None, motion_preset: str):
+        camera = str(camera_type or "").lower()
+        if motion_preset == "drift_down":
+            return 0.32
+        if motion_preset == "drift_up":
+            return 0.68
+        if "close" in camera:
+            return 0.42
+        if "wide" in camera:
+            return 0.5
+        return 0.48
+
+    def _clamp_ratio(self, value: float, low: float = 0.0, high: float = 1.0):
+        return max(low, min(high, value))
+
+    def _motion_spec_for_scene(self, scene: dict, index: int, duration: float):
+        preset = self._motion_preset_for_scene(scene, index)
+        anchor_x = self._anchor_from_layout(scene.get("layout_hint"))
+        anchor_y = self._vertical_anchor_from_camera(scene.get("camera_type"), preset)
+        base_zoom = 1.0
+        scene_duration = max(float(duration or 2.5), 1.5)
+
+        spec_map = {
+            "push_in": {
+                "zoom": (base_zoom, 1.06, 1.12 if scene_duration > 3.2 else 1.09),
+                "x": (self._clamp_ratio(anchor_x - 0.04), anchor_x, self._clamp_ratio(anchor_x + 0.03)),
+                "y": (anchor_y + 0.02, anchor_y, anchor_y - 0.01),
+            },
+            "pull_out": {
+                "zoom": (1.1, 1.05, 1.0),
+                "x": (anchor_x, self._clamp_ratio(anchor_x - 0.03), self._clamp_ratio(anchor_x + 0.02)),
+                "y": (anchor_y, anchor_y - 0.01, anchor_y + 0.01),
+            },
+            "pan_left": {
+                "zoom": (1.05, 1.07, 1.09),
+                "x": (self._clamp_ratio(anchor_x + 0.16), self._clamp_ratio(anchor_x + 0.05), self._clamp_ratio(anchor_x - 0.08)),
+                "y": (anchor_y, anchor_y - 0.01, anchor_y),
+            },
+            "pan_right": {
+                "zoom": (1.05, 1.07, 1.09),
+                "x": (self._clamp_ratio(anchor_x - 0.16), self._clamp_ratio(anchor_x - 0.05), self._clamp_ratio(anchor_x + 0.08)),
+                "y": (anchor_y, anchor_y + 0.01, anchor_y),
+            },
+            "focus_subject": {
+                "zoom": (1.02, 1.1, 1.16 if scene_duration > 3.0 else 1.12),
+                "x": (self._clamp_ratio(anchor_x - 0.08), anchor_x, anchor_x),
+                "y": (anchor_y + 0.02, anchor_y, self._clamp_ratio(anchor_y - 0.03)),
+            },
+            "drift_up": {
+                "zoom": (1.03, 1.06, 1.08),
+                "x": (anchor_x, self._clamp_ratio(anchor_x + 0.02), self._clamp_ratio(anchor_x - 0.02)),
+                "y": (self._clamp_ratio(anchor_y + 0.12), anchor_y + 0.03, self._clamp_ratio(anchor_y - 0.02)),
+            },
+            "drift_down": {
+                "zoom": (1.03, 1.06, 1.08),
+                "x": (anchor_x, self._clamp_ratio(anchor_x - 0.02), self._clamp_ratio(anchor_x + 0.02)),
+                "y": (self._clamp_ratio(anchor_y - 0.12), anchor_y - 0.03, self._clamp_ratio(anchor_y + 0.03)),
+            },
+        }
+        return {"preset": preset, **spec_map.get(preset, spec_map["push_in"])}
+
+    def _piecewise_expr(self, first: float, second: float, third: float, frames: int):
+        midpoint = max(frames // 2, 1)
+        end_frames = max(frames - midpoint, 1)
+        return (
+            f"if(lte(on,{midpoint}),"
+            f"{first:.4f}+({second:.4f}-{first:.4f})*on/{midpoint},"
+            f"{second:.4f}+({third:.4f}-{second:.4f})*(on-{midpoint})/{end_frames})"
+        )
+
+    def _transition_duration_for_pair(self, current_duration: float, next_duration: float):
+        return round(max(0.18, min(0.45, current_duration * 0.18, next_duration * 0.18)), 2)
+
     def _prepare_reference_audio(self, source_path: str, output_path: str):
         audio = AudioSegment.from_file(source_path)
         audio = audio.set_channels(1).normalize()
@@ -913,7 +1038,21 @@ class StickmanGenerator:
             timeline[-1]["video_duration"] = round(timeline[-1]["video_duration"] + (required_duration - total_video_duration), 2)
         return timeline
 
-    def _create_image_clip(self, image_path: str, output_path: str, duration: float):
+    def _create_image_clip(self, image_path: str, output_path: str, duration: float, scene: Optional[dict] = None, index: int = 1):
+        fps = 25
+        scene = scene or {}
+        frames = max(int(round(float(duration) * fps)), 2)
+        spec = self._motion_spec_for_scene(scene, index, duration)
+        zoom_expr = self._piecewise_expr(*spec["zoom"], frames)
+        x_progress = self._piecewise_expr(*spec["x"], frames)
+        y_progress = self._piecewise_expr(*spec["y"], frames)
+        x_expr = f"(iw-iw/zoom)*({x_progress})"
+        y_expr = f"(ih-ih/zoom)*({y_progress})"
+        filter_expr = (
+            "scale=2400:1350:force_original_aspect_ratio=increase,"
+            f"zoompan=z='{zoom_expr}':x='{x_expr}':y='{y_expr}':d=1:s=1920x1080:fps={fps},"
+            f"trim=duration={float(duration):.3f},fps={fps}"
+        )
         cmd = [
             "ffmpeg",
             "-y",
@@ -924,11 +1063,15 @@ class StickmanGenerator:
             "-t",
             str(duration),
             "-vf",
-            "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,zoompan=z='min(zoom+0.0008,1.06)':d=1:s=1920x1080:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)',fps=25",
+            filter_expr,
             "-c:v",
             "libx264",
+            "-preset",
+            "veryfast",
             "-pix_fmt",
             "yuv420p",
+            "-r",
+            str(fps),
             output_path,
         ]
         self._run_ffmpeg(cmd, "生成视频片段失败")
@@ -941,31 +1084,49 @@ class StickmanGenerator:
                 combined += AudioSegment.silent(duration=350)
         combined.export(output_path, format="mp3")
 
-    def _concat_video_clips(self, clip_paths, output_path: str):
-        with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as file:
-            for clip_path in clip_paths:
-                safe_path = clip_path.replace("'", "''")
-                file.write(f"file '{safe_path}'\n")
-            list_path = file.name
+    def _concat_video_clips(self, clip_paths, timeline, storyboards, output_path: str):
+        if not clip_paths:
+            raise RuntimeError("没有可拼接的视频片段")
+        if len(clip_paths) == 1:
+            shutil.copyfile(clip_paths[0], output_path)
+            return
 
-        try:
-            cmd = [
-                "ffmpeg",
-                "-y",
-                "-f",
-                "concat",
-                "-safe",
-                "0",
-                "-i",
-                list_path,
-                "-c",
-                "copy",
-                output_path,
-            ]
-            self._run_ffmpeg(cmd, "拼接视频片段失败")
-        finally:
-            if os.path.exists(list_path):
-                os.remove(list_path)
+        cmd = ["ffmpeg", "-y"]
+        for clip_path in clip_paths:
+            cmd.extend(["-i", clip_path])
+
+        filter_parts = []
+        current_label = "[0:v]"
+        elapsed = float(timeline[0].get("video_duration", 2.5))
+
+        for index in range(1, len(clip_paths)):
+            scene = storyboards[index - 1] if index - 1 < len(storyboards) else {}
+            transition = self._transition_type_for_scene(scene, index)
+            current_duration = float(timeline[index - 1].get("video_duration", 2.5))
+            next_duration = float(timeline[index].get("video_duration", 2.5))
+            transition_duration = self._transition_duration_for_pair(current_duration, next_duration)
+            offset = max(elapsed - transition_duration, 0.0)
+            output_label = f"[v{index}]"
+            filter_parts.append(
+                f"{current_label}[{index}:v]xfade=transition={transition}:duration={transition_duration:.2f}:offset={offset:.2f}{output_label}"
+            )
+            current_label = output_label
+            elapsed += max(next_duration - transition_duration, 0.0)
+
+        cmd.extend([
+            "-filter_complex",
+            ";".join(filter_parts),
+            "-map",
+            current_label,
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-pix_fmt",
+            "yuv420p",
+            output_path,
+        ])
+        self._run_ffmpeg(cmd, "拼接视频片段失败")
 
     def _merge_video_and_audio(self, video_path: str, audio_path: str):
         backend_dir = Path(__file__).resolve().parents[2]
