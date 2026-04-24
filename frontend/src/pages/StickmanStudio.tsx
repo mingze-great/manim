@@ -4,6 +4,7 @@ import { Alert, Button, Card, Col, Input, Row, Select, Space, Spin, Steps, Tabs,
 import { EditOutlined, PlayCircleOutlined, PictureOutlined, RocketOutlined, UploadOutlined } from '@ant-design/icons'
 import { Project, projectApi, StickmanVoiceOption } from '@/services/project'
 import { useAuthStore } from '@/stores/authStore'
+import { ChallengeStrip, StepRail, TipCard } from '@/components/GuidedExperience'
 
 type Storyboard = {
   scene_id: number
@@ -314,7 +315,40 @@ export default function StickmanStudio() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto p-6 space-y-6">
+    <div className="max-w-6xl mx-auto p-6 space-y-6 premium-dark-page rounded-[28px]">
+      <StepRail
+        title="火柴人分步创作"
+        subtitle="这是更适合新手和精修用户的工作台：先确认脚本与分镜，再生成图片，最后合成视频。"
+        steps={[
+          { title: '脚本分镜', desc: '先拿到可编辑的分镜草稿。' },
+          { title: '风格确认', desc: '先做风格预览，再决定是否批量出图。' },
+          { title: '图片生成', desc: '根据分镜生成或重生对应画面。' },
+          { title: '视频合成', desc: '试听音色并输出最终视频。' },
+        ]}
+        active={project?.video_url ? 3 : imageAssets.length ? 2 : storyboards.length ? 1 : 0}
+      />
+
+      <div className="premium-grid-two">
+        <TipCard title="新手怎么走最顺" tone="gold">
+          先生成脚本和分镜，再先做 1 张风格预览图。确认风格没问题后再生成全部图片，最后再合成视频，会更省试错成本。
+        </TipCard>
+        <TipCard title="你现在要完成什么" tone="soft">
+          当前页面不是一次做完所有事，而是把复杂流程拆成几步。每做完一步，系统都会明确告诉你下一步该做什么。
+        </TipCard>
+      </div>
+
+      <ChallengeStrip
+        title="推荐动作：不确定怎么操作时，先点这些"
+        actions={
+          <>
+            <Button className="challenge-chip" onClick={handleGenerateScript} loading={saving}>挑战：快速生成分镜草稿</Button>
+            <Button className="challenge-chip" onClick={() => handleGeneratePreviewImage(false)} disabled={!storyboards.length || saving}>挑战：先看风格预览图</Button>
+            <Button className="challenge-chip" onClick={handleGenerateImages} disabled={!storyboards.length || !previewImageAsset || saving}>挑战：直接生成全部图片</Button>
+            <Button className="challenge-chip" onClick={handleComposeVideo} disabled={!imageAssets.length || saving}>挑战：直接合成视频</Button>
+          </>
+        }
+      />
+
       <Card
         title={project?.title || '火柴人分步创作'}
         extra={<Space><Tag color="gold">分步创作</Tag><Button onClick={() => navigate(`/project/${id}/task`)}>去任务页</Button></Space>}
