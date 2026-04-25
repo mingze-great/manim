@@ -3,11 +3,11 @@ import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { Card, Progress, Button, Space, message, Spin, Tabs, Select } from 'antd'
 import { DownloadOutlined, PlayCircleOutlined, PlaySquareOutlined, CloudUploadOutlined } from '@ant-design/icons'
 import { projectApi, Task, Project } from '@/services/project'
+import { getAppBase, resolveBackendUrl } from '@/services/api'
 import { useAuthStore } from '@/stores/authStore'
 import { motion } from 'framer-motion'
 import StickmanProjectTask from './StickmanProjectTask'
 import TemplateShowcase from '@/components/TemplateShowcase'
-import { resolveBackendUrl } from '@/services/api'
 
 const statusMap: Record<string, { text: string; color: string }> = {
   not_started: { text: '未开始', color: '#8c8c8c' },
@@ -377,7 +377,7 @@ export default function ProjectTask() {
     setDownloadingVideo(true)
     
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
+      const API_BASE = getAppBase()
       const token = useAuthStore.getState().token
       const fullUrl = videoUrl.startsWith('http') ? videoUrl : `${API_BASE}${videoUrl}`
       
@@ -506,7 +506,7 @@ export default function ProjectTask() {
                   <TemplateShowcase
                     value={selectedTemplateId}
                     onChange={setSelectedTemplateId}
-                    category={isMathProjectCategory(project?.category) ? 'math' : undefined}
+                    category={isMathProjectCategory(project?.category) ? 'math' : 'thinking'}
                   />
 
                   <div className="flex items-center gap-3 mt-3">

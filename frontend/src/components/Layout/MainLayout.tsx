@@ -6,6 +6,7 @@ import {
   LogoutOutlined, MenuOutlined, BellOutlined, BookOutlined, SafetyOutlined
 } from '@ant-design/icons'
 import { useAuthStore } from '@/stores/authStore'
+import { clearAuthArtifacts, syncCrossSiteLogout } from '@/utils/authSync'
 import { useState, useEffect } from 'react'
 import './Layout.css'
 
@@ -42,9 +43,10 @@ export default function MainLayout() {
       icon: <LogoutOutlined />,
       label: '退出登录',
       onClick: () => {
-        sessionStorage.removeItem('admin_mode')
+        clearAuthArtifacts()
         logout()
-        navigate('/login')
+        syncCrossSiteLogout(`${window.location.protocol}//${window.location.hostname}`)
+        navigate('/login', { replace: true })
       },
     },
   ]

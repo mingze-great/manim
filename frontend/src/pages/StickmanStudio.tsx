@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { Alert, Button, Card, Col, Input, Row, Select, Space, Spin, Steps, Tabs, Tag, Upload, message } from 'antd'
 import { EditOutlined, PlayCircleOutlined, PictureOutlined, RocketOutlined, UploadOutlined } from '@ant-design/icons'
 import { Project, projectApi, StickmanVoiceOption } from '@/services/project'
+import { getAppBase, resolveBackendUrl } from '@/services/api'
 import { useAuthStore } from '@/stores/authStore'
 
 type Storyboard = {
@@ -16,6 +17,12 @@ type Storyboard = {
   visual_focus?: string
   keywords?: string[]
   duration_range?: string
+  opening_template_key?: string
+  background_prompt?: string
+  foreground_subjects?: Array<{ key: string; kind: string; label: string }>
+  foreground_events?: Array<{ target: string; animation: string; start: number; duration: number; x_ratio?: number; y_ratio?: number }>
+  subtitle_lines?: Array<{ text: string; start?: number; end?: number }>
+  scene_style_profile?: string
 }
 
 type ImageAsset = {
@@ -25,13 +32,14 @@ type ImageAsset = {
   used_fallback?: boolean
   image_source?: 'model' | 'fallback'
   model_used?: string | null
+  model_requested?: string | null
   error_summary?: string | null
 }
 
 function resolveAssetUrl(url?: string | null) {
   if (!url) return ''
   if (url.startsWith('http')) return url
-  const base = import.meta.env.VITE_API_BASE_URL || ''
+  const base = getAppBase()
   return `${base}${url}`
 }
 
@@ -39,7 +47,7 @@ function resolveStyleReferenceUrl(path?: string | null) {
   if (!path) return ''
   const fileName = path.split(/[/\\]/).pop()
   if (!fileName) return ''
-  const base = import.meta.env.VITE_API_BASE_URL || ''
+  const base = getAppBase()
   return `${base}/api/style-reference-images/${fileName}`
 }
 
@@ -66,6 +74,8 @@ export default function StickmanStudio() {
       return {}
     }
   }, [project?.generation_flags])
+
+  const openingTemplate = String(parsedFlags.opening_template_key || 'hook_question')
 
   const loadProject = async () => {
     const { data } = await projectApi.get(Number(id))
@@ -309,6 +319,18 @@ export default function StickmanStudio() {
     }
   }
 
+  const handleUpdateGenerationFlags = async (patch: Record<string, any>) => {
+    if (!project) return
+    const nextFlags = { ...parsedFlags, ...patch }
+    try {
+      const { data } = await projectApi.update(project.id, { generation_flags: JSON.stringify(nextFlags) } as Partial<Project>)
+      setProject(data)
+      message.success('火柴人模板设置已更新')
+    } catch (error: any) {
+      message.error(error.response?.data?.detail || '更新模板设置失败')
+    }
+  }
+
   if (loading) {
     return <div className="flex items-center justify-center h-64"><Spin size="large" /></div>
   }
@@ -324,7 +346,8 @@ export default function StickmanStudio() {
           <Steps current={imageAssets.length ? 2 : storyboards.length ? 1 : 0} items={[{ title: '生成脚本' }, { title: '确认分镜' }, { title: '生成图片' }, { title: '去任务页合成' }]} />
           <Card size="small" title="参考风格图">
             <Space direction="vertical" style={{ width: '100%' }}>
-              <Alert type="info" message="上传一张参考图后，系统会把它当成主要风格来源；如果不上传，则继续使用默认火柴人风格。" />
+              <Alert type="info" message="默认使用 4_23 参考视频方向的画风；上传参考图后，会优先按参考图风格生成。" />
+              <Alert type="success" message="当前默认视觉方向" description="4_23 风格：横版宽画幅、背景稳定、前景人物/图标递进出现、底部字幕安全区固定。" />
               {project?.style_reference_image_path && (
                 <img src={resolveStyleReferenceUrl(project.style_reference_image_path)} alt="style-reference" style={{ width: 240, borderRadius: 12, border: '1px solid #eee' }} />
               )}
@@ -335,6 +358,20 @@ export default function StickmanStudio() {
               <Upload beforeUpload={handleUploadStyleReference} showUploadList={false} accept=".png,.jpg,.jpeg,.webp">
                 <Button icon={<UploadOutlined />} loading={saving}>上传风格参考图</Button>
               </Upload>
+            </Space>
+          </Card>
+          <Card size="small" title="开头模板">
+            <Space direction="vertical" style={{ width: '100%' }}>
+              <Alert type="info" message="第一版支持两种可复用开头模板：反问钩子型、爆点数字型。生成脚本时会自动把模板结构写进首幕分镜。" />
+              <Select
+                value={openingTemplate}
+                onChange={(value) => handleUpdateGenerationFlags({ opening_template_key: value, default_style_reference: 'reference_4_23' })}
+                options={[
+                  { label: '反问钩子型', value: 'hook_question' },
+                  { label: '爆点数字型', value: 'big_number' },
+                ]}
+                style={{ width: 260 }}
+              />
             </Space>
           </Card>
           <Card size="small" title="风格预览图">
@@ -382,7 +419,7 @@ export default function StickmanStudio() {
               </Card>
               <Button type="primary" onClick={handleComposeVideo} loading={saving} disabled={!imageAssets.length}>直接合成视频</Button>
               {!!composeProgress && <div>合成进度：{composeProgress}% {composeMessage}</div>}
-              {project?.video_url && <video src={project.video_url.startsWith('http') ? project.video_url : `${import.meta.env.VITE_API_BASE_URL || ''}${project.video_url}`} controls style={{ width: '100%', borderRadius: 12 }} />}
+              {project?.video_url && <video src={resolveBackendUrl(project.video_url)} controls style={{ width: '100%', borderRadius: 12 }} />}
             </Space>
           </Card>
 
@@ -404,24 +441,38 @@ export default function StickmanStudio() {
                           <Card title={scene.scene_title || `第${index + 1}幕`} extra={<Tag>{scene.camera_type || '镜头未设定'}</Tag>}>
                             <Space direction="vertical" style={{ width: '100%' }}>
                               <Input value={scene.scene_title} onChange={(e) => updateScene(index, { scene_title: e.target.value })} placeholder="分镜标题" />
-                              <Input.TextArea rows={3} value={scene.scene_description} onChange={(e) => updateScene(index, { scene_description: e.target.value })} placeholder="场景描述" />
-                              <Input.TextArea rows={3} value={scene.narration} onChange={(e) => updateScene(index, { narration: e.target.value })} placeholder="旁白" />
-                              <Input value={scene.camera_type} onChange={(e) => updateScene(index, { camera_type: e.target.value })} placeholder="镜头类型" />
-                              <Input value={scene.character_action} onChange={(e) => updateScene(index, { character_action: e.target.value })} placeholder="人物动作" />
-                              <Input value={scene.layout_hint} onChange={(e) => updateScene(index, { layout_hint: e.target.value })} placeholder="构图提示" />
-                              <Select
-                                value={scene.duration_range || '2-4'}
-                                onChange={(value) => updateScene(index, { duration_range: value })}
+                               <Input.TextArea rows={3} value={scene.scene_description} onChange={(e) => updateScene(index, { scene_description: e.target.value })} placeholder="场景描述" />
+                               <Input.TextArea rows={3} value={scene.narration} onChange={(e) => updateScene(index, { narration: e.target.value })} placeholder="旁白" />
+                               <Input.TextArea rows={2} value={scene.background_prompt || ''} onChange={(e) => updateScene(index, { background_prompt: e.target.value })} placeholder="背景提示词 / 场景底板描述" />
+                               <Input value={scene.camera_type} onChange={(e) => updateScene(index, { camera_type: e.target.value })} placeholder="镜头类型" />
+                               <Input value={scene.character_action} onChange={(e) => updateScene(index, { character_action: e.target.value })} placeholder="人物动作" />
+                               <Input value={scene.layout_hint} onChange={(e) => updateScene(index, { layout_hint: e.target.value })} placeholder="构图提示" />
+                               {index === 0 && (
+                                 <Select
+                                   value={scene.opening_template_key || openingTemplate}
+                                   onChange={(value) => updateScene(index, { opening_template_key: value })}
+                                   options={[
+                                     { label: '反问钩子型', value: 'hook_question' },
+                                     { label: '爆点数字型', value: 'big_number' },
+                                   ]}
+                                   style={{ width: '100%' }}
+                                 />
+                               )}
+                               <Select
+                                 value={scene.duration_range || '2-4'}
+                                 onChange={(value) => updateScene(index, { duration_range: value })}
                                 options={[
                                   { label: '1-2 秒', value: '1-2' },
                                   { label: '2-4 秒', value: '2-4' },
                                   { label: '4-6 秒', value: '4-6' },
-                                ]}
-                                style={{ width: '100%' }}
-                              />
-                            </Space>
-                          </Card>
-                        </Col>
+                                 ]}
+                                 style={{ width: '100%' }}
+                               />
+                               {!!scene.foreground_events?.length && <Alert type="success" message={`前景事件 ${scene.foreground_events.length} 个`} description={scene.foreground_events.map((item) => `${item.target}:${item.animation}@${item.start}s`).join(' / ')} />}
+                               {!!scene.subtitle_lines?.length && <Alert type="info" message={`字幕分段 ${scene.subtitle_lines.length} 条`} description={scene.subtitle_lines.map((item) => item.text).join(' / ')} />}
+                             </Space>
+                           </Card>
+                         </Col>
                       ))}
                     </Row>
                   </Space>
@@ -438,8 +489,17 @@ export default function StickmanStudio() {
                       <Tag color={parsedFlags.image_fallback_used ? 'orange' : 'green'}>
                         {parsedFlags.image_fallback_used ? '包含降级图片' : '真实图片生成'}
                       </Tag>
+                      {parsedFlags.image_auto_switched ? <Tag color="blue">已自动切模型</Tag> : null}
                       {!!parsedFlags.fallback_count && <Tag color="red">{parsedFlags.fallback_count} 张为降级图</Tag>}
+                      {!!parsedFlags.image_switch_count && <Tag color="blue">{parsedFlags.image_switch_count} 张自动切换成功</Tag>}
                     </Space>
+                    {parsedFlags.image_auto_switched && !parsedFlags.image_fallback_used && (
+                      <Alert
+                        type="info"
+                        message="图片主模型已自动切换到可用模型"
+                        description="当前开发环境的高阶图片模型额度不足，系统已自动切换到可用的普通模型继续真实出图。"
+                      />
+                    )}
                     {parsedFlags.image_fallback_used && (
                       <Alert
                         type="warning"
@@ -458,6 +518,7 @@ export default function StickmanStudio() {
                                 <Space wrap>
                                   <Tag color={asset?.used_fallback ? 'orange' : 'green'}>{asset?.used_fallback ? '降级占位图' : '真实模型图'}</Tag>
                                   {asset?.model_used && <Tag>{asset.model_used}</Tag>}
+                                  {asset?.model_requested && asset?.model_requested !== asset?.model_used && <Tag color="blue">原始请求 {asset.model_requested}</Tag>}
                                   {asset?.image_source && <Tag>{asset.image_source === 'model' ? '模型生成' : '占位降级'}</Tag>}
                                 </Space>
                                 <Input.TextArea rows={4} value={asset?.prompt || ''} onChange={(e) => setImageAssets((prev) => prev.map((item, i) => i === index ? { ...item, prompt: e.target.value } : item))} placeholder="图片提示词" />

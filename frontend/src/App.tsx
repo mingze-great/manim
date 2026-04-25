@@ -29,6 +29,7 @@ import AdminArticleCategories from './pages/admin/AdminArticleCategories'
 import AdminModuleStats from './pages/admin/AdminModuleStats'
 import AdminChatStyles from './pages/admin/AdminChatStyles'
 import { useState, useEffect, useRef } from 'react'
+import { buildLegacyEntryUrl } from './utils/authSync'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { token } = useAuthStore()
@@ -47,6 +48,7 @@ function AppContent() {
   const [validating, setValidating] = useState(true)
   const LEGACY_APP_URL = (import.meta.env.VITE_LEGACY_APP_URL as string | undefined) || `${window.location.protocol}//${window.location.hostname}`
   const authRequestRef = useRef(0)
+  const legacyEntryUrl = buildLegacyEntryUrl(LEGACY_APP_URL)
 
   useEffect(() => {
     if (!_hasHydrated) return
@@ -63,7 +65,7 @@ function AppContent() {
           login(token, data)
 
           if (!data.is_admin && (data.frontend_version || 'legacy') === 'legacy' && LEGACY_APP_URL) {
-            window.location.href = LEGACY_APP_URL
+            window.location.href = legacyEntryUrl
             return
           }
         } catch (error) {
@@ -90,7 +92,7 @@ function AppContent() {
         login(token, data)
 
         if (!data.is_admin && (data.frontend_version || 'legacy') === 'legacy' && LEGACY_APP_URL) {
-          window.location.href = LEGACY_APP_URL
+          window.location.href = legacyEntryUrl
           return
         }
       } catch (error: any) {
@@ -103,7 +105,7 @@ function AppContent() {
     }, 30000)
 
     return () => clearInterval(intervalId)
-  }, [token, _hasHydrated, logout, login, LEGACY_APP_URL])
+  }, [token, _hasHydrated, logout, login, LEGACY_APP_URL, legacyEntryUrl])
 
   if (!_hasHydrated || (validating && token)) {
     return (

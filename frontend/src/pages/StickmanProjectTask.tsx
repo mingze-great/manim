@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { Alert, Button, Card, Descriptions, Progress, Space, Spin, Steps, Tag, message } from 'antd'
 import { DownloadOutlined, PlayCircleOutlined } from '@ant-design/icons'
 import { Project, Task, projectApi } from '@/services/project'
+import { resolveBackendUrl } from '@/services/api'
 import { useAuthStore } from '@/stores/authStore'
 
 const taskStatusText: Record<string, string> = {
@@ -171,7 +172,7 @@ export default function StickmanProjectTask() {
     setDownloading(true)
     try {
       const token = useAuthStore.getState().token
-      const fullUrl = videoUrl.startsWith('http') ? videoUrl : `${import.meta.env.VITE_API_BASE_URL || ''}${videoUrl}`
+      const fullUrl = resolveBackendUrl(videoUrl)
       const response = await fetch(fullUrl, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       })
@@ -223,6 +224,15 @@ export default function StickmanProjectTask() {
                     type="warning"
                     message="本次图片生成包含降级占位图"
                     description={flags.scene_1_error || '当前开发环境图片模型可能因额度或权限问题未能全部真实出图，建议进入分步创作页检查并单张重生。'}
+                  />
+                )
+              }
+              if (flags.image_auto_switched) {
+                return (
+                  <Alert
+                    type="info"
+                    message="图片主模型额度不足，系统已自动切换"
+                    description={flags.scene_1_error || '当前高阶图片模型额度不足，但系统已自动切换到可用模型继续真实出图。'}
                   />
                 )
               }
@@ -300,7 +310,7 @@ export default function StickmanProjectTask() {
 
           {project?.video_url && (
             <video
-              src={project.video_url.startsWith('http') ? project.video_url : `${import.meta.env.VITE_API_BASE_URL || ''}${project.video_url}`}
+              src={resolveBackendUrl(project.video_url)}
               controls
               className="w-full rounded-xl shadow-lg"
               style={{ maxHeight: '60vh' }}
