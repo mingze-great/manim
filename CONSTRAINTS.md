@@ -20,6 +20,46 @@
 4. `main` 分支只接受用户确认后的合并
 5. **永远不要直接修改生产环境服务器（152.136.218.74）**
 
+### 1.1 V2.0 当前标准分支
+
+- `feature/v2-ui-mobile-ux-recover-3003` 作为当前 `v2.0` 标准分支
+- 该分支用于复现并部署当前新版 `3003/8003` 的完整行为
+- 当前 `3003` 重部署、模板视频跨端口预览、思维可视化对话流式、后台/个人中心/脚本页布局优化，均以该分支为准
+
+### 1.2 V2 后续优化强制流程
+
+后续所有 `v2` 优化、修复、页面调整，必须遵守以下流程，避免本地工作区污染线上版本：
+
+1. **先从当前有效 v2 基线分支新建专用分支**
+   - 示例：`feature/v2-xxx-optimization`
+   - 不允许直接在已有脏工作区或未整理分支上继续堆改动
+
+2. **新分支创建后立即推送到远程**
+   - 目的是先固定基线，保证可回退、可复现、可审计
+
+3. **所有后续优化必须及时提交并推送到远程**
+   - 不允许只留在本地工作区
+   - 不允许长期依赖“服务器热修但仓库没有”的状态
+
+4. **部署必须以远程分支为来源**
+   - 标准做法：服务器 `git fetch` / `git checkout` / `git reset --hard origin/<branch>`
+   - 不允许把“本地未推送代码”作为唯一部署来源
+
+5. **只有满足下面条件，才允许认定某个 v2 分支为可部署基线**
+   - 已提交到 git
+   - 已推送到远程
+   - 已按远程分支部署验证通过
+
+6. **运行态配置也要尽量仓库化**
+   - nginx 配置文件
+   - service 文件
+   - deploy 脚本
+   - runbook 文档
+
+7. **非 git 数据资产必须有明确同步策略**
+   - 例如模板示例视频共享目录
+   - 必须通过脚本或文档说明，不能靠人工记忆
+
 **部署前合并流程：**
 ```bash
 # 1. 提交当前分支的更改
@@ -48,11 +88,16 @@ git checkout feature/template-preview-video
 |------|------|------|------|------|------|
 | 旧站 | `/opt/manim` | `feature/legacy-v2-redirect` | `/` | `8000` | 旧版业务 + 版本分流能力 |
 | 新站 | `/opt/manim-v2` | `feature/chat-style-and-reference-code` | `3002` | `8002` | 新版业务 |
+| V2.0 测试站 | `/opt/manim-v2-3003-snapshot` | `feature/v2-ui-mobile-ux-recover-3003` | `3003` | `8003` | 当前 v2.0 标准验证环境 |
 
 其他说明：
 - 新站服务：`manim-v2-backend.service`
 - 新站 worker：`manim-v2-worker.service`
 - 新站队列：`manim_v2`
+- V2.0 测试站 backend service：`manim-v2-3003-backend.service`
+- V2.0 测试站 worker service：`manim-v2-3003-worker.service`
+- V2.0 测试站队列：`manim_v2_3003`
+- 模板示例视频共享目录：`/opt/manim/shared/videos/template_examples`
 - 生产数据库：`/opt/manim/backend/manim.db`
 - 生产域名：`https://manim.asia`
 

@@ -69,8 +69,13 @@ ln -sf "$NGINX_CONF_DST" /etc/nginx/sites-enabled/manim-v2-3003.conf
 cp "$APP_ROOT/deploy/manim-v2-3003-backend.service" /etc/systemd/system/$BACKEND_SERVICE
 cp "$APP_ROOT/deploy/manim-v2-3003-worker.service" /etc/systemd/system/$WORKER_SERVICE
 
+systemctl stop "$BACKEND_SERVICE" 2>/dev/null || true
+systemctl stop "$WORKER_SERVICE" 2>/dev/null || true
+systemctl reset-failed "$BACKEND_SERVICE" 2>/dev/null || true
+systemctl reset-failed "$WORKER_SERVICE" 2>/dev/null || true
+
 systemctl daemon-reload
-systemctl enable "$BACKEND_SERVICE" "$WORKER_SERVICE"
+systemctl enable "$BACKEND_SERVICE" "$WORKER_SERVICE" || true
 systemctl restart "$BACKEND_SERVICE"
 systemctl restart "$WORKER_SERVICE"
 
@@ -80,5 +85,7 @@ systemctl reload nginx
 sleep 5
 curl -fsS http://127.0.0.1:8003/health
 curl -I -fsS http://127.0.0.1:3003 >/dev/null
+systemctl is-active "$BACKEND_SERVICE" >/dev/null
+systemctl is-active "$WORKER_SERVICE" >/dev/null
 
 echo "==> Deploy complete"
