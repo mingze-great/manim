@@ -1,0 +1,16 @@
+[Unit]
+Description=Manim V2 3003 Worker
+After=network.target redis.service
+Wants=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/manim-v2-3003-snapshot/backend
+ExecStart=/root/miniconda3/envs/manim311/bin/python3.11 -m celery -A celery_app worker --loglevel=info
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+Environment=CELERY_QUEUE=manim_v2_3003
+
+[Install]
+WantedBy=multi-user.target
