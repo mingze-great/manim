@@ -13,6 +13,8 @@ FRONTEND_ENV_SRC="${FRONTEND_ENV_SRC:-$APP_ROOT/deploy/env.frontend.3003.example
 SYNC_TEMPLATE_VIDEOS_SCRIPT="${SYNC_TEMPLATE_VIDEOS_SCRIPT:-$APP_ROOT/deploy/sync-template-example-videos.sh}"
 PYTHON_BIN="${PYTHON_BIN:-/root/miniconda3/envs/manim311/bin/python3.11}"
 NPM_BIN="${NPM_BIN:-$(command -v npm || true)}"
+BACKEND_ENV_BACKUP="/tmp/manim-v2-3003-backend.env.bak"
+FRONTEND_ENV_BACKUP="/tmp/manim-v2-3003-frontend.env.bak"
 
 echo "==> Deploying v2 3003 from git"
 echo "APP_ROOT=$APP_ROOT"
@@ -22,17 +24,29 @@ if [ ! -d "$APP_ROOT/.git" ]; then
   git clone --branch "$BRANCH" --single-branch https://github.com/mingze-great/manim.git "$APP_ROOT"
 fi
 
+if [ -f "$APP_ROOT/backend/.env" ]; then
+  cp "$APP_ROOT/backend/.env" "$BACKEND_ENV_BACKUP"
+fi
+
+if [ -f "$APP_ROOT/frontend/.env.production.local" ]; then
+  cp "$APP_ROOT/frontend/.env.production.local" "$FRONTEND_ENV_BACKUP"
+fi
+
 cd "$APP_ROOT"
 git fetch "$REMOTE" "$BRANCH"
 git checkout "$BRANCH"
 git reset --hard "$REMOTE/$BRANCH"
 git clean -fd
 
-if [ -f "$BACKEND_ENV_SRC" ] && [ ! -f "$APP_ROOT/backend/.env" ]; then
+if [ -f "$BACKEND_ENV_BACKUP" ]; then
+  cp "$BACKEND_ENV_BACKUP" "$APP_ROOT/backend/.env"
+elif [ -f "$BACKEND_ENV_SRC" ] && [ ! -f "$APP_ROOT/backend/.env" ]; then
   cp "$BACKEND_ENV_SRC" "$APP_ROOT/backend/.env"
 fi
 
-if [ -f "$FRONTEND_ENV_SRC" ]; then
+if [ -f "$FRONTEND_ENV_BACKUP" ]; then
+  cp "$FRONTEND_ENV_BACKUP" "$APP_ROOT/frontend/.env.production.local"
+elif [ -f "$FRONTEND_ENV_SRC" ]; then
   cp "$FRONTEND_ENV_SRC" "$APP_ROOT/frontend/.env.production.local"
 fi
 
