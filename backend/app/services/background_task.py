@@ -18,12 +18,43 @@ from app.models.template import Template
 from app.services.manim import ManimService
 
 
+SHARED_TEMPLATE_EXAMPLES_DIR = pathlib.Path("/opt/manim/shared/videos/template_examples")
+
+
+def get_template_example_video_dirs() -> list[pathlib.Path]:
+    backend_root = pathlib.Path(__file__).parent.parent.parent
+    app_root = pathlib.Path(__file__).parent.parent
+    dirs = [
+        SHARED_TEMPLATE_EXAMPLES_DIR,
+        backend_root / "videos" / "template_examples",
+        app_root / "videos" / "template_examples",
+    ]
+    unique_dirs: list[pathlib.Path] = []
+    seen: set[str] = set()
+    for item in dirs:
+        key = str(item.resolve()) if item.exists() else str(item)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique_dirs.append(item)
+    return unique_dirs
+
+
 def get_manim_python_path() -> str:
     """获取 Manim 环境的 Python 路径"""
     if sys.platform == "win32":
         return sys.executable
     else:
-        return "/opt/miniconda3/envs/manim311/bin/python"
+        candidates = [
+            "/root/miniconda3/envs/manim311/bin/python3.11",
+            "/root/miniconda3/envs/manim311/bin/python",
+            "/opt/miniconda3/envs/manim311/bin/python3.11",
+            "/opt/miniconda3/envs/manim311/bin/python",
+        ]
+        for candidate in candidates:
+            if os.path.exists(candidate):
+                return candidate
+        return sys.executable
 
 
 class BackgroundTaskManager:
@@ -282,16 +313,23 @@ class BackgroundTaskManager:
                 raise RuntimeError("未找到生成的视频文件")
             
             # 移动到最终位置
-            backend_dir = pathlib.Path(__file__).parent.parent
-            videos_dir = backend_dir / "videos" / "template_examples"
-            videos_dir.mkdir(parents=True, exist_ok=True)
+            videos_dirs = get_template_example_video_dirs()
+            for videos_dir in videos_dirs:
+                videos_dir.mkdir(parents=True, exist_ok=True)
             
             final_filename = f"template_{template_id}_preview.mp4"
-            final_path = videos_dir / final_filename
+            final_path = videos_dirs[0] / final_filename
             
             # 使用最新的视频文件
             latest_video = max(video_files, key=lambda x: os.path.getmtime(x))
             shutil.move(latest_video, str(final_path))
+
+            for extra_dir in videos_dirs[1:]:
+                extra_path = extra_dir / final_filename
+                try:
+                    shutil.copy2(str(final_path), str(extra_path))
+                except Exception:
+                    pass
             
             # 更新数据库
             video_url = f"/api/videos/template_examples/{final_filename}"

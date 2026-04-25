@@ -628,10 +628,25 @@ def download_template_example_video(filename: str):
         from fastapi.responses import JSONResponse
         return JSONResponse({"error": "Invalid filename"}, status_code=400)
     
-    videos_dir = pathlib.Path(__file__).parent / "videos" / "template_examples"
-    video_path = videos_dir / safe_filename
-    
-    if not video_path.exists():
+    search_dirs = [
+        pathlib.Path("/opt/manim/shared/videos/template_examples"),
+        pathlib.Path(__file__).parent.parent / "videos" / "template_examples",
+        pathlib.Path(__file__).parent / "videos" / "template_examples",
+        pathlib.Path("/opt/manim/backend/videos/template_examples"),
+        pathlib.Path("/opt/manim-v2/backend/videos/template_examples"),
+        pathlib.Path("/opt/manim-legacy/backend/videos/template_examples"),
+        pathlib.Path("/opt/manim/backend/app/videos/template_examples"),
+        pathlib.Path("/opt/manim-v2/backend/app/videos/template_examples"),
+        pathlib.Path("/opt/manim-legacy/backend/app/videos/template_examples"),
+    ]
+    video_path = None
+    for videos_dir in search_dirs:
+        candidate = videos_dir / safe_filename
+        if candidate.exists() and candidate.is_file():
+            video_path = candidate
+            break
+
+    if video_path is None:
         from fastapi.responses import JSONResponse
         return JSONResponse({"error": "Video not found"}, status_code=404)
     
