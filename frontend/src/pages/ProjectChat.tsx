@@ -45,6 +45,7 @@ export default function ProjectChat() {
   const [chatStyles, setChatStyles] = useState<ChatStyle[]>([])
   const [selectedStyle, setSelectedStyle] = useState<string>('conservative')
   const abortControllerRef = useRef<AbortController | null>(null)
+  const selectedStyleInfo = chatStyles.find((style) => style.code === selectedStyle)
 
   useEffect(() => {
     fetchProject()
@@ -508,6 +509,11 @@ export default function ProjectChat() {
       <div className="p-3 border-t border-gray-200 dark:border-gray-700">
         <div className="text-xs text-gray-400 mb-2 text-center">
           ⚠️ 视频将在 3 小时后自动清除 | 对话内容将在 24 小时后清除
+        </div>
+        <div className="mb-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700 dark:border-blue-900/50 dark:bg-blue-900/20 dark:text-blue-200">
+          <div className="font-medium">对话风格</div>
+          <div className="mt-1">会影响 AI 的提问方式、表达方式和内容组织方式。拿不准时，先使用默认风格即可。</div>
+          {selectedStyleInfo?.description && <div className="mt-1 text-blue-600 dark:text-blue-300">当前风格：{selectedStyleInfo.description}</div>}
         </div>
         <div className="flex gap-2 items-end">
           <Select

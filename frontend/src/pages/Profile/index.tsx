@@ -1,7 +1,6 @@
-import { Card, Tabs, Form, Input, Button, Avatar, Space, Tag, List, Typography, Divider, Progress } from 'antd'
+import { Card, Button, Avatar, Space, Tag, Typography, Divider, Descriptions } from 'antd'
 import { 
-  UserOutlined, SafetyOutlined, BellOutlined, KeyOutlined, 
-  DownloadOutlined, ClockCircleOutlined, HistoryOutlined, LogoutOutlined
+  UserOutlined, LogoutOutlined
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
@@ -48,9 +47,6 @@ export default function Profile() {
     enterprise: '企业版'
   }
 
-  const remainingQuota = usageStats ? usageStats.daily_quota - usageStats.used_today : 0
-  const usedPercent = usageStats ? Math.round((usageStats.used_today / usageStats.daily_quota) * 100) : 50
-
   return (
     <div className="profile-page">
       <div className="profile-header">
@@ -66,155 +62,30 @@ export default function Profile() {
         </div>
       </div>
 
-      <Tabs
-        defaultActiveKey="quota"
-        items={[
-          {
-            key: 'quota',
-            label: '额度管理',
-            children: (
-              <Card loading={loading}>
-                <div className="quota-section">
-                  <div className="quota-header">
-                    <Title level={5}>今日额度</Title>
-                    <Text type="secondary">每日 00:00 重置</Text>
-                  </div>
-                  <div className="quota-display">
-                    <Progress 
-                      type="dashboard" 
-                      percent={usedPercent} 
-                      size={160}
-                      strokeColor={remainingQuota > 0 ? "#6366f1" : "#ff4d4f"}
-                      format={() => (
-                        <div className="quota-numbers">
-                          <span className="used">{remainingQuota}</span>
-                          <span className="total">/ {usageStats?.daily_quota || 100}</span>
-                        </div>
-                      )}
-                    />
-                  </div>
-                  <div className="quota-actions">
-                    <Button type="primary" onClick={() => navigate('/pricing')}>升级套餐</Button>
-                    <Button>获取更多额度</Button>
-                  </div>
-                </div>
-                <Divider />
-                <div className="usage-stats">
-                  <Title level={5}>使用统计</Title>
-                  <div className="stats-grid">
-                    <div className="stat-item">
-                      <span className="stat-value">{usageStats?.used_today || 0}</span>
-                      <span className="stat-label">今日使用</span>
-                    </div>
-                    <div className="stat-item">
-                      <span className="stat-value">{usageStats?.weekly_usage || 0}</span>
-                      <span className="stat-label">本周使用</span>
-                    </div>
-                    <div className="stat-item">
-                      <span className="stat-value">{usageStats?.total_usage?.toLocaleString() || 0}</span>
-                      <span className="stat-label">总使用量</span>
-                    </div>
-                  </div>
-                </div>
-              </Card>
-            ),
-          },
-          {
-            key: 'account',
-            label: '账户设置',
-            children: (
-              <Card>
-                <Form layout="vertical" initialValues={{ username: user?.username, email: user?.email }}>
-                  <Form.Item label="用户名">
-                    <Input prefix={<UserOutlined />} />
-                  </Form.Item>
-                  <Form.Item label="邮箱">
-                    <Input prefix="@" disabled />
-                  </Form.Item>
-                  <Form.Item label="手机号">
-                    <Input placeholder="未绑定" />
-                  </Form.Item>
-                  <Form.Item>
-                    <Button type="primary">保存修改</Button>
-                  </Form.Item>
-                </Form>
-                <Divider />
-                <Title level={5}>安全设置</Title>
-                <div className="security-items">
-                  <div className="security-item">
-                    <div>
-                      <Text strong>修改密码</Text>
-                      <Text type="secondary" className="block">上次修改于 30 天前</Text>
-                    </div>
-                    <Button icon={<KeyOutlined />}>修改</Button>
-                  </div>
-                  <div className="security-item">
-                    <div>
-                      <Text strong>两步验证</Text>
-                      <Text type="secondary" className="block">未启用</Text>
-                    </div>
-                    <Button icon={<SafetyOutlined />}>启用</Button>
-                  </div>
-                </div>
-              </Card>
-            ),
-          },
-          {
-            key: 'notifications',
-            label: '通知设置',
-            children: (
-              <Card>
-                <List
-                  dataSource={[
-                    { icon: <BellOutlined />, title: '任务完成通知', desc: '渲染完成时发送通知', enabled: true },
-                    { icon: <DownloadOutlined />, title: '下载通知', desc: '视频下载完成时发送通知', enabled: true },
-                    { icon: <ClockCircleOutlined />, title: '渲染队列提醒', desc: '渲染开始前提醒', enabled: false },
-                    { icon: <HistoryOutlined />, title: '活动日志', desc: '账户重要操作通知', enabled: true },
-                  ]}
-                  renderItem={(item) => (
-                    <List.Item
-                      actions={[
-                        <Button type="link">{item.enabled ? '关闭' : '开启'}</Button>
-                      ]}
-                    >
-                      <List.Item.Meta
-                        avatar={<div className="notif-icon">{item.icon}</div>}
-                        title={item.title}
-                        description={item.desc}
-                      />
-                    </List.Item>
-                  )}
-                />
-              </Card>
-            ),
-          },
-          {
-            key: 'downloads',
-            label: '下载记录',
-            children: (
-              <Card>
-                <List
-                  dataSource={[
-                    { name: '勾股定理动画.mp4', size: '12.5 MB', time: '2024-01-15 14:30' },
-                    { name: '三角函数演示.mp4', size: '18.2 MB', time: '2024-01-14 10:20' },
-                    { name: '概率论讲解.mp4', size: '25.6 MB', time: '2024-01-12 16:45' },
-                  ]}
-                  renderItem={(item) => (
-                    <List.Item
-                      actions={[<Button type="link" icon={<DownloadOutlined />}>重新下载</Button>]}
-                    >
-                      <List.Item.Meta
-                        title={item.name}
-                        description={`${item.size} · ${item.time}`}
-                      />
-                    </List.Item>
-                  )}
-                />
-              </Card>
-            ),
-          },
-        ]}
-      />
+      <Space direction="vertical" size={16} style={{ width: '100%' }}>
+        <Card loading={loading}>
+          <Title level={5}>账号信息</Title>
+          <Descriptions column={1} size="small">
+            <Descriptions.Item label="用户名">{user?.username || '-'}</Descriptions.Item>
+            <Descriptions.Item label="邮箱">{user?.email || '-'}</Descriptions.Item>
+            <Descriptions.Item label="用户 ID">{user?.id || '-'}</Descriptions.Item>
+            <Descriptions.Item label="套餐">{planLabels[subscription?.plan || 'free'] || subscription?.plan || '付费版'}</Descriptions.Item>
+            <Descriptions.Item label="到期时间">{user?.expires_at ? new Date(user.expires_at).toLocaleString('zh-CN') : '未设置'}</Descriptions.Item>
+            <Descriptions.Item label="今日使用量">{usageStats?.used_today ?? '-'}</Descriptions.Item>
+            <Descriptions.Item label="总使用量">{usageStats?.total_usage?.toLocaleString?.() ?? '-'}</Descriptions.Item>
+          </Descriptions>
+        </Card>
+
+        <Card>
+          <Title level={5}>说明</Title>
+          <div className="text-gray-500 text-sm space-y-2">
+            <div>个人中心当前仅保留已实际接通的账号信息与订阅信息。</div>
+            <div>密码修改、通知设置、下载记录等功能将在后续完整接入后再重新开放。</div>
+          </div>
+          <Divider />
+          <Button type="primary" onClick={() => navigate('/pricing')}>查看套餐</Button>
+        </Card>
+      </Space>
 
       <Card className="logout-card">
         <Button danger icon={<LogoutOutlined />} onClick={handleLogout}>

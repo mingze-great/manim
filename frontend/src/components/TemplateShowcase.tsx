@@ -2,6 +2,8 @@ import { useState, useRef, useEffect } from 'react'
 import { Modal, Tabs, Spin } from 'antd'
 import { PlayCircleOutlined } from '@ant-design/icons'
 import { templateApi, Template } from '@/services/template'
+import { resolveBackendUrl } from '@/services/api'
+import { inferTemplateCategory } from '@/utils/templateCategory'
 import './TemplateShowcase.css'
 
 interface TemplateShowcaseProps {
@@ -15,26 +17,13 @@ const CATEGORY_MAP: Record<string, string> = {
   math: '数学可视化',
 }
 
-function inferTemplateCategory(template: Template): 'thinking' | 'math' {
-  const explicitCategory = String(template.category || '').trim().toLowerCase()
-  if (explicitCategory === 'thinking' || explicitCategory === 'math') {
-    return explicitCategory
-  }
-  if (template.reference_code?.trim()) {
-    return 'math'
-  }
-  const raw = `${template.category || ''} ${template.name || ''} ${template.description || ''}`.toLowerCase()
-  const mathHints = ['math', '数学', '公式', '定理', '几何', '函数', '矩阵', '傅里叶', '欧拉', '微积分', '物理']
-  return mathHints.some((hint) => raw.includes(hint)) ? 'math' : 'thinking'
-}
-
 function TemplateCard({ t, value, onChange, onPreview }: {
   t: Template
   value: number | null
   onChange: (id: number) => void
   onPreview: (t: Template) => void
 }) {
-  const getVideoUrl = (template: Template) => template.example_video_url || ''
+  const getVideoUrl = (template: Template) => resolveBackendUrl(template.example_video_url)
 
   return (
     <div
@@ -94,7 +83,7 @@ export default function TemplateShowcase({ value, onChange, category }: Template
     }
   }
 
-  const getVideoUrl = (t: Template) => t.example_video_url || ''
+  const getVideoUrl = (t: Template) => resolveBackendUrl(t.example_video_url)
   const categories = ['thinking', 'math']
   const defaultTab = category === 'math' ? 'math' : 'thinking'
   const getTemplatesByCategory = (cat: string) => templates.filter(t => inferTemplateCategory(t) === cat)
