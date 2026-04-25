@@ -22,6 +22,7 @@ class Project(Base):
     theme = Column(Text, nullable=False)
     category = Column(String(50), nullable=True)  # 视频主题方向
     module_type = Column(String(20), default="manim", nullable=False)
+    stickman_variant = Column(String(20), default="legacy", nullable=False)
     storyboard_count = Column(Integer, default=3, nullable=False)
     aspect_ratio = Column(String(10), default="16:9", nullable=False)
     generation_mode = Column(String(20), default="one_click", nullable=False)

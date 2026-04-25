@@ -20,12 +20,23 @@ from app.models.task import Task
 from app.models.template import Template
 from app.api.auth import get_current_user
 from app.services.manim import ManimService
-from app.services.stickman_generator import StickmanGenerator
+from app.services.stickman_generator import StickmanGenerator as StickmanGeneratorLegacy
+from app.services.stickman_generator_v2 import StickmanGenerator as StickmanGeneratorV2
 from app.config import get_settings
 from app.utils.cos_storage import cos_storage
 from app.tasks.celery_tasks import render_video_celery, generate_code_celery, generate_chat_celery
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
+
+
+def _build_stickman_generator(project: Project | None = None):
+    if project and str(getattr(project, 'stickman_variant', 'legacy') or 'legacy') == 'v2':
+        return StickmanGeneratorV2()
+    return StickmanGeneratorLegacy()
+
+
+def _stickman_variant_label(project: Project | None = None):
+    return '优化版' if project and str(getattr(project, 'stickman_variant', 'legacy') or 'legacy') == 'v2' else '经典版'
 
 
 def _project_query_for_user(db: Session, current_user: User):
@@ -630,6 +641,7 @@ async def generate_stickman_video_stream(
             task_local.status = "processing"
             task_local.progress = 1
             project_local.status = "rendering"
+            task_local.log = (task_local.log or "") + f"开始{_stickman_variant_label(project_local)}火柴人生成\n"
             db_session.commit()
 
             progress_queue: asyncio.Queue[dict] = asyncio.Queue()
@@ -641,7 +653,7 @@ async def generate_stickman_video_stream(
                     {"type": "progress", "progress": progress, "content": message},
                 )
 
-            generator = StickmanGenerator()
+            generator = _build_stickman_generator(project_local)
             try:
                 generation_flags = json.loads(project_local.generation_flags or "{}")
             except Exception:
@@ -795,6 +807,7 @@ async def compose_stickman_video_stream(
             task_local.status = "processing"
             task_local.progress = 1
             project_local.status = "rendering"
+            task_local.log = (task_local.log or "") + f"开始{_stickman_variant_label(project_local)}火柴人合成\n"
             db_session.commit()
 
             progress_queue: asyncio.Queue[dict] = asyncio.Queue()
@@ -806,7 +819,7 @@ async def compose_stickman_video_stream(
                     {"type": "progress", "progress": progress, "content": message},
                 )
 
-            generator = StickmanGenerator()
+            generator = _build_stickman_generator(project_local)
             generation_task = asyncio.create_task(asyncio.to_thread(
                 generator.compose_from_assets,
                 str(project_local.theme),

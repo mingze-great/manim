@@ -27,7 +27,8 @@ from app.schemas.task import TaskCreate, TaskResponse
 from app.api.auth import get_current_user
 from app.services.chat import ChatService
 from app.services.manim import ManimService
-from app.services.stickman_generator import StickmanGenerator
+from app.services.stickman_generator import StickmanGenerator as StickmanGeneratorLegacy
+from app.services.stickman_generator_v2 import StickmanGenerator as StickmanGeneratorV2
 from app.services.audio_enhancement import enhance_voice_audio
 from app.tasks.celery_tasks import generate_chat_celery
 
@@ -38,6 +39,16 @@ MODULE_LABELS = {
     "stickman": "火柴人视频",
 }
 
+
+def _build_stickman_generator(project: Project | None = None):
+    if project and str(getattr(project, 'stickman_variant', 'legacy') or 'legacy') == 'v2':
+        return StickmanGeneratorV2()
+    return StickmanGeneratorLegacy()
+
+
+def _stickman_variant_label(project: Project | None = None):
+    return '优化版' if project and str(getattr(project, 'stickman_variant', 'legacy') or 'legacy') == 'v2' else '经典版'
+
 router = APIRouter(prefix="/projects", tags=["projects"])
 limiter = Limiter(key_func=get_remote_address)
 
@@ -46,7 +57,7 @@ limiter = Limiter(key_func=get_remote_address)
 def get_stickman_voice_library(
     current_user: Annotated[User, Depends(get_current_user)],
 ): 
-    generator = StickmanGenerator()
+    generator = StickmanGeneratorLegacy()
     voices = generator.get_tts_voice_library()
     custom_voices = current_user.get_custom_voices() if hasattr(current_user, 'get_custom_voices') else []
     return {"voices": voices + custom_voices}
@@ -57,7 +68,7 @@ def preview_stickman_voice(
     payload: dict,
     current_user: Annotated[User, Depends(get_current_user)],
 ):
-    generator = StickmanGenerator()
+    generator = StickmanGeneratorLegacy()
     sample_text = str(payload.get("text") or "你好，这是一段火柴人视频的配音试听。")
     provider = str(payload.get("tts_provider") or "dashscope_cosyvoice")
     voice = str(payload.get("tts_voice") or "longshuo_v3")
@@ -101,6 +112,7 @@ def create_project(
         theme=project.theme,
         category=project.category,
         module_type=project.module_type,
+        stickman_variant=(project.stickman_variant or "legacy") if project.module_type == "stickman" else "legacy",
         storyboard_count=project.storyboard_count,
         aspect_ratio=project.aspect_ratio,
         generation_mode=project.generation_mode,
@@ -156,6 +168,10 @@ def update_project(
 
     if project.module_type == "stickman":
         data = project_update.model_dump(exclude_unset=True)
+        if "stickman_variant" in data and data["stickman_variant"] is not None:
+            data["stickman_variant"] = str(data["stickman_variant"])
+            if data["stickman_variant"] not in {"legacy", "v2"}:
+                raise HTTPException(status_code=400, detail="stickman_variant 仅支持 legacy 或 v2")
         if "storyboard_count" in data and data["storyboard_count"] is not None:
             limit = 20 if current_user.is_admin else 6
             data["storyboard_count"] = max(2, min(int(data["storyboard_count"]), limit))
@@ -189,11 +205,12 @@ def generate_stickman_script(
     db: Annotated[Session, Depends(get_db)]
 ):
     project = _get_stickman_project(db, current_user, project_id)
-    generator = StickmanGenerator()
+    generator = _build_stickman_generator(project)
     script_data = generator.generate_script_data(str(project.theme), int(project.storyboard_count or 3))
     project.final_script = script_data.get("script")
     project.storyboard_json = json.dumps(script_data.get("storyboards") or [], ensure_ascii=False)
     project.status = "draft"
+    project.error_message = None
     db.commit()
     db.refresh(project)
     return project
@@ -235,7 +252,7 @@ def generate_stickman_images(
         if not allowed:
             raise HTTPException(status_code=403, detail=reason or '系统繁忙，请稍后再试')
     
-    generator = StickmanGenerator()
+    generator = _build_stickman_generator(project)
     assets, flags = generator.generate_images(
         storyboards,
         str(project.aspect_ratio or "16:9"),
@@ -243,6 +260,8 @@ def generate_stickman_images(
         style_reference_image_path=str(project.style_reference_image_path) if project.style_reference_image_path else None,
         style_reference_notes=str(project.style_reference_notes) if project.style_reference_notes else None,
     )
+    flags["stickman_variant"] = str(getattr(project, 'stickman_variant', 'legacy') or 'legacy')
+    flags["stickman_variant_label"] = _stickman_variant_label(project)
     project.image_assets_json = json.dumps(assets, ensure_ascii=False)
     project.generation_flags = json.dumps(flags, ensure_ascii=False)
     
@@ -271,7 +290,7 @@ def generate_stickman_preview_image(
     if not current_user.is_admin and preview_count >= 2:
         raise HTTPException(status_code=403, detail="每个项目最多生成2次预览图，已达上限")
 
-    generator = StickmanGenerator()
+    generator = _build_stickman_generator(project)
     preview_index = 0
     preview_scene = storyboards[preview_index]
     asset, _ = generator.regenerate_single_image(
@@ -283,6 +302,8 @@ def generate_stickman_preview_image(
         str(project.style_reference_image_path) if project.style_reference_image_path else None,
         str(project.style_reference_notes) if project.style_reference_notes else None,
     )
+    if isinstance(asset, dict):
+        asset["stickman_variant"] = str(getattr(project, 'stickman_variant', 'legacy') or 'legacy')
     project.preview_image_asset_json = json.dumps(asset, ensure_ascii=False)
     project.preview_regen_count = preview_count + 1
     db.commit()
@@ -305,7 +326,7 @@ def regenerate_stickman_image(
     assets = json.loads(project.image_assets_json or "[]")
     if not (0 <= scene_index < len(storyboards)):
         raise HTTPException(status_code=404, detail="分镜不存在")
-    generator = StickmanGenerator()
+    generator = _build_stickman_generator(project)
     prompt_override = payload.get("prompt")
     asset, used_fallback = generator.regenerate_single_image(
         storyboards[scene_index],
@@ -506,7 +527,7 @@ async def upload_style_reference(
 
     project.style_reference_image_path = str(image_path)
     project.style_reference_notes = notes or None
-    generator = StickmanGenerator()
+    generator = StickmanGeneratorLegacy()
     project.style_reference_profile = generator.extract_style_reference_profile(str(image_path), notes or None)
     db.commit()
     db.refresh(project)

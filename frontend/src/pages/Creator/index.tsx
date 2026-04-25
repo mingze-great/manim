@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Alert, Button, Input, message, Divider, Card, InputNumber, Segmented, Select, Upload, Typography } from 'antd'
 import { RocketOutlined, BulbOutlined, VideoCameraOutlined, HighlightOutlined, UploadOutlined, FileTextOutlined, AudioOutlined } from '@ant-design/icons'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
 import { projectApi, StickmanVoiceOption } from '@/services/project'
 import { articleApi, Category as ArticleCategory } from '@/services/article'
@@ -16,6 +16,7 @@ const { TextArea } = Input
 type ModuleType = 'manim' | 'math' | 'stickman' | 'article'
 type VoiceSource = 'ai' | 'record' | 'upload'
 type GenerationMode = 'one_click' | 'step_by_step'
+type StickmanVariant = 'legacy' | 'v2'
 
 const defaultStickmanVoiceOptions: StickmanVoiceOption[] = [
   { label: '稳重男声', value: 'longshuo_v3', provider: 'dashscope_cosyvoice', gender: 'male', style: 'steady' },
@@ -47,6 +48,7 @@ function normalizeVoiceOptions(input: unknown): StickmanVoiceOption[] {
 
 export default function Creator() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const user = useAuthStore((state) => state.user)
   const [loading, setLoading] = useState(false)
   const [moduleType, setModuleType] = useState<ModuleType>('manim')
@@ -56,6 +58,7 @@ export default function Creator() {
   const [mathTopic, setMathTopic] = useState('')
   const [stickmanTopic, setStickmanTopic] = useState('')
   const [storyboardCount, setStoryboardCount] = useState(3)
+  const [stickmanVariant, setStickmanVariant] = useState<StickmanVariant>('legacy')
   const [voiceSource, setVoiceSource] = useState<VoiceSource>('ai')
   const [ttsVoice, setTtsVoice] = useState('longshuo_v3')
   const [ttsRate, setTtsRate] = useState('+0%')
@@ -224,6 +227,7 @@ export default function Creator() {
         title: `火柴人视频-${stickmanTopic}`,
         theme: stickmanTopic.trim(),
         module_type: 'stickman',
+        stickman_variant: stickmanVariant,
         storyboard_count: storyboardCount,
         aspect_ratio: '16:9',
         generation_mode: generationMode,
@@ -281,6 +285,17 @@ export default function Creator() {
     }
   }
 
+  useEffect(() => {
+    const nextModule = searchParams.get('module')
+    const nextVariant = searchParams.get('variant')
+    if (nextModule === 'stickman') {
+      setModuleType('stickman')
+    }
+    if (nextVariant === 'legacy' || nextVariant === 'v2') {
+      setStickmanVariant(nextVariant)
+    }
+  }, [searchParams])
+
   return (
     <div className="creator-page">
       <div className="creator-hero creator-hero-sunrise">
@@ -334,12 +349,12 @@ export default function Creator() {
               <p>输入数学主题，选择模板，直接生成公式推演动画。</p>
             </Card>
 
-            <Card className={`module-card ${moduleType === 'stickman' ? 'active' : ''} ${!stickmanEnabled ? 'module-card-disabled' : ''}`} onClick={() => setModuleType('stickman')}>
+            <Card className={`module-card ${moduleType === 'stickman' ? 'active' : ''} ${!stickmanEnabled ? 'module-card-disabled' : ''}`} onClick={() => navigate('/creator/stickman')}>
               <div className="module-card-icon module-card-icon-orange">
                 <VideoCameraOutlined />
               </div>
               <h3>火柴人视频</h3>
-              <p>直接填写主题与分镜数，进入图片、配音与合成任务流。</p>
+              <p>先进入版本选择页，再进入经典版或优化版火柴人创作流程。</p>
             </Card>
 
             <Card className={`module-card ${moduleType === 'article' ? 'active' : ''} ${!articleEnabled ? 'module-card-disabled' : ''}`} onClick={() => { setModuleType('article'); handleArticleModeEnter() }}>
@@ -469,8 +484,8 @@ export default function Creator() {
               <TopicExamples category={selectedStickmanCategory} onSelect={(topic) => setStickmanTopic(topic)} titlePrefix="热门主题" />
               <div className="stickman-panel mt-6">
                 <div className="stickman-panel-head">
-                  <h2>火柴人视频模块</h2>
-                  <p>先从热门主题入手，或在下方继续调整主题与生成参数。</p>
+                  <h2>{stickmanVariant === 'v2' ? '优化版火柴人模块' : '经典版火柴人模块'}</h2>
+                  <p>{stickmanVariant === 'v2' ? '当前为优化版火柴人流程，先从热门主题入手，或在下方继续调整主题与生成参数。' : '当前为经典版火柴人流程，先从热门主题入手，或在下方继续调整主题与生成参数。'}</p>
                 </div>
 
                 <div className="stickman-form-grid">
@@ -594,8 +609,8 @@ export default function Creator() {
           ) : (
           <div className="stickman-panel">
             <div className="stickman-panel-head">
-              <h2>火柴人视频模块</h2>
-              <p>先选热门方向和主题，也可以保留下方参数化创作流程。</p>
+              <h2>{stickmanVariant === 'v2' ? '优化版火柴人模块' : '经典版火柴人模块'}</h2>
+              <p>{stickmanVariant === 'v2' ? '当前为优化版火柴人流程，可继续选择热门方向和主题。' : '当前为经典版火柴人流程，可继续选择热门方向和主题。'}</p>
             </div>
 
             <div className="mb-6">

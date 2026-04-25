@@ -7,6 +7,7 @@ export interface Project {
   theme: string
   category: string | null
   module_type: 'manim' | 'math' | 'stickman'
+  stickman_variant: 'legacy' | 'v2'
   storyboard_count: number
   aspect_ratio: string
   generation_mode: 'one_click' | 'step_by_step'
@@ -102,7 +103,7 @@ export interface PendingResponse {
 export const projectApi = {
   list: () => api.get<Project[]>('/projects'),
   get: (id: number) => api.get<Project>(`/projects/${id}`),
-  create: (data: { title: string; theme: string; category?: string; module_type?: 'manim' | 'stickman'; storyboard_count?: number; aspect_ratio?: string; generation_mode?: 'one_click' | 'step_by_step'; voice_source?: 'ai' | 'upload' | 'record'; tts_provider?: string; tts_voice?: string; tts_rate?: string }) => api.post<Project>('/projects', data),
+  create: (data: { title: string; theme: string; category?: string; module_type?: 'manim' | 'stickman'; stickman_variant?: 'legacy' | 'v2'; storyboard_count?: number; aspect_ratio?: string; generation_mode?: 'one_click' | 'step_by_step'; voice_source?: 'ai' | 'upload' | 'record'; tts_provider?: string; tts_voice?: string; tts_rate?: string }) => api.post<Project>('/projects', data),
   update: (id: number, data: Partial<Project>) => api.put<Project>(`/projects/${id}`, data),
   uploadVoiceReference: (id: number, file: File, source: 'upload' | 'record') => {
     const formData = new FormData()

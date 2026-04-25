@@ -11,6 +11,7 @@ class ProjectBase(BaseModel):
 class ProjectCreate(ProjectBase):
     category: Optional[str] = None
     module_type: str = "manim"
+    stickman_variant: str = "legacy"
     storyboard_count: int = 3
     aspect_ratio: str = "16:9"
     generation_mode: str = "one_click"
@@ -25,6 +26,7 @@ class ProjectUpdate(BaseModel):
     theme: Optional[str] = None
     category: Optional[str] = None
     module_type: Optional[str] = None
+    stickman_variant: Optional[str] = None
     storyboard_count: Optional[int] = None
     aspect_ratio: Optional[str] = None
     generation_mode: Optional[str] = None
@@ -56,6 +58,7 @@ class ProjectResponse(ProjectBase):
     user_id: int
     category: Optional[str] = None
     module_type: str = "manim"
+    stickman_variant: str = "legacy"
     storyboard_count: int = 3
     aspect_ratio: str = "16:9"
     generation_mode: str = "one_click"

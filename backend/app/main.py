@@ -72,6 +72,11 @@ async def lifespan(app: FastAPI):
             conn.commit()
             print("Added module_type column to projects")
 
+        if 'stickman_variant' not in project_columns:
+            conn.execute(text("ALTER TABLE projects ADD COLUMN stickman_variant VARCHAR(20) DEFAULT 'legacy'"))
+            conn.commit()
+            print("Added stickman_variant column to projects")
+
         if 'storyboard_count' not in project_columns:
             conn.execute(text("ALTER TABLE projects ADD COLUMN storyboard_count INTEGER DEFAULT 3"))
             conn.commit()
