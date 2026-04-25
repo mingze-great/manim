@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { AUTH_STORAGE_KEY, LOGOUT_MARKER_KEY } from '@/utils/authSync'
 
 interface User {
   id: number
@@ -37,7 +38,22 @@ export const useAuthStore = create<AuthState>()(
       _hasHydrated: false,
       isAuthenticated: () => !!get().token,
       login: (token, user) => set({ token, user, lastActivity: Date.now() }),
-      logout: () => set({ token: null, user: null, lastActivity: Date.now() }),
+      logout: () => {
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem(LOGOUT_MARKER_KEY, String(Date.now()))
+            sessionStorage.removeItem('admin_mode')
+          } catch {
+          }
+        }
+        set({ token: null, user: null, lastActivity: Date.now() })
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.removeItem(AUTH_STORAGE_KEY)
+          } catch {
+          }
+        }
+      },
       setUser: (user) => set({ user }),
       updateActivity: () => set({ lastActivity: Date.now() }),
       checkExpiration: () => {

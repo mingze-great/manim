@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { Table, Button, Space, Tag, Modal, Form, Input, message, Popconfirm, Upload, Switch, Tooltip, Segmented } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, PlayCircleOutlined, UploadOutlined, SettingOutlined } from '@ant-design/icons'
 import { templateApi, Template } from '@/services/template'
+import { inferTemplateCategory } from '@/utils/templateCategory'
+import { getAppBase, resolveBackendUrl } from '@/services/api'
 import api from '@/services/api'
 
 const { TextArea } = Input
@@ -47,9 +49,12 @@ export default function AdminTemplates() {
 
   const fetchTemplates = async () => {
     try {
-      const params = categoryFilter !== 'all' ? { category: categoryFilter } : undefined
-      const { data } = await templateApi.list(params)
-      setTemplates([...data.system_templates, ...data.user_templates])
+      const { data } = await templateApi.list({ limit: 100 })
+      const allTemplates = [...data.system_templates, ...data.user_templates]
+      const filteredTemplates = categoryFilter === 'all'
+        ? allTemplates
+        : allTemplates.filter((template) => inferTemplateCategory(template) === categoryFilter)
+      setTemplates(filteredTemplates)
     } catch (err) {
       message.error('获取模板失败')
     } finally {
@@ -108,7 +113,7 @@ export default function AdminTemplates() {
   }
 
   const handlePreviewVideo = (videoUrl: string) => {
-    const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
+    const API_BASE = getAppBase()
     setPreviewVideoUrl(videoUrl.startsWith('http') ? videoUrl : `${API_BASE}${videoUrl}`)
     setVideoPreviewVisible(true)
   }
@@ -173,16 +178,24 @@ export default function AdminTemplates() {
       dataIndex: 'category',
       key: 'category',
       width: 110,
-      render: (category: string | null, record: Template) => (
+      render: (_category: string | null, record: Template) => {
+        const inferredCategory = inferTemplateCategory(record)
+        const rawCategory = record.category ? String(record.category) : ''
+        return (
         <Space direction="vertical" size={2}>
-          <Tag color={category === 'math' ? 'blue' : category === 'thinking' ? 'purple' : 'default'}>
-            {CATEGORY_MAP[category || ''] || category || '未分类'}
+          <Tag color={inferredCategory === 'math' ? 'blue' : 'purple'}>
+            {CATEGORY_MAP[inferredCategory]}
           </Tag>
+          {rawCategory && rawCategory !== inferredCategory && (
+            <Tag color="default" style={{ fontSize: 11 }}>
+              原始: {rawCategory}
+            </Tag>
+          )}
           <Tag color={record.is_system ? 'cyan' : 'green'} style={{ fontSize: 11 }}>
             {record.is_system ? '系统' : '自定义'}
           </Tag>
         </Space>
-      ),
+      )},
     },
     {
       title: '用户可见',
@@ -419,7 +432,7 @@ class Fourier(Scene):
                   <video 
                     src={editingTemplate.example_video_url.startsWith('http') 
                       ? editingTemplate.example_video_url 
-                      : `${import.meta.env.VITE_API_BASE_URL || ''}${editingTemplate.example_video_url}`}
+                      : resolveBackendUrl(editingTemplate.example_video_url)}
                     controls
                     className="w-full max-h-48 rounded-lg"
                   />
