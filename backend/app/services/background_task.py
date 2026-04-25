@@ -23,7 +23,16 @@ def get_manim_python_path() -> str:
     if sys.platform == "win32":
         return sys.executable
     else:
-        return "/opt/miniconda3/envs/manim311/bin/python"
+        candidates = [
+            "/root/miniconda3/envs/manim311/bin/python3.11",
+            "/root/miniconda3/envs/manim311/bin/python",
+            "/opt/miniconda3/envs/manim311/bin/python3.11",
+            "/opt/miniconda3/envs/manim311/bin/python",
+        ]
+        for candidate in candidates:
+            if os.path.exists(candidate):
+                return candidate
+        return sys.executable
 
 
 class BackgroundTaskManager:
@@ -282,16 +291,23 @@ class BackgroundTaskManager:
                 raise RuntimeError("未找到生成的视频文件")
             
             # 移动到最终位置
-            backend_dir = pathlib.Path(__file__).parent.parent
+            backend_dir = pathlib.Path(__file__).parent.parent.parent
             videos_dir = backend_dir / "videos" / "template_examples"
             videos_dir.mkdir(parents=True, exist_ok=True)
+            compatibility_dir = pathlib.Path(__file__).parent.parent / "videos" / "template_examples"
+            compatibility_dir.mkdir(parents=True, exist_ok=True)
             
             final_filename = f"template_{template_id}_preview.mp4"
             final_path = videos_dir / final_filename
+            compatibility_path = compatibility_dir / final_filename
             
             # 使用最新的视频文件
             latest_video = max(video_files, key=lambda x: os.path.getmtime(x))
             shutil.move(latest_video, str(final_path))
+            try:
+                shutil.copy2(str(final_path), str(compatibility_path))
+            except Exception:
+                pass
             
             # 更新数据库
             video_url = f"/api/videos/template_examples/{final_filename}"

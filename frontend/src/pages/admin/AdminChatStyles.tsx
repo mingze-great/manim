@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Table, Button, Space, Modal, Form, Input, message, Popconfirm, Tag } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import api from '@/services/api'
+import { useIsMobile } from '@/hooks/useIsMobile'
 
 const { TextArea } = Input
 
@@ -18,6 +19,7 @@ interface ChatStyle {
 }
 
 export default function AdminChatStyles() {
+  const isMobile = useIsMobile()
   const [styles, setStyles] = useState<ChatStyle[]>([])
   const [loading, setLoading] = useState(true)
   const [modalVisible, setModalVisible] = useState(false)
@@ -157,13 +159,35 @@ export default function AdminChatStyles() {
         </Space>
       </div>
 
-      <Table
-        columns={columns}
-        dataSource={styles}
-        rowKey="id"
-        loading={loading}
-        pagination={{ pageSize: 10 }}
-      />
+      {isMobile ? (
+        <div className="space-y-3">
+          {styles.map((record) => (
+            <div key={record.id} className="rounded-xl border border-gray-200 p-4 bg-white">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="font-semibold break-words">{record.name}</div>
+                  <div className="mt-1"><Tag color="blue">{record.code}</Tag>{record.is_default ? <Tag color="green">默认</Tag> : null}</div>
+                  <div className="text-sm text-gray-500 mt-2">{record.description || '暂无风格说明'}</div>
+                </div>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)}>编辑</Button>
+                <Popconfirm title="确定删除此风格？" onConfirm={() => handleDelete(record.id)}>
+                  <Button size="small" danger icon={<DeleteOutlined />}>删除</Button>
+                </Popconfirm>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <Table
+          columns={columns}
+          dataSource={styles}
+          rowKey="id"
+          loading={loading}
+          pagination={{ pageSize: 10 }}
+        />
+      )}
 
       <Modal
         title={editingStyle ? '编辑风格' : '添加风格'}

@@ -4,10 +4,12 @@ import { ReloadOutlined, FileTextOutlined, UserOutlined, WarningOutlined, CheckC
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts'
 import dayjs from 'dayjs'
 import { adminApi, AuditLog } from '../../services/admin'
+import { useIsMobile } from '@/hooks/useIsMobile'
 
 const COLORS = ['#10b981', '#ef4444', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16']
 
 export default function AdminLogs() {
+  const isMobile = useIsMobile()
   const [logs, setLogs] = useState<AuditLog[]>([])
   const [loading, setLoading] = useState(false)
   const [actionFilter, setActionFilter] = useState<string>('')
@@ -245,18 +247,34 @@ export default function AdminLogs() {
       </Row>
 
       <Card className="hover-lift" style={{ borderRadius: '16px' }}>
-        <Table
-          columns={columns}
-          dataSource={filteredLogs}
-          rowKey="id"
-          loading={loading}
-          pagination={{ 
-            pageSize: 15, 
-            showSizeChanger: true,
-            showTotal: (total) => `共 ${total} 条记录`
-          }}
-          scroll={{ x: 800 }}
-        />
+        {isMobile ? (
+          <div className="space-y-3">
+            {filteredLogs.map((log) => (
+              <div key={log.id} className="rounded-xl border border-gray-200 p-4 bg-white">
+                <div className="flex items-center justify-between gap-3">
+                  <Tag color={getActionColor(log.action)}>{getActionLabel(log.action)}</Tag>
+                  <span className="text-xs font-mono text-gray-500">{new Date(log.created_at).toLocaleString('zh-CN')}</span>
+                </div>
+                <div className="mt-2 text-sm text-gray-700">用户：{log.username || '系统'}</div>
+                <div className="mt-2 text-sm text-gray-600 break-words">{log.details || '无详情'}</div>
+                <div className="mt-2"><code className="text-xs bg-gray-100 px-2 py-1 rounded">{log.ip_address || '-'}</code></div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <Table
+            columns={columns}
+            dataSource={filteredLogs}
+            rowKey="id"
+            loading={loading}
+            pagination={{ 
+              pageSize: 15, 
+              showSizeChanger: true,
+              showTotal: (total) => `共 ${total} 条记录`
+            }}
+            scroll={{ x: 800 }}
+          />
+        )}
       </Card>
     </div>
   )

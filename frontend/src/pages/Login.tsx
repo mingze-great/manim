@@ -1,16 +1,31 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { Form, Input, Button, message } from 'antd'
 import { UserOutlined, LockOutlined, RocketOutlined } from '@ant-design/icons'
 import { authApi } from '@/services/auth'
 import { useAuthStore } from '@/stores/authStore'
 import { motion } from 'framer-motion'
+import { buildLegacyEntryUrl } from '@/utils/authSync'
 
 export default function Login() {
   const navigate = useNavigate()
-  const { login } = useAuthStore()
+  const { login, token, user, _hasHydrated } = useAuthStore()
   const [loading, setLoading] = useState(false)
   const LEGACY_APP_URL = (import.meta.env.VITE_LEGACY_APP_URL as string | undefined) || `${window.location.protocol}//${window.location.hostname}`
+  const legacyEntryUrl = buildLegacyEntryUrl(LEGACY_APP_URL)
+
+  useEffect(() => {
+    if (!_hasHydrated || !token || !user) return
+    if (user.is_admin) {
+      navigate('/admin', { replace: true })
+      return
+    }
+    if ((user.frontend_version || 'legacy') === 'legacy' && LEGACY_APP_URL) {
+      window.location.replace(legacyEntryUrl)
+      return
+    }
+    navigate('/', { replace: true })
+  }, [_hasHydrated, token, user, navigate, LEGACY_APP_URL, legacyEntryUrl])
 
   const onFinish = async (values: { username: string; password: string }) => {
     setLoading(true)
@@ -41,11 +56,11 @@ export default function Login() {
       })
       message.success('登录成功')
       if (userData.is_admin) {
-        navigate('/admin')
+        navigate('/admin', { replace: true })
       } else if ((userData.frontend_version || 'legacy') === 'legacy' && LEGACY_APP_URL) {
-        window.location.href = LEGACY_APP_URL
+        window.location.replace(legacyEntryUrl)
       } else {
-        navigate('/')
+        navigate('/', { replace: true })
       }
     } catch (error: any) {
       const detail = error.response?.data?.detail

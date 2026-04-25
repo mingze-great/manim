@@ -11,7 +11,12 @@ from datetime import datetime
 
 from app.config import get_settings
 from app.database import engine, Base
-from app.api import auth, projects, tasks, templates, admin, payment, monitoring, internal, video_topics, articles, articles_stream, chat_styles
+from app.api import auth, projects, tasks, templates, admin, payment, monitoring, internal, video_topics, articles, articles_stream
+
+try:
+    from app.api import chat_styles
+except ImportError:
+    chat_styles = None
 
 settings = get_settings()
 
@@ -451,7 +456,8 @@ app.include_router(internal.router, prefix="/api")
 app.include_router(video_topics.router, prefix="/api")
 app.include_router(articles.router, prefix="/api")
 app.include_router(articles_stream.router, prefix="/api")
-app.include_router(chat_styles.router, prefix="/api")
+if chat_styles is not None:
+    app.include_router(chat_styles.router, prefix="/api")
 
 
 import asyncio
@@ -601,16 +607,21 @@ def download_video(
         from fastapi.responses import JSONResponse
         return JSONResponse({"error": "Invalid filename"}, status_code=400)
     
-    videos_dir = pathlib.Path(__file__).parent.parent / "videos"
-    video_path = videos_dir / safe_filename
-    
-    if not video_path.exists():
+    search_dirs = [
+        pathlib.Path(__file__).parent.parent / "videos",
+        pathlib.Path("/opt/manim/backend/videos"),
+        pathlib.Path("/opt/manim-v2/backend/videos"),
+    ]
+    video_path = None
+    for videos_dir in search_dirs:
+        candidate = videos_dir / safe_filename
+        if candidate.exists() and candidate.is_file():
+            video_path = candidate
+            break
+
+    if video_path is None:
         from fastapi.responses import JSONResponse
         return JSONResponse({"error": "Video not found"}, status_code=404)
-    
-    if not video_path.is_file():
-        from fastapi.responses import JSONResponse
-        return JSONResponse({"error": "Not a file"}, status_code=400)
     
     return FileResponse(video_path, media_type="video/mp4", filename=safe_filename)
 
@@ -623,13 +634,27 @@ def download_template_example_video(filename: str):
         from fastapi.responses import JSONResponse
         return JSONResponse({"error": "Invalid filename"}, status_code=400)
     
-    videos_dir = pathlib.Path(__file__).parent / "videos" / "template_examples"
-    video_path = videos_dir / safe_filename
-    
-    if not video_path.exists():
+    search_dirs = [
+        pathlib.Path(__file__).parent.parent / "videos" / "template_examples",
+        pathlib.Path(__file__).parent / "videos" / "template_examples",
+        pathlib.Path("/opt/manim/backend/videos/template_examples"),
+        pathlib.Path("/opt/manim-v2/backend/videos/template_examples"),
+        pathlib.Path("/opt/manim-legacy/backend/videos/template_examples"),
+        pathlib.Path("/opt/manim/backend/app/videos/template_examples"),
+        pathlib.Path("/opt/manim-v2/backend/app/videos/template_examples"),
+        pathlib.Path("/opt/manim-legacy/backend/app/videos/template_examples"),
+    ]
+    video_path = None
+    for videos_dir in search_dirs:
+        candidate = videos_dir / safe_filename
+        if candidate.exists() and candidate.is_file():
+            video_path = candidate
+            break
+
+    if video_path is None:
         from fastapi.responses import JSONResponse
         return JSONResponse({"error": "Video not found"}, status_code=404)
-    
+
     if not video_path.is_file():
         from fastapi.responses import JSONResponse
         return JSONResponse({"error": "Not a file"}, status_code=400)

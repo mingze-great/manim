@@ -3,7 +3,13 @@ import { useAuthStore } from '@/stores/authStore'
 
 const MAX_RETRIES = 3
 const RETRY_DELAY = 1000
-const appBase = ((import.meta as any)?.env?.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') || ''
+function normalizeAppBase(input?: string) {
+  const raw = (input || '').trim().replace(/\/$/, '')
+  if (!raw || raw === '/api') return ''
+  return raw.replace(/\/api$/, '')
+}
+
+const appBase = normalizeAppBase((import.meta as any)?.env?.VITE_API_BASE_URL as string | undefined)
 const apiBase = appBase ? `${appBase}/api` : '/api'
 
 const api = axios.create({

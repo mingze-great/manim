@@ -158,6 +158,7 @@ export const projectApi = {
   optimizeCodeStream: (id: number, feedback: string) => 
     buildApiPath(`/projects/${id}/optimize-code/stream?feedback=${encodeURIComponent(feedback)}`),
   getTask: (projectId: number) => api.get<Task>(`/tasks/project/${projectId}`),
+  generateVideoStream: (projectId: number) => buildApiPath(`/tasks/${projectId}/render`),
   generateStickmanStream: (projectId: number) => buildApiPath(`/tasks/${projectId}/stickman-generate`),
   generateStickmanComposeStream: (projectId: number) => buildApiPath(`/tasks/${projectId}/stickman-compose`),
   regenerateCode: (id: number) => api.post(`/projects/${id}/regenerate-code`),
@@ -168,10 +169,15 @@ export const projectApi = {
     ),
   fixCodeStream: (projectId: number) =>
     buildApiPath(`/tasks/${projectId}/fix-code-stream`),
-  generateCodeAsync: (projectId: number, templateId?: number) =>
-    api.post<{ task_id: number; status: string; message: string }>(
-      `/tasks/${projectId}/generate-code-async${templateId ? `?template_id=${templateId}` : ''}`
-    ),
+  generateCodeAsync: (projectId: number, templateId?: number, model?: string) => {
+    const search = new URLSearchParams()
+    if (templateId) search.set('template_id', String(templateId))
+    if (model) search.set('model', model)
+    const query = search.toString()
+    return api.post<{ task_id: number; status: string; message: string }>(
+      `/tasks/${projectId}/generate-code-async${query ? `?${query}` : ''}`
+    )
+  },
   renderVideoAsync: (projectId: number) =>
     api.post<{ task_id: number; celery_task_id: string; message: string }>(`/tasks/${projectId}/render-async`),
   getBackgroundTask: (taskId: number) =>

@@ -26,6 +26,13 @@ from app.utils.cos_storage import cos_storage
 from app.tasks.celery_tasks import render_video_celery, generate_code_celery, generate_chat_celery
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
+
+
+def _project_query_for_user(db: Session, current_user: User):
+    query = db.query(Project)
+    if not current_user.is_admin:
+        query = query.filter(Project.user_id == current_user.id)
+    return query
 settings = get_settings()
 
 RENDER_SEMAPHORE = asyncio.Semaphore(4)
@@ -34,6 +41,71 @@ OLD_SERVER_SEMAPHORE = asyncio.Semaphore(2)
 MAX_TOTAL_RENDERS = 6
 RENDER_TOTAL_TIMEOUT = 300
 RENDER_NO_OUTPUT_TIMEOUT = 60
+MIN_VALID_VIDEO_DURATION = 2.0
+MIN_VALID_VIDEO_SIZE = 200 * 1024
+
+
+def _probe_video_file(video_path: str):
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe",
+                "-v", "error",
+                "-show_entries", "format=duration,size",
+                "-of", "default=noprint_wrappers=1",
+                video_path,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=True,
+        )
+    except Exception:
+        return None
+
+    duration = None
+    size = None
+    for line in result.stdout.splitlines():
+        if line.startswith("duration="):
+            try:
+                duration = float(line.split("=", 1)[1])
+            except ValueError:
+                duration = None
+        elif line.startswith("size="):
+            try:
+                size = int(float(line.split("=", 1)[1]))
+            except ValueError:
+                size = None
+    return {"duration": duration, "size": size}
+
+
+def _pick_valid_rendered_video(temp_dir: str):
+    candidates = []
+    for root, dirs, files in os.walk(temp_dir):
+        if "partial_movie_files" in root:
+            continue
+        for file in files:
+            if not file.endswith(".mp4"):
+                continue
+            path = os.path.join(root, file)
+            try:
+                stat = os.stat(path)
+            except OSError:
+                continue
+            probe = _probe_video_file(path) or {}
+            candidates.append({
+                "path": path,
+                "mtime": stat.st_mtime,
+                "size": int(stat.st_size),
+                "duration": float(probe.get("duration") or 0.0),
+            })
+
+    valid = [
+        item for item in candidates
+        if item["size"] >= MIN_VALID_VIDEO_SIZE and item["duration"] >= MIN_VALID_VIDEO_DURATION
+    ]
+    valid.sort(key=lambda item: (item["duration"], item["size"], item["mtime"]), reverse=True)
+    return valid[0] if valid else None
 
 
 def _task_message(task: Task) -> str:
@@ -44,6 +116,33 @@ def _task_message(task: Task) -> str:
         if lines:
             return lines[-1]
     return f"任务{task.status}"
+
+
+def _is_math_project(project: Project) -> bool:
+    category = str(project.category or "").strip().lower()
+    module_type = str(project.module_type or "").strip().lower()
+    return module_type == "math" or category in {"math", "数学可视化"}
+
+
+def _build_initial_math_script(topic: str) -> str:
+    clean_topic = str(topic or "").strip() or "该数学主题"
+    return f"""【视频主题】
+{clean_topic}
+
+【核心概念】
+围绕“{clean_topic}”做一个由浅入深的数学可视化讲解，重点展示定义、关键关系和直观变化过程。
+
+### 1. 问题引入
+用一句直观问题引出 {clean_topic} 的研究对象，并说明为什么这个主题值得可视化。
+
+### 2. 核心定义
+给出 {clean_topic} 的核心定义、变量含义和最基础的数学表达式。
+
+### 3. 关键变化
+展示 {clean_topic} 随参数或条件变化时的图像、几何关系或数量变化趋势。
+
+### 4. 总结结论
+总结 {clean_topic} 的关键规律、适用场景，以及观众应记住的直觉结论。"""
 
 
 @router.post("/internal/update-video")
@@ -255,10 +354,10 @@ async def render_video_stream(
     db: Annotated[Session, Depends(get_db)]
 ):
     current_user_id = int(current_user.id)
-    project = db.query(Project).filter(
-        Project.id == project_id,
-        Project.user_id == current_user_id
-    ).first()
+    project_query = db.query(Project).filter(Project.id == project_id)
+    if not current_user.is_admin:
+        project_query = project_query.filter(Project.user_id == current_user_id)
+    project = project_query.first()
     
     if not project:
         async def error_gen():
@@ -424,56 +523,57 @@ async def render_video_stream(
                         
                         yield f"data: {json.dumps({'type': 'info', 'content': '-' * 50})}\n\n"
                         
-                        if timed_out:
+                        selected_video = _pick_valid_rendered_video(temp_dir) if returncode == 0 or timed_out else None
+
+                        if timed_out and not selected_video:
                             project_local.status = "failed"
-                            project_local.error_message = "渲染超时"
+                            project_local.error_message = "渲染超时，未生成完整视频"
                             db_session.commit()
-                            yield f"data: {json.dumps({'type': 'error', 'content': '渲染已因超时终止，请检查代码或降低视频复杂度'})}\n\n"
-                        
-                        elif returncode == 0:
-                            video_files = []
-                            for root, dirs, files in os.walk(temp_dir):
-                                for file in files:
-                                    if file.endswith(".mp4"):
-                                        video_files.append(os.path.join(root, file))
+                            yield f"data: {json.dumps({'type': 'error', 'content': '渲染已因超时终止，且未生成完整视频，请检查代码或降低视频复杂度'})}\n\n"
+
+                        elif (returncode == 0 or timed_out) and selected_video:
+                            video_path = selected_video["path"]
                             
-                            if video_files:
-                                video_path = video_files[0]
-                                
-                                backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-                                videos_dir = os.path.join(backend_dir, "videos")
-                                os.makedirs(videos_dir, exist_ok=True)
-                                
-                                video_filename = f"{project_id}_{uuid.uuid4().hex[:8]}.mp4"
-                                local_video_path = os.path.join(videos_dir, video_filename)
-                                
-                                shutil.move(video_path, local_video_path)
-                                
-                                video_url = f"/api/videos/{video_filename}"
-                                
-                                if cos_storage.enabled:
-                                    success, cos_key, cos_url = cos_storage.upload_file(
-                                        local_video_path, 
-                                        project_id, 
-                                        0
-                                    )
-                                    if success and cos_url:
-                                        video_url = cos_url
-                                        try:
-                                            os.remove(local_video_path)
-                                        except:
-                                            pass
-                                
-                                project_local.status = "completed"
-                                project_local.video_url = video_url
-                                user_local = db_session.query(User).filter(User.id == current_user_id).first()
-                                if user_local:
-                                    user_local.increment_module_usage_new(db_session, "visual")
-                                db_session.commit()
-                                
-                                yield f"data: {json.dumps({'type': 'success', 'content': f'渲染完成！耗时{int(elapsed)}秒', 'video_url': video_url})}\n\n"
-                            else:
-                                yield f"data: {json.dumps({'type': 'error', 'content': '未找到视频文件'})}\n\n"
+                            backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+                            videos_dir = os.path.join(backend_dir, "videos")
+                            os.makedirs(videos_dir, exist_ok=True)
+                            
+                            video_filename = f"{project_id}_{uuid.uuid4().hex[:8]}.mp4"
+                            local_video_path = os.path.join(videos_dir, video_filename)
+                            
+                            shutil.move(video_path, local_video_path)
+                            
+                            video_url = f"/api/videos/{video_filename}"
+                            
+                            if cos_storage.enabled:
+                                success, cos_key, cos_url = cos_storage.upload_file(
+                                    local_video_path, 
+                                    project_id, 
+                                    0
+                                )
+                                if success and cos_url:
+                                    video_url = cos_url
+                                    try:
+                                        os.remove(local_video_path)
+                                    except:
+                                        pass
+                            
+                            project_local.status = "completed"
+                            project_local.video_url = video_url
+                            project_local.error_message = None
+                            user_local = db_session.query(User).filter(User.id == current_user_id).first()
+                            if user_local:
+                                user_local.increment_module_usage_new(db_session, "visual")
+                            db_session.commit()
+                            
+                            success_content = f"渲染完成！耗时{int(elapsed)}秒，视频时长{selected_video['duration']:.2f}秒"
+                            yield f"data: {json.dumps({'type': 'success', 'content': success_content, 'video_url': video_url})}\n\n"
+
+                        elif returncode == 0:
+                            project_local.status = "failed"
+                            project_local.error_message = "未找到完整视频文件"
+                            db_session.commit()
+                            yield f"data: {json.dumps({'type': 'error', 'content': '未找到完整视频文件'})}\n\n"
                         else:
                             project_local.status = "failed"
                             project_local.error_message = f"渲染失败 (code: {returncode})"
@@ -515,10 +615,10 @@ async def generate_stickman_video_stream(
     db: Annotated[Session, Depends(get_db)]
 ):
     current_user_id = int(current_user.id)
-    project = db.query(Project).filter(
-        Project.id == project_id,
-        Project.user_id == current_user_id
-    ).first()
+    project_query = db.query(Project).filter(Project.id == project_id)
+    if not current_user.is_admin:
+        project_query = project_query.filter(Project.user_id == current_user_id)
+    project = project_query.first()
 
     if not project:
         async def error_gen():
@@ -569,6 +669,10 @@ async def generate_stickman_video_stream(
                 )
 
             generator = StickmanGenerator()
+            try:
+                generation_flags = json.loads(project_local.generation_flags or "{}")
+            except Exception:
+                generation_flags = {}
             generation_task = asyncio.create_task(asyncio.to_thread(
                 generator.generate,
                 str(project_local.theme),
@@ -582,6 +686,7 @@ async def generate_stickman_video_stream(
                 str(project_local.tts_rate or "+0%"),
                 str(project_local.style_reference_image_path) if project_local.style_reference_image_path else None,
                 str(project_local.style_reference_notes) if project_local.style_reference_notes else None,
+                str(generation_flags.get("opening_template_key") or "hook_question"),
             ))
 
             while True:
@@ -666,10 +771,10 @@ async def compose_stickman_video_stream(
     db: Annotated[Session, Depends(get_db)]
 ):
     current_user_id = int(current_user.id)
-    project = db.query(Project).filter(
-        Project.id == project_id,
-        Project.user_id == current_user_id
-    ).first()
+    project_query = db.query(Project).filter(Project.id == project_id)
+    if not current_user.is_admin:
+        project_query = project_query.filter(Project.user_id == current_user_id)
+    project = project_query.first()
 
     if not project:
         async def error_gen():
@@ -817,10 +922,7 @@ def get_project_task(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)]
 ):
-    project = db.query(Project).filter(
-        Project.id == project_id,
-        Project.user_id == current_user.id
-    ).first()
+    project = _project_query_for_user(db, current_user).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
@@ -863,7 +965,7 @@ async def render_video_async(
         task.id,
         project_id,
         None,
-        project.custom_code
+        None
     )
     
     task.celery_task_id = celery_result.id
@@ -949,7 +1051,12 @@ async def generate_code_async(
         raise HTTPException(status_code=404, detail="Project not found")
     
     if not project.final_script:
-        raise HTTPException(status_code=400, detail="请先完成内容对话")
+        if _is_math_project(project):
+            project.final_script = _build_initial_math_script(project.theme)
+            db.commit()
+            db.refresh(project)
+        else:
+            raise HTTPException(status_code=400, detail="请先完成内容对话")
     
     # 创建任务记录
     task = Task(

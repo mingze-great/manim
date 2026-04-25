@@ -6,12 +6,53 @@ import pathlib
 import time
 
 from app.database import get_db
+from app.models.project import Project
 from app.models.user import User
 from app.models.template import Template
 from app.schemas.template import TemplateCreate, TemplateResponse, TemplateListResponse, TemplateUpdate
 from app.api.auth import get_current_user
 
 router = APIRouter(prefix="/templates", tags=["templates"])
+
+
+def _validate_template_payload(category: Optional[str], code: Optional[str], reference_code: Optional[str]):
+    normalized_category = (category or "").strip().lower()
+    normalized_code = (code or "").strip()
+    normalized_reference = (reference_code or "").strip()
+
+    if normalized_category == "math" and not normalized_code and not normalized_reference:
+        raise HTTPException(status_code=400, detail="数学可视化模板至少需要填写代码模板或参考代码")
+
+
+def _template_example_video_dirs() -> list[pathlib.Path]:
+    backend_root = pathlib.Path(__file__).parent.parent.parent
+    app_root = pathlib.Path(__file__).parent.parent
+    dirs = [
+        backend_root / "videos" / "template_examples",
+        app_root / "videos" / "template_examples",
+    ]
+    unique_dirs: list[pathlib.Path] = []
+    seen: set[str] = set()
+    for item in dirs:
+        key = str(item.resolve()) if item.exists() else str(item)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique_dirs.append(item)
+    return unique_dirs
+
+
+def _background_task_project_id(db: Session, preferred_user_id: int | None = None) -> int:
+    if preferred_user_id is not None:
+        user_project = db.query(Project).filter(Project.user_id == preferred_user_id).order_by(Project.id.asc()).first()
+        if user_project:
+            return int(user_project.id)
+
+    any_project = db.query(Project).order_by(Project.id.asc()).first()
+    if any_project:
+        return int(any_project.id)
+
+    raise HTTPException(status_code=400, detail="当前没有可用于创建预览任务的项目，请先创建任意项目")
 
 
 @router.get("", response_model=TemplateListResponse)
@@ -147,12 +188,15 @@ def create_template(
     if template_is_system_bool and not user_is_admin_value:
         raise HTTPException(status_code=403, detail="Only administrators can create system templates")
     
+    _validate_template_payload(template.category, template.code, template.reference_code)
+
     current_user_id = current_user_obj.id
     new_template = Template(
         name=template.name,
         description=template.description,
         category=template.category,
         code=template.code,
+        reference_code=template.reference_code,
         thumbnail=template.thumbnail,
         is_system=template_is_system_bool,
         user_id=current_user_id if not template_is_system_bool else None,
@@ -201,6 +245,12 @@ def update_template(
             raise HTTPException(status_code=403, detail="Not authorized")
     
     update_data_dict = update_data.model_dump(exclude_unset=True)
+    _validate_template_payload(
+        update_data_dict.get("category", template.category),
+        update_data_dict.get("code", template.code),
+        update_data_dict.get("reference_code", template.reference_code),
+    )
+
     for field, value in update_data_dict.items():
         if value is not None:
             setattr(template, field, value)
@@ -269,16 +319,25 @@ async def upload_example_video(
     if not file.filename or not file.filename.endswith('.mp4'):
         raise HTTPException(status_code=400, detail="Only MP4 files are allowed")
     
-    videos_dir = pathlib.Path(__file__).parent.parent.parent / "videos" / "template_examples"
-    videos_dir.mkdir(parents=True, exist_ok=True)
+    videos_dirs = _template_example_video_dirs()
+    for videos_dir in videos_dirs:
+        videos_dir.mkdir(parents=True, exist_ok=True)
     
     timestamp = int(time.time())
     filename = f"template_{template_id}_{timestamp}.mp4"
-    file_path = videos_dir / filename
+    primary_path = videos_dirs[0] / filename
     
     content = await file.read()
-    with open(file_path, 'wb') as f:
+    with open(primary_path, 'wb') as f:
         f.write(content)
+
+    for extra_dir in videos_dirs[1:]:
+        extra_path = extra_dir / filename
+        try:
+            with open(extra_path, 'wb') as f:
+                f.write(content)
+        except Exception:
+            pass
     
     video_url = f"/api/videos/template_examples/{filename}"
     template.example_video_url = video_url
@@ -307,9 +366,13 @@ def delete_example_video(
     
     if template.example_video_url:
         filename = template.example_video_url.split('/')[-1]
-        file_path = pathlib.Path(__file__).parent.parent.parent / "videos" / "template_examples" / filename
-        if file_path.exists():
-            os.remove(file_path)
+        for videos_dir in _template_example_video_dirs():
+            file_path = videos_dir / filename
+            if file_path.exists():
+                try:
+                    os.remove(file_path)
+                except OSError:
+                    pass
         
         template.example_video_url = None
         db.commit()
@@ -340,7 +403,7 @@ async def render_template_preview(
     bg_task = task_manager.create_task(
         db=db,
         task_type="render_template_preview",
-        project_id=0,
+        project_id=_background_task_project_id(db, current_user_obj.id),
         user_id=current_user_obj.id,
         input_params={"template_id": template_id}
     )
@@ -382,7 +445,7 @@ async def render_all_template_previews(
         bg_task = task_manager.create_task(
             db=db,
             task_type="render_template_preview",
-            project_id=0,
+            project_id=_background_task_project_id(db, current_user_obj.id),
             user_id=current_user_obj.id,
             input_params={"template_id": template.id}
         )

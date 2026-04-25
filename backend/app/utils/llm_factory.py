@@ -1,7 +1,11 @@
 import os
 from abc import ABC, abstractmethod
 from typing import Any
-import google.generativeai as genai
+
+try:
+    import google.generativeai as genai
+except ImportError:
+    genai = None
 
 from app.config import get_settings
 
@@ -20,6 +24,9 @@ class LLMAdapter(ABC):
 
     async def chat_stream(self, messages: list[dict], model: str = None, **kwargs):
         return await self.stream_chat(messages, model, **kwargs)
+
+    async def generate_code(self, messages: list[dict], model: str = None, retry_callback=None, **kwargs) -> str:
+        return await self.chat(messages, model, **kwargs)
 
 
 class DashScopeAdapter(LLMAdapter):
@@ -341,6 +348,8 @@ class GeminiAdapter(LLMAdapter):
     """Gemini 适配器 - 使用 Google 官方 SDK"""
     
     def __init__(self):
+        if genai is None:
+            raise ImportError("google.generativeai 未安装，无法使用 Gemini provider")
         genai.configure(api_key=settings.GEMINI_API_KEY)
     
     async def chat(self, messages: list[dict], model: str = None, **kwargs) -> str:
@@ -490,33 +499,111 @@ class GLMAdapter(LLMAdapter):
 
 class LLMFactory:
     _client_cache = None
+
+    @staticmethod
+    def _normalize_provider() -> str:
+        return (settings.LLM_PROVIDER or "auto").strip().lower()
+
+    @staticmethod
+    def _provider_has_config(provider: str) -> bool:
+        checks = {
+            "dashscope": bool(settings.DASHSCOPE_API_KEY),
+            "deepseek": bool(settings.DEEPSEEK_API_KEY),
+            "gemini": bool(settings.GEMINI_API_KEY),
+            "openai": bool(settings.OPENAI_API_KEY),
+            "glm": bool(settings.GLM_API_KEY or settings.OPENAI_API_KEY),
+            "qwen": bool(settings.OPENAI_API_KEY),
+        }
+        return checks.get(provider, False)
+
+    @classmethod
+    def _get_provider(cls) -> str:
+        provider = cls._normalize_provider()
+        if provider != "auto":
+            return provider
+
+        for candidate in ["dashscope", "deepseek", "gemini", "openai", "glm"]:
+            if cls._provider_has_config(candidate):
+                return candidate
+        raise ValueError("未配置可用模型提供商，请检查 .env 中的 LLM_PROVIDER 和 API Key")
+
+    @classmethod
+    def _build_client(cls, provider: str) -> LLMAdapter:
+        if provider == "dashscope":
+            if not settings.DASHSCOPE_API_KEY:
+                raise ValueError("未配置 DASHSCOPE_API_KEY")
+            return DashScopeAdapter()
+        if provider == "deepseek":
+            if not settings.DEEPSEEK_API_KEY:
+                raise ValueError("未配置 DEEPSEEK_API_KEY")
+            return DeepSeekAdapter()
+        if provider == "gemini":
+            if not settings.GEMINI_API_KEY:
+                raise ValueError("未配置 GEMINI_API_KEY")
+            return GeminiAdapter()
+        if provider == "glm":
+            if not (settings.GLM_API_KEY or settings.OPENAI_API_KEY):
+                raise ValueError("未配置 GLM_API_KEY 或 OPENAI_API_KEY")
+            return GLMAdapter()
+        if provider == "qwen":
+            if not settings.OPENAI_API_KEY:
+                raise ValueError("未配置 OPENAI_API_KEY")
+            return QwenAdapter()
+        if provider == "openai":
+            if not settings.OPENAI_API_KEY:
+                raise ValueError("未配置 OPENAI_API_KEY")
+            return OpenAIAdapter()
+        raise ValueError(f"不支持的 LLM_PROVIDER: {provider}")
+
+    @classmethod
+    def _get_model_config(cls) -> tuple[list[str], str, str]:
+        provider = cls._get_provider()
+        if provider == "dashscope":
+            models = [m.strip() for m in settings.DASHSCOPE_AVAILABLE_MODELS.split(",") if m.strip()]
+            return models, settings.DASHSCOPE_CHAT_MODEL, settings.DASHSCOPE_CODE_MODEL
+        if provider == "deepseek":
+            models = [m for m in [settings.DEEPSEEK_MODEL, settings.DEEPSEEK_FALLBACK_MODEL] if m]
+            default_model = settings.DEEPSEEK_MODEL or settings.DEEPSEEK_FALLBACK_MODEL
+            return models, default_model, default_model
+        if provider == "gemini":
+            models = [settings.GEMINI_MODEL] if settings.GEMINI_MODEL else []
+            default_model = settings.GEMINI_MODEL
+            return models, default_model, default_model
+        if provider == "glm":
+            default_model = settings.GLM_MODEL or settings.OPENAI_MODEL
+            models = [default_model] if default_model else []
+            return models, default_model, default_model
+        if provider == "qwen":
+            return ["qwen-plus"], "qwen-plus", "qwen-plus"
+
+        default_model = settings.OPENAI_MODEL
+        models = [default_model] if default_model else []
+        return models, default_model, default_model
     
     @classmethod
     def get_client(cls) -> LLMAdapter:
         if cls._client_cache is not None:
             return cls._client_cache
-        
-        if not settings.DASHSCOPE_API_KEY:
-            raise ValueError(
-                "未配置 DASHSCOPE_API_KEY。\n"
-                "请在 .env 中配置 DASHSCOPE_API_KEY"
-            )
-        
-        cls._client_cache = DashScopeAdapter()
+
+        provider = cls._get_provider()
+        cls._client_cache = cls._build_client(provider)
         return cls._client_cache
     
     @classmethod
     def get_model_name(cls) -> str:
-        return settings.DASHSCOPE_CHAT_MODEL
+        return cls.get_chat_model()
     
     @classmethod
     def get_chat_model(cls) -> str:
-        return settings.DASHSCOPE_CHAT_MODEL
+        _, chat_model, _ = cls._get_model_config()
+        return chat_model
     
     @classmethod
     def get_code_model(cls) -> str:
-        return settings.DASHSCOPE_CODE_MODEL
+        _, _, code_model = cls._get_model_config()
+        return code_model
     
     @classmethod
     def get_available_models(cls) -> list:
-        return [m.strip() for m in settings.DASHSCOPE_AVAILABLE_MODELS.split(",")]
+        models, _, _ = cls._get_model_config()
+        return models

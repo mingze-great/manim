@@ -406,9 +406,7 @@ class ChatService:
                 }
             return
         
-        # 确定使用的 prompt 和消息
-        language = detect_language(theme + " " + user_message)
-        system_prompt = SYSTEM_PROMPT_ZH if language == 'zh' else SYSTEM_PROMPT_EN
+        # 普通对话保留上面已经选中的风格 prompt；只有代码生成/修复请求才切换到专用 prompt
         user_context = user_message
         
         # 如果是代码生成或修复请求，且有必要的信息

@@ -187,6 +187,39 @@
   padding: 16px 24px 24px;
 }
 
+@media (max-width: 768px) {
+  .showcase-scroll-wrapper {
+    overflow-x: visible;
+  }
+
+  .showcase-card-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 0;
+  }
+
+  .showcase-card {
+    width: 100%;
+    flex: none;
+  }
+
+  .showcase-card:hover {
+    transform: none;
+  }
+
+  .showcase-card-overlay {
+    opacity: 1;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.62), rgba(0, 0, 0, 0.12));
+    justify-content: flex-end;
+    padding-bottom: 14px;
+  }
+
+  .showcase-preview-video {
+    max-height: 320px;
+  }
+}
+
 [data-theme='dark'] .showcase-card {
   background: #1f1f1f;
   border-color: #333;

@@ -10,6 +10,7 @@ import {
   EditOutlined, ClockCircleOutlined, TeamOutlined, CrownOutlined, HourglassOutlined, SettingOutlined
 } from '@ant-design/icons'
 import { adminApi, User, UserStats } from '../../services/admin'
+import { useIsMobile } from '@/hooks/useIsMobile'
 
 const formatDateTime = (dateStr: string | null | undefined, showTime: boolean = true) => {
     if (!dateStr) return '-'
@@ -31,6 +32,7 @@ const formatDateTime = (dateStr: string | null | undefined, showTime: boolean = 
   }
 
 export default function AdminUsers() {
+  const isMobile = useIsMobile()
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(false)
   const [searchText, setSearchText] = useState('')
@@ -242,6 +244,85 @@ export default function AdminUsers() {
     }
   }
 
+  const getPermissionTag = (record: User, moduleKey: 'visual' | 'stickman' | 'article') => {
+    const permission: any = defaultPermissions(record)[moduleKey]
+    const labelMap = {
+      visual: '思维可视化',
+      stickman: '火柴人',
+      article: '公众号',
+    }
+    const colorMap = {
+      visual: 'green',
+      stickman: 'orange',
+      article: 'purple',
+    } as const
+    const period = permission?.period || (moduleKey === 'visual' ? 'daily' : 'monthly')
+    const label = period === 'monthly' ? '本月' : '今日'
+    if (record.is_admin) return <Tag color="blue">{labelMap[moduleKey]}: 无限</Tag>
+    if (!permission?.enabled) return <Tag>{labelMap[moduleKey]}: 关闭</Tag>
+    return <Tag color={colorMap[moduleKey]}>{labelMap[moduleKey]}: {label} {permission.used_today || 0}/{permission.daily_limit}</Tag>
+  }
+
+  const renderUserActions = (record: User, compact = false) => (
+    <Space wrap size={compact ? 4 : 8}>
+      {!record.is_approved && (
+        <>
+          <Button
+            type="primary"
+            size="small"
+            icon={<CheckCircleOutlined />}
+            onClick={() => handleApproveUser(record)}
+          >
+            通过
+          </Button>
+          <Button
+            danger
+            size="small"
+            icon={<CloseCircleOutlined />}
+            onClick={() => handleRejectUser(record.id)}
+          >
+            拒绝
+          </Button>
+        </>
+      )}
+      {record.is_approved && (
+        <Button size="small" icon={<ClockCircleOutlined />} onClick={() => handleExtendUser(record)}>
+          时长
+        </Button>
+      )}
+      {record.is_approved && !record.is_admin && (
+        <Button size="small" icon={<SettingOutlined />} onClick={() => handleVideoLimitUser(record)}>
+          配额
+        </Button>
+      )}
+      <Button size="small" icon={<SettingOutlined />} onClick={() => openPermissionModal(record)}>
+        权限
+      </Button>
+      <Button type="primary" ghost size="small" icon={<EyeOutlined />} onClick={() => handleViewUser(record)}>
+        详情
+      </Button>
+      <Button
+        size="small"
+        type={record.is_active ? 'default' : 'primary'}
+        icon={record.is_active ? <LockOutlined /> : <UnlockOutlined />}
+        onClick={() => handleToggleActive(record.id)}
+      >
+        {record.is_active ? '禁用' : '启用'}
+      </Button>
+      <Popconfirm
+        title="确定删除此用户？"
+        description="删除后无法恢复"
+        onConfirm={() => handleDeleteUser(record.id)}
+        okText="确定"
+        cancelText="取消"
+      >
+        <Button type="text" danger size="small" icon={<DeleteOutlined />}>
+          删除
+        </Button>
+      </Popconfirm>
+    </Space>
+  )
+
   const handleVideoLimitUser = (user: User) => {
     setVideoLimitUser(user)
     setVideoLimitValue(user.daily_video_limit || 5)
@@ -382,34 +463,19 @@ export default function AdminUsers() {
       title: '思维可视化',
       key: 'visual_limit',
       width: 120,
-      render: (_: any, record: User) => {
-        const permission: any = defaultPermissions(record).visual
-        const period = permission?.period || 'daily'
-        const label = period === 'monthly' ? '本月' : '今日'
-        return record.is_admin ? <Tag color="blue">无限制</Tag> : permission?.enabled ? <Tag color="green">{label} {permission.used_today || 0}/{permission.daily_limit}</Tag> : <Tag>关闭</Tag>
-      },
+      render: (_: any, record: User) => getPermissionTag(record, 'visual'),
     },
     {
       title: '火柴人',
       key: 'stickman_limit',
       width: 120,
-      render: (_: any, record: User) => {
-        const permission: any = defaultPermissions(record).stickman
-        const period = permission?.period || 'monthly'
-        const label = period === 'monthly' ? '本月' : '今日'
-        return record.is_admin ? <Tag color="blue">无限制</Tag> : permission?.enabled ? <Tag color="orange">{label} {permission.used_today || 0}/{permission.daily_limit}</Tag> : <Tag>关闭</Tag>
-      },
+      render: (_: any, record: User) => getPermissionTag(record, 'stickman'),
     },
     {
       title: '公众号',
       key: 'article_limit',
       width: 120,
-      render: (_: any, record: User) => {
-        const permission: any = defaultPermissions(record).article
-        const period = permission?.period || 'monthly'
-        const label = period === 'monthly' ? '本月' : '今日'
-        return record.is_admin ? <Tag color="blue">无限制</Tag> : permission?.enabled ? <Tag color="purple">{label} {permission.used_today || 0}/{permission.daily_limit}</Tag> : <Tag>关闭</Tag>
-      },
+      render: (_: any, record: User) => getPermissionTag(record, 'article'),
     },
     {
       title: '有效期',
@@ -429,77 +495,7 @@ export default function AdminUsers() {
       title: '操作',
       key: 'action',
       width: 320,
-      render: (_: any, record: User) => (
-        <Space wrap>
-          {!record.is_approved && (
-            <>
-              <Button
-                type="primary"
-                size="small"
-                icon={<CheckCircleOutlined />}
-                onClick={() => handleApproveUser(record)}
-              >
-                通过
-              </Button>
-              <Button
-                danger
-                size="small"
-                icon={<CloseCircleOutlined />}
-                onClick={() => handleRejectUser(record.id)}
-              >
-                拒绝
-              </Button>
-            </>
-          )}
-          {record.is_approved && (
-            <Button
-              size="small"
-              icon={<ClockCircleOutlined />}
-              onClick={() => handleExtendUser(record)}
-            >
-              设置时长
-            </Button>
-          )}
-          {record.is_approved && !record.is_admin && (
-            <Button
-              size="small"
-              icon={<SettingOutlined />}
-              onClick={() => handleVideoLimitUser(record)}
-            >
-              配额
-            </Button>
-          )}
-          <Button size="small" icon={<SettingOutlined />} onClick={() => openPermissionModal(record)}>模块权限</Button>
-          <Button 
-            type="primary" 
-            ghost
-            size="small"
-            icon={<EyeOutlined />} 
-            onClick={() => handleViewUser(record)}
-          >
-            详情
-          </Button>
-          <Button
-            size="small"
-            type={record.is_active ? 'default' : 'primary'}
-            icon={record.is_active ? <LockOutlined /> : <UnlockOutlined />}
-            onClick={() => handleToggleActive(record.id)}
-          >
-            {record.is_active ? '禁用' : '启用'}
-          </Button>
-          <Popconfirm
-            title="确定删除此用户？"
-            description="删除后无法恢复"
-            onConfirm={() => handleDeleteUser(record.id)}
-            okText="确定"
-            cancelText="取消"
-          >
-            <Button type="text" danger size="small" icon={<DeleteOutlined />}>
-              删除
-            </Button>
-          </Popconfirm>
-        </Space>
-      ),
+      render: (_: any, record: User) => renderUserActions(record),
     },
   ]
 
@@ -590,20 +586,59 @@ export default function AdminUsers() {
       </Card>
 
       <Card className="hover-lift" style={{ borderRadius: '16px' }}>
-        <Table
-          columns={columns}
-          dataSource={users}
-          rowKey="id"
-          rowSelection={{ selectedRowKeys, onChange: (keys) => setSelectedRowKeys(keys as number[]) }}
-          loading={loading}
-          pagination={{ 
-            pageSize: 10, 
-            showSizeChanger: true, 
-            showQuickJumper: true,
-            showTotal: (total) => `共 ${total} 个用户`
-          }}
-          scroll={{ x: 800 }}
-        />
+        {isMobile ? (
+          <Space direction="vertical" size={12} style={{ width: '100%' }}>
+            {users.map((record) => (
+              <Card key={record.id} size="small" style={{ borderRadius: '12px' }}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <Avatar style={{ backgroundColor: record.is_admin ? '#f59e0b' : '#6366f1' }} icon={<UserOutlined />} size={40} />
+                    <div className="min-w-0">
+                      <div className="font-medium truncate">{record.username}</div>
+                      <div className="text-gray-500 text-sm break-all">{record.email}</div>
+                    </div>
+                  </div>
+                  <Tag color={record.is_admin ? 'gold' : 'default'}>{record.is_admin ? '管理员' : '用户'}</Tag>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Badge status={record.is_active ? 'success' : 'error'} text={record.is_active ? '正常' : '已禁用'} />
+                  {record.is_approved ? <Tag color="green">已通过</Tag> : <Tag color="orange">待审核</Tag>}
+                  <Tag color={(record.frontend_version || 'legacy') === 'v2' ? 'green' : 'default'}>
+                    {(record.frontend_version || 'legacy') === 'v2' ? '新版本' : '老版本'}
+                  </Tag>
+                </div>
+                <div className="mt-3 text-sm text-gray-600 space-y-1">
+                  <div>有效期：{formatDateTime(record.expires_at)}</div>
+                  <div>注册时间：{formatDateTime(record.created_at)}</div>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {getPermissionTag(record, 'visual')}
+                  {getPermissionTag(record, 'stickman')}
+                  {getPermissionTag(record, 'article')}
+                </div>
+                <div className="mt-3">
+                  {renderUserActions(record, true)}
+                </div>
+              </Card>
+            ))}
+            {!users.length && !loading && <div className="text-center text-gray-400 py-8">暂无用户</div>}
+          </Space>
+        ) : (
+          <Table
+            columns={columns}
+            dataSource={users}
+            rowKey="id"
+            rowSelection={{ selectedRowKeys, onChange: (keys) => setSelectedRowKeys(keys as number[]) }}
+            loading={loading}
+            pagination={{ 
+              pageSize: 10, 
+              showSizeChanger: true, 
+              showQuickJumper: true,
+              showTotal: (total) => `共 ${total} 个用户`
+            }}
+            scroll={{ x: 800 }}
+          />
+        )}
       </Card>
 
       <Modal

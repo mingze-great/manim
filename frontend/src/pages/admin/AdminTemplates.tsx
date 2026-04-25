@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react'
-import { Table, Button, Space, Tag, Modal, Form, Input, message, Popconfirm, Upload, Switch, Tooltip, Segmented } from 'antd'
+import { Table, Button, Space, Tag, Modal, Form, Input, message, Popconfirm, Upload, Switch, Tooltip, Segmented, Card } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, PlayCircleOutlined, UploadOutlined, SettingOutlined } from '@ant-design/icons'
 import { templateApi, Template } from '@/services/template'
+import { inferTemplateCategory } from '@/utils/templateCategory'
+import { getAppBase, resolveBackendUrl } from '@/services/api'
+import { useIsMobile } from '@/hooks/useIsMobile'
 import api from '@/services/api'
 
 const { TextArea } = Input
@@ -19,6 +22,7 @@ const CATEGORY_MAP: Record<string, string> = {
 }
 
 export default function AdminTemplates() {
+  const isMobile = useIsMobile()
   const [templates, setTemplates] = useState<Template[]>([])
   const [loading, setLoading] = useState(true)
   const [modalVisible, setModalVisible] = useState(false)
@@ -47,9 +51,12 @@ export default function AdminTemplates() {
 
   const fetchTemplates = async () => {
     try {
-      const params = categoryFilter !== 'all' ? { category: categoryFilter } : undefined
-      const { data } = await templateApi.list(params)
-      setTemplates([...data.system_templates, ...data.user_templates])
+      const { data } = await templateApi.list({ limit: 100 })
+      const allTemplates = [...data.system_templates, ...data.user_templates]
+      const filteredTemplates = categoryFilter === 'all'
+        ? allTemplates
+        : allTemplates.filter((template) => inferTemplateCategory(template) === categoryFilter)
+      setTemplates(filteredTemplates)
     } catch (err) {
       message.error('获取模板失败')
     } finally {
@@ -108,7 +115,7 @@ export default function AdminTemplates() {
   }
 
   const handlePreviewVideo = (videoUrl: string) => {
-    const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
+    const API_BASE = getAppBase()
     setPreviewVideoUrl(videoUrl.startsWith('http') ? videoUrl : `${API_BASE}${videoUrl}`)
     setVideoPreviewVisible(true)
   }
@@ -173,16 +180,24 @@ export default function AdminTemplates() {
       dataIndex: 'category',
       key: 'category',
       width: 110,
-      render: (category: string | null, record: Template) => (
+      render: (_category: string | null, record: Template) => {
+        const inferredCategory = inferTemplateCategory(record)
+        const rawCategory = record.category ? String(record.category) : ''
+        return (
         <Space direction="vertical" size={2}>
-          <Tag color={category === 'math' ? 'blue' : category === 'thinking' ? 'purple' : 'default'}>
-            {CATEGORY_MAP[category || ''] || category || '未分类'}
+          <Tag color={inferredCategory === 'math' ? 'blue' : 'purple'}>
+            {CATEGORY_MAP[inferredCategory]}
           </Tag>
+          {rawCategory && rawCategory !== inferredCategory && (
+            <Tag color="default" style={{ fontSize: 11 }}>
+              原始: {rawCategory}
+            </Tag>
+          )}
           <Tag color={record.is_system ? 'cyan' : 'green'} style={{ fontSize: 11 }}>
             {record.is_system ? '系统' : '自定义'}
           </Tag>
         </Space>
-      ),
+      )},
     },
     {
       title: '用户可见',
@@ -278,7 +293,7 @@ export default function AdminTemplates() {
 
   return (
     <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex justify-between items-center mb-6 gap-3 flex-wrap">
         <div>
           <h2 className="text-2xl font-bold">视频风格模板管理</h2>
           <p className="text-gray-500 mt-1">管理所有模板，上传示例视频供用户预览</p>
@@ -301,14 +316,74 @@ export default function AdminTemplates() {
         </Space>
       </div>
 
-      <Table
-        columns={columns}
-        dataSource={templates}
-        rowKey="id"
-        loading={loading}
-        pagination={{ pageSize: 10 }}
-        scroll={{ x: 1000 }}
-      />
+      {isMobile ? (
+        <div className="space-y-3">
+          {templates.map((record) => {
+            const inferredCategory = inferTemplateCategory(record)
+            return (
+              <Card key={record.id} size="small" style={{ borderRadius: '12px' }}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-semibold break-words">{record.name}</div>
+                    {record.description && <div className="text-sm text-gray-500 mt-1">{record.description}</div>}
+                  </div>
+                  <Switch
+                    checked={record.is_visible}
+                    onChange={() => handleToggleVisible(record)}
+                    checkedChildren="显示"
+                    unCheckedChildren="隐藏"
+                  />
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Tag color={inferredCategory === 'math' ? 'blue' : 'purple'}>{CATEGORY_MAP[inferredCategory]}</Tag>
+                  <Tag color={record.is_system ? 'cyan' : 'green'}>{record.is_system ? '系统' : '自定义'}</Tag>
+                  <Tag color={record.example_video_url ? 'gold' : 'default'}>{record.example_video_url ? '有示例视频' : '无示例视频'}</Tag>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {record.example_video_url ? (
+                    <>
+                      <Button size="small" icon={<PlayCircleOutlined />} onClick={() => handlePreviewVideo(record.example_video_url!)}>预览</Button>
+                      <Popconfirm title="确定删除此示例视频？" onConfirm={() => handleDeleteVideo(record.id)}>
+                        <Button size="small" danger>删视频</Button>
+                      </Popconfirm>
+                    </>
+                  ) : (
+                    <Upload
+                      accept=".mp4"
+                      showUploadList={false}
+                      beforeUpload={(file) => {
+                        handleUploadVideo(record.id, file)
+                        return false
+                      }}
+                    >
+                      <Button size="small" icon={<UploadOutlined />} loading={uploading}>上传视频</Button>
+                    </Upload>
+                  )}
+                  <Button size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)}>编辑</Button>
+                  {!record.is_system ? (
+                    <Popconfirm title="确定删除此模板？" description="删除后无法恢复" onConfirm={() => handleDelete(record.id)}>
+                      <Button size="small" danger icon={<DeleteOutlined />}>删除</Button>
+                    </Popconfirm>
+                  ) : (
+                    <Tooltip title="系统模板不可删除，如需隐藏请点击显示开关">
+                      <Button size="small" disabled icon={<DeleteOutlined />}>删除</Button>
+                    </Tooltip>
+                  )}
+                </div>
+              </Card>
+            )
+          })}
+        </div>
+      ) : (
+        <Table
+          columns={columns}
+          dataSource={templates}
+          rowKey="id"
+          loading={loading}
+          pagination={{ pageSize: 10 }}
+          scroll={{ x: 1000 }}
+        />
+      )}
 
       <Modal
         title={editingTemplate ? '编辑模板' : '添加模板'}
@@ -419,7 +494,7 @@ class Fourier(Scene):
                   <video 
                     src={editingTemplate.example_video_url.startsWith('http') 
                       ? editingTemplate.example_video_url 
-                      : `${import.meta.env.VITE_API_BASE_URL || ''}${editingTemplate.example_video_url}`}
+                      : resolveBackendUrl(editingTemplate.example_video_url)}
                     controls
                     className="w-full max-h-48 rounded-lg"
                   />
