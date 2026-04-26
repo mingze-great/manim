@@ -290,10 +290,10 @@ export default function AdminTemplates() {
               return (
                 <Form.Item
                   name="code"
-                  label="代码模板"
-                  rules={[{ required: category !== 'math', message: '请输入代码模板' }]}
+                  label="脚本模板"
+                  rules={[{ required: category !== 'math', message: '请输入脚本模板' }]}
                   extra={category === 'math' 
-                    ? "数学可视化可只填参考代码，此字段可留空" 
+                    ? "数学可视化可只填参考脚本，此字段可留空" 
                     : "此模板将作为AI生成视频脚本的参考风格，包括动画结构、配色、排版等"}
                 >
                   <TextArea
@@ -303,7 +303,7 @@ export default function AdminTemplates() {
 
 class MyScene(Scene):
     def construct(self):
-        # 在这里编写你的代码模板...
+        # 在这里编写你的脚本模板...
 `}
                   />
                 </Form.Item>
@@ -320,15 +320,15 @@ class MyScene(Scene):
               return category === 'math' ? (
                 <Form.Item
                   name="reference_code"
-                  label="参考代码（数学可视化专用）"
-                  extra="数学可视化将参考此代码的结构、风格、排版，但替换核心公式和文案。留空则使用普通模板模式。"
+                  label="参考脚本（数学可视化专用）"
+                  extra="数学可视化将参考此脚本的结构、风格、排版，但替换核心公式和文案。留空则使用普通模板模式。"
                 >
                   <TextArea
                     rows={12}
                     className="font-mono text-sm"
-                    placeholder={`# 参考代码示例：傅里叶级数可视化
-# AI将参考此代码的结构和风格，生成新的数学可视化代码
-# 必须保持：代码结构、动画风格、排版方式
+                    placeholder={`# 参考脚本示例：傅里叶级数可视化
+# AI将参考此脚本的结构和风格，生成新的数学可视化内容
+# 必须保持：结构、动画风格、排版方式
 # 必须替换：核心公式、几何参数、文案内容
 
 from manim import *
@@ -384,7 +384,7 @@ class Fourier(Scene):
           )}
           
           <div className="bg-yellow-50 p-3 rounded-lg text-sm text-yellow-700">
-            <strong>提示：</strong>用户选择此模板后，将完全按照此代码的风格（结构、动画、配色）生成新内容。分类决定该模板在哪个模块下可用。
+            <strong>提示：</strong>用户选择此模板后，将完全按照此脚本的风格（结构、动画、配色）生成新内容。分类决定该模板在哪个模块下可用。
           </div>
         </Form>
       </Modal>

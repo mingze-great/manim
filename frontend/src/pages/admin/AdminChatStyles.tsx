@@ -153,8 +153,8 @@ export default function AdminChatStyles() {
 
           <Form.Item
             name="code"
-            label="风格代码"
-            rules={[{ required: true, message: '请输入风格代码' }]}
+            label="风格标识"
+            rules={[{ required: true, message: '请输入风格标识' }]}
             extra="英文标识，如：conservative、sharp、radical"
           >
             <Input placeholder="conservative" />

@@ -45,7 +45,7 @@ export default function AdminTokenUsage() {
     if (!data) return []
     return [
       { name: '对话 Token', value: data.total_chat_tokens, color: '#3b82f6' },
-      { name: '代码 Token', value: data.total_code_tokens, color: '#10b981' }
+      { name: '脚本 Token', value: data.total_code_tokens, color: '#10b981' }
     ]
   }
 
@@ -55,7 +55,7 @@ export default function AdminTokenUsage() {
       name: user.username.slice(0, 6),
       fullName: user.username,
       对话: user.chat_token_usage,
-      代码: user.code_token_usage,
+      脚本: user.code_token_usage,
       color: COLORS[index % COLORS.length]
     }))
   }
@@ -104,7 +104,7 @@ export default function AdminTokenUsage() {
       )
     },
     {
-      title: '代码 Token',
+      title: '脚本 Token',
       dataIndex: 'code_token_usage',
       key: 'code_token_usage',
       render: (val: number) => (
@@ -186,7 +186,7 @@ export default function AdminTokenUsage() {
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-green-500 to-green-400" />
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500 mb-1">代码 Token</p>
+                <p className="text-sm text-gray-500 mb-1">脚本 Token</p>
                 <p className="text-2xl font-bold text-green-600">{formatNumber(data?.total_code_tokens || 0)}</p>
                 <p className="text-xs text-gray-400 mt-1">{codePercent}% 占比</p>
               </div>
@@ -272,7 +272,7 @@ export default function AdminTokenUsage() {
                   />
                   <Legend />
                   <Bar dataKey="对话" stackId="a" fill="#3b82f6" radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="代码" stackId="a" fill="#10b981" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="脚本" stackId="a" fill="#10b981" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}
