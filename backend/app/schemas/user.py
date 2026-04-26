@@ -55,6 +55,20 @@ class TokenData(BaseModel):
     username: Optional[str] = None
 
 
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str = Field(..., min_length=8, max_length=50)
+
+    @field_validator('new_password')
+    @classmethod
+    def validate_new_password(cls, v):
+        if not re.search(r'[A-Za-z]', v):
+            raise ValueError('密码必须包含字母')
+        if not re.search(r'\d', v):
+            raise ValueError('密码必须包含数字')
+        return v
+
+
 class UserUpdate(BaseModel):
     is_active: Optional[bool] = None
     is_admin: Optional[bool] = None

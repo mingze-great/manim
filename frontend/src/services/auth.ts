@@ -14,6 +14,11 @@ export interface RegisterRequest {
   password: string
 }
 
+export interface ChangePasswordRequest {
+  old_password: string
+  new_password: string
+}
+
 export const authApi = {
   login: async (data: LoginRequest) => {
     const params = new URLSearchParams()
@@ -27,6 +32,11 @@ export const authApi = {
   register: (data: RegisterRequest) => axios.post(`${API_BASE}/auth/register`, data),
   me: (token: string) => {
     return axios.get(`${API_BASE}/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+  },
+  changePassword: (data: ChangePasswordRequest, token: string) => {
+    return axios.post(`${API_BASE}/auth/change-password`, data, {
       headers: { Authorization: `Bearer ${token}` }
     })
   },

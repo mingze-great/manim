@@ -1,11 +1,12 @@
-import { Card, Button, Avatar, Space, Tag, Typography, Divider, Descriptions } from 'antd'
+import { Card, Button, Avatar, Space, Tag, Typography, Divider, Descriptions, Modal, Form, Input, message } from 'antd'
 import { 
-  UserOutlined, LogoutOutlined
+  UserOutlined, LogoutOutlined, LockOutlined
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { useAuthStore } from '@/stores/authStore'
 import { paymentApi, Subscription, UsageStats } from '@/services/payment'
+import { authApi } from '@/services/auth'
 import './Profile.css'
 
 const { Title, Text } = Typography
@@ -16,6 +17,9 @@ export default function Profile() {
   const [subscription, setSubscription] = useState<Subscription | null>(null)
   const [usageStats, setUsageStats] = useState<UsageStats | null>(null)
   const [loading, setLoading] = useState(true)
+  const [passwordModalOpen, setPasswordModalOpen] = useState(false)
+  const [passwordLoading, setPasswordLoading] = useState(false)
+  const [form] = Form.useForm()
 
   useEffect(() => {
     const fetchData = async () => {
@@ -38,6 +42,27 @@ export default function Profile() {
   const handleLogout = () => {
     logout()
     navigate('/')
+  }
+
+  const handleChangePassword = async () => {
+    const token = useAuthStore.getState().token
+    if (!token) {
+      message.error('登录状态已失效，请重新登录')
+      return
+    }
+    try {
+      const values = await form.validateFields()
+      setPasswordLoading(true)
+      await authApi.changePassword({ old_password: values.old_password, new_password: values.new_password }, token)
+      message.success('密码修改成功，请牢记新密码')
+      setPasswordModalOpen(false)
+      form.resetFields()
+    } catch (err: any) {
+      if (err?.errorFields) return
+      message.error(err.response?.data?.detail || '密码修改失败')
+    } finally {
+      setPasswordLoading(false)
+    }
   }
 
   const planLabels: Record<string, string> = {
@@ -79,11 +104,14 @@ export default function Profile() {
         <Card>
           <Title level={5}>说明</Title>
           <div className="text-gray-500 text-sm space-y-2">
-            <div>个人中心当前仅保留已实际接通的账号信息与订阅信息。</div>
-            <div>密码修改、通知设置、下载记录等功能将在后续完整接入后再重新开放。</div>
+            <div>个人中心当前保留账号信息、订阅信息和密码修改能力。</div>
+            <div>下载记录、通知设置等功能会在后续继续完善。</div>
           </div>
           <Divider />
-          <Button type="primary" onClick={() => navigate('/pricing')}>查看套餐</Button>
+          <Space wrap>
+            <Button type="primary" onClick={() => navigate('/pricing')}>查看套餐</Button>
+            <Button icon={<LockOutlined />} onClick={() => setPasswordModalOpen(true)}>修改密码</Button>
+          </Space>
         </Card>
       </Space>
 
@@ -92,6 +120,46 @@ export default function Profile() {
           退出登录
         </Button>
       </Card>
+
+      <Modal
+        title="修改密码"
+        open={passwordModalOpen}
+        onCancel={() => {
+          setPasswordModalOpen(false)
+          form.resetFields()
+        }}
+        onOk={handleChangePassword}
+        confirmLoading={passwordLoading}
+        okText="确认修改"
+        cancelText="取消"
+      >
+        <Form form={form} layout="vertical">
+          <Form.Item label="旧密码" name="old_password" rules={[{ required: true, message: '请输入旧密码' }]}>
+            <Input.Password placeholder="请输入当前密码" />
+          </Form.Item>
+          <Form.Item label="新密码" name="new_password" rules={[
+            { required: true, message: '请输入新密码' },
+            { min: 8, message: '密码至少 8 位' },
+            { pattern: /[A-Za-z]/, message: '密码必须包含字母' },
+            { pattern: /\d/, message: '密码必须包含数字' },
+          ]}>
+            <Input.Password placeholder="请输入新密码" />
+          </Form.Item>
+          <Form.Item label="确认新密码" name="confirm_password" dependencies={['new_password']} rules={[
+            { required: true, message: '请再次输入新密码' },
+            ({ getFieldValue }) => ({
+              validator(_, value) {
+                if (!value || getFieldValue('new_password') === value) {
+                  return Promise.resolve()
+                }
+                return Promise.reject(new Error('两次输入的新密码不一致'))
+              },
+            }),
+          ]}>
+            <Input.Password placeholder="请再次输入新密码" />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   )
 }

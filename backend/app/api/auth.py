@@ -12,7 +12,7 @@ import secrets
 from app.database import get_db
 from app.config import get_settings
 from app.models.user import User, AuditLog
-from app.schemas.user import UserCreate, UserResponse, Token
+from app.schemas.user import UserCreate, UserResponse, Token, ChangePasswordRequest
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -238,6 +238,25 @@ async def logout(
     token_blacklist.add(token)
     log_audit(db, current_user.id, current_user.username, "LOGOUT", details="用户登出", request=request)
     return {"message": "Successfully logged out"}
+
+
+@router.post("/change-password")
+async def change_password(
+    payload: ChangePasswordRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+    request: Request,
+):
+    if not verify_password(payload.old_password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="旧密码错误")
+    if payload.old_password == payload.new_password:
+        raise HTTPException(status_code=400, detail="新密码不能与旧密码相同")
+
+    current_user.hashed_password = get_password_hash(payload.new_password)
+    db.commit()
+
+    log_audit(db, current_user.id, current_user.username, "PASSWORD_CHANGED", details="用户自行修改密码", request=request)
+    return {"message": "密码修改成功"}
 
 
 @router.get("/me", response_model=UserResponse)

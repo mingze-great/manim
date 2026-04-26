@@ -146,6 +146,14 @@ export default function AdminLayout() {
           items={menuItems}
           onClick={({ key }) => handleMenuClick(key)}
         />
+        <div className="px-4 pb-4 pt-2">
+          <Button icon={<DashboardOutlined />} block type="primary" ghost onClick={() => handleMenuClick('/admin')}>
+            回到后台管理
+          </Button>
+          <Button icon={<HomeOutlined />} block className="mt-2" onClick={() => handleMenuClick('/')}>
+            返回首页
+          </Button>
+        </div>
       </Drawer>
 
       <Layout>

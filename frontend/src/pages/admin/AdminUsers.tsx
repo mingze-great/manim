@@ -439,6 +439,7 @@ export default function AdminUsers() {
     {
       title: '用户',
       key: 'user',
+      width: 220,
       render: (_: any, record: User) => (
         <div className="flex items-center gap-3">
           <Avatar 
@@ -454,87 +455,58 @@ export default function AdminUsers() {
       ),
     },
     {
-      title: '状态',
-      dataIndex: 'is_active',
-      key: 'is_active',
-      width: 100,
-      render: (isActive: boolean) => (
-        <Badge status={isActive ? 'success' : 'error'} text={isActive ? '正常' : '已禁用'} />
-      ),
-    },
-    {
-      title: '审核',
-      dataIndex: 'is_approved',
-      key: 'is_approved',
-      width: 100,
-      render: (isApproved: boolean) => (
-        isApproved 
-          ? <Tag color="green">已通过</Tag>
-          : <Tag color="orange">待审核</Tag>
-      ),
-    },
-    {
-      title: '角色',
-      dataIndex: 'is_admin',
-      key: 'is_admin',
-      width: 100,
-      render: (isAdmin: boolean) => (
-        isAdmin ? <Tag color="gold">管理员</Tag> : <Tag color="default">用户</Tag>
-      ),
-    },
-    {
-      title: '前端版本',
-      key: 'frontend_version',
-      width: 140,
+      title: '账号状态',
+      key: 'account_state',
+      width: 190,
       render: (_: any, record: User) => (
-        <Select
-          size="small"
-          style={{ width: 110 }}
-          value={record.frontend_version || 'legacy'}
-          onChange={(value) => handleFrontendVersionChange(record.id, value as 'legacy' | 'v2')}
-          options={[
-            { label: '老版本', value: 'legacy' },
-            { label: '新版本', value: 'v2' },
-          ]}
-        />
+        <Space size={[4, 6]} wrap>
+          <Badge status={record.is_active ? 'success' : 'error'} text={record.is_active ? '正常' : '已禁用'} />
+          {record.is_approved ? <Tag color="green">已通过</Tag> : <Tag color="orange">待审核</Tag>}
+          {record.is_admin ? <Tag color="gold">管理员</Tag> : <Tag color="default">用户</Tag>}
+        </Space>
       ),
     },
     {
-      title: '思维可视化',
-      key: 'visual_limit',
-      width: 120,
-      render: (_: any, record: User) => getPermissionTag(record, 'visual'),
+      title: '使用配置',
+      key: 'usage_config',
+      width: 230,
+      render: (_: any, record: User) => (
+        <div>
+          <div className="mb-2">
+            <Select
+              size="small"
+              style={{ width: 110 }}
+              value={record.frontend_version || 'legacy'}
+              onChange={(value) => handleFrontendVersionChange(record.id, value as 'legacy' | 'v2')}
+              options={[
+                { label: '老版本', value: 'legacy' },
+                { label: '新版本', value: 'v2' },
+              ]}
+            />
+          </div>
+          <Space size={[4, 6]} wrap>
+            {getPermissionTag(record, 'visual')}
+            {getPermissionTag(record, 'stickman')}
+            {getPermissionTag(record, 'article')}
+          </Space>
+        </div>
+      ),
     },
     {
-      title: '火柴人',
-      key: 'stickman_limit',
-      width: 120,
-      render: (_: any, record: User) => getPermissionTag(record, 'stickman'),
-    },
-    {
-      title: '公众号',
-      key: 'article_limit',
-      width: 120,
-      render: (_: any, record: User) => getPermissionTag(record, 'article'),
-    },
-    {
-      title: '有效期',
-      dataIndex: 'expires_at',
-      key: 'expires_at',
-      width: 170,
-      render: (expiresAt: string) => formatDateTime(expiresAt),
-    },
-    {
-      title: '注册时间',
-      dataIndex: 'created_at',
-      key: 'created_at',
-      width: 180,
-      render: (date: string) => formatDateTime(date),
+      title: '时间信息',
+      key: 'time_info',
+      width: 200,
+      render: (_: any, record: User) => (
+        <div className="text-sm leading-6">
+          <div><span className="text-gray-500">有效期：</span>{formatDateTime(record.expires_at)}</div>
+          <div><span className="text-gray-500">注册时间：</span>{formatDateTime(record.created_at)}</div>
+        </div>
+      ),
     },
     {
       title: '操作',
       key: 'action',
-      width: 320,
+      width: 260,
       render: (_: any, record: User) => renderUserActions(record),
     },
   ]
@@ -705,7 +677,6 @@ export default function AdminUsers() {
               showQuickJumper: true,
               showTotal: (total) => `共 ${total} 个用户`
             }}
-            scroll={{ x: 800 }}
           />
         )}
       </Card>
