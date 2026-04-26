@@ -74,7 +74,8 @@ export default function TemplateShowcase({ value, onChange, category }: Template
   const fetchTemplates = async () => {
     setLoading(true)
     try {
-      const { data } = await templateApi.list(category ? { category } : undefined)
+      const params = category === 'math' ? { category } : undefined
+      const { data } = await templateApi.list(params)
       const all = [...data.system_templates, ...data.user_templates].filter(t => t.is_active !== false)
       setTemplates(all)
     } catch {
