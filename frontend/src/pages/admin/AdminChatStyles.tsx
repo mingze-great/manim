@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Table, Button, Space, Modal, Form, Input, message, Popconfirm, Tag } from 'antd'
+import { Button, Space, Modal, Form, Input, message, Popconfirm, Tag, Card } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import api from '@/services/api'
 import { useIsMobile } from '@/hooks/useIsMobile'
@@ -90,55 +90,26 @@ export default function AdminChatStyles() {
     }
   }
 
-  const columns = [
-    {
-      title: '名称',
-      dataIndex: 'name',
-      key: 'name',
-    },
-    {
-      title: '代码',
-      dataIndex: 'code',
-      key: 'code',
-      render: (code: string) => <Tag color="blue">{code}</Tag>
-    },
-    {
-      title: '描述',
-      dataIndex: 'description',
-      key: 'description',
-      ellipsis: true,
-    },
-    {
-      title: '默认',
-      dataIndex: 'is_default',
-      key: 'is_default',
-      render: (isDefault: boolean) => isDefault ? <Tag color="green">默认</Tag> : null
-    },
-    {
-      title: '操作',
-      key: 'action',
-      width: 150,
-      render: (_: any, record: ChatStyle) => (
-        <Space>
-          <Button
-            type="link"
-            icon={<EditOutlined />}
-            onClick={() => handleEdit(record)}
-          >
-            编辑
-          </Button>
-          <Popconfirm
-            title="确定删除此风格？"
-            onConfirm={() => handleDelete(record.id)}
-          >
-            <Button type="link" danger icon={<DeleteOutlined />}>
-              删除
-            </Button>
-          </Popconfirm>
-        </Space>
-      ),
-    },
-  ]
+  const renderStyleCard = (record: ChatStyle) => (
+    <Card key={record.id} size="small" style={{ borderRadius: '12px' }}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="font-semibold break-words">{record.name}</div>
+            <Tag color="blue">{record.code}</Tag>
+            {record.is_default ? <Tag color="green">默认</Tag> : null}
+          </div>
+          <div className="text-sm text-gray-500 mt-2 leading-6">{record.description || '暂无风格说明'}</div>
+        </div>
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Button size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)}>编辑</Button>
+        <Popconfirm title="确定删除此风格？" onConfirm={() => handleDelete(record.id)}>
+          <Button size="small" danger icon={<DeleteOutlined />}>删除</Button>
+        </Popconfirm>
+      </div>
+    </Card>
+  )
 
   return (
     <div className="p-6">
@@ -159,35 +130,9 @@ export default function AdminChatStyles() {
         </Space>
       </div>
 
-      {isMobile ? (
-        <div className="space-y-3">
-          {styles.map((record) => (
-            <div key={record.id} className="rounded-xl border border-gray-200 p-4 bg-white">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="font-semibold break-words">{record.name}</div>
-                  <div className="mt-1"><Tag color="blue">{record.code}</Tag>{record.is_default ? <Tag color="green">默认</Tag> : null}</div>
-                  <div className="text-sm text-gray-500 mt-2">{record.description || '暂无风格说明'}</div>
-                </div>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)}>编辑</Button>
-                <Popconfirm title="确定删除此风格？" onConfirm={() => handleDelete(record.id)}>
-                  <Button size="small" danger icon={<DeleteOutlined />}>删除</Button>
-                </Popconfirm>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <Table
-          columns={columns}
-          dataSource={styles}
-          rowKey="id"
-          loading={loading}
-          pagination={{ pageSize: 10 }}
-        />
-      )}
+      <div className={isMobile ? 'space-y-3' : 'grid grid-cols-1 xl:grid-cols-2 gap-4'}>
+        {styles.map((record) => renderStyleCard(record))}
+      </div>
 
       <Modal
         title={editingStyle ? '编辑风格' : '添加风格'}

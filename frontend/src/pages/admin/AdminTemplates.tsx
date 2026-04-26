@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Table, Button, Space, Tag, Modal, Form, Input, message, Popconfirm, Upload, Switch, Tooltip, Segmented, Card } from 'antd'
+import { Button, Space, Tag, Modal, Form, Input, message, Popconfirm, Upload, Switch, Tooltip, Segmented, Card } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, PlayCircleOutlined, UploadOutlined, SettingOutlined } from '@ant-design/icons'
 import { templateApi, Template } from '@/services/template'
 import { inferTemplateCategory } from '@/utils/templateCategory'
@@ -156,87 +156,35 @@ export default function AdminTemplates() {
     }
   }
 
-  const columns = [
-    {
-      title: 'ID',
-      dataIndex: 'id',
-      key: 'id',
-      width: 50,
-    },
-    {
-      title: '名称',
-      dataIndex: 'name',
-      key: 'name',
-      width: 200,
-    },
-    {
-      title: '描述',
-      dataIndex: 'description',
-      key: 'description',
-      ellipsis: true,
-    },
-    {
-      title: '分类',
-      dataIndex: 'category',
-      key: 'category',
-      width: 110,
-      render: (_category: string | null, record: Template) => {
-        const inferredCategory = inferTemplateCategory(record)
-        const rawCategory = record.category ? String(record.category) : ''
-        return (
-        <Space direction="vertical" size={2}>
-          <Tag color={inferredCategory === 'math' ? 'blue' : 'purple'}>
-            {CATEGORY_MAP[inferredCategory]}
-          </Tag>
-          {rawCategory && rawCategory !== inferredCategory && (
-            <Tag color="default" style={{ fontSize: 11 }}>
-              原始: {rawCategory}
-            </Tag>
-          )}
-          <Tag color={record.is_system ? 'cyan' : 'green'} style={{ fontSize: 11 }}>
-            {record.is_system ? '系统' : '自定义'}
-          </Tag>
-        </Space>
-      )},
-    },
-    {
-      title: '用户可见',
-      dataIndex: 'is_visible',
-      key: 'is_visible',
-      width: 100,
-      render: (isVisible: boolean, record: Template) => (
-        <Switch
-          checked={isVisible}
-          onChange={() => handleToggleVisible(record)}
-          checkedChildren="显示"
-          unCheckedChildren="隐藏"
-        />
-      ),
-    },
-    {
-      title: '示例视频',
-      dataIndex: 'example_video_url',
-      key: 'example_video_url',
-      width: 180,
-      render: (videoUrl: string | null, record: Template) => (
-        <Space>
-          {videoUrl ? (
+  const renderTemplateCard = (record: Template) => {
+    const inferredCategory = inferTemplateCategory(record)
+    const rawCategory = record.category ? String(record.category) : ''
+    return (
+      <Card key={record.id} size="small" style={{ borderRadius: '12px' }}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="font-semibold break-words">{record.name}</div>
+              <Tag color={inferredCategory === 'math' ? 'blue' : 'purple'}>{CATEGORY_MAP[inferredCategory]}</Tag>
+              <Tag color={record.is_system ? 'cyan' : 'green'}>{record.is_system ? '系统' : '自定义'}</Tag>
+              {rawCategory && rawCategory !== inferredCategory && <Tag color="default">原始: {rawCategory}</Tag>}
+            </div>
+            {record.description && <div className="text-sm text-gray-500 mt-2 leading-6">{record.description}</div>}
+          </div>
+          <Switch
+            checked={record.is_visible}
+            onChange={() => handleToggleVisible(record)}
+            checkedChildren="显示"
+            unCheckedChildren="隐藏"
+          />
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          {record.example_video_url ? (
             <>
-              <Button
-                type="link"
-                size="small"
-                icon={<PlayCircleOutlined />}
-                onClick={() => handlePreviewVideo(videoUrl)}
-              >
-                预览
-              </Button>
-              <Popconfirm
-                title="确定删除此示例视频？"
-                onConfirm={() => handleDeleteVideo(record.id)}
-              >
-                <Button type="link" size="small" danger>
-                  删除
-                </Button>
+              <Button size="small" icon={<PlayCircleOutlined />} onClick={() => handlePreviewVideo(record.example_video_url!)}>预览示例</Button>
+              <Popconfirm title="确定删除此示例视频？" onConfirm={() => handleDeleteVideo(record.id)}>
+                <Button size="small" danger>删视频</Button>
               </Popconfirm>
             </>
           ) : (
@@ -248,48 +196,23 @@ export default function AdminTemplates() {
                 return false
               }}
             >
-              <Button type="link" size="small" icon={<UploadOutlined />} loading={uploading}>
-                上传
-              </Button>
+              <Button size="small" icon={<UploadOutlined />} loading={uploading}>上传示例视频</Button>
             </Upload>
           )}
-        </Space>
-      ),
-    },
-    {
-      title: '操作',
-      key: 'action',
-      width: 150,
-      render: (_: any, record: Template) => (
-        <Space>
-          <Button
-            type="link"
-            icon={<EditOutlined />}
-            onClick={() => handleEdit(record)}
-          >
-            编辑
-          </Button>
+          <Button size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)}>编辑</Button>
           {!record.is_system ? (
-            <Popconfirm
-              title="确定删除此模板？"
-              description="删除后无法恢复"
-              onConfirm={() => handleDelete(record.id)}
-            >
-              <Button type="link" danger icon={<DeleteOutlined />}>
-                删除
-              </Button>
+            <Popconfirm title="确定删除此模板？" description="删除后无法恢复" onConfirm={() => handleDelete(record.id)}>
+              <Button size="small" danger icon={<DeleteOutlined />}>删除</Button>
             </Popconfirm>
           ) : (
-            <Tooltip title="系统模板不可删除，如需隐藏请点击「隐藏」按钮">
-              <Button type="link" disabled icon={<DeleteOutlined />}>
-                删除
-              </Button>
+            <Tooltip title="系统模板不可删除，如需隐藏请点击显示开关">
+              <Button size="small" disabled icon={<DeleteOutlined />}>删除</Button>
             </Tooltip>
           )}
-        </Space>
-      ),
-    },
-  ]
+        </div>
+      </Card>
+    )
+  }
 
   return (
     <div className="p-6">
@@ -316,74 +239,9 @@ export default function AdminTemplates() {
         </Space>
       </div>
 
-      {isMobile ? (
-        <div className="space-y-3">
-          {templates.map((record) => {
-            const inferredCategory = inferTemplateCategory(record)
-            return (
-              <Card key={record.id} size="small" style={{ borderRadius: '12px' }}>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="font-semibold break-words">{record.name}</div>
-                    {record.description && <div className="text-sm text-gray-500 mt-1">{record.description}</div>}
-                  </div>
-                  <Switch
-                    checked={record.is_visible}
-                    onChange={() => handleToggleVisible(record)}
-                    checkedChildren="显示"
-                    unCheckedChildren="隐藏"
-                  />
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Tag color={inferredCategory === 'math' ? 'blue' : 'purple'}>{CATEGORY_MAP[inferredCategory]}</Tag>
-                  <Tag color={record.is_system ? 'cyan' : 'green'}>{record.is_system ? '系统' : '自定义'}</Tag>
-                  <Tag color={record.example_video_url ? 'gold' : 'default'}>{record.example_video_url ? '有示例视频' : '无示例视频'}</Tag>
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {record.example_video_url ? (
-                    <>
-                      <Button size="small" icon={<PlayCircleOutlined />} onClick={() => handlePreviewVideo(record.example_video_url!)}>预览</Button>
-                      <Popconfirm title="确定删除此示例视频？" onConfirm={() => handleDeleteVideo(record.id)}>
-                        <Button size="small" danger>删视频</Button>
-                      </Popconfirm>
-                    </>
-                  ) : (
-                    <Upload
-                      accept=".mp4"
-                      showUploadList={false}
-                      beforeUpload={(file) => {
-                        handleUploadVideo(record.id, file)
-                        return false
-                      }}
-                    >
-                      <Button size="small" icon={<UploadOutlined />} loading={uploading}>上传视频</Button>
-                    </Upload>
-                  )}
-                  <Button size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)}>编辑</Button>
-                  {!record.is_system ? (
-                    <Popconfirm title="确定删除此模板？" description="删除后无法恢复" onConfirm={() => handleDelete(record.id)}>
-                      <Button size="small" danger icon={<DeleteOutlined />}>删除</Button>
-                    </Popconfirm>
-                  ) : (
-                    <Tooltip title="系统模板不可删除，如需隐藏请点击显示开关">
-                      <Button size="small" disabled icon={<DeleteOutlined />}>删除</Button>
-                    </Tooltip>
-                  )}
-                </div>
-              </Card>
-            )
-          })}
-        </div>
-      ) : (
-        <Table
-          columns={columns}
-          dataSource={templates}
-          rowKey="id"
-          loading={loading}
-          pagination={{ pageSize: 10 }}
-          scroll={{ x: 1000 }}
-        />
-      )}
+      <div className={isMobile ? 'space-y-3' : 'grid grid-cols-1 xl:grid-cols-2 gap-4'}>
+        {templates.map((record) => renderTemplateCard(record))}
+      </div>
 
       <Modal
         title={editingTemplate ? '编辑模板' : '添加模板'}

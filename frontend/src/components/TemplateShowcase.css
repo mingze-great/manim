@@ -14,7 +14,7 @@
 }
 
 .showcase-scroll-wrapper {
-  overflow-x: auto;
+  overflow-x: visible;
   -webkit-overflow-scrolling: touch;
   padding-bottom: 8px;
 }
@@ -38,13 +38,13 @@
 }
 
 .showcase-card-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
   padding: 4px;
 }
 
 .showcase-card {
-  flex: 0 0 260px;
   border-radius: 12px;
   border: 2px solid #e8e8e8;
   overflow: hidden;
@@ -189,19 +189,18 @@
 
 @media (max-width: 768px) {
   .showcase-scroll-wrapper {
-    overflow-x: visible;
+    overflow-x: auto;
   }
 
   .showcase-card-row {
-    display: grid;
-    grid-template-columns: 1fr;
+    display: flex;
     gap: 12px;
     padding: 0;
   }
 
   .showcase-card {
-    width: 100%;
-    flex: none;
+    width: 280px;
+    flex: 0 0 280px;
   }
 
   .showcase-card:hover {
@@ -217,6 +216,12 @@
 
   .showcase-preview-video {
     max-height: 320px;
+  }
+}
+
+@media (max-width: 1200px) and (min-width: 769px) {
+  .showcase-card-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

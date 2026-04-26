@@ -32,6 +32,7 @@ export interface User {
   id: number
   username: string
   email: string
+  phone?: string | null
   is_active: boolean
   is_admin: boolean
   frontend_version?: 'legacy' | 'v2'
