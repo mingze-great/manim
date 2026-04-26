@@ -93,6 +93,8 @@ def create_project(
         module_key = "visual"
     stickman_storyboard_limit = 20 if current_user.is_admin else 6
     if module_key == "stickman":
+        if str(project.stickman_variant or "legacy") not in {"legacy", "v2"}:
+            raise HTTPException(status_code=400, detail="stickman_variant 仅支持 legacy 或 v2")
         project.storyboard_count = max(2, min(int(project.storyboard_count or 3), stickman_storyboard_limit))
     allowed, reason = current_user.can_use_module(module_key, db)
     if not allowed:
@@ -527,7 +529,7 @@ async def upload_style_reference(
 
     project.style_reference_image_path = str(image_path)
     project.style_reference_notes = notes or None
-    generator = StickmanGeneratorLegacy()
+    generator = _build_stickman_generator(project)
     project.style_reference_profile = generator.extract_style_reference_profile(str(image_path), notes or None)
     db.commit()
     db.refresh(project)

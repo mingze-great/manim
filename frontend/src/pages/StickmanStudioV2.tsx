@@ -28,11 +28,15 @@ type Storyboard = {
 type ImageAsset = {
   image_url?: string
   image_path?: string
+  scene_image_url?: string
+  scene_image_path?: string
   prompt?: string
   used_fallback?: boolean
   image_source?: 'model' | 'fallback'
   model_used?: string | null
   model_requested?: string | null
+  scene_image_source?: 'material_library' | 'model' | 'fallback'
+  scene_image_model_used?: string | null
   error_summary?: string | null
 }
 
@@ -41,6 +45,10 @@ function resolveAssetUrl(url?: string | null) {
   if (url.startsWith('http')) return url
   const base = getAppBase()
   return `${base}${url}`
+}
+
+function resolvePreferredPreviewUrl(asset?: ImageAsset | null) {
+  return resolveAssetUrl(asset?.scene_image_url || asset?.image_url || '')
 }
 
 function resolveStyleReferenceUrl(path?: string | null) {
@@ -386,8 +394,8 @@ export default function StickmanStudio() {
           <Card size="small" title="风格预览图">
             <Space direction="vertical" style={{ width: '100%' }}>
               <Alert type="info" message="先生成 1 张预览图确认风格，满意后再生成全部分镜图，能明显降低图片成本。" />
-              {previewImageAsset?.image_url ? (
-                <img src={resolveAssetUrl(previewImageAsset.image_url)} alt="preview-scene" style={{ width: '100%', maxWidth: 420, borderRadius: 12, border: '1px solid #eee' }} />
+              {resolvePreferredPreviewUrl(previewImageAsset) ? (
+                <img src={resolvePreferredPreviewUrl(previewImageAsset)} alt="preview-scene" style={{ width: '100%', maxWidth: 420, borderRadius: 12, border: '1px solid #eee' }} />
               ) : (
                 <div style={{ height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fafafa', borderRadius: 12 }}>尚未生成风格预览图</div>
               )}
@@ -517,12 +525,13 @@ export default function StickmanStudio() {
                           <Col span={12} key={`image-${scene.scene_id || index}`}>
                              <Card title={scene.scene_title || `第${index + 1}幕`} extra={<Button size="small" icon={<EditOutlined />} onClick={() => handleRegenerateImage(index)} loading={saving} disabled={!useAuthStore.getState().user?.is_admin}>重生图片</Button>}>
                               <Space direction="vertical" style={{ width: '100%' }}>
-                                {asset?.image_url ? <img src={resolveAssetUrl(asset.image_url)} alt={scene.scene_title || `scene-${index + 1}`} style={{ width: '100%', borderRadius: 12, border: '1px solid #eee' }} /> : <div style={{ height: 180, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fafafa', borderRadius: 12 }}>未生成图片</div>}
+                                {resolvePreferredPreviewUrl(asset) ? <img src={resolvePreferredPreviewUrl(asset)} alt={scene.scene_title || `scene-${index + 1}`} style={{ width: '100%', borderRadius: 12, border: '1px solid #eee' }} /> : <div style={{ height: 180, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fafafa', borderRadius: 12 }}>未生成图片</div>}
                                  <Space wrap>
                                    <Tag color={asset?.used_fallback ? 'orange' : 'green'}>{asset?.used_fallback ? '降级占位图' : '真实模型图'}</Tag>
                                    {asset?.model_used && <Tag>{asset.model_used}</Tag>}
                                    {asset?.model_requested && asset.model_requested !== asset.model_used && <Tag color="purple">请求模型 {asset.model_requested}</Tag>}
                                    {asset?.image_source && <Tag>{asset.image_source === 'model' ? '模型生成' : '占位降级'}</Tag>}
+                                   {asset?.scene_image_source && <Tag color="blue">{asset.scene_image_source === 'material_library' ? '素材库匹配' : asset.scene_image_source === 'model' ? '场景插画模型' : '本地插画降级'}</Tag>}
                                  </Space>
                                 <Input.TextArea rows={4} value={asset?.prompt || ''} onChange={(e) => setImageAssets((prev) => prev.map((item, i) => i === index ? { ...item, prompt: e.target.value } : item))} placeholder="图片提示词" />
                                 {asset?.error_summary && <Alert type={asset?.used_fallback ? 'warning' : 'info'} message={asset.error_summary} />}

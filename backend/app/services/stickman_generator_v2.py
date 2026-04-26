@@ -64,7 +64,8 @@ class StickmanGenerator:
         self.material_source_dir = self._resolve_material_source_dir()
         self.material_library = self._load_material_library()
         self.subtitle_translation_cache = {}
-        self.direct_psychology_background = Path(r"E:\ai\cankao\背景1.png")
+        self.direct_psychology_background = self._resolve_background_image_path()
+        self.font_candidates = self._resolve_font_candidates()
 
     def _load_tts_voice_library(self):
         raw = self.settings.STICKMAN_TTS_VOICE_LIBRARY or "[]"
@@ -89,6 +90,38 @@ class StickmanGenerator:
             if candidate and Path(candidate).exists():
                 return Path(candidate)
         return Path(configured) if configured else Path(candidates[-1])
+
+    def _resolve_background_image_path(self):
+        configured = str(getattr(self.settings, "STICKMAN_V2_BACKGROUND_IMAGE_PATH", "") or "").strip()
+        candidates = [configured] if configured else []
+        if os.name == "nt":
+            candidates.append(r"E:\ai\cankao\背景1.png")
+        candidates.append(str(self.background_asset_dir / "psychology_reference_background.png"))
+        for candidate in candidates:
+            if candidate and Path(candidate).exists():
+                return Path(candidate)
+        return Path(configured) if configured else (self.background_asset_dir / "psychology_reference_background.png")
+
+    def _resolve_font_candidates(self):
+        configured = str(getattr(self.settings, "STICKMAN_V2_FONT_PATHS", "") or "").strip()
+        candidates = [item.strip() for item in configured.split(",") if item.strip()]
+        if os.name == "nt":
+            candidates.extend([r"C:\Windows\Fonts\msyh.ttc", r"C:\Windows\Fonts\simhei.ttf"])
+        else:
+            candidates.extend([
+                "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+                "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+                "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+                "/usr/share/fonts/truetype/arphic/ukai.ttc",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            ])
+        seen = set()
+        ordered = []
+        for candidate in candidates:
+            if candidate and candidate not in seen:
+                ordered.append(candidate)
+                seen.add(candidate)
+        return ordered
 
     def _resolve_material_source_dir(self):
         configured = str(getattr(self.settings, "STICKMAN_MATERIAL_SOURCE_DIR", "") or "").strip()
@@ -735,6 +768,7 @@ class StickmanGenerator:
         tts_rate: str | None = None,
         style_reference_image_path: str | None = None,
         style_reference_notes: str | None = None,
+        opening_template_key: str | None = None,
     ):
         self._require_config()
         storyboard_count = max(2, min(int(storyboard_count or 3), 20))
@@ -744,7 +778,7 @@ class StickmanGenerator:
                 progress_callback(progress, message)
 
         report(5, "开始生成火柴人视频")
-        script_data = self.generate_script_data(topic, storyboard_count)
+        script_data = self.generate_script_data(topic, storyboard_count, opening_template_key=opening_template_key)
         report(20, "脚本生成完成")
 
         with tempfile.TemporaryDirectory(prefix="stickman_") as temp_dir:
@@ -893,8 +927,8 @@ class StickmanGenerator:
                 "video_path": final_path,
             }
 
-    def generate_script_data(self, topic: str, storyboard_count: int):
-        script_data = self._generate_script(topic, storyboard_count)
+    def generate_script_data(self, topic: str, storyboard_count: int, opening_template_key: Optional[str] = None):
+        script_data = self._generate_script(topic, storyboard_count, opening_template_key=opening_template_key)
         script_data = self._expand_storyboards_for_pacing(script_data, topic)
         storyboards = script_data.get("storyboards") or []
         for index, scene in enumerate(storyboards, start=1):
@@ -913,6 +947,8 @@ class StickmanGenerator:
             scene.setdefault("foreground_density", self._foreground_density_for_index(index))
             scene.setdefault("motion_preset", self._motion_preset_for_scene(scene, index))
             scene.setdefault("transition_type", self._transition_type_for_index(index))
+            if index == 1:
+                scene.setdefault("opening_template_key", opening_template_key or "hook_question")
             scene.setdefault("background_prompt", self._background_prompt_for_scene(scene, topic, index))
             scene.setdefault("scene_image_prompt", self._scene_image_prompt_for_scene(scene, topic))
             scene.setdefault("foreground_subjects", self._foreground_subjects_for_scene(scene, topic, index))
@@ -1026,10 +1062,16 @@ class StickmanGenerator:
             return base_dir / "temp"
         return base_dir / f"project_{project_id}"
 
-    def _generate_script(self, topic: str, storyboard_count: int):
+    def _opening_template_instruction(self, opening_template_key: Optional[str]):
+        if opening_template_key == "big_number":
+            return "首幕必须使用爆点数字型开头：用明确数字、结果或反差抓住注意力。"
+        return "首幕必须使用反问钩子型开头：用直接问题引发用户继续看下去。"
+
+    def _generate_script(self, topic: str, storyboard_count: int, opening_template_key: Optional[str] = None):
         prompt = (
             f'请为主题"{topic}"生成一个中文火柴人科普短视频脚本。'
             f"总共 {storyboard_count} 个分镜，每个分镜 1-2 句旁白。"
+            f"{self._opening_template_instruction(opening_template_key)}"
             "必须返回 JSON，不要输出解释。JSON 结构如下："
             '{"title":"视频标题","script":"完整脚本","storyboards":[{"scene_id":1,"scene_description":"场景描述","narration":"旁白文本","keywords":["关键词"]}]}'
         )
@@ -1076,6 +1118,7 @@ class StickmanGenerator:
                     "duration_range": scene.get("duration_range") or "2-4",
                     "motion_preset": scene.get("motion_preset") or self._motion_preset_for_scene(scene, index),
                     "transition_type": scene.get("transition_type") or self._transition_type_for_index(index),
+                    "opening_template_key": scene.get("opening_template_key") or (opening_template_key or "hook_question") if index == 1 else scene.get("opening_template_key"),
                 }
             )
 
@@ -1102,6 +1145,7 @@ class StickmanGenerator:
                     "duration_range": "2-4",
                     "motion_preset": self._motion_preset_for_index(index),
                     "transition_type": self._transition_type_for_index(index),
+                    "opening_template_key": (opening_template_key or "hook_question") if index == 1 else None,
                 }
             )
         return {
@@ -1225,7 +1269,7 @@ class StickmanGenerator:
         return "classic stickman explainer style, clean white background, black line figure, simple props, layered overlays, readable lower third subtitles"
 
     def _load_font(self, size: int):
-        for candidate in [r"C:\Windows\Fonts\msyh.ttc", r"C:\Windows\Fonts\simhei.ttf"]:
+        for candidate in self.font_candidates:
             if os.path.exists(candidate):
                 try:
                     return ImageFont.truetype(candidate, size=size)

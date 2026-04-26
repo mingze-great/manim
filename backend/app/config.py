@@ -113,6 +113,8 @@ class Settings(BaseSettings):
     STICKMAN_TTS_VOICE: str = "longshuo_v3"
     STICKMAN_TTS_VOICE_LIBRARY: str = "[{\"label\":\"稳重男声\",\"value\":\"longshuo_v3\",\"provider\":\"dashscope_cosyvoice\",\"gender\":\"male\",\"style\":\"steady\"},{\"label\":\"阳光男声\",\"value\":\"longanyang\",\"provider\":\"dashscope_cosyvoice\",\"gender\":\"male\",\"style\":\"bright\"},{\"label\":\"元气女声\",\"value\":\"longanhuan\",\"provider\":\"dashscope_cosyvoice\",\"gender\":\"female\",\"style\":\"energetic\"},{\"label\":\"理性播报男声\",\"value\":\"sambert-zhiming-v1\",\"provider\":\"dashscope_sambert\",\"gender\":\"male\",\"style\":\"rational\"},{\"label\":\"治愈陪伴女声\",\"value\":\"sambert-zhiya-v1\",\"provider\":\"dashscope_sambert\",\"gender\":\"female\",\"style\":\"healing\"},{\"label\":\"激励主播男声\",\"value\":\"sambert-zhihao-v1\",\"provider\":\"dashscope_sambert\",\"gender\":\"male\",\"style\":\"motivational\"}]"
     STICKMAN_OUTPUT_DIR: str = "stickman"
+    STICKMAN_V2_BACKGROUND_IMAGE_PATH: str = ""
+    STICKMAN_V2_FONT_PATHS: str = ""
 
     ARTICLE_DAILY_LIMIT: int = 20
 

@@ -128,6 +128,7 @@ class StickmanGenerator:
         tts_rate: str | None = None,
         style_reference_image_path: str | None = None,
         style_reference_notes: str | None = None,
+        opening_template_key: str | None = None,
     ):
         self._require_config()
         storyboard_count = max(2, min(int(storyboard_count or 3), 20))
@@ -137,7 +138,7 @@ class StickmanGenerator:
                 progress_callback(progress, message)
 
         report(5, "开始生成火柴人视频")
-        script_data = self.generate_script_data(topic, storyboard_count)
+        script_data = self.generate_script_data(topic, storyboard_count, opening_template_key=opening_template_key)
         report(20, "脚本生成完成")
 
         with tempfile.TemporaryDirectory(prefix="stickman_") as temp_dir:
@@ -290,8 +291,8 @@ class StickmanGenerator:
                 "video_path": final_path,
             }
 
-    def generate_script_data(self, topic: str, storyboard_count: int):
-        script_data = self._generate_script(topic, storyboard_count)
+    def generate_script_data(self, topic: str, storyboard_count: int, opening_template_key: Optional[str] = None):
+        script_data = self._generate_script(topic, storyboard_count, opening_template_key=opening_template_key)
         script_data = self._expand_storyboards_for_pacing(script_data, topic)
         storyboards = script_data.get("storyboards") or []
         for index, scene in enumerate(storyboards, start=1):
@@ -303,6 +304,8 @@ class StickmanGenerator:
             scene.setdefault("duration_range", "2-4")
             scene.setdefault("motion_preset", self._motion_preset_for_scene(scene, index))
             scene.setdefault("transition_type", self._transition_type_for_index(index))
+            if index == 1:
+                scene.setdefault("opening_template_key", opening_template_key or "hook_question")
         return script_data
 
     def generate_images(self, storyboards: list[dict], aspect_ratio: str, project_id: Optional[int] = None, progress_callback=None, style_reference_image_path: Optional[str] = None, style_reference_notes: Optional[str] = None):
@@ -372,10 +375,16 @@ class StickmanGenerator:
             return base_dir / "temp"
         return base_dir / f"project_{project_id}"
 
-    def _generate_script(self, topic: str, storyboard_count: int):
+    def _opening_template_instruction(self, opening_template_key: Optional[str]):
+        if opening_template_key == "big_number":
+            return "首幕必须使用爆点数字型开头：用明确数字、结果或反差抓住注意力。"
+        return "首幕必须使用反问钩子型开头：用直接问题引发用户继续看下去。"
+
+    def _generate_script(self, topic: str, storyboard_count: int, opening_template_key: Optional[str] = None):
         prompt = (
             f'请为主题"{topic}"生成一个中文火柴人科普短视频脚本。'
             f"总共 {storyboard_count} 个分镜，每个分镜 1-2 句旁白。"
+            f"{self._opening_template_instruction(opening_template_key)}"
             "必须返回 JSON，不要输出解释。JSON 结构如下："
             '{"title":"视频标题","script":"完整脚本","storyboards":[{"scene_id":1,"scene_description":"场景描述","narration":"旁白文本","keywords":["关键词"]}]}'
         )
@@ -422,6 +431,7 @@ class StickmanGenerator:
                     "duration_range": scene.get("duration_range") or "2-4",
                     "motion_preset": scene.get("motion_preset") or self._motion_preset_for_scene(scene, index),
                     "transition_type": scene.get("transition_type") or self._transition_type_for_index(index),
+                    "opening_template_key": scene.get("opening_template_key") or ((opening_template_key or "hook_question") if index == 1 else None),
                 }
             )
 
@@ -448,6 +458,7 @@ class StickmanGenerator:
                     "duration_range": "2-4",
                     "motion_preset": self._motion_preset_for_index(index),
                     "transition_type": self._transition_type_for_index(index),
+                    "opening_template_key": (opening_template_key or "hook_question") if index == 1 else None,
                 }
             )
         return {
