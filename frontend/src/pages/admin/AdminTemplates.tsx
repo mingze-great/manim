@@ -326,8 +326,8 @@ class MyScene(Scene):
               return category === 'math' ? (
                 <Form.Item
                   name="reference_code"
-                  label="参考脚本（数学可视化专用）"
-                  extra="数学可视化将参考此脚本的结构、风格、排版，但替换核心公式和文案。留空则使用普通模板模式。"
+                  label="数学参考代码"
+                  extra="数学可视化会优先参考这份完整代码的结构、镜头语言与动画风格生成新主题；为空时兼容回退使用上方脚本模板字段。"
                 >
                   <TextArea
                     rows={12}

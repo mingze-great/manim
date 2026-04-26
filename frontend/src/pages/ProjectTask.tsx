@@ -26,6 +26,11 @@ function isMathProjectCategory(category?: string | null) {
   return raw === 'math' || raw === '数学可视化'
 }
 
+function isMathProject(project?: Project | null) {
+  if (!project) return false
+  return project.module_type === 'math' || isMathProjectCategory(project.category)
+}
+
 export default function ProjectTask() {
   const isMobile = useIsMobile()
   const { id } = useParams<{ id: string }>()
@@ -63,29 +68,19 @@ export default function ProjectTask() {
   const hasRenderedVideo = Boolean(project?.video_url)
   const renderStatus = hasRenderedVideo
     ? 'completed'
-    : renderTask?.status || (generatingVideo ? 'processing' : 'not_started')
+    : renderTask?.status || project?.status || (generatingVideo ? 'processing' : 'not_started')
 
   const fetchProject = async () => {
+    setLoading(true)
     try {
       const { data } = await projectApi.get(Number(id))
       setProject(data)
+      setSelectedTemplateId((prev) => prev ?? data.template_id ?? null)
       if (data.manim_code) {
         setGeneratedCode(data.manim_code)
       }
     } catch (error: any) {
       message.error('获取项目失败: ' + (error.message || error.toString()))
-    }
-  }
-
-  const fetchTask = async () => {
-    try {
-      if (!project?.id) return
-      const tasksRes = await projectApi.getTask(project.id)
-      setTask(tasksRes.data)
-    } catch (error: any) {
-      if (error.response?.status !== 404) {
-        console.error('获取任务失败:', error)
-      }
     } finally {
       setLoading(false)
     }
@@ -117,12 +112,6 @@ export default function ProjectTask() {
       fetchAvailableModels()
     }
   }, [id])
-
-  useEffect(() => {
-    if (project) {
-      fetchTask()
-    }
-  }, [project])
 
   useEffect(() => {
     if (project?.video_url) {
@@ -188,6 +177,11 @@ export default function ProjectTask() {
   }, [project, generatedCode])
 
   const handleGenerateCode = async () => {
+    if (isMathProject(project) && !selectedTemplateId) {
+      message.warning('请选择一个数学参考模板后再生成')
+      return
+    }
+
     setGeneratingCode(true)
     setCodeProgress(0)
     setCodeMessage('正在提交后台任务...')
@@ -231,7 +225,7 @@ export default function ProjectTask() {
       codePollingRef.current = pollTimer
     } catch (error: any) {
       console.error('生成失败:', error)
-      message.error(error.message || '生成失败')
+      message.error(error.response?.data?.detail || error.message || '生成失败')
       setGeneratingCode(false)
     }
   }
@@ -388,7 +382,6 @@ export default function ProjectTask() {
         renderTimeoutRef.current = null
       }
       await fetchProject()
-      await fetchTask()
       setGeneratingVideo(false)
     }
   }
@@ -487,9 +480,9 @@ export default function ProjectTask() {
           title={
             <Space>
               <span className="text-lg font-bold">{project?.title}</span>
-              {task && (
-                <span style={{ color: statusMap[task.status]?.color }}>
-                  ({statusMap[task.status]?.text})
+              {project?.status && statusMap[project.status] && (
+                <span style={{ color: statusMap[project.status]?.color }}>
+                  ({statusMap[project.status]?.text})
                 </span>
               )}
             </Space>
@@ -550,17 +543,22 @@ export default function ProjectTask() {
                   </div>
 
                   <label className="block text-sm text-gray-500 mb-2">
-                    选择模板风格
+                    {isMathProject(project) ? '选择数学参考模板' : '选择模板风格'}
                     {project?.category && (
                       <span className="ml-2 text-xs text-blue-500">
-                        ({isMathProjectCategory(project.category) ? '数学可视化' : '思维可视化'}模板)
+                        ({isMathProject(project) ? '数学参考' : '思维可视化'}模板)
                       </span>
                     )}
                   </label>
+                  {isMathProject(project) && (
+                    <div className="mb-2 text-xs text-gray-500">
+                      系统将参考该模板的完整代码风格生成当前数学主题。
+                    </div>
+                  )}
                   <TemplateShowcase
                     value={selectedTemplateId}
                     onChange={setSelectedTemplateId}
-                    category={isMathProjectCategory(project?.category) ? 'math' : 'thinking'}
+                    category={isMathProject(project) ? 'math' : 'thinking'}
                   />
 
                 </div>

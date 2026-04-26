@@ -14,7 +14,7 @@ interface TemplateShowcaseProps {
 
 const CATEGORY_MAP: Record<string, string> = {
   thinking: '思维可视化',
-  math: '数学可视化',
+  math: '数学参考',
 }
 
 function TemplateCard({ t, value, onChange, onPreview }: {
@@ -74,7 +74,7 @@ export default function TemplateShowcase({ value, onChange, category }: Template
   const fetchTemplates = async () => {
     setLoading(true)
     try {
-      const { data } = await templateApi.list()
+      const { data } = await templateApi.list(category ? { category } : undefined)
       const all = [...data.system_templates, ...data.user_templates].filter(t => t.is_active !== false)
       setTemplates(all)
     } catch {
@@ -95,7 +95,7 @@ export default function TemplateShowcase({ value, onChange, category }: Template
     return (
       <div className="template-showcase">
         <div className="showcase-category-label">
-          {CATEGORY_MAP[category] || category}模板
+          {category === 'math' ? '数学参考模板' : `${CATEGORY_MAP[category] || category}模板`}
         </div>
         <div className="showcase-scroll-wrapper">
           <div className="showcase-card-row" ref={scrollRef}>

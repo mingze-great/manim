@@ -278,20 +278,22 @@ class ManimService:
 基于参考代码，生成新的数学可视化代码。
 
 ## 必须保持
-1. 代码结构（分阶段动画：开场→过渡→核心→总结）
-2. 动画风格（几何+公式结合，参数化曲线等）
-3. 排版方式（左图右文，严格分区）
-4. 性能优化（及时清除上一幕元素）
+1. 尽量继承参考代码的镜头语言、叙事节奏、场景切换和动画组织方式
+2. 保持参考代码擅长的公式呈现方式、重点高亮方式、镜头推进方式和画面密度
+3. 保持参考代码的代码风格，包括场景拆分、对象命名习惯和元素清理习惯
+4. 保持代码完整可运行，并继续注意性能，及时清理上一幕元素
 
 ## 必须替换
 1. 核心公式（MathTex内容）
 2. 几何参数（频率、半径、相位等）
 3. 文案内容（标题、描述、结论）
 4. 类名（使用有意义的英文名）
+5. 与新主题不匹配的场景对象、示例数值和视觉重点
 
 ## 约束
-- 所有坐标用 3D 格式 [x, y, 0]
-- 不用复杂 updater，优先用 always_redraw
+- 优先沿用参考代码已经验证过的结构骨架，而不是重新发明一套完全不同的排版
+- 如果参考代码本身使用 updater、相机移动、公式高亮、坐标系或动态图形，请按同类思路为新主题重写
+- 允许沿用参考代码的整体布局，不要强行改成固定版式
 - 代码风格简洁，注释清晰
 - 代码必须语法正确，能通过 Python ast.parse() 检查
 """ if language == 'zh' else f"""You are a math visualization expert.
@@ -305,20 +307,22 @@ class ManimService:
 Generate new math visualization code based on the reference code.
 
 ## Must Maintain
-1. Code structure (phased animation: opening → transition → core → summary)
-2. Animation style (geometry + formula combination, parametric curves, etc.)
-3. Layout (left graph, right text, strict partitioning)
-4. Performance optimization (clear previous scene elements promptly)
+1. Reuse the reference code's cinematic language, narrative pacing, scene transitions, and animation organization as much as possible
+2. Preserve how the reference code presents formulas, highlights key ideas, moves the camera, and balances visual density
+3. Preserve the reference code's coding style, scene breakdown, naming habits, and cleanup patterns
+4. Keep the code complete, runnable, and mindful of performance by clearing old scene elements promptly
 
 ## Must Replace
 1. Core formulas (MathTex content)
 2. Geometric parameters (frequency, radius, phase, etc.)
 3. Text content (title, description, conclusion)
 4. Class name (use meaningful English names)
+5. Any scene objects, example values, and visual focus points that do not match the new topic
 
 ## Constraints
-- All coordinates in 3D format [x, y, 0]
-- Avoid complex updaters, prefer always_redraw
+- Prefer adapting the proven structure of the reference code instead of inventing a completely different layout
+- If the reference code uses updaters, camera motion, formula highlighting, axes, or dynamic geometry, rewrite the new topic with the same kind of language
+- Do not force a fixed layout when the reference code uses another effective composition
 - Clean code style, clear comments
 - Code must be syntactically correct, pass Python ast.parse()
 """

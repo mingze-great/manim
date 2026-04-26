@@ -189,6 +189,7 @@ def create_template(
         description=template.description,
         category=template.category,
         code=template.code,
+        reference_code=template.reference_code,
         thumbnail=template.thumbnail,
         is_system=template_is_system_bool,
         user_id=current_user_id if not template_is_system_bool else None,

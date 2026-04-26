@@ -44,6 +44,57 @@ def _project_query_for_user(db: Session, current_user: User):
     if not current_user.is_admin:
         query = query.filter(Project.user_id == current_user.id)
     return query
+
+
+def _is_math_project(project: Project | None) -> bool:
+    if not project:
+        return False
+    module_type = str(getattr(project, "module_type", "") or "").strip().lower()
+    category = str(getattr(project, "category", "") or "").strip().lower()
+    return module_type == "math" or category in {"math", "数学可视化"}
+
+
+def _resolve_math_reference_code(template: Template | None) -> str:
+    if not template:
+        return ""
+    reference_code = str(template.reference_code or "").strip()
+    if reference_code:
+        return reference_code
+    return str(template.code or "").strip()
+
+
+def _load_active_template(db: Session, template_id: int | None) -> Template | None:
+    if not template_id:
+        return None
+    return db.query(Template).filter(
+        Template.id == template_id,
+        Template.is_active.is_(True)
+    ).first()
+
+
+def _prepare_code_generation_context(db: Session, project: Project, template_id: int | None):
+    template = _load_active_template(db, template_id)
+    if template_id and not template:
+        raise HTTPException(status_code=400, detail="所选模板不存在或已停用")
+
+    if _is_math_project(project):
+        input_content = str(project.theme or "").strip()
+        if not input_content:
+            raise HTTPException(status_code=400, detail="请先输入数学主题")
+        if not template:
+            raise HTTPException(status_code=400, detail="请选择一个数学参考模板后再生成")
+        if str(template.category or "").strip().lower() != "math":
+            raise HTTPException(status_code=400, detail="请选择数学参考模板")
+        if not _resolve_math_reference_code(template):
+            raise HTTPException(status_code=400, detail="当前数学模板缺少参考代码")
+        return input_content, template
+
+    input_content = str(project.final_script or project.theme or "").strip()
+    if not input_content:
+        raise HTTPException(status_code=400, detail="请先输入主题或完成内容对话")
+    return input_content, template
+
+
 settings = get_settings()
 
 RENDER_SEMAPHORE = asyncio.Semaphore(4)
@@ -230,14 +281,14 @@ async def generate_code_stream(
         async def error_gen():
             yield f"data: {json.dumps({'step': 'error', 'progress': 0, 'message': 'Project not found'})}\n\n"
         return StreamingResponse(error_gen(), media_type="text/event-stream")
-    
-    # 数学可视化项目可能没有 final_script，使用 theme 作为输入
-    input_content = project.final_script or project.theme
-    if not input_content:
+
+    try:
+        input_content, validated_template = _prepare_code_generation_context(db, project, template_id)
+    except HTTPException as exc:
         async def error_gen():
-            yield f"data: {json.dumps({'step': 'error', 'progress': 0, 'message': '请先输入主题或完成内容对话'})}\n\n"
+            yield f"data: {json.dumps({'step': 'error', 'progress': 0, 'message': str(exc.detail)})}\n\n"
         return StreamingResponse(error_gen(), media_type="text/event-stream")
-    
+
     async def event_generator():
         from app.database import SessionLocal
         db_session = SessionLocal()
@@ -253,13 +304,17 @@ async def generate_code_stream(
             yield f"data: {json.dumps({'step': 'prepare', 'progress': 10, 'message': '准备提示词...'})}\n\n"
             await asyncio.sleep(0.1)
             
-            template = None
             template_code = None
-            if template_id:
-                template = db_session.query(Template).filter(Template.id == template_id).first()
+            reference_code = None
+            if validated_template:
+                template = db_session.query(Template).filter(Template.id == validated_template.id).first()
                 if template:
                     template_code = template.code
-                    yield f"data: {json.dumps({'step': 'template', 'progress': 15, 'message': f'使用模板: {template.name}'})}\n\n"
+                    reference_code = _resolve_math_reference_code(template) if _is_math_project(project_local) else str(template.reference_code or "").strip()
+                    if _is_math_project(project_local) and reference_code:
+                        yield f"data: {json.dumps({'step': 'template', 'progress': 15, 'message': f'使用数学参考模板: {template.name}'})}\n\n"
+                    else:
+                        yield f"data: {json.dumps({'step': 'template', 'progress': 15, 'message': f'使用模板: {template.name}'})}\n\n"
             
             yield f"data: {json.dumps({'step': 'generate', 'progress': 20, 'message': '脚本生成中...'})}\n\n"
             
@@ -282,7 +337,8 @@ async def generate_code_stream(
                     input_content, 
                     template_code,
                     video_title=project_local.theme,
-                    model=model
+                    model=model,
+                    reference_code=reference_code or None,
                 )
             )
             
@@ -1036,9 +1092,10 @@ async def generate_code_async(
     
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    
-    if not project.final_script:
-        raise HTTPException(status_code=400, detail="请先完成内容对话")
+
+    _, template = _prepare_code_generation_context(db, project, template_id)
+    project.template_id = template.id if template else None
+    db.commit()
     
     # 创建任务记录
     task = Task(

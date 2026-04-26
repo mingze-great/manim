@@ -183,7 +183,7 @@ def pick_valid_rendered_video(temp_dir: str):
     return valid[0] if valid else None
 
 
-def run_async_code_gen(script_val, template_id, code_ref_val, reference_code=None):
+def run_async_code_gen(script_val, template_id, code_ref_val, reference_code=None, model=None):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
@@ -191,7 +191,7 @@ def run_async_code_gen(script_val, template_id, code_ref_val, reference_code=Non
         manim_service = ManimService(db)
         result = loop.run_until_complete(
             asyncio.wait_for(
-                manim_service.generate_code(script_val, template_id, code_ref_val, reference_code=reference_code),
+                manim_service.generate_code(script_val, template_id, code_ref_val, model=model, reference_code=reference_code),
                 timeout=120
             )
         )
@@ -203,6 +203,23 @@ def run_async_code_gen(script_val, template_id, code_ref_val, reference_code=Non
         except:
             pass
         loop.close()
+
+
+def _is_math_project(project: Project | None) -> bool:
+    if not project:
+        return False
+    module_type = str(getattr(project, "module_type", "") or "").strip().lower()
+    category = str(getattr(project, "category", "") or "").strip().lower()
+    return module_type == "math" or category in {"math", "数学可视化"}
+
+
+def _resolve_math_reference_code(template) -> str:
+    if not template:
+        return ""
+    reference_code = str(template.reference_code or "").strip()
+    if reference_code:
+        return reference_code
+    return str(template.code or "").strip()
 
 
 def render_video_task(task_id: int, project_id: int, template_id: int = None, custom_code: str = None):
@@ -236,7 +253,7 @@ def render_video_task(task_id: int, project_id: int, template_id: int = None, cu
             # 需要生成代码
             update_task_progress(task_id, 10, "processing", log="正在生成 Manim 代码...\n")
             
-            script_val = str(project.final_script) if project.final_script is not None else ""
+            script_val = str(project.theme) if _is_math_project(project) else (str(project.final_script) if project.final_script is not None else "")
             code_ref_val = str(project.custom_code) if project.custom_code is not None else ""
             
             # 获取模板的参考代码
@@ -247,10 +264,10 @@ def render_video_task(task_id: int, project_id: int, template_id: int = None, cu
                 template = db.query(Template).filter(Template.id == template_id).first()
                 if template:
                     template_code = template.code
-                    reference_code = template.reference_code
+                    reference_code = _resolve_math_reference_code(template) if _is_math_project(project) else template.reference_code
             
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(run_async_code_gen, script_val, template_code, code_ref_val, reference_code)
+                future = executor.submit(run_async_code_gen, script_val, template_code, code_ref_val, reference_code, None)
                 try:
                     manim_code = future.result(timeout=180)
                 except concurrent.futures.TimeoutError:
@@ -455,7 +472,7 @@ def generate_code_task(task_id: int, project_id: int, template_id: int = None, m
         try:
             update_task_progress(task_id, 10, "processing", log="准备生成脚本...\n")
             
-            script_val = str(project.final_script) if project.final_script is not None else ""
+            script_val = str(project.theme) if _is_math_project(project) else (str(project.final_script) if project.final_script is not None else "")
             
             # 获取模板代码
             template_code = None
@@ -465,7 +482,7 @@ def generate_code_task(task_id: int, project_id: int, template_id: int = None, m
                 template = db.query(Template).filter(Template.id == template_id).first()
                 if template:
                     template_code = template.code
-                    reference_code = template.reference_code
+                    reference_code = _resolve_math_reference_code(template) if _is_math_project(project) else template.reference_code
                     if reference_code:
                         update_task_progress(task_id, 15, "processing", log=f"使用参考代码模板: {template.name}\n")
                     else:
@@ -475,7 +492,7 @@ def generate_code_task(task_id: int, project_id: int, template_id: int = None, m
             
             # 使用线程池执行异步代码生成
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(run_async_code_gen, script_val, template_code, None, reference_code)
+                future = executor.submit(run_async_code_gen, script_val, template_code, None, reference_code, model)
                 
                 # 等待完成，更新进度
                 progress = 30

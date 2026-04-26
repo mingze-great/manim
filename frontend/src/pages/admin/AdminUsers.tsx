@@ -61,6 +61,7 @@ export default function AdminUsers() {
   const [permissionDraft, setPermissionDraft] = useState<Record<string, any>>({})
   const [permissionLoading, setPermissionLoading] = useState(false)
   const [batchPermissionModalVisible, setBatchPermissionModalVisible] = useState(false)
+  const [batchPermissionApply, setBatchPermissionApply] = useState<Record<string, boolean>>({ visual: false, stickman: false, article: false })
 
   const getVisualLimitValue = (user?: User | null) => {
     const visualLimit = user?.module_permissions?.visual?.daily_limit
@@ -111,6 +112,15 @@ export default function AdminUsers() {
       })
       return next
     })
+    if (batchPermissionModalVisible) {
+      setBatchPermissionApply((prev) => {
+        const next = { ...prev }
+        Object.keys(template).forEach((moduleKey) => {
+          next[moduleKey] = true
+        })
+        return next
+      })
+    }
   }
 
   useEffect(() => {
@@ -397,6 +407,13 @@ export default function AdminUsers() {
     }))
   }
 
+  const updateBatchPermissionApply = (moduleKey: string, checked: boolean) => {
+    setBatchPermissionApply((prev) => ({
+      ...prev,
+      [moduleKey]: checked,
+    }))
+  }
+
   const handleSavePermissions = async () => {
     if (!permissionUser) return
     setPermissionLoading(true)
@@ -414,9 +431,19 @@ export default function AdminUsers() {
 
   const handleBatchPermissions = async () => {
     if (!selectedRowKeys.length) return
+    const selectedModules = Object.entries(permissionDraft).reduce<Record<string, any>>((acc, [moduleKey, value]) => {
+      if (batchPermissionApply[moduleKey]) {
+        acc[moduleKey] = value
+      }
+      return acc
+    }, {})
+    if (!Object.keys(selectedModules).length) {
+      message.warning('请至少选择一个要应用的模块')
+      return
+    }
     setPermissionLoading(true)
     try {
-      await adminApi.batchUpdateUserModulePermissions(selectedRowKeys as number[], permissionDraft)
+      await adminApi.batchUpdateUserModulePermissions(selectedRowKeys as number[], selectedModules)
       message.success('批量模块权限已更新')
       setBatchPermissionModalVisible(false)
       fetchUsers()
@@ -588,6 +615,7 @@ export default function AdminUsers() {
               disabled={!selectedRowKeys.length}
               onClick={() => {
                 setPermissionDraft(defaultPermissions(null))
+                setBatchPermissionApply({ visual: false, stickman: false, article: false })
                 setBatchPermissionModalVisible(true)
               }}
             >
@@ -1004,18 +1032,21 @@ export default function AdminUsers() {
             <Button type="primary" ghost onClick={() => applyPermissionTemplate('enterprise')}>企业版</Button>
           </Space>
         </div>
-        <div className="mb-3 text-gray-500 text-sm">批量设置时会自动排除管理员账号，仅作用于普通用户。</div>
+        <div className="mb-3 text-gray-500 text-sm">批量设置时会自动排除管理员账号，仅作用于普通用户。仅修改本次勾选的模块，未勾选模块保持不变。</div>
         {['visual', 'stickman', 'article'].map((moduleKey) => {
           const labels: Record<string, string> = { visual: '思维可视化', stickman: '火柴人视频', article: '公众号文章' }
           const current: any = permissionDraft[moduleKey] || { enabled: true, daily_limit: moduleKey === 'article' ? 45 : moduleKey === 'stickman' ? 30 : 5, period: moduleKey === 'visual' ? 'daily' : 'monthly' }
           const period = current.period || (moduleKey === 'visual' ? 'daily' : 'monthly')
+          const applyThisModule = !!batchPermissionApply[moduleKey]
           return (
             <Card key={moduleKey} size="small" className="mb-3" title={labels[moduleKey]}>
               <Space align="center" wrap>
+                <span>应用此模块</span>
+                <Switch checked={applyThisModule} onChange={(checked) => updateBatchPermissionApply(moduleKey, checked)} />
                 <span>启用</span>
-                <Switch checked={!!current.enabled} onChange={(checked) => updatePermissionDraft(moduleKey, { enabled: checked })} />
+                <Switch checked={!!current.enabled} onChange={(checked) => updatePermissionDraft(moduleKey, { enabled: checked })} disabled={!applyThisModule} />
                 <span>次数限制</span>
-                <InputNumber min={0} max={999} value={current.daily_limit} onChange={(value) => updatePermissionDraft(moduleKey, { daily_limit: value || 0 })} />
+                <InputNumber min={0} max={999} value={current.daily_limit} onChange={(value) => updatePermissionDraft(moduleKey, { daily_limit: value || 0 })} disabled={!applyThisModule} />
                 <span>周期</span>
                 <Select
                   value={period}
@@ -1025,6 +1056,7 @@ export default function AdminUsers() {
                     { label: '每月', value: 'monthly' },
                   ]}
                   style={{ width: 100 }}
+                  disabled={!applyThisModule}
                 />
               </Space>
             </Card>
