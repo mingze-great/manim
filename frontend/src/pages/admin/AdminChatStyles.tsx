@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Button, Space, Modal, Form, Input, message, Popconfirm, Tag, Card } from 'antd'
+import { Button, Space, Modal, Form, Input, message, Popconfirm, Tag, Card, Spin } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import api from '@/services/api'
 import { useIsMobile } from '@/hooks/useIsMobile'
@@ -130,9 +130,15 @@ export default function AdminChatStyles() {
         </Space>
       </div>
 
-      <div className={isMobile ? 'space-y-3' : 'grid grid-cols-1 xl:grid-cols-2 gap-4'}>
-        {styles.map((record) => renderStyleCard(record))}
-      </div>
+      {loading ? (
+        <div className="flex justify-center items-center py-16">
+          <Spin size="large" />
+        </div>
+      ) : (
+        <div className={isMobile ? 'space-y-3' : 'grid grid-cols-1 xl:grid-cols-2 gap-4'}>
+          {styles.map((record) => renderStyleCard(record))}
+        </div>
+      )}
 
       <Modal
         title={editingStyle ? '编辑风格' : '添加风格'}
