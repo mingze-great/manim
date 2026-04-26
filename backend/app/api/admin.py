@@ -23,7 +23,7 @@ import psutil
 router = APIRouter(prefix="/admin", tags=["admin"])
 settings = get_settings()
 
-MODULE_KEYS = ["visual", "stickman", "article"]
+MODULE_KEYS = ["visual", "stickman", "explainer", "article"]
 
 
 def _normalize_module_permissions(payload: dict, user: User) -> dict:
@@ -355,6 +355,7 @@ async def get_user_detail(
     module_usage = {
         "visual": permissions.get("visual", {}),
         "stickman": permissions.get("stickman", {}),
+        "explainer": permissions.get("explainer", {}),
         "article": permissions.get("article", {}),
     }
     
@@ -1050,6 +1051,11 @@ async def get_module_stats(
     stickman_success = db.query(Project).filter(Project.module_type == "stickman", Project.status == "completed").count()
     stickman_failed = db.query(Project).filter(Project.module_type == "stickman", Project.status == "failed").count()
 
+    explainer_total = db.query(Project).filter(Project.module_type == "explainer").count()
+    explainer_today = db.query(Project).filter(Project.module_type == "explainer", Project.created_at >= today, Project.created_at < tomorrow).count()
+    explainer_success = db.query(Project).filter(Project.module_type == "explainer", Project.status == "completed").count()
+    explainer_failed = db.query(Project).filter(Project.module_type == "explainer", Project.status == "failed").count()
+
     article_total = db.query(Article).count()
     article_today = db.query(Article).filter(Article.created_at >= today, Article.created_at < tomorrow).count()
     article_success = db.query(Article).filter(Article.content_html.isnot(None)).count()
@@ -1058,6 +1064,7 @@ async def get_module_stats(
     return {
         "visual": build(visual_total, visual_today, visual_success, visual_failed),
         "stickman": build(stickman_total, stickman_today, stickman_success, stickman_failed),
+        "explainer": build(explainer_total, explainer_today, explainer_success, explainer_failed),
         "article": build(article_total, article_today, article_success, article_failed),
     }
 

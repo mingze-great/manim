@@ -124,7 +124,15 @@ export default function History() {
   }
 
   const handleContinueProject = (project: Project) => {
-    navigate(`/project/${project.id}/${project.module_type === 'stickman' ? 'task' : 'chat'}`)
+    if (project.module_type === 'stickman') {
+      navigate(`/project/${project.id}/task`)
+      return
+    }
+    if (project.module_type === 'explainer') {
+      navigate(`/project/${project.id}/explainer`)
+      return
+    }
+    navigate(`/project/${project.id}/chat`)
   }
 
   const handleViewProject = (project: Project) => {
@@ -291,8 +299,8 @@ export default function History() {
                           <div className="project-actions">
                             {project.status === 'completed' ? (
                               <>
-                                <Button type="text" size="small" icon={<PlayCircleOutlined />} onClick={() => handleViewProject(project)}>播放</Button>
-                                 <Button type="text" size="small" icon={<CopyOutlined />} onClick={() => navigate(`/project/${project.id}/${project.module_type === 'stickman' ? 'task' : 'chat'}`)}>复用</Button>
+                                 <Button type="text" size="small" icon={<PlayCircleOutlined />} onClick={() => handleViewProject(project)}>播放</Button>
+                                  <Button type="text" size="small" icon={<CopyOutlined />} onClick={() => handleContinueProject(project)}>复用</Button>
                               </>
                             ) : (
                               <Button type="text" size="small" icon={<EditOutlined />} onClick={() => handleContinueProject(project)}>继续编辑</Button>
@@ -353,6 +361,28 @@ export default function History() {
                       <Title level={5} className="project-name">{project.title}</Title>
                       <div className="project-meta"><Text type="secondary">{new Date(project.created_at).toLocaleDateString('zh-CN')}</Text></div>
                       <div className="project-actions"><Button type="text" size="small" icon={<EditOutlined />} onClick={() => navigate(`/project/${project.id}/task`)}>继续创作</Button></div>
+                    </div>
+                  </Card>
+                )
+              })}
+            </div>
+          )},
+          { key: 'explainer', label: `讲解型视频 (${projects.filter(p => p.module_type === 'explainer').length})`, children: (
+            <div className="projects-grid">
+              {projects.filter(p => p.module_type === 'explainer').map((project) => {
+                const task = tasks[project.id]
+                const statusConfig = getStatusConfig(project.status)
+                return (
+                  <Card key={project.id} className="project-card hover-lift">
+                    <div className="project-thumbnail" onClick={() => navigate(`/project/${project.id}/explainer`)}>
+                      <VideoCameraOutlined className="thumbnail-icon" />
+                      {project.status === 'rendering' && task && <div className="progress-overlay"><Progress type="circle" percent={task.progress || 0} size={60} strokeColor="#1d4ed8" /></div>}
+                      <div className={`status-badge ${statusConfig.color}`}>{statusConfig.icon} {statusConfig.text}</div>
+                    </div>
+                    <div className="project-info">
+                      <Title level={5} className="project-name">{project.title}</Title>
+                      <div className="project-meta"><Text type="secondary">{new Date(project.created_at).toLocaleDateString('zh-CN')}</Text></div>
+                      <div className="project-actions"><Button type="text" size="small" icon={<EditOutlined />} onClick={() => navigate(`/project/${project.id}/explainer`)}>继续创作</Button></div>
                     </div>
                   </Card>
                 )

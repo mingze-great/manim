@@ -64,6 +64,7 @@ export default function MainLayout() {
     const item = menuItems.find(m => m && 'key' in m && m.key === location.pathname)
     if (item && 'label' in item) return item.label as string
     if (location.pathname.startsWith('/creator')) return '创作工作台'
+    if (location.pathname.includes('/explainer')) return '讲解型视频'
     if (location.pathname.startsWith('/article')) return '公众号文章'
     return '思维可视化 视频平台'
   }

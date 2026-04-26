@@ -6,6 +6,7 @@ import MainLayout from './components/Layout/MainLayout'
 import AdminLayout from './components/Layout/AdminLayout'
 import Landing from './pages/Landing'
 import Creator from './pages/Creator'
+import ExplainerCreator from './pages/ExplainerCreator'
 import StickmanModuleEntry from './pages/StickmanModuleEntry'
 import StickmanCreator from './pages/StickmanCreator'
 import History from './pages/History'
@@ -15,6 +16,7 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import ProjectChat from './pages/ProjectChat'
 import ProjectTask from './pages/ProjectTask'
+import ExplainerStudio from './pages/ExplainerStudio'
 import StickmanStudioEntry from './pages/StickmanStudioEntry'
 import ArticleEntry from './pages/Article/Entry'
 import ArticleQuick from './pages/Article/Quick'
@@ -126,10 +128,12 @@ function AppContent() {
       
       <Route element={<PrivateRoute><MainLayout /></PrivateRoute>}>
         <Route path="/creator" element={<Creator />} />
+        <Route path="/creator/explainer" element={<ExplainerCreator />} />
         <Route path="/creator/stickman" element={<StickmanModuleEntry />} />
         <Route path="/creator/stickman/:variant" element={<StickmanCreator />} />
         <Route path="/project/:id/chat" element={<ProjectChat />} />
         <Route path="/project/:id/task" element={<ProjectTask />} />
+        <Route path="/project/:id/explainer" element={<ExplainerStudio />} />
         <Route path="/project/:id/stickman" element={<StickmanStudioEntry />} />
         <Route path="/article" element={<ArticleEntry />} />
         <Route path="/article/quick" element={<ArticleQuick />} />

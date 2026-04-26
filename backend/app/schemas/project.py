@@ -20,6 +20,7 @@ class ProjectCreate(ProjectBase):
     tts_voice: str = "longshuo_v3"
     tts_rate: str = "+0%"
     background_image_path: Optional[str] = None
+    target_duration: Optional[int] = None
 
 
 class ProjectUpdate(BaseModel):
@@ -37,6 +38,7 @@ class ProjectUpdate(BaseModel):
     tts_provider: Optional[str] = None
     tts_voice: Optional[str] = None
     tts_rate: Optional[str] = None
+    target_duration: Optional[int] = None
     background_image_path: Optional[str] = None
     style_reference_image_path: Optional[str] = None
     style_reference_notes: Optional[str] = None

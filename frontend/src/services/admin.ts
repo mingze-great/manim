@@ -114,6 +114,7 @@ export interface ModuleStatsItem {
 export interface ModuleStatsResponse {
   visual: ModuleStatsItem
   stickman: ModuleStatsItem
+  explainer: ModuleStatsItem
   article: ModuleStatsItem
 }
 

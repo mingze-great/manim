@@ -29,6 +29,7 @@ from app.services.chat import ChatService
 from app.services.manim import ManimService
 from app.services.stickman_generator import StickmanGenerator as StickmanGeneratorLegacy
 from app.services.stickman_generator_v2 import StickmanGenerator as StickmanGeneratorV2
+from app.services.explainer_generator import ExplainerGenerator
 from app.services.audio_enhancement import enhance_voice_audio
 from app.tasks.celery_tasks import generate_chat_celery
 
@@ -37,6 +38,7 @@ MODULE_LABELS = {
     "manim": "思维可视化",
     "math": "数学可视化",
     "stickman": "视频讲解",
+    "explainer": "讲解型视频",
 }
 
 
@@ -48,6 +50,10 @@ def _build_stickman_generator(project: Project | None = None):
 
 def _stickman_variant_label(project: Project | None = None):
     return '增强讲解' if project and str(getattr(project, 'stickman_variant', 'legacy') or 'legacy') == 'v2' else '标准讲解'
+
+
+def _build_explainer_generator():
+    return ExplainerGenerator()
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 limiter = Limiter(key_func=get_remote_address)
@@ -96,6 +102,8 @@ def create_project(
         if str(project.stickman_variant or "legacy") not in {"legacy", "v2"}:
             raise HTTPException(status_code=400, detail="stickman_variant 仅支持 legacy 或 v2")
         project.storyboard_count = max(2, min(int(project.storyboard_count or 3), stickman_storyboard_limit))
+    elif module_key == "explainer":
+        project.storyboard_count = max(8, min(int(project.storyboard_count or 10), 15))
     allowed, reason = current_user.can_use_module(module_key, db)
     if not allowed:
         raise HTTPException(status_code=403, detail=reason or f"系统繁忙，请稍后再试")
@@ -178,6 +186,10 @@ def update_project(
         if "storyboard_count" in data and data["storyboard_count"] is not None:
             limit = 20 if current_user.is_admin else 6
             data["storyboard_count"] = max(2, min(int(data["storyboard_count"]), limit))
+    elif project.module_type == "explainer":
+        data = project_update.model_dump(exclude_unset=True)
+        if "storyboard_count" in data and data["storyboard_count"] is not None:
+            data["storyboard_count"] = max(8, min(int(data["storyboard_count"]), 15))
     else:
         data = project_update.model_dump(exclude_unset=True)
     
@@ -198,6 +210,18 @@ def _get_stickman_project(db: Session, current_user: User, project_id: int) -> P
         raise HTTPException(status_code=404, detail="Project not found")
     if project.module_type != "stickman":
         raise HTTPException(status_code=400, detail="Only stickman projects support this operation")
+    return project
+
+
+def _get_explainer_project(db: Session, current_user: User, project_id: int) -> Project:
+    project = db.query(Project).filter(
+        Project.id == project_id,
+        Project.user_id == current_user.id
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if project.module_type != "explainer":
+        raise HTTPException(status_code=400, detail="Only explainer projects support this operation")
     return project
 
 
@@ -369,6 +393,151 @@ def regenerate_stickman_image(
     return project
 
 
+@router.post("/{project_id}/explainer/storyboard", response_model=ProjectResponse)
+def generate_explainer_storyboard(
+    project_id: int,
+    payload: dict,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)]
+):
+    project = _get_explainer_project(db, current_user, project_id)
+    generator = _build_explainer_generator()
+    try:
+        generation_flags = json.loads(project.generation_flags or "{}")
+    except Exception:
+        generation_flags = {}
+    opening_hook_mode = str(payload.get("opening_hook_mode") or generation_flags.get("opening_hook_mode") or "hook_question")
+    visual_style_key = str(payload.get("visual_style_key") or generation_flags.get("visual_style_key") or "deep_blue_emotional")
+    target_duration = int(payload.get("target_duration") or generation_flags.get("target_duration") or 45)
+    result = generator.generate_storyboard_data(
+        str(project.theme),
+        int(project.storyboard_count or 10),
+        opening_hook_mode,
+        visual_style_key,
+        target_duration,
+    )
+    project.title = str(result.get("title") or project.title)
+    project.final_script = result.get("script")
+    project.storyboard_json = json.dumps(result.get("storyboards") or [], ensure_ascii=False)
+    project.generation_flags = json.dumps({**generation_flags, **(result.get("generation_flags") or {})}, ensure_ascii=False)
+    project.status = "draft"
+    project.error_message = None
+    db.commit()
+    db.refresh(project)
+    return project
+
+
+@router.put("/{project_id}/explainer/storyboard", response_model=ProjectResponse)
+def update_explainer_storyboard(
+    project_id: int,
+    payload: dict,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)]
+):
+    project = _get_explainer_project(db, current_user, project_id)
+    storyboards = payload.get("storyboards") or []
+    if not isinstance(storyboards, list) or not storyboards:
+        raise HTTPException(status_code=400, detail="storyboards 不能为空")
+    if isinstance(payload.get("title"), str) and payload.get("title").strip():
+        project.title = payload.get("title").strip()
+    if isinstance(payload.get("final_script"), str):
+        project.final_script = payload.get("final_script")
+    if isinstance(payload.get("generation_flags"), dict):
+        try:
+            old_flags = json.loads(project.generation_flags or "{}")
+        except Exception:
+            old_flags = {}
+        project.generation_flags = json.dumps({**old_flags, **payload.get("generation_flags")}, ensure_ascii=False)
+    project.storyboard_json = json.dumps(storyboards, ensure_ascii=False)
+    db.commit()
+    db.refresh(project)
+    return project
+
+
+@router.post("/{project_id}/explainer/images", response_model=ProjectResponse)
+def generate_explainer_images(
+    project_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)]
+):
+    project = _get_explainer_project(db, current_user, project_id)
+    storyboards = json.loads(project.storyboard_json or "[]")
+    if not storyboards:
+        raise HTTPException(status_code=400, detail="请先生成并确认分镜")
+    if not getattr(project, 'quota_consumed', False):
+        allowed, reason = current_user.can_use_module('explainer', db)
+        if not allowed:
+            raise HTTPException(status_code=403, detail=reason or '系统繁忙，请稍后再试')
+    try:
+        generation_flags = json.loads(project.generation_flags or "{}")
+    except Exception:
+        generation_flags = {}
+    generator = _build_explainer_generator()
+    synced_storyboards, assets, flags = generator.generate_images(
+        str(project.theme),
+        storyboards,
+        str(project.aspect_ratio or "16:9"),
+        project_id,
+        None,
+        str(project.background_image_path) if project.background_image_path else None,
+        str(project.style_reference_image_path) if project.style_reference_image_path else None,
+        str(project.style_reference_notes) if project.style_reference_notes else None,
+        generation_flags,
+    )
+    project.storyboard_json = json.dumps(synced_storyboards, ensure_ascii=False)
+    project.image_assets_json = json.dumps(assets, ensure_ascii=False)
+    project.generation_flags = json.dumps(flags, ensure_ascii=False)
+    if not getattr(project, 'quota_consumed', False):
+        current_user.increment_module_usage('explainer')
+        project.quota_consumed = True
+    db.commit()
+    db.refresh(project)
+    return project
+
+
+@router.post("/{project_id}/explainer/images/{scene_index}/regenerate", response_model=ProjectResponse)
+def regenerate_explainer_image(
+    project_id: int,
+    scene_index: int,
+    payload: dict,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)]
+):
+    project = _get_explainer_project(db, current_user, project_id)
+    storyboards = json.loads(project.storyboard_json or "[]")
+    assets = json.loads(project.image_assets_json or "[]")
+    if not (0 <= scene_index < len(storyboards)):
+        raise HTTPException(status_code=404, detail="分镜不存在")
+    try:
+        generation_flags = json.loads(project.generation_flags or "{}")
+    except Exception:
+        generation_flags = {}
+    generator = _build_explainer_generator()
+    updated_scene, asset, used_fallback = generator.regenerate_single_image(
+        str(project.theme),
+        storyboards,
+        scene_index,
+        str(project.aspect_ratio or "16:9"),
+        project_id,
+        payload.get("prompt") if isinstance(payload.get("prompt"), str) else None,
+        str(project.background_image_path) if project.background_image_path else None,
+        str(project.style_reference_image_path) if project.style_reference_image_path else None,
+        str(project.style_reference_notes) if project.style_reference_notes else None,
+        generation_flags,
+    )
+    storyboards[scene_index] = updated_scene
+    while len(assets) <= scene_index:
+        assets.append({})
+    assets[scene_index] = asset
+    generation_flags[f"scene_{scene_index + 1}_fallback"] = used_fallback
+    project.storyboard_json = json.dumps(storyboards, ensure_ascii=False)
+    project.image_assets_json = json.dumps(assets, ensure_ascii=False)
+    project.generation_flags = json.dumps(generation_flags, ensure_ascii=False)
+    db.commit()
+    db.refresh(project)
+    return project
+
+
 @router.post("/{project_id}/voice-reference", response_model=ProjectResponse)
 async def upload_voice_reference(
     project_id: int,
@@ -384,8 +553,8 @@ async def upload_voice_reference(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    if project.module_type != "stickman":
-        raise HTTPException(status_code=400, detail="Only stickman projects support voice upload")
+    if project.module_type not in {"stickman", "explainer"}:
+        raise HTTPException(status_code=400, detail="Only stickman or explainer projects support voice upload")
 
     suffix = Path(file.filename or "voice.wav").suffix.lower()
     if suffix not in {".mp3", ".wav", ".m4a", ".aac", ".ogg", ".webm"}:
@@ -522,8 +691,8 @@ async def upload_style_reference(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    if project.module_type != "stickman":
-        raise HTTPException(status_code=400, detail="Only stickman projects support style reference")
+    if project.module_type not in {"stickman", "explainer"}:
+        raise HTTPException(status_code=400, detail="Only stickman or explainer projects support style reference")
 
     suffix = Path(file.filename or "style.png").suffix.lower()
     if suffix not in {".png", ".jpg", ".jpeg", ".webp"}:
@@ -547,7 +716,10 @@ async def upload_style_reference(
 
     project.style_reference_image_path = str(image_path)
     project.style_reference_notes = notes or None
-    generator = _build_stickman_generator(project)
+    if project.module_type == "explainer":
+        generator = _build_explainer_generator().engine
+    else:
+        generator = _build_stickman_generator(project)
     project.style_reference_profile = generator.extract_style_reference_profile(str(image_path), notes or None)
     db.commit()
     db.refresh(project)
@@ -568,8 +740,8 @@ async def upload_background_image(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    if project.module_type != "stickman":
-        raise HTTPException(status_code=400, detail="Only stickman projects support background image")
+    if project.module_type not in {"stickman", "explainer"}:
+        raise HTTPException(status_code=400, detail="Only stickman or explainer projects support background image")
 
     suffix = Path(file.filename or "background.png").suffix.lower()
     if suffix not in {".png", ".jpg", ".jpeg", ".webp"}:
