@@ -4,12 +4,16 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
+from PIL import Image, ImageDraw
+
 from app.services.stickman_generator_v2 import StickmanGenerator as StickmanGeneratorV2
 
 
 class ExplainerGenerator:
     def __init__(self):
         self.engine = StickmanGeneratorV2()
+        self.background_dir = Path(__file__).resolve().parents[2] / "uploads" / "explainer_backgrounds"
+        self.background_dir.mkdir(parents=True, exist_ok=True)
 
     def generate_storyboard_data(
         self,
@@ -73,16 +77,18 @@ class ExplainerGenerator:
         script_bundle = self.generate_storyboard_data(source_text, storyboard_count, opening_hook_mode, visual_style_key, target_duration)
         report(20, "脚本生成完成")
         engine_storyboards = self._to_engine_storyboards(script_bundle["storyboards"], script_bundle["title"], script_bundle["generation_flags"])
+        effective_background_path = background_image_path or self._ensure_default_background(script_bundle["title"], script_bundle["generation_flags"])
         with tempfile.TemporaryDirectory(prefix="explainer_") as _:
-            image_assets, image_flags = self.engine.generate_images(
+            image_assets, image_flags = self._generate_engine_images(
                 engine_storyboards,
                 aspect_ratio,
-                progress_callback=report,
-                background_image_path=background_image_path,
-                style_reference_image_path=style_reference_image_path,
-                style_reference_notes=style_reference_notes,
+                None,
+                report,
+                effective_background_path,
+                style_reference_image_path,
+                style_reference_notes,
             )
-            result = self.engine.compose_from_assets(
+            result = self._compose_engine_without_section_panels(
                 script_bundle["title"],
                 engine_storyboards,
                 image_assets,
@@ -120,12 +126,13 @@ class ExplainerGenerator:
     ):
         topic = self._fallback_title(source_text)
         engine_storyboards = self._to_engine_storyboards(storyboards, topic, generation_flags or {})
-        assets, flags = self.engine.generate_images(
+        effective_background_path = background_image_path or self._ensure_default_background(topic, generation_flags or {})
+        assets, flags = self._generate_engine_images(
             engine_storyboards,
             aspect_ratio,
             project_id,
             progress_callback,
-            background_image_path,
+            effective_background_path,
             style_reference_image_path,
             style_reference_notes,
         )
@@ -148,13 +155,14 @@ class ExplainerGenerator:
     ):
         topic = self._fallback_title(source_text)
         engine_storyboards = self._to_engine_storyboards(storyboards, topic, generation_flags or {})
+        effective_background_path = background_image_path or self._ensure_default_background(topic, generation_flags or {})
         asset, used_fallback = self.engine.regenerate_single_image(
             engine_storyboards[scene_index],
             scene_index + 1,
             aspect_ratio,
             project_id,
             prompt_override,
-            background_image_path,
+            effective_background_path,
             style_reference_image_path,
             style_reference_notes,
         )
@@ -178,7 +186,7 @@ class ExplainerGenerator:
     ):
         topic = self._fallback_title(source_text)
         engine_storyboards = self._to_engine_storyboards(storyboards, topic, generation_flags or {})
-        result = self.engine.compose_from_assets(
+        result = self._compose_engine_without_section_panels(
             topic,
             engine_storyboards,
             image_assets,
@@ -204,16 +212,19 @@ class ExplainerGenerator:
             '必须返回 JSON，不要输出解释。结构如下：'
             '{"title":"视频标题","hook_title":"开头主标题","hook_subtitle":"开头副标题","hook_conflict_point":"冲突点","ending_payoff":"结尾收束句","storyboards":[{"scene_title":"第一幕","hook_level":"high","narration_text":"配音文案","subtitle_text":"字幕短句","visual_description":"画面描述","camera_motion":"slow_zoom_in","transition_type":"fade","emotion_tone":"tense","duration":3.0,"attention_goal":"hook","punch_phrase":"击中句","beat_type":"hook","keywords":["关键词1","关键词2"]}]}'
         )
-        response = self.engine._chat_completion(
-            messages=[
-                {"role": "system", "content": "你是擅长抖音爆款讲解视频的中文短视频编导，擅长输出高留存、高节奏的分镜 JSON。"},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0.85,
-            max_tokens=3200,
-        )
-        content = response.choices[0].message.content or ""
-        return self._extract_script_json(content, source_text, storyboard_count, hook_mode)
+        try:
+            response = self.engine._chat_completion(
+                messages=[
+                    {"role": "system", "content": "你是擅长抖音爆款讲解视频的中文短视频编导，擅长输出高留存、高节奏的分镜 JSON。"},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.85,
+                max_tokens=3200,
+            )
+            content = response.choices[0].message.content or ""
+            return self._extract_script_json(content, source_text, storyboard_count, hook_mode)
+        except Exception:
+            return self._fallback_script(source_text, storyboard_count, hook_mode)
 
     def _extract_script_json(self, content: str, source_text: str, storyboard_count: int, hook_mode: str):
         match = re.search(r"\{[\s\S]*\}", content)
@@ -237,21 +248,29 @@ class ExplainerGenerator:
 
     def _fallback_script(self, source_text: str, storyboard_count: int, hook_mode: str):
         topic = self._fallback_title(source_text)
+        hook_phrase = self._first_hook_phrase(topic)
+        payoff_phrase = self._payoff_phrase(topic)
         storyboards = []
         for index in range(1, storyboard_count + 1):
             beat_type = "hook" if index == 1 else "payoff" if index == storyboard_count else "expand"
+            subtitle = hook_phrase if index == 1 else payoff_phrase if index == storyboard_count else f"{topic}第{index}点"
+            narration = (
+                f"{hook_phrase}，很多人不是不会表达，而是太习惯先压住自己。" if index == 1
+                else f"{payoff_phrase}。你真正要做的，不是继续忍，而是把自己放回重要位置。" if index == storyboard_count
+                else f"{topic}的第{index}个关键点。"
+            )
             storyboards.append({
                 "scene_title": f"第{index}幕",
                 "hook_level": "high" if index == 1 else "medium",
-                "narration_text": f"{topic}的第{index}个关键点。",
-                "subtitle_text": f"{topic}第{index}点",
+                "narration_text": narration,
+                "subtitle_text": subtitle,
                 "visual_description": f"围绕{topic}的第{index}个讲解画面，构图清晰，适合字幕叠加。",
                 "camera_motion": "slow_zoom_in" if index % 2 else "pan_right",
                 "transition_type": "fade",
                 "emotion_tone": "tense" if index == 1 else "calm",
                 "duration": 3.5,
                 "attention_goal": beat_type,
-                "punch_phrase": f"{topic}第{index}个核心信息",
+                "punch_phrase": subtitle,
                 "beat_type": beat_type,
                 "keywords": [topic],
                 "opening_template_key": hook_mode if index == 1 else "standard_scene",
@@ -286,7 +305,7 @@ class ExplainerGenerator:
             "duration": duration,
             "image_url": scene.get("image_url"),
             "attention_goal": attention_goal,
-            "punch_phrase": str(scene.get("punch_phrase") or subtitle_text[:20]).strip(),
+            "punch_phrase": str(scene.get("punch_phrase") or (self._first_hook_phrase(title) if index == 1 else subtitle_text[:20])).strip(),
             "energy_level": str(scene.get("energy_level") or ("high" if index <= 2 else "medium" if index < total else "high")).strip().lower(),
             "beat_type": beat_type,
             "keywords": scene.get("keywords") or [title[:8]],
@@ -327,10 +346,44 @@ class ExplainerGenerator:
             }
             mapped_scene["background_prompt"] = self.engine._background_prompt_for_scene(mapped_scene, topic, index)
             mapped_scene["scene_image_prompt"] = self._scene_image_prompt_for_scene(scene, topic, total, generation_flags)
-            mapped_scene["foreground_subjects"] = self.engine._foreground_subjects_for_scene(mapped_scene, topic, index)
-            mapped_scene["foreground_events"] = self.engine._foreground_events_for_scene(mapped_scene, index)
+            mapped_scene["foreground_subjects"] = self._foreground_subjects_for_scene(scene, index, total)
+            mapped_scene["foreground_events"] = self._foreground_events_for_scene(scene, index, total)
             mapped.append(mapped_scene)
         return mapped
+
+    def _foreground_subjects_for_scene(self, scene: dict, index: int, total: int):
+        focus = str(scene.get("punch_phrase") or scene.get("subtitle_text") or scene.get("scene_title") or "重点")[:14]
+        subjects = [
+            {"key": "hero_figure", "kind": "scene_illustration", "label": focus},
+            {"key": "hook_text", "kind": "keyword_text", "label": focus},
+        ]
+        beat_type = str(scene.get("beat_type") or "expand")
+        if index == 1 or beat_type == "hook":
+            subjects.append({"key": "focus_ring", "kind": "focus_ring", "label": "focus"})
+            subjects.append({"key": "host_marker", "kind": "host_marker", "label": "讲"})
+        elif beat_type == "payoff" or index == total:
+            subjects.append({"key": "underline", "kind": "underline", "label": "收束"})
+        return subjects
+
+    def _foreground_events_for_scene(self, scene: dict, index: int, total: int):
+        beat_type = str(scene.get("beat_type") or "expand")
+        if index == 1 or beat_type == "hook":
+            return [
+                {"target": "hook_text", "animation": "center_zoom_in", "start": 0.0, "duration": 1.2, "x_ratio": 0.5, "y_ratio": 0.20},
+                {"target": "hero_figure", "animation": "center_bounce", "start": 0.18, "duration": 1.0, "x_ratio": 0.5, "y_ratio": 0.46},
+                {"target": "focus_ring", "animation": "center_fade", "start": 0.28, "duration": 0.8, "x_ratio": 0.5, "y_ratio": 0.46},
+                {"target": "host_marker", "animation": "slide_up_fade", "start": 0.52, "duration": 0.8, "x_ratio": 0.20, "y_ratio": 0.48},
+            ]
+        if beat_type == "payoff" or index == total:
+            return [
+                {"target": "hero_figure", "animation": "center_fade", "start": 0.0, "duration": 1.2, "x_ratio": 0.5, "y_ratio": 0.43},
+                {"target": "hook_text", "animation": "center_slide_up", "start": 0.15, "duration": 1.0, "x_ratio": 0.5, "y_ratio": 0.18},
+                {"target": "underline", "animation": "center_fade", "start": 0.5, "duration": 0.8, "x_ratio": 0.5, "y_ratio": 0.28},
+            ]
+        return [
+            {"target": "hero_figure", "animation": "center_fade", "start": 0.0, "duration": 1.0, "x_ratio": 0.5, "y_ratio": 0.43},
+            {"target": "hook_text", "animation": "center_slide_up", "start": 0.22, "duration": 0.8, "x_ratio": 0.5, "y_ratio": 0.18},
+        ]
 
     def _scene_image_prompt_for_scene(self, scene: dict, topic: str, total: int, generation_flags: dict):
         style_key = str(generation_flags.get("visual_style_key") or "deep_blue_emotional")
@@ -412,3 +465,72 @@ class ExplainerGenerator:
         if not cleaned:
             return "讲解型视频"
         return cleaned.split("\n")[0][:24]
+
+    def _generate_engine_images(self, storyboards, aspect_ratio, project_id=None, progress_callback=None, background_image_path=None, style_reference_image_path=None, style_reference_notes=None):
+        original_enabled = getattr(self.engine, "material_library_enabled", False)
+        original_library = getattr(self.engine, "material_library", [])
+        try:
+            self.engine.material_library_enabled = False
+            self.engine.material_library = []
+            return self.engine.generate_images(
+                storyboards,
+                aspect_ratio,
+                project_id,
+                progress_callback,
+                background_image_path,
+                style_reference_image_path,
+                style_reference_notes,
+            )
+        finally:
+            self.engine.material_library_enabled = original_enabled
+            self.engine.material_library = original_library
+
+    def _compose_engine_without_section_panels(self, topic, storyboards, image_assets, progress_callback=None, voice_source="ai", voice_file_path=None, tts_provider=None, tts_voice=None, tts_rate=None):
+        original = self.engine._attach_section_timing_metadata
+
+        def lightweight_attach(items):
+            for item in items or []:
+                item.pop("sections_meta", None)
+                item.pop("video_progress_start_ratio", None)
+                item.pop("video_progress_end_ratio", None)
+            return []
+
+        try:
+            self.engine._attach_section_timing_metadata = lightweight_attach
+            return self.engine.compose_from_assets(topic, storyboards, image_assets, progress_callback, voice_source, voice_file_path, tts_provider, tts_voice, tts_rate)
+        finally:
+            self.engine._attach_section_timing_metadata = original
+
+    def _ensure_default_background(self, title: str, generation_flags: dict):
+        style_key = str(generation_flags.get("visual_style_key") or "deep_blue_emotional")
+        file_name = f"explainer_{style_key}.png"
+        save_path = self.background_dir / file_name
+        if save_path.exists():
+            return str(save_path)
+        width, height = 1920, 1080
+        image = Image.new("RGB", (width, height), (8, 20, 58))
+        draw = ImageDraw.Draw(image)
+        title_font = self.engine._load_font(54)
+        meta_font = self.engine._load_font(28)
+        accent = (82, 196, 255) if style_key == "deep_blue_emotional" else (255, 193, 7)
+        draw.rectangle((0, int(height * 0.78), width, height), fill=(5, 12, 36))
+        draw.ellipse((90, 90, 310, 310), outline=(255, 255, 255), width=4)
+        draw.ellipse((width - 360, 110, width - 160, 310), outline=accent, width=4)
+        draw.line((180, 180, width - 260, 180), fill=(255, 255, 255), width=2)
+        draw.line((120, 720, width - 120, 720), fill=(255, 255, 255), width=3)
+        draw.rounded_rectangle((120, 760, width - 120, 950), radius=24, outline=(255, 255, 255), width=2)
+        draw.rounded_rectangle((140, 120, 640, 220), radius=18, fill=(255, 255, 255))
+        draw.text((180, 142), title[:18], fill=(8, 20, 58), font=title_font)
+        draw.text((width - 320, 146), "讲解型视频", fill=(255, 255, 255), font=meta_font)
+        image.save(save_path, format="PNG")
+        return str(save_path)
+
+    def _first_hook_phrase(self, topic: str):
+        clean = str(topic or "").replace("为什么", "").replace("？", "").replace("?", "").strip()
+        if clean:
+            return f"越{clean[:10]} 越容易委屈自己"
+        return "你越懂事 越容易委屈自己"
+
+    def _payoff_phrase(self, topic: str):
+        clean = str(topic or "").strip()
+        return f"{clean[:10]}的关键，不是忍下去，而是看见自己" if clean else "真正的改变，从把自己放回重要位置开始"
