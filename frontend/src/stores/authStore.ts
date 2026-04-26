@@ -5,7 +5,8 @@ import { AUTH_STORAGE_KEY, LOGOUT_MARKER_KEY } from '@/utils/authSync'
 interface User {
   id: number
   username: string
-  email: string
+  email?: string | null
+  phone?: string | null
   is_admin?: boolean
   frontend_version?: 'legacy' | 'v2'
   is_approved?: boolean

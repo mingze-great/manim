@@ -48,6 +48,7 @@ export default function Login() {
         id: userData.id, 
         username: userData.username, 
         email: userData.email, 
+        phone: userData.phone,
         is_admin: userData.is_admin,
         frontend_version: userData.frontend_version || 'legacy',
         is_approved: userData.is_approved,

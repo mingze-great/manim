@@ -6,11 +6,22 @@ import re
 
 class UserBase(BaseModel):
     username: str
-    email: EmailStr
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = None
 
 
 class UserCreate(UserBase):
     password: str = Field(..., min_length=8, max_length=50)
+
+    @field_validator('phone')
+    @classmethod
+    def validate_phone(cls, v):
+        if v is None:
+            return v
+        clean = str(v).strip()
+        if not re.fullmatch(r'1\d{10}', clean):
+            raise ValueError('请输入有效的11位手机号')
+        return clean
     
     @field_validator('password')
     @classmethod
@@ -60,6 +71,7 @@ class UserUpdate(BaseModel):
     is_admin: Optional[bool] = None
     frontend_version: Optional[str] = None
     module_permissions: Optional[Dict[str, Any]] = None
+    daily_video_limit: Optional[int] = None
 
 
 class UserStats(BaseModel):
@@ -125,7 +137,8 @@ class TaskLog(BaseModel):
 class UserDetail(BaseModel):
     id: int
     username: str
-    email: str
+    email: Optional[str] = None
+    phone: Optional[str] = None
     is_active: bool
     is_admin: bool = False
     frontend_version: str = "legacy"

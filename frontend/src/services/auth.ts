@@ -9,8 +9,8 @@ export interface LoginRequest {
 }
 
 export interface RegisterRequest {
-  username: string
-  email: string
+  username?: string
+  phone: string
   password: string
 }
 
@@ -25,6 +25,8 @@ export const authApi = {
     return response
   },
   register: (data: RegisterRequest) => axios.post(`${API_BASE}/auth/register`, data),
+  changePassword: (data: { current_password: string; new_password: string }) =>
+    axios.post(`${API_BASE}/auth/change-password`, data),
   me: (token: string) => {
     return axios.get(`${API_BASE}/auth/me`, {
       headers: { Authorization: `Bearer ${token}` }

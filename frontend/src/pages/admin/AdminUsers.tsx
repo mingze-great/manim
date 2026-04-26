@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
-  Table, Card, Input, Button, Space, Tag, Popconfirm,
+  Card, Input, Button, Space, Tag, Popconfirm,
   Modal, Descriptions, message, Row, Col, Avatar, Badge, Radio, InputNumber, Statistic, Switch, Select
 } from 'antd'
 import {
@@ -56,6 +56,10 @@ export default function AdminUsers() {
   const [permissionDraft, setPermissionDraft] = useState<Record<string, any>>({})
   const [permissionLoading, setPermissionLoading] = useState(false)
   const [batchPermissionModalVisible, setBatchPermissionModalVisible] = useState(false)
+  const [batchFrontendVersionVisible, setBatchFrontendVersionVisible] = useState(false)
+  const [batchFrontendVersionValue, setBatchFrontendVersionValue] = useState<'legacy' | 'v2'>('v2')
+  const [batchLimitVisible, setBatchLimitVisible] = useState(false)
+  const [batchLimitValue, setBatchLimitValue] = useState<number>(5)
 
   const defaultPermissions = (user?: User | null) => user?.module_permissions || {
     visual: { enabled: true, daily_limit: user?.daily_video_limit || 5, used_today: 0, period: 'daily' },
@@ -170,6 +174,36 @@ export default function AdminUsers() {
       fetchUsers()
     } catch (err: any) {
       message.error(err.response?.data?.detail || '删除失败')
+    }
+  }
+
+  const handleBatchFrontendVersion = async () => {
+    if (!selectedRowKeys.length) return
+    setPermissionLoading(true)
+    try {
+      await adminApi.batchUpdateFrontendVersion(selectedRowKeys, batchFrontendVersionValue)
+      message.success(`已批量切换为${batchFrontendVersionValue === 'v2' ? '新版本' : '老版本'}`)
+      setBatchFrontendVersionVisible(false)
+      fetchUsers()
+    } catch (err: any) {
+      message.error(err.response?.data?.detail || '批量切换失败')
+    } finally {
+      setPermissionLoading(false)
+    }
+  }
+
+  const handleBatchVideoLimit = async () => {
+    if (!selectedRowKeys.length) return
+    setPermissionLoading(true)
+    try {
+      await adminApi.batchSetVideoLimit(selectedRowKeys, batchLimitValue)
+      message.success(`已批量设置每日限额为 ${batchLimitValue}`)
+      setBatchLimitVisible(false)
+      fetchUsers()
+    } catch (err: any) {
+      message.error(err.response?.data?.detail || '批量设置失败')
+    } finally {
+      setPermissionLoading(false)
     }
   }
 
@@ -395,109 +429,70 @@ export default function AdminUsers() {
     return { total, active, pending, admins }
   }, [users])
 
-  const columns = [
-    {
-      title: '用户',
-      key: 'user',
-      render: (_: any, record: User) => (
-        <div className="flex items-center gap-3">
-          <Avatar 
-            style={{ backgroundColor: record.is_admin ? '#f59e0b' : '#6366f1' }}
-            icon={record.is_admin ? <UserOutlined /> : <UserOutlined />}
-            size={40}
-          />
-          <div>
-            <div className="font-medium">{record.username}</div>
-            <div className="text-gray-500 text-sm">{record.email}</div>
+  const renderUserCard = (record: User) => {
+    const selected = selectedRowKeys.includes(record.id)
+    return (
+      <Card key={record.id} size="small" style={{ borderRadius: '12px', borderColor: selected ? '#2563eb' : undefined }}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={() => setSelectedRowKeys((prev) => prev.includes(record.id) ? prev.filter((id) => id !== record.id) : [...prev, record.id])}
+            />
+            <Avatar style={{ backgroundColor: record.is_admin ? '#f59e0b' : '#6366f1' }} icon={<UserOutlined />} size={40} />
+            <div className="min-w-0">
+              <div className="font-medium truncate">{record.username}</div>
+              <div className="text-gray-500 text-sm break-all">{record.phone || record.email || '未填写联系方式'}</div>
+            </div>
           </div>
+          <Tag color={record.is_admin ? 'gold' : 'default'}>{record.is_admin ? '管理员' : '用户'}</Tag>
         </div>
-      ),
-    },
-    {
-      title: '状态',
-      dataIndex: 'is_active',
-      key: 'is_active',
-      width: 100,
-      render: (isActive: boolean) => (
-        <Badge status={isActive ? 'success' : 'error'} text={isActive ? '正常' : '已禁用'} />
-      ),
-    },
-    {
-      title: '审核',
-      dataIndex: 'is_approved',
-      key: 'is_approved',
-      width: 100,
-      render: (isApproved: boolean) => (
-        isApproved 
-          ? <Tag color="green">已通过</Tag>
-          : <Tag color="orange">待审核</Tag>
-      ),
-    },
-    {
-      title: '角色',
-      dataIndex: 'is_admin',
-      key: 'is_admin',
-      width: 100,
-      render: (isAdmin: boolean) => (
-        isAdmin ? <Tag color="gold">管理员</Tag> : <Tag color="default">用户</Tag>
-      ),
-    },
-    {
-      title: '前端版本',
-      key: 'frontend_version',
-      width: 140,
-      render: (_: any, record: User) => (
-        <Select
-          size="small"
-          style={{ width: 110 }}
-          value={record.frontend_version || 'legacy'}
-          onChange={(value) => handleFrontendVersionChange(record.id, value as 'legacy' | 'v2')}
-          options={[
-            { label: '老版本', value: 'legacy' },
-            { label: '新版本', value: 'v2' },
-          ]}
-        />
-      ),
-    },
-    {
-      title: '思维可视化',
-      key: 'visual_limit',
-      width: 120,
-      render: (_: any, record: User) => getPermissionTag(record, 'visual'),
-    },
-    {
-      title: '火柴人',
-      key: 'stickman_limit',
-      width: 120,
-      render: (_: any, record: User) => getPermissionTag(record, 'stickman'),
-    },
-    {
-      title: '公众号',
-      key: 'article_limit',
-      width: 120,
-      render: (_: any, record: User) => getPermissionTag(record, 'article'),
-    },
-    {
-      title: '有效期',
-      dataIndex: 'expires_at',
-      key: 'expires_at',
-      width: 170,
-      render: (expiresAt: string) => formatDateTime(expiresAt),
-    },
-    {
-      title: '注册时间',
-      dataIndex: 'created_at',
-      key: 'created_at',
-      width: 180,
-      render: (date: string) => formatDateTime(date),
-    },
-    {
-      title: '操作',
-      key: 'action',
-      width: 320,
-      render: (_: any, record: User) => renderUserActions(record),
-    },
-  ]
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Badge status={record.is_active ? 'success' : 'error'} text={record.is_active ? '正常' : '已禁用'} />
+          {record.is_approved ? <Tag color="green">已通过</Tag> : <Tag color="orange">待审核</Tag>}
+          <Tag color={(record.frontend_version || 'legacy') === 'v2' ? 'green' : 'default'}>
+            {(record.frontend_version || 'legacy') === 'v2' ? '新版本' : '老版本'}
+          </Tag>
+        </div>
+
+        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-gray-600">
+          <div>
+            <div className="text-gray-500 mb-1">前端版本</div>
+            <Select
+              size="small"
+              className="w-full"
+              value={record.frontend_version || 'legacy'}
+              onChange={(value) => handleFrontendVersionChange(record.id, value as 'legacy' | 'v2')}
+              options={[
+                { label: '老版本', value: 'legacy' },
+                { label: '新版本', value: 'v2' },
+              ]}
+            />
+          </div>
+          <div>
+            <div className="text-gray-500 mb-1">每日思维可视化限额</div>
+            <Button size="small" icon={<SettingOutlined />} onClick={() => handleVideoLimitUser(record)}>
+              设置为 {record.daily_video_limit || defaultPermissions(record).visual?.daily_limit || 5}
+            </Button>
+          </div>
+          <div>有效期：{formatDateTime(record.expires_at)}</div>
+          <div>注册时间：{formatDateTime(record.created_at)}</div>
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          {getPermissionTag(record, 'visual')}
+          {getPermissionTag(record, 'stickman')}
+          {getPermissionTag(record, 'article')}
+        </div>
+
+        <div className="mt-3">
+          {renderUserActions(record, true)}
+        </div>
+      </Card>
+    )
+  }
 
   return (
     <div>
@@ -552,7 +547,7 @@ export default function AdminUsers() {
         <Row gutter={16} align="middle">
           <Col flex="auto">
             <Input.Search
-              placeholder="搜索用户名或邮箱..."
+              placeholder="搜索用户名、手机号或邮箱..."
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
               onSearch={() => fetchUsers()}
@@ -582,63 +577,24 @@ export default function AdminUsers() {
               批量模块权限
             </Button>
           </Col>
+          <Col>
+            <Button icon={<SettingOutlined />} disabled={!selectedRowKeys.length} onClick={() => setBatchFrontendVersionVisible(true)}>
+              批量版本
+            </Button>
+          </Col>
+          <Col>
+            <Button icon={<ClockCircleOutlined />} disabled={!selectedRowKeys.length} onClick={() => setBatchLimitVisible(true)}>
+              批量每日限额
+            </Button>
+          </Col>
         </Row>
       </Card>
 
       <Card className="hover-lift" style={{ borderRadius: '16px' }}>
-        {isMobile ? (
-          <Space direction="vertical" size={12} style={{ width: '100%' }}>
-            {users.map((record) => (
-              <Card key={record.id} size="small" style={{ borderRadius: '12px' }}>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <Avatar style={{ backgroundColor: record.is_admin ? '#f59e0b' : '#6366f1' }} icon={<UserOutlined />} size={40} />
-                    <div className="min-w-0">
-                      <div className="font-medium truncate">{record.username}</div>
-                      <div className="text-gray-500 text-sm break-all">{record.email}</div>
-                    </div>
-                  </div>
-                  <Tag color={record.is_admin ? 'gold' : 'default'}>{record.is_admin ? '管理员' : '用户'}</Tag>
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Badge status={record.is_active ? 'success' : 'error'} text={record.is_active ? '正常' : '已禁用'} />
-                  {record.is_approved ? <Tag color="green">已通过</Tag> : <Tag color="orange">待审核</Tag>}
-                  <Tag color={(record.frontend_version || 'legacy') === 'v2' ? 'green' : 'default'}>
-                    {(record.frontend_version || 'legacy') === 'v2' ? '新版本' : '老版本'}
-                  </Tag>
-                </div>
-                <div className="mt-3 text-sm text-gray-600 space-y-1">
-                  <div>有效期：{formatDateTime(record.expires_at)}</div>
-                  <div>注册时间：{formatDateTime(record.created_at)}</div>
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {getPermissionTag(record, 'visual')}
-                  {getPermissionTag(record, 'stickman')}
-                  {getPermissionTag(record, 'article')}
-                </div>
-                <div className="mt-3">
-                  {renderUserActions(record, true)}
-                </div>
-              </Card>
-            ))}
-            {!users.length && !loading && <div className="text-center text-gray-400 py-8">暂无用户</div>}
-          </Space>
-        ) : (
-          <Table
-            columns={columns}
-            dataSource={users}
-            rowKey="id"
-            rowSelection={{ selectedRowKeys, onChange: (keys) => setSelectedRowKeys(keys as number[]) }}
-            loading={loading}
-            pagination={{ 
-              pageSize: 10, 
-              showSizeChanger: true, 
-              showQuickJumper: true,
-              showTotal: (total) => `共 ${total} 个用户`
-            }}
-            scroll={{ x: 800 }}
-          />
-        )}
+        <div className={`grid gap-4 ${isMobile ? 'grid-cols-1' : 'grid-cols-1 xl:grid-cols-2'}`}>
+          {users.map((record) => renderUserCard(record))}
+          {!users.length && !loading && <div className={`text-center text-gray-400 py-8 ${isMobile ? '' : 'xl:col-span-2'}`}>暂无用户</div>}
+        </div>
       </Card>
 
       <Modal
@@ -664,7 +620,7 @@ export default function AdminUsers() {
               <Descriptions bordered column={1} size="small">
                 <Descriptions.Item label="用户ID">{selectedUser.id}</Descriptions.Item>
                 <Descriptions.Item label="用户名">{selectedUser.username}</Descriptions.Item>
-                <Descriptions.Item label="邮箱">{selectedUser.email}</Descriptions.Item>
+            <Descriptions.Item label="手机号">{selectedUser.phone || '-'}</Descriptions.Item>
                 <Descriptions.Item label="状态">
                   <Badge status={selectedUser.is_active ? 'success' : 'error'} text={selectedUser.is_active ? '正常' : '已禁用'} />
                 </Descriptions.Item>
@@ -872,6 +828,47 @@ export default function AdminUsers() {
             style={{ width: '100%' }}
           />
           <p className="text-xs text-gray-500 mt-2">配额范围：5-20 条/天</p>
+        </div>
+      </Modal>
+
+      <Modal
+        title={`批量前端版本设置（已选 ${selectedRowKeys.length} 个用户）`}
+        open={batchFrontendVersionVisible}
+        onCancel={() => setBatchFrontendVersionVisible(false)}
+        onOk={handleBatchFrontendVersion}
+        confirmLoading={permissionLoading}
+      >
+        <div className="py-4">
+          <p className="text-gray-500 mb-3">批量设置时会自动跳过管理员账号。</p>
+          <Select
+            className="w-full"
+            value={batchFrontendVersionValue}
+            onChange={(value) => setBatchFrontendVersionValue(value as 'legacy' | 'v2')}
+            options={[
+              { label: '老版本', value: 'legacy' },
+              { label: '新版本', value: 'v2' },
+            ]}
+          />
+        </div>
+      </Modal>
+
+      <Modal
+        title={`批量每日限额设置（已选 ${selectedRowKeys.length} 个用户）`}
+        open={batchLimitVisible}
+        onCancel={() => setBatchLimitVisible(false)}
+        onOk={handleBatchVideoLimit}
+        confirmLoading={permissionLoading}
+      >
+        <div className="py-4">
+          <p className="text-gray-500 mb-3">批量设置时会自动跳过管理员账号，仅更新思维可视化每日限额。</p>
+          <InputNumber
+            value={batchLimitValue}
+            onChange={(value) => setBatchLimitValue(value || 5)}
+            min={1}
+            max={999}
+            addonAfter="条/天"
+            style={{ width: '100%' }}
+          />
         </div>
       </Modal>
 

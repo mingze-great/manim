@@ -31,7 +31,8 @@ api.interceptors.response.use(
 export interface User {
   id: number
   username: string
-  email: string
+  email?: string | null
+  phone?: string | null
   is_active: boolean
   is_admin: boolean
   frontend_version?: 'legacy' | 'v2'
@@ -133,6 +134,12 @@ export const adminApi = {
 
   updateUserModulePermissions: (id: number, modulePermissions: Record<string, any>) =>
     api.put<{ message: string; module_permissions: Record<string, any> }>(`/admin/users/${id}/module-permissions`, modulePermissions),
+
+  batchUpdateFrontendVersion: (userIds: number[], frontendVersion: 'legacy' | 'v2') =>
+    api.post<{ message: string }>(`/admin/users/frontend-version/batch`, { user_ids: userIds, frontend_version: frontendVersion }),
+
+  batchSetVideoLimit: (userIds: number[], limit: number) =>
+    api.post<{ message: string }>(`/admin/users/video-limit/batch`, { user_ids: userIds, limit }),
 
   batchUpdateUserModulePermissions: (userIds: number[], modulePermissions: Record<string, any>) =>
     api.post<{ message: string }>(`/admin/users/module-permissions/batch`, { user_ids: userIds, module_permissions: modulePermissions }),

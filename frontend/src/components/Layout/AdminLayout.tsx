@@ -146,6 +146,14 @@ export default function AdminLayout() {
           items={menuItems}
           onClick={({ key }) => handleMenuClick(key)}
         />
+        <div className="mt-4 flex flex-col gap-2">
+          <Button icon={<SafetyOutlined />} type="primary" onClick={() => { navigate('/admin'); setMobileMenuOpen(false) }} block>
+            回到后台管理
+          </Button>
+          <Button icon={<HomeOutlined />} onClick={() => { navigate('/'); setMobileMenuOpen(false) }} block>
+            返回首页
+          </Button>
+        </div>
       </Drawer>
 
       <Layout>

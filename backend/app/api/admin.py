@@ -1,6 +1,6 @@
 from typing import Optional, List
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Body
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 import json
@@ -68,6 +68,16 @@ def _sync_permissions_to_db(db, user: User, permissions: dict):
             record.period = perm_data.get("period", record.period)
     
     db.commit()
+
+
+def _set_visual_daily_limit(user: User, limit: int):
+    user.daily_video_limit = limit
+    permissions = user.get_module_permissions()
+    permissions.setdefault("visual", {}).update({
+        "daily_limit": limit,
+        "enabled": True,
+    })
+    user.set_module_permissions(permissions)
 def _count_admin_users(users: list[User]) -> int:
     return sum(1 for user in users if bool(user.is_admin))
 
@@ -341,6 +351,7 @@ async def get_user_detail(
         "id": user.id,
         "username": user.username,
         "email": user.email,
+        "phone": user.phone,
         "is_active": user.is_active,
         "is_admin": user.is_admin,
         "frontend_version": user.frontend_version or "legacy",
@@ -381,6 +392,8 @@ async def update_user(
         if user_update.frontend_version not in ["legacy", "v2"]:
             raise HTTPException(status_code=400, detail="frontend_version 只能是 legacy 或 v2")
         user.frontend_version = user_update.frontend_version
+    if user_update.daily_video_limit is not None:
+        _set_visual_daily_limit(user, user_update.daily_video_limit)
     if user_update.module_permissions is not None:
         user.set_module_permissions(_normalize_module_permissions(user_update.module_permissions, user))
     
@@ -449,6 +462,69 @@ async def batch_update_user_module_permissions(
               resource="user", resource_id=None,
               details=f"批量更新 {updated_count} 个用户模块权限，跳过管理员 {skipped_admins} 个", request=request)
     return {"message": f"已更新 {updated_count} 个用户的模块权限，跳过管理员 {skipped_admins} 个", "updated_count": updated_count, "skipped_admins": skipped_admins}
+
+
+@router.post("/users/frontend-version/batch")
+async def batch_update_frontend_version(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+    request: Request = None,
+):
+    user_ids = payload.get("user_ids") or []
+    frontend_version = payload.get("frontend_version")
+    if not user_ids:
+        raise HTTPException(status_code=400, detail="请选择用户")
+    if frontend_version not in ["legacy", "v2"]:
+        raise HTTPException(status_code=400, detail="frontend_version 只能是 legacy 或 v2")
+
+    users = db.query(User).filter(User.id.in_(user_ids)).all()
+    skipped_admins = _count_admin_users(users)
+    updated_count = 0
+    for user in users:
+        if user.is_admin:
+            continue
+        user.frontend_version = frontend_version
+        updated_count += 1
+    db.commit()
+
+    from app.api.auth import log_audit
+    log_audit(db, current_user.id, current_user.username, "USER_FRONTEND_VERSION_BATCH_UPDATE",
+              details=f"批量切换 {updated_count} 个用户前端版本为 {frontend_version}，跳过管理员 {skipped_admins} 个", request=request)
+    return {"message": f"已更新 {updated_count} 个用户的前端版本，跳过管理员 {skipped_admins} 个", "updated_count": updated_count, "skipped_admins": skipped_admins}
+
+
+@router.post("/users/video-limit/batch")
+async def batch_set_user_video_limit(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+    request: Request = None,
+):
+    user_ids = payload.get("user_ids") or []
+    limit = payload.get("limit")
+    if not user_ids:
+        raise HTTPException(status_code=400, detail="请选择用户")
+    if limit is None:
+        raise HTTPException(status_code=400, detail="请填写限额")
+    limit = int(limit)
+    if limit < 1 or limit > 999:
+        raise HTTPException(status_code=400, detail="限额范围必须是1到999")
+
+    users = db.query(User).filter(User.id.in_(user_ids)).all()
+    skipped_admins = _count_admin_users(users)
+    updated_count = 0
+    for user in users:
+        if user.is_admin:
+            continue
+        _set_visual_daily_limit(user, limit)
+        updated_count += 1
+    db.commit()
+
+    from app.api.auth import log_audit
+    log_audit(db, current_user.id, current_user.username, "USER_VIDEO_LIMIT_BATCH_UPDATE",
+              details=f"批量设置 {updated_count} 个用户思维可视化每日限额为 {limit}，跳过管理员 {skipped_admins} 个", request=request)
+    return {"message": f"已更新 {updated_count} 个用户的每日限额，跳过管理员 {skipped_admins} 个", "updated_count": updated_count, "skipped_admins": skipped_admins}
 
 
 @router.delete("/users/{user_id}")
@@ -577,10 +653,7 @@ async def set_user_video_limit(
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
     
-    user.daily_video_limit = limit
-    permissions = user.get_module_permissions()
-    permissions.setdefault("visual", {}).update({"daily_limit": limit, "enabled": True})
-    user.set_module_permissions(permissions)
+    _set_visual_daily_limit(user, limit)
     db.commit()
     
     from app.api.auth import log_audit
@@ -595,7 +668,7 @@ async def set_user_video_limit(
 @router.post("/users/{user_id}/reset-password")
 async def reset_user_password(
     user_id: int,
-    password: str,
+    payload: dict = Body(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
     request: Request = None
@@ -604,6 +677,10 @@ async def reset_user_password(
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
+
+    password = payload.get("password")
+    if not password:
+        raise HTTPException(status_code=400, detail="请输入新密码")
     
     if len(password) < 8:
         raise HTTPException(status_code=400, detail="密码至少8位")

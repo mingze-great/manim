@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Table, Button, Space, Modal, Form, Input, message, Popconfirm, Tag } from 'antd'
+import { Button, Space, Modal, Form, Input, message, Popconfirm, Tag } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import api from '@/services/api'
 import { useIsMobile } from '@/hooks/useIsMobile'
@@ -21,7 +21,6 @@ interface ChatStyle {
 export default function AdminChatStyles() {
   const isMobile = useIsMobile()
   const [styles, setStyles] = useState<ChatStyle[]>([])
-  const [loading, setLoading] = useState(true)
   const [modalVisible, setModalVisible] = useState(false)
   const [editingStyle, setEditingStyle] = useState<ChatStyle | null>(null)
   const [form] = Form.useForm()
@@ -36,8 +35,6 @@ export default function AdminChatStyles() {
       setStyles(data || [])
     } catch (err) {
       message.error('获取风格失败')
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -90,56 +87,6 @@ export default function AdminChatStyles() {
     }
   }
 
-  const columns = [
-    {
-      title: '名称',
-      dataIndex: 'name',
-      key: 'name',
-    },
-    {
-      title: '代码',
-      dataIndex: 'code',
-      key: 'code',
-      render: (code: string) => <Tag color="blue">{code}</Tag>
-    },
-    {
-      title: '描述',
-      dataIndex: 'description',
-      key: 'description',
-      ellipsis: true,
-    },
-    {
-      title: '默认',
-      dataIndex: 'is_default',
-      key: 'is_default',
-      render: (isDefault: boolean) => isDefault ? <Tag color="green">默认</Tag> : null
-    },
-    {
-      title: '操作',
-      key: 'action',
-      width: 150,
-      render: (_: any, record: ChatStyle) => (
-        <Space>
-          <Button
-            type="link"
-            icon={<EditOutlined />}
-            onClick={() => handleEdit(record)}
-          >
-            编辑
-          </Button>
-          <Popconfirm
-            title="确定删除此风格？"
-            onConfirm={() => handleDelete(record.id)}
-          >
-            <Button type="link" danger icon={<DeleteOutlined />}>
-              删除
-            </Button>
-          </Popconfirm>
-        </Space>
-      ),
-    },
-  ]
-
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
@@ -159,35 +106,32 @@ export default function AdminChatStyles() {
         </Space>
       </div>
 
-      {isMobile ? (
-        <div className="space-y-3">
-          {styles.map((record) => (
-            <div key={record.id} className="rounded-xl border border-gray-200 p-4 bg-white">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="font-semibold break-words">{record.name}</div>
-                  <div className="mt-1"><Tag color="blue">{record.code}</Tag>{record.is_default ? <Tag color="green">默认</Tag> : null}</div>
-                  <div className="text-sm text-gray-500 mt-2">{record.description || '暂无风格说明'}</div>
+      <div className={`grid gap-4 ${isMobile ? 'grid-cols-1' : 'grid-cols-1 xl:grid-cols-2'}`}>
+        {styles.map((record) => (
+          <div key={record.id} className="rounded-xl border border-gray-200 p-4 bg-white shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="font-semibold break-words">{record.name}</div>
+                <div className="mt-1 flex flex-wrap gap-2">
+                  <Tag color="blue">{record.code}</Tag>
+                  {record.is_default ? <Tag color="green">默认</Tag> : null}
                 </div>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)}>编辑</Button>
-                <Popconfirm title="确定删除此风格？" onConfirm={() => handleDelete(record.id)}>
-                  <Button size="small" danger icon={<DeleteOutlined />}>删除</Button>
-                </Popconfirm>
+                <div className="text-sm text-gray-500 mt-2">{record.description || '暂无风格说明'}</div>
               </div>
             </div>
-          ))}
-        </div>
-      ) : (
-        <Table
-          columns={columns}
-          dataSource={styles}
-          rowKey="id"
-          loading={loading}
-          pagination={{ pageSize: 10 }}
-        />
-      )}
+            <div className="mt-4 text-xs text-gray-500 line-clamp-4 whitespace-pre-wrap">
+              {record.system_prompt_zh?.slice(0, 180) || '暂无提示词内容'}
+              {(record.system_prompt_zh?.length || 0) > 180 ? '...' : ''}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)}>编辑</Button>
+              <Popconfirm title="确定删除此风格？" onConfirm={() => handleDelete(record.id)}>
+                <Button size="small" danger icon={<DeleteOutlined />}>删除</Button>
+              </Popconfirm>
+            </div>
+          </div>
+        ))}
+      </div>
 
       <Modal
         title={editingStyle ? '编辑风格' : '添加风格'}

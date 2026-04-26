@@ -1,9 +1,9 @@
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
-import { Layout, Menu, Avatar, Dropdown, Space, Button, Drawer, FloatButton } from 'antd'
+import { Layout, Menu, Avatar, Dropdown, Space, Button, Drawer } from 'antd'
 import type { MenuProps } from 'antd'
 import {
   PlusOutlined, HistoryOutlined, UserOutlined,
-  LogoutOutlined, MenuOutlined, BellOutlined, BookOutlined, SafetyOutlined
+  LogoutOutlined, MenuOutlined, BookOutlined, SafetyOutlined, HomeOutlined
 } from '@ant-design/icons'
 import { useAuthStore } from '@/stores/authStore'
 import { clearAuthArtifacts, syncCrossSiteLogout } from '@/utils/authSync'
@@ -25,6 +25,7 @@ export default function MainLayout() {
   }, [user])
 
   const menuItems: MenuProps['items'] = [
+    { key: '/', icon: <HomeOutlined />, label: '返回首页' },
     { key: '/creator', icon: <PlusOutlined />, label: '开始创作' },
     { key: '/history', icon: <HistoryOutlined />, label: '我的作品' },
     { key: '/docs', icon: <BookOutlined />, label: '帮助中心' },
@@ -131,6 +132,21 @@ export default function MainLayout() {
           items={menuItems}
           onClick={({ key }) => handleMenuClick(key)}
         />
+        {isAdminMode && user?.is_admin && (
+          <Button
+            icon={<SafetyOutlined />}
+            onClick={() => {
+              navigate('/admin')
+              setMobileMenuOpen(false)
+            }}
+            block
+            type="primary"
+            ghost
+            className="mt-4"
+          >
+            回到后台管理
+          </Button>
+        )}
       </Drawer>
 
       <Layout>
@@ -145,12 +161,9 @@ export default function MainLayout() {
             <h1 className="page-title">{getPageTitle()}</h1>
           </div>
           <div className="header-right">
-            <FloatButton
-              badge={{ count: 3 }}
-              icon={<BellOutlined />}
-              type="primary"
-              className="notification-btn"
-            />
+            <Button type="text" icon={<HomeOutlined />} onClick={() => navigate('/')}>
+              返回首页
+            </Button>
             <Dropdown menu={userMenu} placement="bottomRight">
               <Space className="user-info">
                 <Avatar 

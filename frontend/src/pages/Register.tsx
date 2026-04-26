@@ -1,15 +1,18 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { Form, Input, Button, message } from 'antd'
-import { UserOutlined, LockOutlined, MailOutlined, RocketOutlined } from '@ant-design/icons'
+import { UserOutlined, LockOutlined, PhoneOutlined, RocketOutlined, SyncOutlined } from '@ant-design/icons'
 import { authApi } from '@/services/auth'
 import { motion } from 'framer-motion'
 
 export default function Register() {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
+  const [form] = Form.useForm()
 
-  const onFinish = async (values: { username: string; email: string; password: string }) => {
+  const generateUsername = () => `创作者${Math.random().toString(36).slice(2, 8)}`
+
+  const onFinish = async (values: { username?: string; phone: string; password: string }) => {
     setLoading(true)
     try {
       await authApi.register(values)
@@ -62,30 +65,44 @@ export default function Register() {
           >
             <Form.Item
               name="username"
-              rules={[{ required: true, message: '请输入用户名' }]}
+              initialValue={generateUsername()}
             >
               <Input 
                 prefix={<UserOutlined className="text-gray-400" />} 
-                placeholder="用户名"
+                placeholder="用户名（可修改）"
                 className="rounded-lg"
+                addonAfter={
+                  <Button
+                    type="link"
+                    size="small"
+                    icon={<SyncOutlined />}
+                    onClick={() => form.setFieldValue('username', generateUsername())}
+                  >
+                    随机
+                  </Button>
+                }
               />
             </Form.Item>
             <Form.Item
-              name="email"
+              name="phone"
               rules={[
-                { required: true, message: '请输入邮箱' },
-                { type: 'email', message: '请输入有效的邮箱地址' },
+                { required: true, message: '请输入手机号' },
+                { pattern: /^1\d{10}$/, message: '请输入有效的11位手机号' },
               ]}
             >
               <Input 
-                prefix={<MailOutlined className="text-gray-400" />} 
-                placeholder="邮箱"
+                prefix={<PhoneOutlined className="text-gray-400" />} 
+                placeholder="手机号"
                 className="rounded-lg"
               />
             </Form.Item>
             <Form.Item
               name="password"
-              rules={[{ required: true, message: '请输入密码' }]}
+              rules={[
+                { required: true, message: '请输入密码' },
+                { min: 8, message: '密码至少8位' },
+                { pattern: /^(?=.*[A-Za-z])(?=.*\d).+$/, message: '密码必须包含字母和数字' },
+              ]}
             >
               <Input.Password 
                 prefix={<LockOutlined className="text-gray-400" />} 

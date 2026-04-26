@@ -510,19 +510,32 @@ export default function ProjectChat() {
         <div className="text-xs text-gray-400 mb-2 text-center">
           ⚠️ 视频将在 3 小时后自动清除 | 对话内容将在 24 小时后清除
         </div>
-        <div className="mb-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700 dark:border-blue-900/50 dark:bg-blue-900/20 dark:text-blue-200">
-          <div className="font-medium">对话风格</div>
-          <div className="mt-1">会影响 AI 的提问方式、表达方式和内容组织方式。拿不准时，先使用默认风格即可。</div>
-          {selectedStyleInfo?.description && <div className="mt-1 text-blue-600 dark:text-blue-300">当前风格：{selectedStyleInfo.description}</div>}
+        <div className="mb-3 rounded-2xl border border-blue-100 bg-gradient-to-r from-blue-50 via-sky-50 to-cyan-50 px-3 py-3 text-blue-700 shadow-sm dark:border-blue-900/50 dark:bg-gradient-to-r dark:from-blue-900/30 dark:via-slate-900 dark:to-cyan-900/20 dark:text-blue-200">
+          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <div className="min-w-0 md:max-w-[60%]">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-500 dark:text-blue-300">Style</div>
+              <div className="mt-1 text-sm font-semibold text-slate-800 dark:text-slate-100">对话风格</div>
+              <div className="mt-1 text-xs leading-5 text-blue-700/90 dark:text-blue-200/90">
+                会影响 AI 的提问方式、表达方式和内容组织方式。拿不准时，先使用默认风格即可。
+              </div>
+              <div className="mt-2 inline-flex max-w-full items-center rounded-full bg-white/80 px-3 py-1 text-xs font-medium text-blue-700 ring-1 ring-blue-100 dark:bg-slate-900/60 dark:text-blue-200 dark:ring-blue-900/60">
+                当前风格：{selectedStyleInfo?.description || chatStyles.find(style => style.code === selectedStyle)?.name || '默认风格'}
+              </div>
+            </div>
+            <div className="w-full md:w-[220px] lg:w-[260px]">
+              <label className="mb-1 block text-[11px] font-medium text-blue-600 dark:text-blue-300">切换风格</label>
+              <Select
+                value={selectedStyle}
+                onChange={setSelectedStyle}
+                size="large"
+                className="w-full"
+                popupMatchSelectWidth={false}
+                options={chatStyles.map(s => ({ label: s.name, value: s.code }))}
+              />
+            </div>
+          </div>
         </div>
         <div className="flex gap-2 items-end">
-          <Select
-            value={selectedStyle}
-            onChange={setSelectedStyle}
-            style={{ width: 100 }}
-            size="small"
-            options={chatStyles.map(s => ({ label: s.name, value: s.code }))}
-          />
           <TextArea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -571,7 +584,7 @@ export default function ProjectChat() {
             重新生成
           </Button>
           <Button type="primary" icon={<CheckCircleOutlined />} onClick={handleConfirmCode}>
-            确认并渲染
+            确认并继续
           </Button>
         </div>
       </Modal>
@@ -586,7 +599,7 @@ export default function ProjectChat() {
       >
         <Alert 
           type="info" 
-          message="粘贴你的文案，系统会自动转换为标准格式并生成代码"
+          message="粘贴你的文案，系统会自动转换为标准格式并生成内容"
           className="mb-3"
         />
         

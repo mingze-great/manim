@@ -14,7 +14,7 @@
 }
 
 .showcase-scroll-wrapper {
-  overflow-x: auto;
+  overflow-x: visible;
   -webkit-overflow-scrolling: touch;
   padding-bottom: 8px;
 }
@@ -38,13 +38,15 @@
 }
 
 .showcase-card-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 16px;
   padding: 4px;
 }
 
 .showcase-card {
-  flex: 0 0 260px;
+  width: 100%;
+  flex: none;
   border-radius: 12px;
   border: 2px solid #e8e8e8;
   overflow: hidden;

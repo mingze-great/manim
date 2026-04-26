@@ -36,6 +36,19 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 
+def generate_random_username(db: Session) -> str:
+    while True:
+        candidate = f"创作者{secrets.token_hex(3)}"
+        exists = db.query(User).filter(User.username == candidate).first()
+        if not exists:
+            return candidate
+
+
+def build_placeholder_email(username: str, phone: str | None) -> str:
+    suffix = phone or secrets.token_hex(4)
+    return f"{username}_{suffix}@placeholder.local"
+
+
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
     to_encode = data.copy()
     if expires_delta:
@@ -165,28 +178,44 @@ def register(
     db: Annotated[Session, Depends(get_db)],
     request: Request
 ):
-    username = user_data.get("username")
-    email = user_data.get("email")
+    username = (user_data.get("username") or "").strip()
+    phone = (user_data.get("phone") or "").strip()
     password = user_data.get("password")
+    email = (user_data.get("email") or "").strip()
+
+    if not username:
+        username = generate_random_username(db)
     
-    if not all([username, email, password]):
-        raise HTTPException(status_code=400, detail="缺少必填信息：用户名、邮箱、密码")
+    if not all([username, phone, password]):
+        raise HTTPException(status_code=400, detail="缺少必填信息：用户名、手机号、密码")
+
+    if not phone.isdigit() or len(phone) != 11 or not phone.startswith('1'):
+        raise HTTPException(status_code=400, detail="请输入有效的11位手机号")
     
     if not check_rate_limit(f"register:{request.client.host}", max_requests=5, window_seconds=3600):
         raise HTTPException(status_code=429, detail="注册过于频繁，请稍后再试")
     
-    # 检查用户名和邮箱
+    # 检查用户名和手机号
     db_user = db.query(User).filter(User.username == username).first()
     if db_user:
         raise HTTPException(status_code=400, detail="用户名已存在")
-    db_user = db.query(User).filter(User.email == email).first()
+
+    db_user = db.query(User).filter(User.phone == phone).first()
     if db_user:
-        raise HTTPException(status_code=400, detail="邮箱已被注册")
+        raise HTTPException(status_code=400, detail="手机号已被注册")
+
+    if not email:
+        email = build_placeholder_email(username, phone)
+    else:
+        db_user = db.query(User).filter(User.email == email).first()
+        if db_user:
+            raise HTTPException(status_code=400, detail="邮箱已被注册")
     
     hashed_password = get_password_hash(password)
     new_user = User(
         username=username,
         email=email,
+        phone=phone,
         hashed_password=hashed_password,
         is_approved=False
     )
@@ -226,6 +255,34 @@ def login(
     log_audit(db, user.id, user.username, "LOGIN_SUCCESS", details="用户登录", request=request)
     
     return {"access_token": access_token, "token_type": "bearer"}
+
+
+@router.post("/change-password")
+def change_password(
+    payload: dict,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+    request: Request,
+):
+    current_password = payload.get("current_password")
+    new_password = payload.get("new_password")
+
+    if not current_password or not new_password:
+        raise HTTPException(status_code=400, detail="请填写当前密码和新密码")
+
+    if len(new_password) < 8:
+        raise HTTPException(status_code=400, detail="新密码至少8位")
+    if not any(ch.isalpha() for ch in new_password) or not any(ch.isdigit() for ch in new_password):
+        raise HTTPException(status_code=400, detail="新密码必须包含字母和数字")
+
+    if not verify_password(current_password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="当前密码错误")
+
+    current_user.hashed_password = get_password_hash(new_password)
+    db.commit()
+
+    log_audit(db, current_user.id, current_user.username, "PASSWORD_CHANGE", details="用户修改密码", request=request)
+    return {"message": "密码修改成功"}
 
 
 @router.post("/logout")

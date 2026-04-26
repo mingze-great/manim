@@ -60,6 +60,8 @@ export default function ProjectTask() {
   const CLIENT_RENDER_TIMEOUT = 330000
   const renderTask = task && ['video_render', 'manim_render'].includes(task.task_type) ? task : null
 
+  const normalizeScriptMessage = (text?: string | null) => (text || '').replace(/代码/g, '脚本')
+
   const hasRenderedVideo = Boolean(project?.video_url)
   const renderStatus = hasRenderedVideo
     ? 'completed'
@@ -142,13 +144,13 @@ export default function ProjectTask() {
         if (data?.task_id && data.status && ['pending', 'processing'].includes(data.status)) {
           setGeneratingCode(true)
           setCodeProgress(data.progress || 0)
-          setCodeMessage(data.message || '后台生成中...')
+          setCodeMessage(normalizeScriptMessage(data.message) || '后台生成中...')
 
           timer = setInterval(async () => {
             try {
               const { data: taskData } = await projectApi.getBackgroundTask(data.task_id as number)
               setCodeProgress(taskData.progress || 0)
-              setCodeMessage(taskData.message || '后台生成中...')
+              setCodeMessage(normalizeScriptMessage(taskData.message) || '后台生成中...')
 
               if (taskData.status === 'completed') {
                 setGeneratingCode(false)
@@ -208,7 +210,7 @@ export default function ProjectTask() {
         try {
           const { data: taskData } = await projectApi.getBackgroundTask(taskId)
           setCodeProgress(taskData.progress || 0)
-          setCodeMessage(taskData.message || '后台生成中...')
+            setCodeMessage(normalizeScriptMessage(taskData.message) || '后台生成中...')
 
           if (taskData.status === 'completed') {
             clearInterval(pollTimer)
@@ -220,18 +222,18 @@ export default function ProjectTask() {
           } else if (taskData.status === 'failed' || taskData.status === 'cancelled') {
             clearInterval(pollTimer)
             setGeneratingCode(false)
-            message.error(taskData.error || '生成失败')
+                message.error(normalizeScriptMessage(taskData.error) || '生成失败')
           }
         } catch (error: any) {
           clearInterval(pollTimer)
           setGeneratingCode(false)
-          message.error(error.message || '获取任务进度失败')
+          message.error(normalizeScriptMessage(error.message) || '获取任务进度失败')
         }
       }, 3000)
       codePollingRef.current = pollTimer
     } catch (error: any) {
       console.error('生成失败:', error)
-      message.error(error.message || '生成失败')
+      message.error(normalizeScriptMessage(error.message) || '生成失败')
       setGeneratingCode(false)
     }
   }
@@ -355,7 +357,7 @@ export default function ProjectTask() {
               } else if (content.includes('combining') || content.includes('writing') || content.includes('合成') || content.includes('保存')) {
                 setVideoProgress(prev => Math.min(Math.max(prev, 85) + 3, 95))
                 setVideoMessage('正在合成视频...')
-              } else if (content.includes('file') || content.includes('代码已保存') || content.includes('manim 命令')) {
+              } else if (content.includes('file') || content.includes('脚本已保存') || content.includes('manim 命令')) {
                 setVideoProgress(prev => Math.max(prev, 20))
                 setVideoMessage('准备渲染环境...')
               }
