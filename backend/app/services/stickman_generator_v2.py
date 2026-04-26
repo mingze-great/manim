@@ -1702,12 +1702,13 @@ class StickmanGenerator:
 
     def _timed_subtitles_for_scene(self, scene: dict, duration: float):
         existing = scene.get("subtitle_segments") or []
+        subtitle_lead = 0.10
         if existing:
             return [
                 {
                     "text": str(item.get("text") or ""),
                     "english": str(item.get("english") or ""),
-                    "start": float(item.get("start", 0.0)),
+                    "start": max(0.0, float(item.get("start", 0.0)) - subtitle_lead),
                     "end": float(item.get("end", duration)),
                 }
                 for item in existing
@@ -1731,7 +1732,7 @@ class StickmanGenerator:
         segment = safe_duration / max(len(lines), 1)
         timed = []
         for index, item in enumerate(lines):
-            start = round(start_at + index * segment, 2)
+            start = round(max(0.0, start_at + index * segment - subtitle_lead), 2)
             end = round(min(duration, start_at + (index + 1) * segment), 2)
             timed.append({
                 "text": self._strip_terminal_punctuation(str(item.get("text") or "")),
@@ -1958,38 +1959,28 @@ class StickmanGenerator:
         canvas = Image.new("RGBA", (1920, 1080), (0, 0, 0, 0))
         draw = ImageDraw.Draw(canvas)
 
-        panel_top = 730
-        separator_y = panel_top + 2
-        subtitle_top = 752
-        progress_bar_y = 1000
-        label_y = 1022
+        progress_bar_y = 1036
+        label_y = 1050
         bar_left = 90
         bar_right = 1830
         bar_width = bar_right - bar_left
 
-        for row in range(panel_top, 1080):
-            alpha = 16 + int((row - panel_top) / max(1080 - panel_top, 1) * 150)
-            draw.line((0, row, 1920, row), fill=(18, 18, 18, min(alpha, 186)), width=1)
+        # Keep the progress UI lightweight: a single thin bottom track plus section labels.
+        draw.rounded_rectangle((bar_left, progress_bar_y, bar_right, progress_bar_y + 10), radius=5, fill=(220, 220, 220, 225))
 
-        draw.line((0, separator_y, 1920, separator_y), fill=(8, 8, 8, 255), width=5)
-        draw.rounded_rectangle((bar_left, progress_bar_y, bar_right, progress_bar_y + 12), radius=6, fill=(255, 255, 255, 120))
-
-        label_font = self._load_font(22)
-        section_count = max(len(sections), 1)
-        slot_width = bar_width / section_count
+        label_font = self._load_font(20)
         for index, section in enumerate(sections, start=1):
-            left = int(bar_left + (index - 1) * slot_width)
-            right = int(bar_left + index * slot_width)
+            start_ratio = float(section.get("start_ratio", 0.0))
+            end_ratio = float(section.get("end_ratio", start_ratio))
+            left = int(bar_left + bar_width * start_ratio)
+            right = int(bar_left + bar_width * end_ratio)
             center_x = int((left + right) / 2)
-            if index < section_count:
-                draw.line((right, label_y + 2, right, 1070), fill=(255, 255, 255, 115), width=2)
+            if index < len(sections):
+                draw.line((right, progress_bar_y - 2, right, 1071), fill=(235, 235, 235, 165), width=2)
             label = str(section.get("title") or "内容")[:12]
             bbox = draw.textbbox((0, 0), label, font=label_font)
             text_width = bbox[2] - bbox[0]
-            draw.text((center_x - text_width / 2, label_y), label, fill=(255, 255, 255, 230), font=label_font)
-
-        # Reserve a stable subtitle region visually similar to the reference lower third.
-        draw.rounded_rectangle((120, subtitle_top, 1800, 952), radius=28, fill=(255, 255, 255, 38))
+            draw.text((center_x - text_width / 2, label_y), label, fill=(235, 235, 235, 235), font=label_font)
         canvas.save(save_path, format="PNG")
 
     def _create_fixed_subtitle_asset(self, save_path: str, subtitle: dict | str):
@@ -2002,24 +1993,24 @@ class StickmanGenerator:
 
         zh_lines = [chinese[i:i + 14] for i in range(0, len(chinese), 14)] or [chinese]
         en_lines = [english[i:i + 28] for i in range(0, len(english), 28)] if english else []
-        canvas = Image.new("RGBA", (1920, 170), (0, 0, 0, 0))
+        canvas = Image.new("RGBA", (1920, 132), (0, 0, 0, 0))
         draw = ImageDraw.Draw(canvas)
-        zh_font = self._load_font(56)
-        en_font = self._load_font(30)
+        zh_font = self._load_font(54)
+        en_font = self._load_font(28)
 
-        y = 10
+        y = 0
         for line in zh_lines:
             bbox = draw.textbbox((0, 0), line, font=zh_font)
             text_width = bbox[2] - bbox[0]
-            draw.text(((1920 - text_width) / 2, y), line, fill=(20, 20, 20, 255), font=zh_font)
-            y += 62
+            draw.text(((1920 - text_width) / 2, y), line, fill=(22, 22, 22, 255), font=zh_font, stroke_width=2, stroke_fill=(255, 255, 255, 220))
+            y += 58
         if en_lines:
-            y += 4
+            y += 2
             for line in en_lines:
                 bbox = draw.textbbox((0, 0), line, font=en_font)
                 text_width = bbox[2] - bbox[0]
-                draw.text(((1920 - text_width) / 2, y), line, fill=(48, 48, 48, 228), font=en_font)
-                y += 38
+                draw.text(((1920 - text_width) / 2, y), line, fill=(42, 42, 42, 235), font=en_font, stroke_width=1, stroke_fill=(255, 255, 255, 190))
+                y += 34
         canvas.save(save_path, format="PNG")
 
     def _build_fixed_bottom_overlays(self, storyboards: list[dict], total_duration: float, asset_dir: Path):
@@ -2157,12 +2148,12 @@ class StickmanGenerator:
         if animation == "fixed_bottom_panel":
             return "0", "0"
         if animation == "fixed_subtitle":
-            return "0", "770"
+            return "0", "900-h"
         if animation == "global_progress_marker":
             bar_left = 90
             bar_width = 1740
             end_time = max(float(overlay.get("end", start + 0.3)), start + 0.3)
-            return f"if(lt(t,{end_time:.2f}),{bar_left}+({bar_width})*(t-{start:.2f})/{max(end_time-start,0.3):.3f}-w/2,{bar_left + bar_width}-w/2)", "977"
+            return f"if(lt(t,{end_time:.2f}),{bar_left}+({bar_width})*(t-{start:.2f})/{max(end_time-start,0.3):.3f}-w/2,{bar_left + bar_width}-w/2)", "1018"
         return str(fixed_x), str(fixed_y)
 
     def _resolve_image_size(self, aspect_ratio: str):
