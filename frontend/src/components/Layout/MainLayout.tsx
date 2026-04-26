@@ -3,7 +3,7 @@ import { Layout, Menu, Avatar, Dropdown, Space, Button, Drawer } from 'antd'
 import type { MenuProps } from 'antd'
 import {
   PlusOutlined, HistoryOutlined, UserOutlined,
-  LogoutOutlined, MenuOutlined, BookOutlined, SafetyOutlined
+  LogoutOutlined, MenuOutlined, BookOutlined, SafetyOutlined, HomeOutlined
 } from '@ant-design/icons'
 import { useAuthStore } from '@/stores/authStore'
 import { clearAuthArtifacts, syncCrossSiteLogout } from '@/utils/authSync'
@@ -93,6 +93,9 @@ export default function MainLayout() {
           className="main-menu"
         />
         <div className="sider-footer">
+          <Button icon={<HomeOutlined />} onClick={() => navigate('/')} block className="mb-2">
+            返回首页
+          </Button>
           {isAdminMode && user?.is_admin && (
             <Button 
               icon={<SafetyOutlined />} 
@@ -131,6 +134,11 @@ export default function MainLayout() {
           items={menuItems}
           onClick={({ key }) => handleMenuClick(key)}
         />
+        <div className="px-4 pb-4 pt-2">
+          <Button icon={<HomeOutlined />} block onClick={() => handleMenuClick('/')}>
+            返回首页
+          </Button>
+        </div>
       </Drawer>
 
       <Layout>
@@ -145,6 +153,9 @@ export default function MainLayout() {
             <h1 className="page-title">{getPageTitle()}</h1>
           </div>
           <div className="header-right">
+            <Button type="text" icon={<HomeOutlined />} onClick={() => navigate('/')}>
+              返回首页
+            </Button>
             <Dropdown menu={userMenu} placement="bottomRight">
               <Space className="user-info">
                 <Avatar 

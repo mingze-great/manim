@@ -510,19 +510,23 @@ export default function ProjectChat() {
         <div className="text-xs text-gray-400 mb-2 text-center">
           ⚠️ 视频将在 3 小时后自动清除 | 对话内容将在 24 小时后清除
         </div>
-        <div className="mb-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700 dark:border-blue-900/50 dark:bg-blue-900/20 dark:text-blue-200">
-          <div className="font-medium">对话风格</div>
-          <div className="mt-1">会影响 AI 的提问方式、表达方式和内容组织方式。拿不准时，先使用默认风格即可。</div>
-          {selectedStyleInfo?.description && <div className="mt-1 text-blue-600 dark:text-blue-300">当前风格：{selectedStyleInfo.description}</div>}
+        <div className="mb-3 rounded-xl border border-blue-100 bg-gradient-to-r from-blue-50 to-indigo-50 px-3 py-3 text-xs text-blue-700 shadow-sm dark:border-blue-900/50 dark:bg-blue-900/20 dark:text-blue-200">
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div className="min-w-0 flex-1">
+              <div className="font-semibold text-sm text-blue-900 dark:text-blue-100">对话风格</div>
+              <div className="mt-1 leading-5">会影响 AI 的提问方式、表达方式和内容组织方式。拿不准时，先使用默认风格即可。</div>
+              {selectedStyleInfo?.description && <div className="mt-2 text-blue-700 dark:text-blue-300">当前风格：{selectedStyleInfo.description}</div>}
+            </div>
+            <Select
+              value={selectedStyle}
+              onChange={setSelectedStyle}
+              style={{ width: 160 }}
+              size="middle"
+              options={chatStyles.map(s => ({ label: s.name, value: s.code }))}
+            />
+          </div>
         </div>
         <div className="flex gap-2 items-end">
-          <Select
-            value={selectedStyle}
-            onChange={setSelectedStyle}
-            style={{ width: 100 }}
-            size="small"
-            options={chatStyles.map(s => ({ label: s.name, value: s.code }))}
-          />
           <TextArea
             value={input}
             onChange={(e) => setInput(e.target.value)}
