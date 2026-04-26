@@ -7,6 +7,7 @@ import re
 class UserBase(BaseModel):
     username: str
     email: EmailStr
+    phone: Optional[str] = None
 
 
 class UserCreate(UserBase):
@@ -140,6 +141,7 @@ class UserDetail(BaseModel):
     id: int
     username: str
     email: str
+    phone: Optional[str] = None
     is_active: bool
     is_admin: bool = False
     frontend_version: str = "legacy"

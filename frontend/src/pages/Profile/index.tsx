@@ -92,7 +92,8 @@ export default function Profile() {
           <Title level={5}>账号信息</Title>
           <Descriptions column={1} size="small">
             <Descriptions.Item label="用户名">{user?.username || '-'}</Descriptions.Item>
-            <Descriptions.Item label="邮箱">{user?.email || '-'}</Descriptions.Item>
+            <Descriptions.Item label="手机号">{user?.phone || '-'}</Descriptions.Item>
+            <Descriptions.Item label="系统邮箱">{user?.email || '-'}</Descriptions.Item>
             <Descriptions.Item label="用户 ID">{user?.id || '-'}</Descriptions.Item>
             <Descriptions.Item label="套餐">{planLabels[subscription?.plan || 'free'] || subscription?.plan || '付费版'}</Descriptions.Item>
             <Descriptions.Item label="到期时间">{user?.expires_at ? new Date(user.expires_at).toLocaleString('zh-CN') : '未设置'}</Descriptions.Item>

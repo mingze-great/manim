@@ -1,15 +1,18 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { Form, Input, Button, message } from 'antd'
-import { UserOutlined, LockOutlined, MailOutlined, RocketOutlined } from '@ant-design/icons'
+import { Form, Input, Button, message, Space } from 'antd'
+import { UserOutlined, LockOutlined, PhoneOutlined, RocketOutlined, ReloadOutlined } from '@ant-design/icons'
 import { authApi } from '@/services/auth'
 import { motion } from 'framer-motion'
+
+const randomUsername = () => `user${Math.floor(100000 + Math.random() * 900000)}`
 
 export default function Register() {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
+  const [form] = Form.useForm()
 
-  const onFinish = async (values: { username: string; email: string; password: string }) => {
+  const onFinish = async (values: { username: string; phone: string; password: string }) => {
     setLoading(true)
     try {
       await authApi.register(values)
@@ -59,27 +62,38 @@ export default function Register() {
             layout="vertical"
             size="large"
             className="input-glow"
+            form={form}
+            initialValues={{ username: randomUsername() }}
           >
             <Form.Item
               name="username"
               rules={[{ required: true, message: '请输入用户名' }]}
             >
-              <Input 
-                prefix={<UserOutlined className="text-gray-400" />} 
+              <Input
+                addonAfter={
+                  <Button
+                    type="text"
+                    icon={<ReloadOutlined />}
+                    onClick={() => form.setFieldValue('username', randomUsername())}
+                  >
+                    随机生成
+                  </Button>
+                }
+                prefix={<UserOutlined className="text-gray-400" />}
                 placeholder="用户名"
                 className="rounded-lg"
               />
             </Form.Item>
             <Form.Item
-              name="email"
+              name="phone"
               rules={[
-                { required: true, message: '请输入邮箱' },
-                { type: 'email', message: '请输入有效的邮箱地址' },
+                { required: true, message: '请输入手机号' },
+                { pattern: /^1\d{10}$/, message: '请输入有效的 11 位手机号' },
               ]}
             >
               <Input 
-                prefix={<MailOutlined className="text-gray-400" />} 
-                placeholder="邮箱"
+                prefix={<PhoneOutlined className="text-gray-400" />}
+                placeholder="手机号"
                 className="rounded-lg"
               />
             </Form.Item>
@@ -93,6 +107,12 @@ export default function Register() {
                 className="rounded-lg"
               />
             </Form.Item>
+            <div className="text-xs text-gray-500 mb-4">
+              <Space direction="vertical" size={2}>
+                <span>用户名支持一键随机生成，也可以手动修改。</span>
+                <span>密码至少 8 位，需包含字母和数字。</span>
+              </Space>
+            </div>
             <Form.Item className="mb-4">
               <Button
                 type="primary"

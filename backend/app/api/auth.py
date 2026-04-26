@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from collections import defaultdict
+import re
 import time
 import secrets
 
@@ -34,6 +35,12 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
+
+
+def build_placeholder_email(username: str, phone: str) -> str:
+    safe_username = re.sub(r"[^a-zA-Z0-9_-]", "", username) or "user"
+    safe_phone = re.sub(r"\D", "", phone) or secrets.token_hex(3)
+    return f"{safe_username}_{safe_phone}@system.local"
 
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
@@ -166,27 +173,34 @@ def register(
     request: Request
 ):
     username = user_data.get("username")
-    email = user_data.get("email")
+    phone = str(user_data.get("phone") or "").strip()
     password = user_data.get("password")
     
-    if not all([username, email, password]):
-        raise HTTPException(status_code=400, detail="缺少必填信息：用户名、邮箱、密码")
+    if not all([username, phone, password]):
+        raise HTTPException(status_code=400, detail="缺少必填信息：用户名、手机号、密码")
+    if not re.fullmatch(r"1\d{10}", phone):
+        raise HTTPException(status_code=400, detail="请输入有效的 11 位手机号")
     
     if not check_rate_limit(f"register:{request.client.host}", max_requests=5, window_seconds=3600):
         raise HTTPException(status_code=429, detail="注册过于频繁，请稍后再试")
     
-    # 检查用户名和邮箱
+    # 检查用户名和手机号
     db_user = db.query(User).filter(User.username == username).first()
     if db_user:
         raise HTTPException(status_code=400, detail="用户名已存在")
-    db_user = db.query(User).filter(User.email == email).first()
+    db_user = db.query(User).filter(User.phone == phone).first()
     if db_user:
-        raise HTTPException(status_code=400, detail="邮箱已被注册")
+        raise HTTPException(status_code=400, detail="手机号已被注册")
+
+    email = build_placeholder_email(str(username), phone)
+    while db.query(User).filter(User.email == email).first():
+        email = build_placeholder_email(str(username), phone + secrets.token_hex(2))
     
     hashed_password = get_password_hash(password)
     new_user = User(
         username=username,
         email=email,
+        phone=phone,
         hashed_password=hashed_password,
         is_approved=False
     )

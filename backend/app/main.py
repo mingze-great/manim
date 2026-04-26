@@ -166,6 +166,10 @@ async def lifespan(app: FastAPI):
             conn.execute(text("ALTER TABLE users ADD COLUMN custom_voices_json TEXT"))
             conn.commit()
             print("Added custom_voices_json column to users")
+        if 'phone' not in user_columns:
+            conn.execute(text("ALTER TABLE users ADD COLUMN phone VARCHAR(20)"))
+            conn.commit()
+            print("Added phone column to users")
 
         if 'generation_mode' not in project_columns:
             conn.execute(text("ALTER TABLE projects ADD COLUMN generation_mode VARCHAR(20) DEFAULT 'one_click'"))

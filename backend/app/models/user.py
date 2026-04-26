@@ -11,6 +11,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String(50), unique=True, index=True, nullable=False)
     email = Column(String(100), unique=True, index=True, nullable=False)
+    phone = Column(String(20), unique=False, index=True, nullable=True)
     hashed_password = Column(String(255), nullable=False)
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
@@ -213,6 +214,7 @@ class User(Base):
             "id": self.id,
             "username": self.username,
             "email": self.email,
+            "phone": self.phone,
             "is_active": self.is_active,
             "is_admin": self.is_admin,
             "frontend_version": self.frontend_version,

@@ -190,7 +190,8 @@ async def list_users(
     if search:
         query = query.filter(
             (User.username.contains(search)) | 
-            (User.email.contains(search))
+            (User.email.contains(search)) |
+            (User.phone.contains(search))
         )
     
     users = query.order_by(User.created_at.desc()).offset(skip).limit(limit).all()
@@ -361,6 +362,7 @@ async def get_user_detail(
         "id": user.id,
         "username": user.username,
         "email": user.email,
+        "phone": user.phone,
         "is_active": user.is_active,
         "is_admin": user.is_admin,
         "frontend_version": user.frontend_version or "legacy",
@@ -827,6 +829,7 @@ async def get_all_user_stats(
             "id": user.id,
             "username": user.username,
             "email": user.email,
+            "phone": user.phone,
             "is_active": user.is_active,
             "is_approved": user.is_approved,
             "expires_at": user.expires_at.isoformat() if user.expires_at else None,

@@ -447,10 +447,10 @@ export default function AdminUsers() {
             icon={record.is_admin ? <UserOutlined /> : <UserOutlined />}
             size={40}
           />
-          <div>
-            <div className="font-medium">{record.username}</div>
-            <div className="text-gray-500 text-sm">{record.email}</div>
-          </div>
+            <div>
+              <div className="font-medium">{record.username}</div>
+              <div className="text-gray-500 text-sm">{record.phone || record.email}</div>
+            </div>
         </div>
       ),
     },
@@ -564,7 +564,7 @@ export default function AdminUsers() {
         <Row gutter={16} align="middle">
           <Col flex="auto">
             <Input.Search
-              placeholder="搜索用户名或邮箱..."
+              placeholder="搜索用户名、手机号或邮箱..."
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
               onSearch={() => fetchUsers()}
@@ -629,7 +629,7 @@ export default function AdminUsers() {
                     <Avatar style={{ backgroundColor: record.is_admin ? '#f59e0b' : '#6366f1' }} icon={<UserOutlined />} size={40} />
                     <div className="min-w-0">
                       <div className="font-medium truncate">{record.username}</div>
-                      <div className="text-gray-500 text-sm break-all">{record.email}</div>
+                      <div className="text-gray-500 text-sm break-all">{record.phone || record.email}</div>
                     </div>
                   </div>
                   <Tag color={record.is_admin ? 'gold' : 'default'}>{record.is_admin ? '管理员' : '用户'}</Tag>
@@ -704,6 +704,7 @@ export default function AdminUsers() {
               <Descriptions bordered column={1} size="small">
                 <Descriptions.Item label="用户ID">{selectedUser.id}</Descriptions.Item>
                 <Descriptions.Item label="用户名">{selectedUser.username}</Descriptions.Item>
+                <Descriptions.Item label="手机号">{selectedUser.phone || '-'}</Descriptions.Item>
                 <Descriptions.Item label="邮箱">{selectedUser.email}</Descriptions.Item>
                 <Descriptions.Item label="状态">
                   <Badge status={selectedUser.is_active ? 'success' : 'error'} text={selectedUser.is_active ? '正常' : '已禁用'} />
