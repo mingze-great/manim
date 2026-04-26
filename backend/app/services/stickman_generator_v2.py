@@ -1717,7 +1717,9 @@ class StickmanGenerator:
         if not lines:
             return []
         start_at = 0.0
-        safe_duration = max(duration, 0.3)
+        audio_duration = float(scene.get("audio_duration") or 0.0)
+        effective_duration = min(duration, audio_duration + 0.06) if audio_duration > 0 else duration
+        safe_duration = max(min(duration, effective_duration), 0.2)
         if len(lines) == 1:
             item = lines[0]
             return [{
@@ -1952,32 +1954,141 @@ class StickmanGenerator:
         draw.ellipse((16, 16, 30, 30), fill=(255, 255, 255, 255))
         canvas.save(save_path, format="PNG")
 
+    def _create_fixed_bottom_panel_asset(self, save_path: str, sections: list[dict]):
+        canvas = Image.new("RGBA", (1920, 1080), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(canvas)
+
+        panel_top = 730
+        separator_y = panel_top + 2
+        subtitle_top = 752
+        progress_bar_y = 1000
+        label_y = 1022
+        bar_left = 90
+        bar_right = 1830
+        bar_width = bar_right - bar_left
+
+        for row in range(panel_top, 1080):
+            alpha = 16 + int((row - panel_top) / max(1080 - panel_top, 1) * 150)
+            draw.line((0, row, 1920, row), fill=(18, 18, 18, min(alpha, 186)), width=1)
+
+        draw.line((0, separator_y, 1920, separator_y), fill=(8, 8, 8, 255), width=5)
+        draw.rounded_rectangle((bar_left, progress_bar_y, bar_right, progress_bar_y + 12), radius=6, fill=(255, 255, 255, 120))
+
+        label_font = self._load_font(22)
+        section_count = max(len(sections), 1)
+        slot_width = bar_width / section_count
+        for index, section in enumerate(sections, start=1):
+            left = int(bar_left + (index - 1) * slot_width)
+            right = int(bar_left + index * slot_width)
+            center_x = int((left + right) / 2)
+            if index < section_count:
+                draw.line((right, label_y + 2, right, 1070), fill=(255, 255, 255, 115), width=2)
+            label = str(section.get("title") or "内容")[:12]
+            bbox = draw.textbbox((0, 0), label, font=label_font)
+            text_width = bbox[2] - bbox[0]
+            draw.text((center_x - text_width / 2, label_y), label, fill=(255, 255, 255, 230), font=label_font)
+
+        # Reserve a stable subtitle region visually similar to the reference lower third.
+        draw.rounded_rectangle((120, subtitle_top, 1800, 952), radius=28, fill=(255, 255, 255, 38))
+        canvas.save(save_path, format="PNG")
+
+    def _create_fixed_subtitle_asset(self, save_path: str, subtitle: dict | str):
+        if isinstance(subtitle, dict):
+            chinese = str(subtitle.get("text") or "").strip() or " "
+            english = self._sanitize_english_subtitle(str(subtitle.get("english") or ""))
+        else:
+            chinese = str(subtitle or "").strip() or " "
+            english = self._sanitize_english_subtitle(self._translate_subtitle_to_english(chinese))
+
+        zh_lines = [chinese[i:i + 14] for i in range(0, len(chinese), 14)] or [chinese]
+        en_lines = [english[i:i + 28] for i in range(0, len(english), 28)] if english else []
+        canvas = Image.new("RGBA", (1920, 170), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(canvas)
+        zh_font = self._load_font(56)
+        en_font = self._load_font(30)
+
+        y = 10
+        for line in zh_lines:
+            bbox = draw.textbbox((0, 0), line, font=zh_font)
+            text_width = bbox[2] - bbox[0]
+            draw.text(((1920 - text_width) / 2, y), line, fill=(20, 20, 20, 255), font=zh_font)
+            y += 62
+        if en_lines:
+            y += 4
+            for line in en_lines:
+                bbox = draw.textbbox((0, 0), line, font=en_font)
+                text_width = bbox[2] - bbox[0]
+                draw.text(((1920 - text_width) / 2, y), line, fill=(48, 48, 48, 228), font=en_font)
+                y += 38
+        canvas.save(save_path, format="PNG")
+
+    def _build_fixed_bottom_overlays(self, storyboards: list[dict], total_duration: float, asset_dir: Path):
+        asset_dir.mkdir(parents=True, exist_ok=True)
+        overlays = []
+        sections = list((storyboards[0].get("sections_meta") if storyboards else []) or [])
+
+        panel_path = asset_dir / "bottom_panel.png"
+        self._create_fixed_bottom_panel_asset(str(panel_path), sections)
+        overlays.append({
+            "path": str(panel_path),
+            "start": 0.0,
+            "end": float(total_duration),
+            "animation": "fixed_bottom_panel",
+        })
+
+        marker_path = asset_dir / "progress_marker.png"
+        self._create_progress_marker_asset(str(marker_path))
+        overlays.append({
+            "path": str(marker_path),
+            "start": 0.0,
+            "end": float(total_duration),
+            "x_ratio": 0.0,
+            "x_end_ratio": 1.0,
+            "animation": "global_progress_marker",
+        })
+
+        subtitle_offset = 0
+        for scene in storyboards:
+            scene_start = float(scene.get("start_time") or 0.0)
+            for subtitle in self._timed_subtitles_for_scene(scene, float(scene.get("scene_duration") or 0.0)):
+                subtitle_path = asset_dir / f"subtitle_global_{subtitle_offset}.png"
+                self._create_fixed_subtitle_asset(str(subtitle_path), subtitle)
+                overlays.append({
+                    "path": str(subtitle_path),
+                    "start": round(scene_start + float(subtitle.get("start") or 0.0), 2),
+                    "end": round(scene_start + float(subtitle.get("end") or 0.0), 2),
+                    "animation": "fixed_subtitle",
+                })
+                subtitle_offset += 1
+        return overlays
+
     def _build_scene_overlays(self, scene: dict, duration: float, asset_dir: Path, asset: Optional[dict] = None):
         asset_dir.mkdir(parents=True, exist_ok=True)
         subject_map = {str(item.get("key")): item for item in (scene.get("foreground_subjects") or []) if item.get("key")}
         palette = self._warm_palette_for_scene(scene)
         overlays = []
         if scene.get("sections_meta"):
-            progress_bar_path = asset_dir / "progress_bar.png"
-            progress_marker_path = asset_dir / "progress_marker.png"
-            self._create_progress_bar_asset(str(progress_bar_path), scene)
-            self._create_progress_marker_asset(str(progress_marker_path))
+            panel_path = asset_dir / "bottom_panel.png"
+            marker_path = asset_dir / "progress_marker.png"
+            self._create_fixed_bottom_panel_asset(str(panel_path), list(scene.get("sections_meta") or []))
+            self._create_progress_marker_asset(str(marker_path))
             overlays.append({
-                "path": str(progress_bar_path),
+                "path": str(panel_path),
                 "start": 0.0,
                 "end": float(duration),
-                "x_ratio": 0.5,
-                "y_ratio": 0.965,
-                "animation": "progress_bar",
+                "animation": "fixed_bottom_panel",
+                "fade_in": 0.0,
+                "fade_out": 0.0,
             })
             overlays.append({
-                "path": str(progress_marker_path),
+                "path": str(marker_path),
                 "start": 0.0,
                 "end": float(duration),
                 "x_ratio": float(scene.get("video_progress_start_ratio", 0.0)),
                 "x_end_ratio": float(scene.get("video_progress_end_ratio", 0.0)),
-                "y_ratio": 0.967,
-                "animation": "progress_marker",
+                "animation": "global_progress_marker",
+                "fade_in": 0.0,
+                "fade_out": 0.0,
             })
         for index, event in enumerate((scene.get("foreground_events") or [])[:6]):
             subject = subject_map.get(str(event.get("target") or ""))
@@ -1999,14 +2110,14 @@ class StickmanGenerator:
             })
         for index, subtitle in enumerate(self._timed_subtitles_for_scene(scene, duration), start=len(overlays)):
             overlay_path = asset_dir / f"subtitle_{index}.png"
-            self._create_subtitle_asset(str(overlay_path), subtitle, palette)
+            self._create_fixed_subtitle_asset(str(overlay_path), subtitle)
             overlays.append({
                 "path": str(overlay_path),
                 "start": float(subtitle["start"]),
                 "end": float(subtitle["end"]),
-                "x_ratio": 0.5,
-                "y_ratio": 0.885,
-                "animation": "subtitle",
+                "animation": "fixed_subtitle",
+                "fade_in": 0.0,
+                "fade_out": 0.0,
             })
         return overlays
 
@@ -2043,6 +2154,15 @@ class StickmanGenerator:
             return str(fixed_x), f"if(lt(t,{start:.2f}),1080+h,if(lt(t,{start + 0.28:.2f}),1080+h-(1080+h-{fixed_y})*(t-{start:.2f})/0.28,{fixed_y}))"
         if animation == "subtitle":
             return "(W-w)/2", "min(760,H-h-44)"
+        if animation == "fixed_bottom_panel":
+            return "0", "0"
+        if animation == "fixed_subtitle":
+            return "0", "770"
+        if animation == "global_progress_marker":
+            bar_left = 90
+            bar_width = 1740
+            end_time = max(float(overlay.get("end", start + 0.3)), start + 0.3)
+            return f"if(lt(t,{end_time:.2f}),{bar_left}+({bar_width})*(t-{start:.2f})/{max(end_time-start,0.3):.3f}-w/2,{bar_left + bar_width}-w/2)", "977"
         return str(fixed_x), str(fixed_y)
 
     def _resolve_image_size(self, aspect_ratio: str):
@@ -2320,8 +2440,7 @@ class StickmanGenerator:
     def _finalize_audio_track(self, audio_path: str):
         audio = AudioSegment.from_file(audio_path)
         if len(audio) > 300:
-            audio = audio.fade_out(min(420, len(audio) // 3))
-        audio += AudioSegment.silent(duration=850)
+            audio = audio.fade_out(min(120, len(audio) // 8))
         audio.export(audio_path, format="mp3")
         return max(len(audio) / 1000.0, 1.0)
 
@@ -2506,7 +2625,7 @@ class StickmanGenerator:
         if not timeline:
             return timeline
         total_video_duration = sum(item["video_duration"] for item in timeline)
-        required_duration = total_audio_duration + 0.8
+        required_duration = total_audio_duration + 0.02
         if total_video_duration < required_duration:
             timeline[-1]["video_duration"] = round(timeline[-1]["video_duration"] + (required_duration - total_video_duration), 2)
         return timeline
@@ -2586,16 +2705,16 @@ class StickmanGenerator:
             current_label = "[base0]"
             for overlay_index, overlay in enumerate(overlays, start=1):
                 x_overlay, y_overlay = self._overlay_position_expr(overlay["path"], overlay)
-                fade_in = 0.14
-                fade_out = 0.16
+                fade_in = max(float(overlay.get("fade_in", 0.14)), 0.0)
+                fade_out = max(float(overlay.get("fade_out", 0.16)), 0.0)
                 overlay_label = f"[ov{overlay_index}]"
                 output_label = f"[base{overlay_index}]"
-                fade_out_start = max(float(overlay["end"]) - fade_out, float(overlay["start"]))
-                overlay_filter = (
-                    f"[{overlay_index}:v]format=rgba,"
-                    f"fade=t=in:st={float(overlay['start']):.2f}:d={fade_in:.2f}:alpha=1,"
-                    f"fade=t=out:st={fade_out_start:.2f}:d={fade_out:.2f}:alpha=1"
-                )
+                overlay_filter = f"[{overlay_index}:v]format=rgba"
+                if fade_in > 0:
+                    overlay_filter += f",fade=t=in:st={float(overlay['start']):.2f}:d={fade_in:.2f}:alpha=1"
+                if fade_out > 0:
+                    fade_out_start = max(float(overlay["end"]) - fade_out, float(overlay["start"]))
+                    overlay_filter += f",fade=t=out:st={fade_out_start:.2f}:d={fade_out:.2f}:alpha=1"
                 animation = str(overlay.get("animation") or "")
                 if animation in {"keyword_punch", "number_burst", "bounce_settle", "focus_ring_ping", "arrow_draw", "underline_wipe"}:
                     overlay_filter += ",setpts=PTS-STARTPTS"
