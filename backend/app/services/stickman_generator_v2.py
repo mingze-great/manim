@@ -1980,8 +1980,33 @@ class StickmanGenerator:
             label = str(section.get("title") or "内容")[:12]
             bbox = draw.textbbox((0, 0), label, font=label_font)
             text_width = bbox[2] - bbox[0]
-            draw.text((center_x - text_width / 2, label_y), label, fill=(235, 235, 235, 235), font=label_font)
+            draw.text((center_x - text_width / 2, label_y), label, fill=(120, 120, 120, 220), font=label_font)
         canvas.save(save_path, format="PNG")
+
+    def _section_progress_position_expr(self, overlay: dict, width: int):
+        sections = list(overlay.get("sections_meta") or [])
+        scene_start_time = float(overlay.get("scene_start_time") or 0.0)
+        bar_left = 90
+        bar_width = 1740
+        total_end = bar_left + bar_width - width / 2
+        if not sections:
+            duration = max(float(overlay.get("end", 0.3)) - float(overlay.get("start", 0.0)), 0.3)
+            return f"{bar_left} + ({bar_width}) * t / {duration:.3f} - w/2"
+
+        global_t = f"({scene_start_time:.3f}+t)"
+        expr = f"{total_end:.3f}"
+        for section in reversed(sections):
+            start_time = float(section.get("start_time", 0.0))
+            end_time = float(section.get("end_time", start_time))
+            start_ratio = float(section.get("start_ratio", 0.0))
+            end_ratio = float(section.get("end_ratio", start_ratio))
+            left = bar_left + bar_width * start_ratio
+            right = bar_left + bar_width * end_ratio
+            section_duration = max(end_time - start_time, 0.05)
+            pixels_per_second = (right - left) / section_duration
+            section_expr = f"{left:.3f}+(({global_t})-{start_time:.3f})*{pixels_per_second:.6f}-w/2"
+            expr = f"if(lte({global_t},{end_time:.3f}),{section_expr},{expr})"
+        return expr
 
     def _create_fixed_subtitle_asset(self, save_path: str, subtitle: dict | str):
         if isinstance(subtitle, dict):
@@ -2075,8 +2100,8 @@ class StickmanGenerator:
                 "path": str(marker_path),
                 "start": 0.0,
                 "end": float(duration),
-                "x_ratio": float(scene.get("video_progress_start_ratio", 0.0)),
-                "x_end_ratio": float(scene.get("video_progress_end_ratio", 0.0)),
+                "sections_meta": list(scene.get("sections_meta") or []),
+                "scene_start_time": float(scene.get("start_time") or 0.0),
                 "animation": "global_progress_marker",
                 "fade_in": 0.0,
                 "fade_out": 0.0,
@@ -2150,10 +2175,7 @@ class StickmanGenerator:
         if animation == "fixed_subtitle":
             return "0", "900-h"
         if animation == "global_progress_marker":
-            bar_left = 90
-            bar_width = 1740
-            end_time = max(float(overlay.get("end", start + 0.3)), start + 0.3)
-            return f"if(lt(t,{end_time:.2f}),{bar_left}+({bar_width})*(t-{start:.2f})/{max(end_time-start,0.3):.3f}-w/2,{bar_left + bar_width}-w/2)", "1018"
+            return self._section_progress_position_expr(overlay, width), "1018"
         return str(fixed_x), str(fixed_y)
 
     def _resolve_image_size(self, aspect_ratio: str):
@@ -2282,7 +2304,7 @@ class StickmanGenerator:
                     await communicate.save(save_path)
                 asyncio_run(_run_edge())
                 audio = AudioSegment.from_file(save_path)
-                return max(len(audio) / 1000.0, 1.0)
+                return self._export_tts_audio(audio, save_path)
             except Exception:
                 provider = "dashscope_cosyvoice"
                 voice = self._normalize_tts_voice(provider, voice)
@@ -2301,8 +2323,7 @@ class StickmanGenerator:
                     factor = 1.0 + (float(rate.strip('%')) / 100.0)
                     factor = max(0.7, min(1.3, factor))
                     audio = audio._spawn(audio.raw_data, overrides={"frame_rate": int(audio.frame_rate * factor)}).set_frame_rate(audio.frame_rate)
-                    audio.export(save_path, format="mp3")
-                return max(len(audio) / 1000.0, 1.0)
+                return self._export_tts_audio(audio, save_path)
             except Exception:
                 provider = "dashscope_sambert"
                 voice = "sambert-zhiming-v1"
@@ -2316,7 +2337,7 @@ class StickmanGenerator:
                     await communicate.save(save_path)
                 asyncio_run(_run_edge_fallback())
                 audio = AudioSegment.from_file(save_path)
-                return max(len(audio) / 1000.0, 1.0)
+                return self._export_tts_audio(audio, save_path)
             except Exception:
                 provider = "dashscope_qwen"
                 voice = "Cherry"
@@ -2336,10 +2357,7 @@ class StickmanGenerator:
                     factor = 1.0 + (float(rate.strip('%')) / 100.0)
                     factor = max(0.7, min(1.3, factor))
                     audio = audio._spawn(audio.raw_data, overrides={"frame_rate": int(audio.frame_rate * factor)}).set_frame_rate(audio.frame_rate)
-                    audio.export(save_path, format='mp3')
-                else:
-                    audio.export(save_path, format='mp3')
-                return max(len(audio) / 1000.0, 1.0)
+                return self._export_tts_audio(audio, save_path)
             except Exception:
                 provider = "dashscope_qwen"
                 voice = "Cherry"
@@ -2380,7 +2398,7 @@ class StickmanGenerator:
             audio = AudioSegment.from_file(save_path)
             if not self._audio_has_signal(audio):
                 raise RuntimeError('Generic TTS returned silent audio')
-            return max(len(audio) / 1000.0, 1.0)
+            return self._export_tts_audio(audio, save_path)
         except Exception:
             duration = max(2.0, min(len(text) * 0.22, 10.0))
             silence = AudioSegment.silent(duration=int(duration * 1000))
@@ -2424,6 +2442,11 @@ class StickmanGenerator:
 
     def _audio_has_signal(self, audio: AudioSegment):
         return bool(len(audio)) and int(audio.rms or 0) > 0
+
+    def _export_tts_audio(self, audio: AudioSegment, save_path: str, preroll_ms: int = 120):
+        final_audio = AudioSegment.silent(duration=max(preroll_ms, 0)) + audio
+        final_audio.export(save_path, format="mp3")
+        return max(len(final_audio) / 1000.0, 1.0)
 
     def _scene_tts_profile(self, scene: dict, provider: str, voice: str, rate: str):
         return provider, voice, rate
