@@ -25,9 +25,10 @@ from app.config import get_settings
 class StickmanGenerator:
     def __init__(self):
         self.settings = get_settings()
-        self.llm_api_key = self.settings.STICKMAN_LLM_API_KEY or self.settings.OPENAI_API_KEY or self.settings.DEEPSEEK_API_KEY or self.settings.DASHSCOPE_API_KEY
-        self.llm_base_url = self.settings.STICKMAN_LLM_BASE_URL or self.settings.OPENAI_BASE_URL or self.settings.DEEPSEEK_BASE_URL or self.settings.DASHSCOPE_BASE_URL
-        self.llm_model = self.settings.STICKMAN_LLM_MODEL or self.settings.OPENAI_MODEL or self.settings.DEEPSEEK_MODEL or self.settings.DASHSCOPE_CHAT_MODEL
+        self.llm_api_key = self.settings.STICKMAN_LLM_API_KEY or self.settings.DASHSCOPE_API_KEY or self.settings.OPENAI_API_KEY or self.settings.DEEPSEEK_API_KEY
+        self.llm_base_url = self.settings.STICKMAN_LLM_BASE_URL or self.settings.DASHSCOPE_BASE_URL or self.settings.OPENAI_BASE_URL or self.settings.DEEPSEEK_BASE_URL
+        self.llm_model = self.settings.STICKMAN_LLM_MODEL or self.settings.DASHSCOPE_CHAT_MODEL or self.settings.OPENAI_MODEL or self.settings.DEEPSEEK_MODEL
+        self.llm_models = self._resolve_llm_models()
         self.image_api_key = self.settings.STICKMAN_IMAGE_API_KEY or getattr(self.settings, "IMAGE_API_KEY", "") or self.settings.DASHSCOPE_API_KEY
         self.image_base_url = self.settings.STICKMAN_IMAGE_BASE_URL or getattr(self.settings, "IMAGE_BASE_URL", "")
         self.image_model = self.settings.STICKMAN_IMAGE_MODEL or getattr(self.settings, "IMAGE_MODEL", "wan2.7-image")
@@ -66,12 +67,70 @@ class StickmanGenerator:
             pass
         return []
 
+    def _resolve_llm_models(self):
+        candidates = [
+            getattr(self.settings, "STICKMAN_LLM_MODEL", ""),
+            getattr(self.settings, "DASHSCOPE_CHAT_MODEL", ""),
+            getattr(self.settings, "DASHSCOPE_CHAT_FALLBACK_MODEL_1", ""),
+            getattr(self.settings, "DASHSCOPE_CHAT_FALLBACK_MODEL_2", ""),
+            getattr(self.settings, "OPENAI_MODEL", ""),
+            getattr(self.settings, "DEEPSEEK_MODEL", ""),
+            getattr(self.settings, "GLM_MODEL", ""),
+        ]
+        ordered = []
+        seen = set()
+        for candidate in candidates:
+            value = str(candidate or "").strip()
+            if value and value not in seen:
+                ordered.append(value)
+                seen.add(value)
+        return ordered or [self.llm_model]
+
+    def _chat_completion(self, messages: list[dict], temperature: float, max_tokens: int):
+        last_error = None
+        for model in self.llm_models:
+            try:
+                return self.llm_client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                )
+            except Exception as exc:
+                last_error = exc
+                continue
+        raise last_error or RuntimeError("火柴人脚本模型不可用")
+
     def get_tts_voice_library(self):
         return self.tts_voice_library
 
     def _split_sentences(self, text: str) -> list[str]:
         parts = [item.strip() for item in re.split(r'(?<=[。！？!?])\s*', text or '') if item.strip()]
         return parts or ([text.strip()] if text and text.strip() else [])
+
+    def build_storyboards_from_script_text(self, topic: str, script_text: str):
+        sentences = self._split_sentences(script_text)
+        storyboards = []
+        for index, narration in enumerate(sentences, start=1):
+            storyboards.append({
+                "scene_id": index,
+                "scene_title": f"第{index}幕",
+                "scene_description": f"围绕{topic}的第{index}段讲解画面，仅表达当前句子内容。",
+                "narration": narration,
+                "keywords": [topic],
+                "camera_type": self._camera_type_for_index(index),
+                "character_action": self._action_for_index(index),
+                "layout_hint": self._layout_for_index(index),
+                "visual_focus": topic,
+                "duration_range": "2-4",
+                "motion_preset": self._motion_preset_for_scene({}, index),
+                "transition_type": self._transition_type_for_index(index),
+            })
+        return {
+            "title": topic,
+            "script": "\n".join(sentences),
+            "storyboards": storyboards,
+        }
 
     def _expand_storyboards_for_pacing(self, script_data: dict, topic: str):
         storyboards = script_data.get("storyboards") or []
@@ -126,6 +185,7 @@ class StickmanGenerator:
         tts_provider: str | None = None,
         tts_voice: str | None = None,
         tts_rate: str | None = None,
+        background_image_path: str | None = None,
         style_reference_image_path: str | None = None,
         style_reference_notes: str | None = None,
         opening_template_key: str | None = None,
@@ -308,7 +368,7 @@ class StickmanGenerator:
                 scene.setdefault("opening_template_key", opening_template_key or "hook_question")
         return script_data
 
-    def generate_images(self, storyboards: list[dict], aspect_ratio: str, project_id: Optional[int] = None, progress_callback=None, style_reference_image_path: Optional[str] = None, style_reference_notes: Optional[str] = None):
+    def generate_images(self, storyboards: list[dict], aspect_ratio: str, project_id: Optional[int] = None, progress_callback=None, background_image_path: Optional[str] = None, style_reference_image_path: Optional[str] = None, style_reference_notes: Optional[str] = None):
         assets = []
         flags = {"image_fallback_used": False, "fallback_count": 0, "image_provider_status": "model"}
         image_output_dir = self._get_image_output_dir(project_id)
@@ -348,6 +408,7 @@ class StickmanGenerator:
         aspect_ratio: str,
         project_id: Optional[int] = None,
         prompt_override: Optional[str] = None,
+        background_image_path: Optional[str] = None,
         style_reference_image_path: Optional[str] = None,
         style_reference_notes: Optional[str] = None,
     ):
@@ -389,8 +450,7 @@ class StickmanGenerator:
             '{"title":"视频标题","script":"完整脚本","storyboards":[{"scene_id":1,"scene_description":"场景描述","narration":"旁白文本","keywords":["关键词"]}]}'
         )
 
-        response = self.llm_client.chat.completions.create(
-            model=self.llm_model,
+        response = self._chat_completion(
             messages=[
                 {"role": "system", "content": "你是短视频脚本策划，擅长输出适合火柴人动画的分镜 JSON。"},
                 {"role": "user", "content": prompt},
@@ -399,21 +459,21 @@ class StickmanGenerator:
             max_tokens=2400,
         )
         content = response.choices[0].message.content or ""
-        return self._extract_script_json(content, topic, storyboard_count)
+        return self._extract_script_json(content, topic, storyboard_count, opening_template_key=opening_template_key)
 
-    def _extract_script_json(self, content: str, topic: str, storyboard_count: int):
+    def _extract_script_json(self, content: str, topic: str, storyboard_count: int, opening_template_key: Optional[str] = None):
         match = re.search(r"\{[\s\S]*\}", content)
         if not match:
-            return self._fallback_script(topic, storyboard_count, content)
+            return self._fallback_script(topic, storyboard_count, content, opening_template_key=opening_template_key)
 
         try:
             data = json.loads(match.group())
         except json.JSONDecodeError:
-            return self._fallback_script(topic, storyboard_count, content)
+            return self._fallback_script(topic, storyboard_count, content, opening_template_key=opening_template_key)
 
         storyboards = data.get("storyboards") or []
         if not isinstance(storyboards, list) or not storyboards:
-            return self._fallback_script(topic, storyboard_count, content)
+            return self._fallback_script(topic, storyboard_count, content, opening_template_key=opening_template_key)
 
         normalized = []
         for index, scene in enumerate(storyboards[:storyboard_count], start=1):
@@ -441,7 +501,7 @@ class StickmanGenerator:
             "storyboards": normalized,
         }
 
-    def _fallback_script(self, topic: str, storyboard_count: int, raw_text: str):
+    def _fallback_script(self, topic: str, storyboard_count: int, raw_text: str, opening_template_key: Optional[str] = None):
         storyboards = []
         for index in range(1, storyboard_count + 1):
             storyboards.append(

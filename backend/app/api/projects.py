@@ -122,6 +122,7 @@ def create_project(
         tts_provider=project.tts_provider,
         tts_voice=project.tts_voice,
         tts_rate=project.tts_rate,
+        background_image_path=project.background_image_path,
     )
     db.add(new_project)
     db.commit()
@@ -208,7 +209,11 @@ def generate_stickman_script(
 ):
     project = _get_stickman_project(db, current_user, project_id)
     generator = _build_stickman_generator(project)
-    script_data = generator.generate_script_data(str(project.theme), int(project.storyboard_count or 3))
+    project_final_script = str(project.final_script or "").strip()
+    if project_final_script and hasattr(generator, "build_storyboards_from_script_text"):
+        script_data = generator.build_storyboards_from_script_text(str(project.theme), project_final_script)
+    else:
+        script_data = generator.generate_script_data(str(project.theme), int(project.storyboard_count or 3))
     project.final_script = script_data.get("script")
     project.storyboard_json = json.dumps(script_data.get("storyboards") or [], ensure_ascii=False)
     project.status = "draft"
@@ -259,6 +264,7 @@ def generate_stickman_images(
         storyboards,
         str(project.aspect_ratio or "16:9"),
         project_id,
+        background_image_path=str(project.background_image_path) if project.background_image_path else None,
         style_reference_image_path=str(project.style_reference_image_path) if project.style_reference_image_path else None,
         style_reference_notes=str(project.style_reference_notes) if project.style_reference_notes else None,
     )
@@ -301,6 +307,7 @@ def generate_stickman_preview_image(
         str(project.aspect_ratio or "16:9"),
         project_id,
         None,
+        str(project.background_image_path) if project.background_image_path else None,
         str(project.style_reference_image_path) if project.style_reference_image_path else None,
         str(project.style_reference_notes) if project.style_reference_notes else None,
     )
@@ -336,6 +343,7 @@ def regenerate_stickman_image(
         str(project.aspect_ratio or "16:9"),
         project_id,
         prompt_override if isinstance(prompt_override, str) else None,
+        str(project.background_image_path) if project.background_image_path else None,
         str(project.style_reference_image_path) if project.style_reference_image_path else None,
         str(project.style_reference_notes) if project.style_reference_notes else None,
     )
@@ -531,6 +539,49 @@ async def upload_style_reference(
     project.style_reference_notes = notes or None
     generator = _build_stickman_generator(project)
     project.style_reference_profile = generator.extract_style_reference_profile(str(image_path), notes or None)
+    db.commit()
+    db.refresh(project)
+    return project
+
+
+@router.post("/{project_id}/background-image", response_model=ProjectResponse)
+async def upload_background_image(
+    project_id: int,
+    file: UploadFile = File(...),
+    current_user: Annotated[User, Depends(get_current_user)] = None,
+    db: Annotated[Session, Depends(get_db)] = None,
+):
+    project = db.query(Project).filter(
+        Project.id == project_id,
+        Project.user_id == current_user.id
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    if project.module_type != "stickman":
+        raise HTTPException(status_code=400, detail="Only stickman projects support background image")
+
+    suffix = Path(file.filename or "background.png").suffix.lower()
+    if suffix not in {".png", ".jpg", ".jpeg", ".webp"}:
+        raise HTTPException(status_code=400, detail="仅支持 png/jpg/jpeg/webp 图片")
+
+    base_dir = Path(__file__).resolve().parents[2] / "uploads" / "background_images"
+    base_dir.mkdir(parents=True, exist_ok=True)
+    image_path = base_dir / f"project_{project_id}_{uuid.uuid4().hex}{suffix}"
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="背景图文件为空")
+    with open(image_path, "wb") as buffer:
+        buffer.write(content)
+
+    if project.background_image_path and os.path.exists(project.background_image_path):
+        try:
+            os.remove(project.background_image_path)
+        except OSError:
+            pass
+
+    project.background_image_path = str(image_path)
     db.commit()
     db.refresh(project)
     return project

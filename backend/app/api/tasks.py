@@ -669,6 +669,7 @@ async def generate_stickman_video_stream(
                 str(project_local.tts_provider or "edge_tts"),
                 str(project_local.tts_voice or "zh-CN-XiaoxiaoNeural"),
                 str(project_local.tts_rate or "+0%"),
+                str(project_local.background_image_path) if getattr(project_local, 'background_image_path', None) else None,
                 str(project_local.style_reference_image_path) if project_local.style_reference_image_path else None,
                 str(project_local.style_reference_notes) if project_local.style_reference_notes else None,
                 str(generation_flags.get("opening_template_key") or "hook_question"),

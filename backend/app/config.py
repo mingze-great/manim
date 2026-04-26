@@ -98,8 +98,8 @@ class Settings(BaseSettings):
 
     STICKMAN_ENABLED: bool = True
     STICKMAN_LLM_API_KEY: str = ""
-    STICKMAN_LLM_BASE_URL: str = "https://openrouter.fans/v1"
-    STICKMAN_LLM_MODEL: str = "deepseek/deepseek-v3.2"
+    STICKMAN_LLM_BASE_URL: str = ""
+    STICKMAN_LLM_MODEL: str = ""
     STICKMAN_IMAGE_API_KEY: str = ""
     STICKMAN_IMAGE_BASE_URL: str = "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
     STICKMAN_IMAGE_MODEL: str = "qwen-image-2.0-pro"
@@ -113,6 +113,9 @@ class Settings(BaseSettings):
     STICKMAN_TTS_VOICE: str = "longshuo_v3"
     STICKMAN_TTS_VOICE_LIBRARY: str = "[{\"label\":\"稳重男声\",\"value\":\"longshuo_v3\",\"provider\":\"dashscope_cosyvoice\",\"gender\":\"male\",\"style\":\"steady\"},{\"label\":\"阳光男声\",\"value\":\"longanyang\",\"provider\":\"dashscope_cosyvoice\",\"gender\":\"male\",\"style\":\"bright\"},{\"label\":\"元气女声\",\"value\":\"longanhuan\",\"provider\":\"dashscope_cosyvoice\",\"gender\":\"female\",\"style\":\"energetic\"},{\"label\":\"理性播报男声\",\"value\":\"sambert-zhiming-v1\",\"provider\":\"dashscope_sambert\",\"gender\":\"male\",\"style\":\"rational\"},{\"label\":\"治愈陪伴女声\",\"value\":\"sambert-zhiya-v1\",\"provider\":\"dashscope_sambert\",\"gender\":\"female\",\"style\":\"healing\"},{\"label\":\"激励主播男声\",\"value\":\"sambert-zhihao-v1\",\"provider\":\"dashscope_sambert\",\"gender\":\"male\",\"style\":\"motivational\"}]"
     STICKMAN_OUTPUT_DIR: str = "stickman"
+    STICKMAN_MATERIAL_LIBRARY_ENABLED: bool = True
+    STICKMAN_MATERIAL_LIBRARY_PATH: str = ""
+    STICKMAN_MATERIAL_SOURCE_DIR: str = ""
     STICKMAN_V2_BACKGROUND_IMAGE_PATH: str = ""
     STICKMAN_V2_FONT_PATHS: str = ""
 

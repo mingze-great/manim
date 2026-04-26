@@ -17,6 +17,7 @@ export interface Project {
   tts_provider: string
   tts_voice: string
   tts_rate: string
+  background_image_path: string | null
   style_reference_image_path: string | null
   style_reference_notes: string | null
   style_reference_profile: string | null
@@ -118,6 +119,13 @@ export const projectApi = {
     formData.append('file', file)
     if (notes) formData.append('notes', notes)
     return api.post<Project>(`/projects/${id}/style-reference`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  uploadBackgroundImage: (id: number, file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post<Project>(`/projects/${id}/background-image`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
   },

@@ -30,9 +30,9 @@ export default function StickmanModuleEntry() {
         <p className="text-gray-500">先进入版本选择页，再进入对应的火柴人制作流程。经典版和优化版会长期并存。</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {variantCards.map((item) => (
-          <Card key={item.value} hoverable onClick={() => navigate(`/creator?module=stickman&variant=${item.value}`)}>
+          <Card key={item.value} hoverable onClick={() => navigate(`/creator/stickman/${item.value}`)}>
             <div className="space-y-4">
               <div>
                 <h2 className="text-xl font-semibold mb-2">{item.title}</h2>
@@ -40,7 +40,7 @@ export default function StickmanModuleEntry() {
               </div>
               <Button type="primary" block onClick={(event) => {
                 event.stopPropagation()
-                navigate(`/creator?module=stickman&variant=${item.value}`)
+                navigate(`/creator/stickman/${item.value}`)
               }}>
                 进入{item.title}
               </Button>

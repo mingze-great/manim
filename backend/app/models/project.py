@@ -32,6 +32,7 @@ class Project(Base):
     tts_provider = Column(String(30), default="dashscope_cosyvoice", nullable=False)
     tts_voice = Column(String(80), default="longshuo_v3", nullable=False)
     tts_rate = Column(String(20), default="+0%", nullable=False)
+    background_image_path = Column(String(500), nullable=True)
     style_reference_image_path = Column(String(500), nullable=True)
     style_reference_notes = Column(Text, nullable=True)
     style_reference_profile = Column(Text, nullable=True)

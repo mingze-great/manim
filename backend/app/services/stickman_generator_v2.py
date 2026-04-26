@@ -25,9 +25,10 @@ from app.config import get_settings
 class StickmanGenerator:
     def __init__(self):
         self.settings = get_settings()
-        self.llm_api_key = self.settings.STICKMAN_LLM_API_KEY or self.settings.OPENAI_API_KEY or self.settings.DEEPSEEK_API_KEY or self.settings.DASHSCOPE_API_KEY
-        self.llm_base_url = self.settings.STICKMAN_LLM_BASE_URL or self.settings.OPENAI_BASE_URL or self.settings.DEEPSEEK_BASE_URL or self.settings.DASHSCOPE_BASE_URL
-        self.llm_model = self.settings.STICKMAN_LLM_MODEL or self.settings.OPENAI_MODEL or self.settings.DEEPSEEK_MODEL or self.settings.DASHSCOPE_CHAT_MODEL
+        self.llm_api_key = self.settings.STICKMAN_LLM_API_KEY or self.settings.DASHSCOPE_API_KEY or self.settings.OPENAI_API_KEY or self.settings.DEEPSEEK_API_KEY
+        self.llm_base_url = self.settings.STICKMAN_LLM_BASE_URL or self.settings.DASHSCOPE_BASE_URL or self.settings.OPENAI_BASE_URL or self.settings.DEEPSEEK_BASE_URL
+        self.llm_model = self.settings.STICKMAN_LLM_MODEL or self.settings.DASHSCOPE_CHAT_MODEL or self.settings.OPENAI_MODEL or self.settings.DEEPSEEK_MODEL
+        self.llm_models = self._resolve_llm_models()
         self.image_api_key = self.settings.STICKMAN_IMAGE_API_KEY or getattr(self.settings, "IMAGE_API_KEY", "") or self.settings.DASHSCOPE_API_KEY
         self.image_base_url = self.settings.STICKMAN_IMAGE_BASE_URL or getattr(self.settings, "IMAGE_BASE_URL", "")
         self.image_model = self.settings.STICKMAN_IMAGE_MODEL or getattr(self.settings, "IMAGE_MODEL", "wan2.7-image")
@@ -76,6 +77,40 @@ class StickmanGenerator:
         except Exception:
             pass
         return []
+
+    def _resolve_llm_models(self):
+        candidates = [
+            getattr(self.settings, "STICKMAN_LLM_MODEL", ""),
+            getattr(self.settings, "DASHSCOPE_CHAT_MODEL", ""),
+            getattr(self.settings, "DASHSCOPE_CHAT_FALLBACK_MODEL_1", ""),
+            getattr(self.settings, "DASHSCOPE_CHAT_FALLBACK_MODEL_2", ""),
+            getattr(self.settings, "OPENAI_MODEL", ""),
+            getattr(self.settings, "DEEPSEEK_MODEL", ""),
+            getattr(self.settings, "GLM_MODEL", ""),
+        ]
+        ordered = []
+        seen = set()
+        for candidate in candidates:
+            value = str(candidate or "").strip()
+            if value and value not in seen:
+                ordered.append(value)
+                seen.add(value)
+        return ordered or [self.llm_model]
+
+    def _chat_completion(self, messages: list[dict], temperature: float, max_tokens: int):
+        last_error = None
+        for model in self.llm_models:
+            try:
+                return self.llm_client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                )
+            except Exception as exc:
+                last_error = exc
+                continue
+        raise last_error or RuntimeError("火柴人脚本模型不可用")
 
     def _resolve_material_library_path(self):
         configured = str(getattr(self.settings, "STICKMAN_MATERIAL_LIBRARY_PATH", "") or "").strip()
@@ -422,10 +457,11 @@ class StickmanGenerator:
     def _fixed_background_size(self, aspect_ratio: str):
         return (1920, 1080) if aspect_ratio == "16:9" else (1080, 1920)
 
-    def _create_fixed_reference_background(self, save_path: str, aspect_ratio: str, scene: Optional[dict] = None):
+    def _create_fixed_reference_background(self, save_path: str, aspect_ratio: str, scene: Optional[dict] = None, background_image_path: Optional[str] = None):
         width, height = self._fixed_background_size(aspect_ratio)
-        if self.direct_psychology_background.exists():
-            with Image.open(self.direct_psychology_background).convert("RGB") as image:
+        preferred_background = Path(background_image_path) if background_image_path else self.direct_psychology_background
+        if preferred_background.exists():
+            with Image.open(preferred_background).convert("RGB") as image:
                 if image.size == (width, height):
                     image.save(save_path, format="PNG")
                 else:
@@ -500,10 +536,41 @@ class StickmanGenerator:
             canvas.save(target_path, format="PNG")
 
     def _build_material_assets(self, storyboards: list[dict], image_output_dir: Path, aspect_ratio: str):
-        if not any(item.get("has_semantic_metadata") for item in self.material_library):
+        if not self.material_library:
             return [], {
                 "material_library_used": False,
-                "material_library_reason": "素材库缺少文字解析，暂不启用自动匹配",
+                "material_library_reason": "素材库为空，已回退模型生成",
+            }
+
+        if not any(item.get("has_semantic_metadata") for item in self.material_library):
+            assets = []
+            material_pool = self.material_library[:]
+            for index, scene in enumerate(storyboards, start=1):
+                material = material_pool[(index - 1) % len(material_pool)]
+                source_path = Path(material["image_path"])
+                scene["matched_material_file"] = material.get("file_name")
+                scene["matched_material_score"] = 1
+                scene["matched_material_reasons"] = ["fallback:sequential_material_library"]
+                assets.append({
+                    "scene_id": scene.get("scene_id", index),
+                    "prompt": f"material_fallback:{material.get('file_name')}",
+                    "scene_image_path": str(source_path),
+                    "scene_image_url": None,
+                    "used_fallback": False,
+                    "image_source": "material_library",
+                    "model_used": None,
+                    "scene_image_source": "material_library",
+                    "scene_image_model_used": None,
+                    "material_file_name": material.get("file_name"),
+                    "material_match_score": 1,
+                    "material_match_reasons": ["fallback:sequential_material_library"],
+                    "error_summary": "素材库缺少语义标签，已按素材库顺序生成场景前景。",
+                })
+            return assets, {
+                "material_library_used": True,
+                "material_library_count": len(self.material_library),
+                "material_selection_unique": len(self.material_library) >= len(storyboards),
+                "material_library_reason": "素材库缺少语义标签，已按顺序使用素材库",
             }
 
         selections = self._select_material_candidates(storyboards)
@@ -613,8 +680,7 @@ class StickmanGenerator:
             return cached
         english = ""
         try:
-            response = self.llm_client.chat.completions.create(
-                model=self.llm_model,
+            response = self._chat_completion(
                 messages=[
                     {"role": "system", "content": "Translate Chinese subtitles into concise natural English. Return only the English translation."},
                     {"role": "user", "content": text},
@@ -725,10 +791,13 @@ class StickmanGenerator:
             scene["subtitle_lines"] = self._subtitle_blueprint_for_scene(scene)
             scene["emphasis_beats"] = self._emphasis_beats_for_scene(scene)
             storyboards.append(scene)
+        sections = self._attach_sections(storyboards)
+        storyboards = self._explode_storyboards_for_segments(storyboards, topic)
         return {
             "title": topic,
             "script": "\n".join(sentences),
             "storyboards": storyboards,
+            "sections": sections,
         }
 
     def _infer_scene_focus(self, narration: str, topic: str):
@@ -766,6 +835,7 @@ class StickmanGenerator:
         tts_provider: str | None = None,
         tts_voice: str | None = None,
         tts_rate: str | None = None,
+        background_image_path: str | None = None,
         style_reference_image_path: str | None = None,
         style_reference_notes: str | None = None,
         opening_template_key: str | None = None,
@@ -794,6 +864,7 @@ class StickmanGenerator:
                 scenes,
                 aspect_ratio,
                 progress_callback=report,
+                background_image_path=background_image_path,
                 style_reference_image_path=style_reference_image_path,
                 style_reference_notes=style_reference_notes,
             )
@@ -807,16 +878,29 @@ class StickmanGenerator:
                 audio_segments = []
                 for index, scene in enumerate(scenes, start=1):
                     audio_path = audio_dir / f"scene_{index}.mp3"
-                    duration = self._generate_audio(scene.get("scene_narration") or scene.get("narration", ""), str(audio_path), tts_provider, tts_voice, tts_rate)
+                    scene_provider, scene_voice, scene_rate = self._scene_tts_profile(
+                        scene,
+                        str(tts_provider or self.tts_provider or "dashscope_cosyvoice"),
+                        str(tts_voice or self.tts_voice or "longshuo_v3"),
+                        str(tts_rate or "+0%"),
+                    )
+                    duration = self._generate_audio(
+                        scene.get("scene_narration") or scene.get("narration", ""),
+                        str(audio_path),
+                        scene_provider,
+                        scene_voice,
+                        scene_rate,
+                    )
                     audio_segments.append((str(audio_path), duration))
                     report(45 + int(index / len(scenes) * 20), f"配音生成中 ({index}/{len(scenes)})")
                 timeline = self._build_timeline(audio_segments)
                 audio_track = str(Path(temp_dir) / "final_audio.mp3")
                 self._concat_audio(audio_segments, audio_track)
 
-            total_audio_duration = self._get_audio_duration(audio_track)
+            total_audio_duration = self._finalize_audio_track(audio_track)
             timeline = self._ensure_timeline_covers_audio(timeline, total_audio_duration)
             self._attach_scene_timing_metadata(scenes, timeline, audio_segments)
+            self._attach_section_timing_metadata(scenes)
 
             report(68, "时间轴计算完成")
 
@@ -891,16 +975,29 @@ class StickmanGenerator:
                 audio_segments = []
                 for index, scene in enumerate(storyboards, start=1):
                     audio_path = audio_dir / f"scene_{index}.mp3"
-                    duration = self._generate_audio(scene.get("scene_narration") or scene.get("narration", ""), str(audio_path), tts_provider, tts_voice, tts_rate)
+                    scene_provider, scene_voice, scene_rate = self._scene_tts_profile(
+                        scene,
+                        str(tts_provider or self.tts_provider or "dashscope_cosyvoice"),
+                        str(tts_voice or self.tts_voice or "longshuo_v3"),
+                        str(tts_rate or "+0%"),
+                    )
+                    duration = self._generate_audio(
+                        scene.get("scene_narration") or scene.get("narration", ""),
+                        str(audio_path),
+                        scene_provider,
+                        scene_voice,
+                        scene_rate,
+                    )
                     audio_segments.append((str(audio_path), duration))
                     report(20 + int(index / len(storyboards) * 30), f"配音生成中 ({index}/{len(storyboards)})")
                 timeline = self._build_timeline(audio_segments)
                 audio_track = str(Path(temp_dir) / "final_audio.mp3")
                 self._concat_audio(audio_segments, audio_track)
 
-            total_audio_duration = self._get_audio_duration(audio_track)
+            total_audio_duration = self._finalize_audio_track(audio_track)
             timeline = self._ensure_timeline_covers_audio(timeline, total_audio_duration)
             self._attach_scene_timing_metadata(storyboards, timeline, audio_segments)
+            self._attach_section_timing_metadata(storyboards)
 
             report(58, "时间轴计算完成")
             clip_paths = []
@@ -955,14 +1052,18 @@ class StickmanGenerator:
             scene.setdefault("foreground_events", self._foreground_events_for_scene(scene, index))
             scene.setdefault("subtitle_lines", self._subtitle_blueprint_for_scene(scene))
             scene.setdefault("emphasis_beats", self._emphasis_beats_for_scene(scene))
+        sections = self._attach_sections(storyboards)
+        script_data["sections"] = sections
+        script_data["storyboards"] = self._explode_storyboards_for_segments(storyboards, topic)
+        script_data["script"] = "\n".join(scene.get("scene_narration") or scene.get("narration") or "" for scene in script_data["storyboards"])
         return script_data
 
-    def generate_images(self, storyboards: list[dict], aspect_ratio: str, project_id: Optional[int] = None, progress_callback=None, style_reference_image_path: Optional[str] = None, style_reference_notes: Optional[str] = None):
+    def generate_images(self, storyboards: list[dict], aspect_ratio: str, project_id: Optional[int] = None, progress_callback=None, background_image_path: Optional[str] = None, style_reference_image_path: Optional[str] = None, style_reference_notes: Optional[str] = None):
         assets = []
         image_output_dir = self._get_image_output_dir(project_id)
         image_output_dir.mkdir(parents=True, exist_ok=True)
         fixed_background_path = image_output_dir / f"fixed_background_{uuid.uuid4().hex[:8]}.png"
-        self._create_fixed_reference_background(str(fixed_background_path), aspect_ratio, storyboards[0] if storyboards else None)
+        self._create_fixed_reference_background(str(fixed_background_path), aspect_ratio, storyboards[0] if storyboards else None, background_image_path)
         flags = {
             "image_fallback_used": False,
             "fallback_count": 0,
@@ -970,7 +1071,7 @@ class StickmanGenerator:
             "default_style_reference": "psychology_reference_background",
             "dynamic_video_mode": "fixed_background_scene_overlay",
             "background_mode": "fixed_reference_background",
-            "background_source": str(self.direct_psychology_background),
+            "background_source": str(Path(background_image_path) if background_image_path else self.direct_psychology_background),
             "fixed_background_path": str(fixed_background_path),
         }
 
@@ -1030,6 +1131,7 @@ class StickmanGenerator:
         aspect_ratio: str,
         project_id: Optional[int] = None,
         prompt_override: Optional[str] = None,
+        background_image_path: Optional[str] = None,
         style_reference_image_path: Optional[str] = None,
         style_reference_notes: Optional[str] = None,
     ):
@@ -1037,7 +1139,7 @@ class StickmanGenerator:
         image_output_dir.mkdir(parents=True, exist_ok=True)
         image_path = image_output_dir / f"fixed_background_{uuid.uuid4().hex[:8]}.png"
         prompt = prompt_override or self._resolved_scene_image_prompt(scene, str(scene.get("visual_focus") or scene.get("scene_title") or "主题"))
-        self._create_fixed_reference_background(str(image_path), aspect_ratio, scene)
+        self._create_fixed_reference_background(str(image_path), aspect_ratio, scene, background_image_path)
         scene_image_path = image_output_dir / f"scene_{index}_illustration_{uuid.uuid4().hex[:8]}.png"
         illustration_result = self._generate_scene_illustration(prompt, str(scene_image_path), scene)
         return {
@@ -1076,8 +1178,7 @@ class StickmanGenerator:
             '{"title":"视频标题","script":"完整脚本","storyboards":[{"scene_id":1,"scene_description":"场景描述","narration":"旁白文本","keywords":["关键词"]}]}'
         )
 
-        response = self.llm_client.chat.completions.create(
-            model=self.llm_model,
+        response = self._chat_completion(
             messages=[
                 {"role": "system", "content": "你是短视频脚本策划，擅长输出适合火柴人动画的分镜 JSON。"},
                 {"role": "user", "content": prompt},
@@ -1086,21 +1187,21 @@ class StickmanGenerator:
             max_tokens=2400,
         )
         content = response.choices[0].message.content or ""
-        return self._extract_script_json(content, topic, storyboard_count)
+        return self._extract_script_json(content, topic, storyboard_count, opening_template_key=opening_template_key)
 
-    def _extract_script_json(self, content: str, topic: str, storyboard_count: int):
+    def _extract_script_json(self, content: str, topic: str, storyboard_count: int, opening_template_key: Optional[str] = None):
         match = re.search(r"\{[\s\S]*\}", content)
         if not match:
-            return self._fallback_script(topic, storyboard_count, content)
+            return self._fallback_script(topic, storyboard_count, content, opening_template_key=opening_template_key)
 
         try:
             data = json.loads(match.group())
         except json.JSONDecodeError:
-            return self._fallback_script(topic, storyboard_count, content)
+            return self._fallback_script(topic, storyboard_count, content, opening_template_key=opening_template_key)
 
         storyboards = data.get("storyboards") or []
         if not isinstance(storyboards, list) or not storyboards:
-            return self._fallback_script(topic, storyboard_count, content)
+            return self._fallback_script(topic, storyboard_count, content, opening_template_key=opening_template_key)
 
         normalized = []
         for index, scene in enumerate(storyboards[:storyboard_count], start=1):
@@ -1128,7 +1229,7 @@ class StickmanGenerator:
             "storyboards": normalized,
         }
 
-    def _fallback_script(self, topic: str, storyboard_count: int, raw_text: str):
+    def _fallback_script(self, topic: str, storyboard_count: int, raw_text: str, opening_template_key: Optional[str] = None):
         storyboards = []
         for index in range(1, storyboard_count + 1):
             storyboards.append(
@@ -1253,6 +1354,75 @@ class StickmanGenerator:
         text = str(scene.get("narration") or "")
         candidates = keywords[:2] or [part for part in re.split(r"[，。！？、\s]+", text) if part][:2]
         return candidates
+
+    def _section_title_for_scene(self, scene: dict, index: int, total: int):
+        role = str(scene.get("performance_template") or scene.get("opening_template_key") or "").strip().lower()
+        if role in {"hook", "problem"}:
+            return "问题切入", "question"
+        if role in {"cause", "compare"}:
+            return "原因分析", "cause"
+        if role in {"method", "explain"}:
+            return "应对方法", "method"
+        if role in {"result", "summary", "transition"} or index >= total:
+            return "总结收束", "summary"
+        if total <= 3:
+            return ("问题切入", "question") if index == 1 else ("应对方法", "method")
+        if index <= max(1, total // 3):
+            return "问题切入", "question"
+        if index <= max(2, total * 2 // 3):
+            return "应对方法", "method"
+        return "总结收束", "summary"
+
+    def _attach_sections(self, storyboards: list[dict]):
+        total = len(storyboards)
+        sections = []
+        last_key = None
+        for index, scene in enumerate(storyboards, start=1):
+            title, icon_key = self._section_title_for_scene(scene, index, total)
+            key = (title, icon_key)
+            if key != last_key:
+                sections.append({
+                    "section_id": len(sections) + 1,
+                    "title": title,
+                    "icon_key": icon_key,
+                    "start_scene_index": index,
+                    "end_scene_index": index,
+                })
+                last_key = key
+            else:
+                sections[-1]["end_scene_index"] = index
+            scene["section_id"] = sections[-1]["section_id"]
+            scene["section_title"] = title
+            scene["section_icon_key"] = icon_key
+        return sections
+
+    def _explode_storyboards_for_segments(self, storyboards: list[dict], topic: str):
+        exploded = []
+        for scene in storyboards:
+            subtitle_lines = list(scene.get("subtitle_lines") or self._subtitle_blueprint_for_scene(scene))
+            if not subtitle_lines:
+                subtitle_lines = [{"text": str(scene.get("scene_narration") or scene.get("narration") or topic).strip()}]
+            for seg_index, subtitle in enumerate(subtitle_lines, start=1):
+                text = str(subtitle.get("text") or "").strip() or str(scene.get("scene_narration") or scene.get("narration") or topic).strip()
+                clone = dict(scene)
+                clone["segment_index_within_scene"] = seg_index
+                clone["source_scene_id"] = scene.get("scene_id")
+                clone["scene_narration"] = text
+                clone["narration"] = text
+                clone["scene_title"] = str(scene.get("section_title") or scene.get("scene_title") or f"第{scene.get('scene_id')}幕")
+                clone["subtitle_lines"] = [{
+                    "text": text,
+                    "english": str(subtitle.get("english") or "").strip(),
+                }]
+                clone["visual_focus"] = self._infer_scene_focus(text, topic)
+                clone["scene_description"] = f"围绕{text[:14]}的单句讲解画面，仅表达当前字幕段内容。"
+                clone["scene_image_prompt"] = self._scene_image_prompt_for_scene(clone, topic)
+                clone["foreground_subjects"] = self._foreground_subjects_for_scene(clone, topic, len(exploded) + 1)
+                clone["foreground_events"] = self._foreground_events_for_scene(clone, len(exploded) + 1)
+                exploded.append(clone)
+        for index, scene in enumerate(exploded, start=1):
+            scene["scene_id"] = index
+        return exploded
 
     def _foreground_subjects_for_scene(self, scene: dict, topic: str, index: int):
         focus = str(scene.get("visual_focus") or topic).strip() or topic
@@ -1485,8 +1655,50 @@ class StickmanGenerator:
         raw = str(text or "")
         if not raw.strip():
             return []
+
+        def split_long_clause(clause: str):
+            clause = clause.strip()
+            if not clause:
+                return []
+            if len(clause) <= 18:
+                return [clause]
+
+            comma_parts = [item.strip() for item in re.split(r"(?<=[，,、])\s*", clause) if item.strip()]
+            if len(comma_parts) > 1:
+                merged = []
+                current = ""
+                for part in comma_parts:
+                    candidate = f"{current}{part}" if current else part
+                    if current and len(candidate) > 18:
+                        merged.append(current)
+                        current = part
+                    else:
+                        current = candidate
+                if current:
+                    merged.append(current)
+                return merged
+
+            pieces = []
+            current = clause
+            while len(current) > 18:
+                cut = current.rfind("，", 0, 18)
+                if cut <= 0:
+                    cut = current.rfind(",", 0, 18)
+                if cut <= 0:
+                    cut = current.rfind("、", 0, 18)
+                if cut <= 0:
+                    cut = 16
+                pieces.append(current[:cut + 1].strip())
+                current = current[cut + 1:].strip()
+            if current:
+                pieces.append(current)
+            return [item for item in pieces if item]
+
         parts = [item.strip() for item in re.split(r"(?<=[。！？!?；;])\s*", raw) if item.strip()]
-        return parts or [raw.strip()]
+        refined = []
+        for part in (parts or [raw.strip()]):
+            refined.extend(split_long_clause(part))
+        return refined or [raw.strip()]
 
     def _timed_subtitles_for_scene(self, scene: dict, duration: float):
         existing = scene.get("subtitle_segments") or []
@@ -1686,11 +1898,11 @@ class StickmanGenerator:
         else:
             chinese = str(subtitle or "").strip() or " "
             english = self._sanitize_english_subtitle(self._translate_subtitle_to_english(chinese))
-        zh_lines = [chinese[i:i + 16] for i in range(0, len(chinese), 16)] or [chinese]
-        en_lines = [english[i:i + 34] for i in range(0, len(english), 34)] if english else []
+        zh_lines = [chinese[i:i + 14] for i in range(0, len(chinese), 14)] or [chinese]
+        en_lines = [english[i:i + 28] for i in range(0, len(english), 28)] if english else []
         zh_font = self._load_font(56)
         en_font = self._load_font(32)
-        canvas_height = 24 + len(zh_lines) * 62 + (14 if en_lines else 0) + len(en_lines) * 40
+        canvas_height = 24 + len(zh_lines) * 62 + (12 if en_lines else 0) + len(en_lines) * 40
         canvas = Image.new("RGBA", (1680, max(canvas_height, 132)), (0, 0, 0, 0))
         draw = ImageDraw.Draw(canvas)
         y = 0
@@ -1708,11 +1920,65 @@ class StickmanGenerator:
                 y += 40
         canvas.save(save_path, format="PNG")
 
+    def _create_progress_bar_asset(self, save_path: str, scene: dict):
+        sections = list(scene.get("sections_meta") or [])
+        canvas = Image.new("RGBA", (1680, 120), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(canvas)
+        title_font = self._load_font(28)
+        bar_y = 78
+        bar_left = 120
+        bar_width = 1440
+        bar_height = 14
+        draw.rounded_rectangle((bar_left, bar_y, bar_left + bar_width, bar_y + bar_height), radius=7, fill=(255, 255, 255, 185))
+        current_section = int(scene.get("section_id") or 1)
+        for section in sections:
+            start_ratio = float(section.get("start_ratio", 0.0))
+            end_ratio = float(section.get("end_ratio", start_ratio))
+            left = bar_left + int(bar_width * start_ratio)
+            right = bar_left + int(bar_width * end_ratio)
+            color = (59, 130, 246, 240) if int(section.get("section_id") or 0) <= current_section else (210, 210, 210, 180)
+            draw.rounded_rectangle((left, bar_y, max(right, left + 8), bar_y + bar_height), radius=7, fill=color)
+            label = str(section.get("title") or "")[:8]
+            bbox = draw.textbbox((0, 0), label, font=title_font)
+            label_w = bbox[2] - bbox[0]
+            label_x = max(0, min(1680 - label_w, left + max((right - left - label_w) // 2, 0)))
+            draw.text((label_x, 24), label, fill=(18, 18, 18, 255), font=title_font)
+        canvas.save(save_path, format="PNG")
+
+    def _create_progress_marker_asset(self, save_path: str):
+        canvas = Image.new("RGBA", (46, 46), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(canvas)
+        draw.ellipse((5, 5, 41, 41), fill=(245, 158, 11, 255), outline=(255, 255, 255, 255), width=3)
+        draw.ellipse((16, 16, 30, 30), fill=(255, 255, 255, 255))
+        canvas.save(save_path, format="PNG")
+
     def _build_scene_overlays(self, scene: dict, duration: float, asset_dir: Path, asset: Optional[dict] = None):
         asset_dir.mkdir(parents=True, exist_ok=True)
         subject_map = {str(item.get("key")): item for item in (scene.get("foreground_subjects") or []) if item.get("key")}
         palette = self._warm_palette_for_scene(scene)
         overlays = []
+        if scene.get("sections_meta"):
+            progress_bar_path = asset_dir / "progress_bar.png"
+            progress_marker_path = asset_dir / "progress_marker.png"
+            self._create_progress_bar_asset(str(progress_bar_path), scene)
+            self._create_progress_marker_asset(str(progress_marker_path))
+            overlays.append({
+                "path": str(progress_bar_path),
+                "start": 0.0,
+                "end": float(duration),
+                "x_ratio": 0.5,
+                "y_ratio": 0.965,
+                "animation": "progress_bar",
+            })
+            overlays.append({
+                "path": str(progress_marker_path),
+                "start": 0.0,
+                "end": float(duration),
+                "x_ratio": float(scene.get("video_progress_start_ratio", 0.0)),
+                "x_end_ratio": float(scene.get("video_progress_end_ratio", 0.0)),
+                "y_ratio": 0.967,
+                "animation": "progress_marker",
+            })
         for index, event in enumerate((scene.get("foreground_events") or [])[:6]):
             subject = subject_map.get(str(event.get("target") or ""))
             if not subject:
@@ -1744,11 +2010,25 @@ class StickmanGenerator:
             })
         return overlays
 
-    def _overlay_position_expr(self, overlay_path: str, animation: str, start: float, x_ratio: float, y_ratio: float):
+    def _overlay_position_expr(self, overlay_path: str, overlay: dict):
+        animation = str(overlay.get("animation") or "fade_in")
+        start = float(overlay.get("start", 0.0))
+        x_ratio = float(overlay.get("x_ratio", 0.5))
+        y_ratio = float(overlay.get("y_ratio", 0.5))
         with Image.open(overlay_path) as image:
             width, height = image.size
         fixed_x = max(0, min(1920 - width, int(1920 * x_ratio) - width // 2))
         fixed_y = max(0, min(1080 - height, int(1080 * y_ratio) - height // 2))
+        if animation == "progress_bar":
+            return "(W-w)/2", "min(H-h-8, 952)"
+        if animation == "progress_marker":
+            end_ratio = float(overlay.get("x_end_ratio", x_ratio))
+            bar_left = 120
+            bar_width = 1440
+            start_x = bar_left + int(bar_width * x_ratio) - width // 2
+            end_x = bar_left + int(bar_width * end_ratio) - width // 2
+            end_time = max(float(overlay.get("end", start + 0.3)), start + 0.3)
+            return f"if(lt(t,{end_time:.2f}),{start_x}+({end_x}-{start_x})*(t-{start:.2f})/{max(end_time-start,0.3):.3f},{end_x})", "min(H-h-8, 948)"
         if animation == "center_fade":
             return "(W-w)/2", "(H-h)/2"
         if animation == "center_zoom_in":
@@ -1762,7 +2042,7 @@ class StickmanGenerator:
         if animation == "slide_up_fade":
             return str(fixed_x), f"if(lt(t,{start:.2f}),1080+h,if(lt(t,{start + 0.28:.2f}),1080+h-(1080+h-{fixed_y})*(t-{start:.2f})/0.28,{fixed_y}))"
         if animation == "subtitle":
-            return "(W-w)/2", "min(H-h-44, 830)"
+            return "(W-w)/2", "min(760,H-h-44)"
         return str(fixed_x), str(fixed_y)
 
     def _resolve_image_size(self, aspect_ratio: str):
@@ -1904,6 +2184,8 @@ class StickmanGenerator:
                 with open(save_path, 'wb') as file:
                     file.write(audio_bytes)
                 audio = AudioSegment.from_file(save_path)
+                if not self._audio_has_signal(audio):
+                    raise RuntimeError("CosyVoice returned silent audio")
                 if rate != "+0%":
                     factor = 1.0 + (float(rate.strip('%')) / 100.0)
                     factor = max(0.7, min(1.3, factor))
@@ -1911,8 +2193,8 @@ class StickmanGenerator:
                     audio.export(save_path, format="mp3")
                 return max(len(audio) / 1000.0, 1.0)
             except Exception:
-                provider = "edge_tts"
-                voice = "zh-CN-YunjianNeural"
+                provider = "dashscope_sambert"
+                voice = "sambert-zhiming-v1"
 
         if provider == "edge_tts":
             try:
@@ -1937,6 +2219,8 @@ class StickmanGenerator:
                 with open(save_path, 'wb') as file:
                     file.write(audio_data)
                 audio = AudioSegment.from_file(save_path)
+                if not self._audio_has_signal(audio):
+                    raise RuntimeError('Sambert returned silent audio')
                 if rate != "+0%":
                     factor = 1.0 + (float(rate.strip('%')) / 100.0)
                     factor = max(0.7, min(1.3, factor))
@@ -1983,6 +2267,8 @@ class StickmanGenerator:
                 raise RuntimeError(f"语音合成失败: {result}")
 
             audio = AudioSegment.from_file(save_path)
+            if not self._audio_has_signal(audio):
+                raise RuntimeError('Generic TTS returned silent audio')
             return max(len(audio) / 1000.0, 1.0)
         except Exception:
             duration = max(2.0, min(len(text) * 0.22, 10.0))
@@ -2024,6 +2310,20 @@ class StickmanGenerator:
             if audio.get("data"):
                 return None, audio.get("data")
         return None, None
+
+    def _audio_has_signal(self, audio: AudioSegment):
+        return bool(len(audio)) and int(audio.rms or 0) > 0
+
+    def _scene_tts_profile(self, scene: dict, provider: str, voice: str, rate: str):
+        return provider, voice, rate
+
+    def _finalize_audio_track(self, audio_path: str):
+        audio = AudioSegment.from_file(audio_path)
+        if len(audio) > 300:
+            audio = audio.fade_out(min(420, len(audio) // 3))
+        audio += AudioSegment.silent(duration=850)
+        audio.export(audio_path, format="mp3")
+        return max(len(audio) / 1000.0, 1.0)
 
     def _download_and_convert_audio(self, url: str, save_path: str):
         suffix = Path(urlparse(url).path).suffix or ".wav"
@@ -2206,7 +2506,7 @@ class StickmanGenerator:
         if not timeline:
             return timeline
         total_video_duration = sum(item["video_duration"] for item in timeline)
-        required_duration = total_audio_duration
+        required_duration = total_audio_duration + 0.8
         if total_video_duration < required_duration:
             timeline[-1]["video_duration"] = round(timeline[-1]["video_duration"] + (required_duration - total_video_duration), 2)
         return timeline
@@ -2227,21 +2527,54 @@ class StickmanGenerator:
             elapsed += scene_duration
         return storyboards
 
+    def _attach_section_timing_metadata(self, storyboards: list[dict]):
+        if not storyboards:
+            return []
+        total_duration = max(float(storyboards[-1].get("end_time") or 0.0), 0.1)
+        sections = []
+        current = None
+        for scene in storyboards:
+            section_id = int(scene.get("section_id") or 0) or (len(sections) + 1)
+            title = str(scene.get("section_title") or "内容")
+            icon_key = str(scene.get("section_icon_key") or "section")
+            if current is None or current["section_id"] != section_id:
+                current = {
+                    "section_id": section_id,
+                    "title": title,
+                    "icon_key": icon_key,
+                    "start_time": float(scene.get("start_time") or 0.0),
+                    "end_time": float(scene.get("end_time") or 0.0),
+                }
+                sections.append(current)
+            else:
+                current["end_time"] = float(scene.get("end_time") or current["end_time"])
+        for section in sections:
+            section["start_ratio"] = round(float(section["start_time"]) / total_duration, 4)
+            section["end_ratio"] = round(float(section["end_time"]) / total_duration, 4)
+        for scene in storyboards:
+            scene["sections_meta"] = sections
+            scene["video_progress_start_ratio"] = round(float(scene.get("start_time") or 0.0) / total_duration, 4)
+            scene["video_progress_end_ratio"] = round(float(scene.get("end_time") or 0.0) / total_duration, 4)
+        return sections
+
     def _create_image_clip(self, image_path: str, output_path: str, duration: float, scene: Optional[dict] = None, index: int = 1, asset: Optional[dict] = None):
         fps = 25
         scene = scene or {}
         frames = max(int(round(float(duration) * fps)), 2)
-        spec = self._motion_spec_for_scene(scene, index, duration)
-        zoom_expr = self._piecewise_expr(*spec["zoom"], frames)
-        x_progress = self._piecewise_expr(*spec["x"], frames)
-        y_progress = self._piecewise_expr(*spec["y"], frames)
-        x_expr = f"(iw-iw/zoom)*({x_progress})"
-        y_expr = f"(ih-ih/zoom)*({y_progress})"
-        filter_expr = (
-            "scale=2400:1350:force_original_aspect_ratio=increase,"
-            f"zoompan=z='{zoom_expr}':x='{x_expr}':y='{y_expr}':d=1:s=1920x1080:fps={fps},"
-            f"trim=duration={float(duration):.3f},fps={fps}"
-        )
+        if asset and str(asset.get("image_source") or "") == "fixed_background":
+            filter_expr = f"scale=1920:1080,fps={fps},trim=duration={float(duration):.3f}"
+        else:
+            spec = self._motion_spec_for_scene(scene, index, duration)
+            zoom_expr = self._piecewise_expr(*spec["zoom"], frames)
+            x_progress = self._piecewise_expr(*spec["x"], frames)
+            y_progress = self._piecewise_expr(*spec["y"], frames)
+            x_expr = f"(iw-iw/zoom)*({x_progress})"
+            y_expr = f"(ih-ih/zoom)*({y_progress})"
+            filter_expr = (
+                "scale=2400:1350:force_original_aspect_ratio=increase,"
+                f"zoompan=z='{zoom_expr}':x='{x_expr}':y='{y_expr}':d=1:s=1920x1080:fps={fps},"
+                f"trim=duration={float(duration):.3f},fps={fps}"
+            )
         overlay_dir = Path(output_path).with_suffix("")
         overlays = self._build_scene_overlays(scene, duration, overlay_dir, asset)
         cmd = ["ffmpeg", "-y", "-loop", "1", "-i", image_path]
@@ -2252,13 +2585,7 @@ class StickmanGenerator:
             filter_parts = [f"[0:v]{filter_expr}[base0]"]
             current_label = "[base0]"
             for overlay_index, overlay in enumerate(overlays, start=1):
-                x_overlay, y_overlay = self._overlay_position_expr(
-                    overlay["path"],
-                    str(overlay.get("animation") or "fade_in"),
-                    float(overlay["start"]),
-                    float(overlay["x_ratio"]),
-                    float(overlay["y_ratio"]),
-                )
+                x_overlay, y_overlay = self._overlay_position_expr(overlay["path"], overlay)
                 fade_in = 0.14
                 fade_out = 0.16
                 overlay_label = f"[ov{overlay_index}]"

@@ -117,6 +117,11 @@ async def lifespan(app: FastAPI):
             conn.commit()
             print("Added tts_rate column to projects")
 
+        if 'background_image_path' not in project_columns:
+            conn.execute(text("ALTER TABLE projects ADD COLUMN background_image_path VARCHAR(500)"))
+            conn.commit()
+            print("Added background_image_path column to projects")
+
         if 'style_reference_image_path' not in project_columns:
             conn.execute(text("ALTER TABLE projects ADD COLUMN style_reference_image_path VARCHAR(500)"))
             conn.commit()
@@ -683,6 +688,20 @@ def download_style_reference_image(filename: str):
         return JSONResponse({"error": "Invalid filename"}, status_code=400)
 
     uploads_dir = pathlib.Path(__file__).parent.parent / "uploads" / "style_references"
+    candidates = list(uploads_dir.glob(f"**/{safe_filename}"))
+    if not candidates:
+        return JSONResponse({"error": "Image not found"}, status_code=404)
+
+    return FileResponse(candidates[0], media_type="image/png", filename=safe_filename)
+
+
+@app.get("/api/background-images/{filename}")
+def download_background_image(filename: str):
+    safe_filename = pathlib.Path(filename).name
+    if not re.match(r'^[\w\-\.]+\.(png|jpg|jpeg|webp)$', safe_filename):
+        return JSONResponse({"error": "Invalid filename"}, status_code=400)
+
+    uploads_dir = pathlib.Path(__file__).parent.parent / "uploads" / "background_images"
     candidates = list(uploads_dir.glob(f"**/{safe_filename}"))
     if not candidates:
         return JSONResponse({"error": "Image not found"}, status_code=404)

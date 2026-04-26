@@ -59,6 +59,14 @@ function resolveStyleReferenceUrl(path?: string | null) {
   return `${base}/api/style-reference-images/${fileName}`
 }
 
+function resolveBackgroundUrl(path?: string | null) {
+  if (!path) return ''
+  const fileName = path.split(/[/\\]/).pop()
+  if (!fileName) return ''
+  const base = getAppBase()
+  return `${base}/api/background-images/${fileName}`
+}
+
 export default function StickmanStudio() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -207,6 +215,20 @@ export default function StickmanStudio() {
       message.success('风格参考图已上传')
     } catch (error: any) {
       message.error(error.response?.data?.detail || '上传风格参考图失败')
+    } finally {
+      setSaving(false)
+    }
+    return false
+  }
+
+  const handleUploadBackgroundImage = async (file: File) => {
+    setSaving(true)
+    try {
+      const { data } = await projectApi.uploadBackgroundImage(Number(id), file)
+      setProject(data)
+      message.success('背景图已上传')
+    } catch (error: any) {
+      message.error(error.response?.data?.detail || '上传背景图失败')
     } finally {
       setSaving(false)
     }
@@ -374,6 +396,17 @@ export default function StickmanStudio() {
               <Input.TextArea rows={3} value={styleNotes} onChange={(e) => setStyleNotes(e.target.value)} placeholder="可选：补充说明想保留的风格特点，例如极简线稿、暖色调、手绘感" />
               <Upload beforeUpload={handleUploadStyleReference} showUploadList={false} accept=".png,.jpg,.jpeg,.webp">
                 <Button icon={<UploadOutlined />} loading={saving}>上传风格参考图</Button>
+              </Upload>
+            </Space>
+          </Card>
+          <Card size="small" title="固定背景图">
+            <Space direction="vertical" style={{ width: '100%' }}>
+              <Alert type="info" message="优化版默认使用固定背景。上传后可替换当前项目整条视频的底图。" />
+              {project?.background_image_path && (
+                <img src={resolveBackgroundUrl(project.background_image_path)} alt="background-reference" style={{ width: 280, borderRadius: 12, border: '1px solid #eee' }} />
+              )}
+              <Upload beforeUpload={handleUploadBackgroundImage} showUploadList={false} accept=".png,.jpg,.jpeg,.webp">
+                <Button icon={<UploadOutlined />} loading={saving}>上传背景图</Button>
               </Upload>
             </Space>
           </Card>

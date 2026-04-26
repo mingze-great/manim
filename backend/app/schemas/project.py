@@ -19,6 +19,7 @@ class ProjectCreate(ProjectBase):
     tts_provider: str = "dashscope_cosyvoice"
     tts_voice: str = "longshuo_v3"
     tts_rate: str = "+0%"
+    background_image_path: Optional[str] = None
 
 
 class ProjectUpdate(BaseModel):
@@ -36,6 +37,7 @@ class ProjectUpdate(BaseModel):
     tts_provider: Optional[str] = None
     tts_voice: Optional[str] = None
     tts_rate: Optional[str] = None
+    background_image_path: Optional[str] = None
     style_reference_image_path: Optional[str] = None
     style_reference_notes: Optional[str] = None
     style_reference_profile: Optional[str] = None
@@ -68,6 +70,7 @@ class ProjectResponse(ProjectBase):
     tts_provider: str = "dashscope_cosyvoice"
     tts_voice: str = "longshuo_v3"
     tts_rate: str = "+0%"
+    background_image_path: Optional[str]
     style_reference_image_path: Optional[str]
     style_reference_notes: Optional[str]
     style_reference_profile: Optional[str]

@@ -7,6 +7,7 @@ import AdminLayout from './components/Layout/AdminLayout'
 import Landing from './pages/Landing'
 import Creator from './pages/Creator'
 import StickmanModuleEntry from './pages/StickmanModuleEntry'
+import StickmanCreator from './pages/StickmanCreator'
 import History from './pages/History'
 import Profile from './pages/Profile'
 import Docs from './pages/Docs'
@@ -126,6 +127,7 @@ function AppContent() {
       <Route element={<PrivateRoute><MainLayout /></PrivateRoute>}>
         <Route path="/creator" element={<Creator />} />
         <Route path="/creator/stickman" element={<StickmanModuleEntry />} />
+        <Route path="/creator/stickman/:variant" element={<StickmanCreator />} />
         <Route path="/project/:id/chat" element={<ProjectChat />} />
         <Route path="/project/:id/task" element={<ProjectTask />} />
         <Route path="/project/:id/stickman" element={<StickmanStudioEntry />} />

@@ -1,50 +1,18 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Alert, Button, Input, message, Divider, Card, InputNumber, Segmented, Select, Upload, Typography } from 'antd'
-import { RocketOutlined, BulbOutlined, VideoCameraOutlined, HighlightOutlined, UploadOutlined, FileTextOutlined, AudioOutlined } from '@ant-design/icons'
+import { useEffect, useState } from 'react'
+import { Alert, Button, Input, message, Divider, Card, Segmented, Select } from 'antd'
+import { RocketOutlined, BulbOutlined, VideoCameraOutlined, HighlightOutlined, FileTextOutlined } from '@ant-design/icons'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
-import { projectApi, StickmanVoiceOption } from '@/services/project'
+import { projectApi } from '@/services/project'
 import { articleApi, Category as ArticleCategory } from '@/services/article'
 import TopicCategorySelector from './components/TopicCategorySelector'
 import TopicExamples from './components/TopicExamples'
-import AudioRecorder from './components/AudioRecorder'
 import { VideoTopicCategory } from '@/services/videoTopic'
 import './Creator.css'
 
 const { TextArea } = Input
 
 type ModuleType = 'manim' | 'math' | 'stickman' | 'article'
-type VoiceSource = 'ai' | 'record' | 'upload'
-type GenerationMode = 'one_click' | 'step_by_step'
-type StickmanVariant = 'legacy' | 'v2'
-
-const defaultStickmanVoiceOptions: StickmanVoiceOption[] = [
-  { label: '稳重男声', value: 'longshuo_v3', provider: 'dashscope_cosyvoice', gender: 'male', style: 'steady' },
-  { label: '阳光男声', value: 'longanyang', provider: 'dashscope_cosyvoice', gender: 'male', style: 'bright' },
-  { label: '温暖男声', value: 'longsanshu', provider: 'dashscope_cosyvoice', gender: 'male', style: 'warm' },
-  { label: '清爽男声', value: 'longanlang', provider: 'dashscope_cosyvoice', gender: 'male', style: 'clean' },
-  { label: '元气女声', value: 'longanhuan', provider: 'dashscope_cosyvoice', gender: 'female', style: 'energetic' },
-  { label: '知性女声', value: 'longxiaochun_v2', provider: 'dashscope_cosyvoice', gender: 'female', style: 'intellectual' },
-  { label: '平和女声', value: 'longanwen', provider: 'dashscope_cosyvoice', gender: 'female', style: 'calm' },
-  { label: '理性播报男声', value: 'sambert-zhiming-v1', provider: 'dashscope_sambert', gender: 'male', style: 'rational' },
-  { label: '治愈陪伴女声', value: 'sambert-zhiya-v1', provider: 'dashscope_sambert', gender: 'female', style: 'healing' },
-  { label: '激励主播男声', value: 'sambert-zhihao-v1', provider: 'dashscope_sambert', gender: 'male', style: 'motivational' },
-]
-
-function normalizeVoiceOptions(input: unknown): StickmanVoiceOption[] {
-  if (!Array.isArray(input)) return defaultStickmanVoiceOptions
-  const normalized = input
-    .map((item: any) => ({
-      label: typeof item?.label === 'string' && item.label.trim() ? item.label : String(item?.value || ''),
-      value: typeof item?.value === 'string' ? item.value : '',
-      provider: typeof item?.provider === 'string' && item.provider ? item.provider : 'dashscope_cosyvoice',
-      gender: typeof item?.gender === 'string' ? item.gender : undefined,
-      style: typeof item?.style === 'string' ? item.style : undefined,
-    }))
-    .filter((item) => item.value)
-
-  return normalized.length ? normalized : defaultStickmanVoiceOptions
-}
 
 export default function Creator() {
   const navigate = useNavigate()
@@ -53,76 +21,19 @@ export default function Creator() {
   const [loading, setLoading] = useState(false)
   const [moduleType, setModuleType] = useState<ModuleType>('manim')
   const [selectedCategory, setSelectedCategory] = useState<VideoTopicCategory | null>(null)
-  const [selectedStickmanCategory, setSelectedStickmanCategory] = useState<VideoTopicCategory | null>(null)
   const [customTopic, setCustomTopic] = useState('')
   const [mathTopic, setMathTopic] = useState('')
-  const [stickmanTopic, setStickmanTopic] = useState('')
-  const [storyboardCount, setStoryboardCount] = useState(3)
-  const [stickmanVariant, setStickmanVariant] = useState<StickmanVariant>('legacy')
-  const [voiceSource, setVoiceSource] = useState<VoiceSource>('ai')
-  const [ttsVoice, setTtsVoice] = useState('longshuo_v3')
-  const [ttsRate, setTtsRate] = useState('+0%')
-  const [voiceLibrary, setVoiceLibrary] = useState<StickmanVoiceOption[]>(defaultStickmanVoiceOptions)
-  const [customVoiceLabel, setCustomVoiceLabel] = useState('')
-  const [generationMode, setGenerationMode] = useState<GenerationMode>('one_click')
-  const [audioFile, setAudioFile] = useState<File | null>(null)
-  const [audioPreviewUrl, setAudioPreviewUrl] = useState<string | null>(null)
-  const [styleImageFile, setStyleImageFile] = useState<File | null>(null)
-  const [styleImagePreviewUrl, setStyleImagePreviewUrl] = useState<string | null>(null)
-  const [styleNotes, setStyleNotes] = useState('')
   const [articleTopic, setArticleTopic] = useState('')
   const [articleCategory, setArticleCategory] = useState('生活')
   const [articleCategories, setArticleCategories] = useState<ArticleCategory[]>([])
   const [selectedArticleCategory, setSelectedArticleCategory] = useState<ArticleCategory | null>(null)
-  const safeVoiceOptions = useMemo(() => normalizeVoiceOptions(voiceLibrary), [voiceLibrary])
 
   const permissions = user?.module_permissions || {}
   const stickmanEnabled = user?.is_admin || permissions.stickman?.enabled !== false
   const articleEnabled = user?.is_admin || permissions.article?.enabled !== false
-  const stickmanStoryboardMax = user?.is_admin ? 20 : 6
-
-  useEffect(() => {
-    const loadVoices = async () => {
-      try {
-        const { data } = await projectApi.getStickmanVoiceLibrary()
-        setVoiceLibrary(normalizeVoiceOptions(data.voices))
-      } catch {
-        setVoiceLibrary(defaultStickmanVoiceOptions)
-      }
-    }
-    loadVoices()
-  }, [])
-
-  useEffect(() => {
-    if (!safeVoiceOptions.length) return
-    if (!safeVoiceOptions.some((item) => item.value === ttsVoice)) {
-      setTtsVoice(safeVoiceOptions[0].value)
-    }
-  }, [safeVoiceOptions, ttsVoice])
-
-  const updateAudioFile = (file: File | null) => {
-    setAudioFile(file)
-    setAudioPreviewUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev)
-      return file ? URL.createObjectURL(file) : null
-    })
-  }
-
-  const updateStyleImageFile = (file: File | null) => {
-    setStyleImageFile(file)
-    setStyleImagePreviewUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev)
-      return file ? URL.createObjectURL(file) : null
-    })
-  }
 
   const handleCategorySelect = (category: VideoTopicCategory) => {
     setSelectedCategory(category)
-  }
-
-  const handleStickmanCategorySelect = (category: VideoTopicCategory) => {
-    setSelectedStickmanCategory(category)
-    setStickmanTopic(category.example_topics?.[0] || '')
   }
 
   const ensureArticleCategories = async () => {
@@ -144,17 +55,13 @@ export default function Creator() {
     title: string
     theme: string
     category?: string
-    module_type: 'manim' | 'stickman'
+    module_type: 'manim'
     storyboard_count?: number
   }) => {
     setLoading(true)
     try {
       const { data } = await projectApi.create(payload)
       message.success('创建成功')
-      if (payload.module_type === 'stickman') {
-        navigate(`/project/${data.id}/task`)
-        return
-      }
       navigate(`/project/${data.id}/chat`)
     } catch (error: any) {
       const detail = error.response?.data?.detail || error.message || '创建失败'
@@ -206,54 +113,6 @@ export default function Creator() {
     await handleTopicSelect(customTopic)
   }
 
-  const handleStickmanCreate = async () => {
-    if (!stickmanEnabled) {
-      message.warning('当前账号未开通火柴人视频模块，请联系管理员开通')
-      return
-    }
-    if (!stickmanTopic.trim()) {
-      message.warning('请输入火柴人视频主题')
-      return
-    }
-    if (voiceSource !== 'ai' && !audioFile) {
-      message.warning('请先录音或上传音频文件')
-      return
-    }
-
-    const selectedVoice = safeVoiceOptions.find((item) => item.value === ttsVoice)
-    setLoading(true)
-    try {
-      const { data } = await projectApi.create({
-        title: `火柴人视频-${stickmanTopic}`,
-        theme: stickmanTopic.trim(),
-        module_type: 'stickman',
-        stickman_variant: stickmanVariant,
-        storyboard_count: storyboardCount,
-        aspect_ratio: '16:9',
-        generation_mode: generationMode,
-        voice_source: voiceSource,
-        tts_provider: selectedVoice?.provider || 'dashscope_cosyvoice',
-        tts_voice: ttsVoice,
-        tts_rate: ttsRate,
-      })
-
-      if (audioFile && voiceSource !== 'ai') {
-        await projectApi.uploadVoiceReference(data.id, audioFile, voiceSource)
-      }
-      if (styleImageFile) {
-        await projectApi.uploadStyleReference(data.id, styleImageFile, styleNotes || undefined)
-      }
-
-      message.success('创建成功')
-      navigate(generationMode === 'step_by_step' ? `/project/${data.id}/stickman` : `/project/${data.id}/task`)
-    } catch (error: any) {
-      const detail = error.response?.data?.detail || error.message || '创建失败'
-      message.error(detail)
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const handleArticleTopicSelect = (topic: string) => {
     if (!articleEnabled) {
       message.warning('当前账号未开通公众号文章模块，请联系管理员开通')
@@ -263,38 +122,14 @@ export default function Creator() {
     navigate(`/article?topic=${encodeURIComponent(topic)}&category=${encodeURIComponent(articleCategory)}`)
   }
 
-  const handleCreateCustomVoice = async () => {
-    if (!audioFile) {
-      message.warning('请先录音或上传一段声音样本')
-      return
-    }
-    if (!customVoiceLabel.trim()) {
-      message.warning('请输入自定义音色名称')
-      return
-    }
-    setLoading(true)
-    try {
-      const { data } = await projectApi.createCustomStickmanVoice(audioFile, customVoiceLabel.trim())
-      setVoiceLibrary((prev) => [...prev, data.voice])
-      setTtsVoice(data.voice.value)
-      message.success('自定义音色已创建并加入音色库')
-    } catch (error: any) {
-      message.error(error.response?.data?.detail || '创建自定义音色失败')
-    } finally {
-      setLoading(false)
-    }
-  }
-
   useEffect(() => {
     const nextModule = searchParams.get('module')
     const nextVariant = searchParams.get('variant')
     if (nextModule === 'stickman') {
-      setModuleType('stickman')
+      navigate(`/creator/stickman/${nextVariant === 'v2' ? 'v2' : 'legacy'}`, { replace: true })
+      return
     }
-    if (nextVariant === 'legacy' || nextVariant === 'v2') {
-      setStickmanVariant(nextVariant)
-    }
-  }, [searchParams])
+  }, [navigate, searchParams])
 
   return (
     <div className="creator-page">
@@ -318,6 +153,10 @@ export default function Creator() {
               value={moduleType}
               onChange={(value) => {
                 const next = value as ModuleType
+                if (next === 'stickman') {
+                  navigate('/creator/stickman')
+                  return
+                }
                 setModuleType(next)
                 if (next === 'article') {
                   handleArticleModeEnter()
@@ -476,292 +315,25 @@ export default function Creator() {
             </div>
           </div>
         ) : moduleType === 'stickman' ? (
-          selectedStickmanCategory ? (
-            <div className="max-w-2xl mx-auto">
-              <Button onClick={() => setSelectedStickmanCategory(null)} className="mb-4">
-                返回选择方向
-              </Button>
-              <TopicExamples category={selectedStickmanCategory} onSelect={(topic) => setStickmanTopic(topic)} titlePrefix="热门主题" />
-              <div className="stickman-panel mt-6">
-                <div className="stickman-panel-head">
-                  <h2>{stickmanVariant === 'v2' ? '优化版火柴人模块' : '经典版火柴人模块'}</h2>
-                  <p>{stickmanVariant === 'v2' ? '当前为优化版火柴人流程，先从热门主题入手，或在下方继续调整主题与生成参数。' : '当前为经典版火柴人流程，先从热门主题入手，或在下方继续调整主题与生成参数。'}</p>
-                </div>
-
-                <div className="stickman-form-grid">
-                  <div>
-                    <label className="stickman-label">视频主题</label>
-                    <TextArea
-                      value={stickmanTopic}
-                      onChange={(e) => setStickmanTopic(e.target.value)}
-                      rows={5}
-                      placeholder={`例如：
-• 为什么拖延会越来越严重
-• 普通人如何建立复利思维
-• 熬夜对身体的真实影响`}
-                    />
-                  </div>
-
-                  <div className="stickman-side-card">
-                    <label className="stickman-label">视频比例</label>
-                    <div className="aspect-pill">16:9 横屏</div>
-
-                    <label className="stickman-label">分镜数量</label>
-                    <InputNumber min={2} max={stickmanStoryboardMax} value={storyboardCount} onChange={(value) => setStoryboardCount(value || 3)} style={{ width: '100%' }} />
-
-                    <label className="stickman-label mt-4">配音来源</label>
-                    <Select
-                      value={voiceSource}
-                      onChange={(value) => {
-                        setVoiceSource(value)
-                        updateAudioFile(null)
-                      }}
-                      options={[
-                        { label: 'AI 配音', value: 'ai' },
-                        { label: '直接录音', value: 'record' },
-                        { label: '上传音频文件', value: 'upload' },
-                      ]}
-                      style={{ width: '100%' }}
-                    />
-
-                    <label className="stickman-label mt-4">生成方式</label>
-                    <Select
-                      value={generationMode}
-                      onChange={(value) => setGenerationMode(value)}
-                      options={[
-                        { label: '一键生成', value: 'one_click' },
-                        { label: '分步创作', value: 'step_by_step' },
-                      ]}
-                      style={{ width: '100%' }}
-                    />
-
-                    {voiceSource === 'ai' && (
-                      <>
-                        <label className="stickman-label mt-4">AI 音色</label>
-                        <Select value={ttsVoice} onChange={setTtsVoice} options={safeVoiceOptions.map((item) => ({ label: item.label, value: item.value }))} style={{ width: '100%' }} />
-
-                        <label className="stickman-label mt-4">语速</label>
-                        <Select
-                          value={ttsRate}
-                          onChange={setTtsRate}
-                          options={[
-                            { label: '偏慢', value: '-15%' },
-                            { label: '标准', value: '+0%' },
-                            { label: '偏快', value: '+15%' },
-                          ]}
-                          style={{ width: '100%' }}
-                        />
-                      </>
-                    )}
-
-                    {voiceSource === 'record' && <AudioRecorder value={audioFile} onChange={updateAudioFile} />}
-
-                    {voiceSource === 'upload' && (
-                      <div className="audio-source-box">
-                        <Upload beforeUpload={(file) => { updateAudioFile(file); return false }} onRemove={() => { updateAudioFile(null) }} maxCount={1} accept=".mp3,.wav,.m4a,.aac,.ogg,.webm">
-                          <Button icon={<UploadOutlined />}>选择音频文件</Button>
-                        </Upload>
-                        {audioFile && (
-                          <div className="audio-preview-stack">
-                            <Typography.Text type="secondary">已选择: {audioFile.name}</Typography.Text>
-                            <Typography.Text type="secondary">大小: {(audioFile.size / 1024 / 1024).toFixed(2)} MB</Typography.Text>
-                            {audioPreviewUrl && <audio controls src={audioPreviewUrl} style={{ width: '100%' }} />}
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {voiceSource !== 'ai' && (
-                      <>
-                        <div className="audio-source-box">
-                          <Typography.Text strong>基于你的声音创建专属 AI 音色</Typography.Text>
-                          <Typography.Text type="secondary">建议至少提供 8 秒以上、安静环境下录制的人声样本。系统会先清洗优化，再尝试创建你的专属配音音色。</Typography.Text>
-                          <Input value={customVoiceLabel} onChange={(e) => setCustomVoiceLabel(e.target.value)} placeholder="例如：我的成长男声 / 温柔陪伴女声" style={{ marginTop: 8 }} />
-                          <Button style={{ marginTop: 12 }} onClick={handleCreateCustomVoice} loading={loading} icon={<AudioOutlined />}>优化并创建我的音色</Button>
-                        </div>
-                        <Alert style={{ marginTop: 12 }} type="info" showIcon message="新上线模块，默认支持试用 2 次；如需长期使用请联系管理员开通。公众号约 0.6-1.5 元/篇，火柴人视频按分镜计费。" />
-                      </>
-                    )}
-
-                    <div className="audio-source-box">
-                      <Typography.Text strong>参考风格图</Typography.Text>
-                      <Typography.Text type="secondary">上传一张参考图，让分镜图片尽量贴近它的整体风格。</Typography.Text>
-                      <Upload beforeUpload={(file) => { updateStyleImageFile(file); return false }} onRemove={() => { updateStyleImageFile(null) }} maxCount={1} accept=".png,.jpg,.jpeg,.webp" style={{ marginTop: 8 }}>
-                        <Button icon={<UploadOutlined />}>上传风格参考图</Button>
-                      </Upload>
-                      <Input.TextArea rows={2} value={styleNotes} onChange={(e) => setStyleNotes(e.target.value)} placeholder="补充风格说明，例如：极简线稿、暖色调、治愈感" style={{ marginTop: 8 }} />
-                      {styleImagePreviewUrl && <img src={styleImagePreviewUrl} alt="style-preview" style={{ width: '100%', marginTop: 12, borderRadius: 12, border: '1px solid #eee' }} />}
-                    </div>
-
-                    <div className="stickman-tips">
-                      <p>支持热门主题、AI选题和手动输入主题。</p>
-                      <p>当前版本默认生成 16:9 横版视频。</p>
-                      <p>支持 AI 配音、浏览器录音和音频文件上传。</p>
-                    </div>
-
-                    <Button type="primary" icon={<VideoCameraOutlined />} onClick={handleStickmanCreate} loading={loading} size="large" block disabled={!stickmanTopic.trim()} className="btn-gradient-warm">
-                      创建并进入任务
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : (
           <div className="stickman-panel">
             <div className="stickman-panel-head">
-              <h2>{stickmanVariant === 'v2' ? '优化版火柴人模块' : '经典版火柴人模块'}</h2>
-              <p>{stickmanVariant === 'v2' ? '当前为优化版火柴人流程，可继续选择热门方向和主题。' : '当前为经典版火柴人流程，可继续选择热门方向和主题。'}</p>
+              <h2>火柴人视频模块</h2>
+              <p>火柴人已经迁移为独立创建流，先选择版本，再进入对应的专属配置页。</p>
             </div>
 
-            <div className="mb-6">
-              <div className="flex items-center gap-2 mb-4">
-                <BulbOutlined className="text-xl text-indigo-500" />
-                <span className="text-lg font-medium">选择热门方向</span>
-              </div>
-              <TopicCategorySelector onSelect={handleStickmanCategorySelect} />
-            </div>
+            <Alert
+              type="info"
+              message="火柴人配置已独立"
+              description="为了避免选完版本后又回到首页配置，现在经典版和优化版都使用独立创建页。"
+            />
 
-            <Divider>或直接输入主题</Divider>
-
-            <div className="stickman-form-grid">
-              <div>
-                <label className="stickman-label">视频主题</label>
-                <TextArea
-                  value={stickmanTopic}
-                  onChange={(e) => setStickmanTopic(e.target.value)}
-                  rows={5}
-                  placeholder={`例如：
-• 为什么拖延会越来越严重
-• 普通人如何建立复利思维
-• 熬夜对身体的真实影响`}
-                />
-              </div>
-
-              <div className="stickman-side-card">
-                <label className="stickman-label">视频比例</label>
-                <div className="aspect-pill">16:9 横屏</div>
-
-                <label className="stickman-label">分镜数量</label>
-                <InputNumber min={2} max={stickmanStoryboardMax} value={storyboardCount} onChange={(value) => setStoryboardCount(value || 3)} style={{ width: '100%' }} />
-
-                <label className="stickman-label mt-4">配音来源</label>
-                <Select
-                  value={voiceSource}
-                  onChange={(value) => {
-                    setVoiceSource(value)
-                    updateAudioFile(null)
-                  }}
-                  options={[
-                    { label: 'AI 配音', value: 'ai' },
-                    { label: '直接录音', value: 'record' },
-                    { label: '上传音频文件', value: 'upload' },
-                  ]}
-                  style={{ width: '100%' }}
-                />
-
-                <label className="stickman-label mt-4">生成方式</label>
-                <Select
-                  value={generationMode}
-                  onChange={(value) => setGenerationMode(value)}
-                  options={[
-                    { label: '一键生成', value: 'one_click' },
-                    { label: '分步创作', value: 'step_by_step' },
-                  ]}
-                  style={{ width: '100%' }}
-                />
-
-                {voiceSource === 'ai' && (
-                  <>
-                    <label className="stickman-label mt-4">AI 音色</label>
-                    <Select value={ttsVoice} onChange={setTtsVoice} options={safeVoiceOptions.map((item) => ({ label: item.label, value: item.value }))} style={{ width: '100%' }} />
-
-                    <label className="stickman-label mt-4">语速</label>
-                    <Select
-                      value={ttsRate}
-                      onChange={setTtsRate}
-                      options={[
-                        { label: '偏慢', value: '-15%' },
-                        { label: '标准', value: '+0%' },
-                        { label: '偏快', value: '+15%' },
-                      ]}
-                      style={{ width: '100%' }}
-                    />
-                  </>
-                )}
-
-                {voiceSource === 'record' && <AudioRecorder value={audioFile} onChange={updateAudioFile} />}
-
-                {voiceSource === 'upload' && (
-                  <div className="audio-source-box">
-                    <Upload
-                      beforeUpload={(file) => {
-                        updateAudioFile(file)
-                        return false
-                      }}
-                      onRemove={() => {
-                        updateAudioFile(null)
-                      }}
-                      maxCount={1}
-                      accept=".mp3,.wav,.m4a,.aac,.ogg,.webm"
-                    >
-                      <Button icon={<UploadOutlined />}>选择音频文件</Button>
-                    </Upload>
-                    {audioFile && (
-                      <div className="audio-preview-stack">
-                        <Typography.Text type="secondary">已选择: {audioFile.name}</Typography.Text>
-                        <Typography.Text type="secondary">大小: {(audioFile.size / 1024 / 1024).toFixed(2)} MB</Typography.Text>
-                        {audioPreviewUrl && <audio controls src={audioPreviewUrl} style={{ width: '100%' }} />}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {voiceSource !== 'ai' && (
-                  <>
-                    <div className="audio-source-box">
-                      <Typography.Text strong>基于你的声音创建专属 AI 音色</Typography.Text>
-                      <Typography.Text type="secondary">建议至少提供 8 秒以上、安静环境下录制的人声样本。系统会先清洗优化，再尝试创建你的专属配音音色。</Typography.Text>
-                      <Input value={customVoiceLabel} onChange={(e) => setCustomVoiceLabel(e.target.value)} placeholder="例如：我的成长男声 / 温柔陪伴女声" style={{ marginTop: 8 }} />
-                      <Button style={{ marginTop: 12 }} onClick={handleCreateCustomVoice} loading={loading} icon={<AudioOutlined />}>优化并创建我的音色</Button>
-                    </div>
-                    <Alert style={{ marginTop: 12 }} type="info" showIcon message="新上线模块，默认支持试用 2 次；如需长期使用请联系管理员开通。公众号约 0.6-1.5 元/篇，火柴人视频按分镜计费。" />
-                  </>
-                )}
-
-                <div className="audio-source-box">
-                  <Typography.Text strong>参考风格图</Typography.Text>
-                  <Typography.Text type="secondary">上传一张参考图，让分镜图片尽量贴近它的整体风格。</Typography.Text>
-                  <Upload beforeUpload={(file) => { updateStyleImageFile(file); return false }} onRemove={() => { updateStyleImageFile(null) }} maxCount={1} accept=".png,.jpg,.jpeg,.webp" style={{ marginTop: 8 }}>
-                    <Button icon={<UploadOutlined />}>上传风格参考图</Button>
-                  </Upload>
-                  <Input.TextArea rows={2} value={styleNotes} onChange={(e) => setStyleNotes(e.target.value)} placeholder="补充风格说明，例如：极简线稿、暖色调、治愈感" style={{ marginTop: 8 }} />
-                  {styleImagePreviewUrl && <img src={styleImagePreviewUrl} alt="style-preview" style={{ width: '100%', marginTop: 12, borderRadius: 12, border: '1px solid #eee' }} />}
-                </div>
-
-                <div className="stickman-tips">
-                  <p>推荐 3-4 个分镜，生成速度更快。</p>
-                  <p>当前版本默认生成 16:9 横版视频。</p>
-                  <p>支持 AI 配音、浏览器录音和音频文件上传。</p>
-                  <p>支持一键生成，也支持分步控制脚本、分镜和图片。</p>
-                  <p>同样支持热门主题与 AI 选题。</p>
-                </div>
-
-                <Button
-                  type="primary"
-                  icon={<VideoCameraOutlined />}
-                  onClick={handleStickmanCreate}
-                  loading={loading}
-                  size="large"
-                  block
-                  disabled={!stickmanTopic.trim()}
-                  className="btn-gradient-warm"
-                >
-                  创建并进入任务
-                </Button>
-              </div>
+            <div className="mt-6 flex gap-3 flex-wrap">
+              <Button type="primary" icon={<VideoCameraOutlined />} onClick={() => navigate('/creator/stickman')}>
+                去选择火柴人版本
+              </Button>
+              <Button onClick={() => setModuleType('manim')}>返回思维可视化</Button>
             </div>
           </div>
-          )
         ) : (
           <div className="stickman-panel">
             <div className="stickman-panel-head">
