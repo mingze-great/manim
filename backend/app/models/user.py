@@ -47,6 +47,7 @@ class User(Base):
         return {
             "visual": {"enabled": True, "daily_limit": self.daily_video_limit or 10, "used_today": 0, "last_reset_date": None, "period": "daily"},
             "stickman": {"enabled": True, "daily_limit": 2, "used_today": 0, "last_reset_date": None, "period": "monthly"},
+            "explainer": {"enabled": True, "daily_limit": 2, "used_today": 0, "last_reset_date": None, "period": "monthly"},
             "article": {"enabled": True, "daily_limit": 2, "used_today": 0, "last_reset_date": None, "period": "monthly"},
         }
 
@@ -55,6 +56,7 @@ class User(Base):
             return {
                 "visual": {"enabled": True, "daily_limit": -1, "used_today": 0, "last_reset_date": None, "period": "daily"},
                 "stickman": {"enabled": True, "daily_limit": -1, "used_today": 0, "last_reset_date": None, "period": "monthly"},
+                "explainer": {"enabled": True, "daily_limit": -1, "used_today": 0, "last_reset_date": None, "period": "monthly"},
                 "article": {"enabled": True, "daily_limit": -1, "used_today": 0, "last_reset_date": None, "period": "monthly"},
             }
         permissions = self.get_default_module_permissions()
@@ -111,7 +113,7 @@ class User(Base):
     def get_module_permission(self, module_key: str):
         permissions = self.get_module_permissions()
         permission = permissions.get(module_key, {"enabled": False, "daily_limit": 0, "used_today": 0, "last_reset_date": None, "period": "daily"})
-        period = permission.get("period") or ("monthly" if module_key in {"stickman", "article"} else "daily")
+        period = permission.get("period") or ("monthly" if module_key in {"stickman", "explainer", "article"} else "daily")
         current_marker = datetime.utcnow().strftime('%Y-%m') if period == 'monthly' else datetime.utcnow().date().isoformat()
         if permission.get("last_reset_date") != current_marker:
             permission["used_today"] = 0
@@ -141,7 +143,7 @@ class User(Base):
             return
         permissions = self.get_module_permissions()
         permission = permissions.get(module_key, {"enabled": True, "daily_limit": 0, "used_today": 0, "last_reset_date": None, "period": "daily"})
-        period = permission.get("period") or ("monthly" if module_key in {"stickman", "article"} else "daily")
+        period = permission.get("period") or ("monthly" if module_key in {"stickman", "explainer", "article"} else "daily")
         marker = datetime.utcnow().strftime('%Y-%m') if period == 'monthly' else datetime.utcnow().date().isoformat()
         if permission.get("last_reset_date") != marker:
             permission["used_today"] = 0
@@ -186,7 +188,7 @@ class User(Base):
         ).all()
         
         result = {}
-        module_keys = ["visual", "stickman", "article"]
+        module_keys = ["visual", "stickman", "explainer", "article"]
         for key in module_keys:
             record = None
             for r in records:

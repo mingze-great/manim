@@ -6,7 +6,7 @@ export interface Project {
   title: string
   theme: string
   category: string | null
-  module_type: 'manim' | 'math' | 'stickman'
+  module_type: 'manim' | 'math' | 'stickman' | 'explainer'
   stickman_variant: 'legacy' | 'v2'
   storyboard_count: number
   aspect_ratio: string
@@ -104,7 +104,7 @@ export interface PendingResponse {
 export const projectApi = {
   list: () => api.get<Project[]>('/projects'),
   get: (id: number) => api.get<Project>(`/projects/${id}`),
-  create: (data: { title: string; theme: string; category?: string; module_type?: 'manim' | 'stickman'; stickman_variant?: 'legacy' | 'v2'; storyboard_count?: number; aspect_ratio?: string; generation_mode?: 'one_click' | 'step_by_step'; voice_source?: 'ai' | 'upload' | 'record'; tts_provider?: string; tts_voice?: string; tts_rate?: string }) => api.post<Project>('/projects', data),
+  create: (data: { title: string; theme: string; category?: string; module_type?: 'manim' | 'stickman' | 'explainer'; stickman_variant?: 'legacy' | 'v2'; storyboard_count?: number; aspect_ratio?: string; generation_mode?: 'one_click' | 'step_by_step'; voice_source?: 'ai' | 'upload' | 'record'; tts_provider?: string; tts_voice?: string; tts_rate?: string }) => api.post<Project>('/projects', data),
   update: (id: number, data: Partial<Project>) => api.put<Project>(`/projects/${id}`, data),
   uploadVoiceReference: (id: number, file: File, source: 'upload' | 'record') => {
     const formData = new FormData()
@@ -145,6 +145,10 @@ export const projectApi = {
   updateStickmanStoryboards: (id: number, data: { storyboards: any[]; final_script?: string }) => api.put<Project>(`/projects/${id}/stickman/storyboards`, data),
   generateStickmanImages: (id: number) => api.post<Project>(`/projects/${id}/stickman/images`),
   regenerateStickmanImage: (id: number, sceneIndex: number, data?: { prompt?: string }) => api.post<Project>(`/projects/${id}/stickman/images/${sceneIndex}/regenerate`, data || {}),
+  generateExplainerStoryboard: (id: number, data?: { opening_hook_mode?: string; visual_style_key?: string; target_duration?: number }) => api.post<Project>(`/projects/${id}/explainer/storyboard`, data || {}),
+  updateExplainerStoryboard: (id: number, data: { storyboards: any[]; final_script?: string; title?: string; generation_flags?: Record<string, any> }) => api.put<Project>(`/projects/${id}/explainer/storyboard`, data),
+  generateExplainerImages: (id: number) => api.post<Project>(`/projects/${id}/explainer/images`),
+  regenerateExplainerImage: (id: number, sceneIndex: number, data?: { prompt?: string }) => api.post<Project>(`/projects/${id}/explainer/images/${sceneIndex}/regenerate`, data || {}),
   delete: (id: number) => api.delete(`/projects/${id}`),
   batchDelete: (ids: number[]) => api.post('/projects/batch-delete', { project_ids: ids }),
   getConversations: (id: number) => api.get<Conversation[]>(`/projects/${id}/conversations`),
@@ -170,6 +174,8 @@ export const projectApi = {
   generateVideoStream: (projectId: number) => buildApiPath(`/tasks/${projectId}/render`),
   generateStickmanStream: (projectId: number) => buildApiPath(`/tasks/${projectId}/stickman-generate`),
   generateStickmanComposeStream: (projectId: number) => buildApiPath(`/tasks/${projectId}/stickman-compose`),
+  generateExplainerStream: (projectId: number) => buildApiPath(`/tasks/${projectId}/explainer-generate`),
+  generateExplainerComposeStream: (projectId: number) => buildApiPath(`/tasks/${projectId}/explainer-compose`),
   regenerateCode: (id: number) => api.post(`/projects/${id}/regenerate-code`),
   fixCode: (projectId: number, data: { error_message: string; current_code: string }) =>
     api.post<{ success: boolean; fixed_code?: string; fix_description?: string; message?: string }>(

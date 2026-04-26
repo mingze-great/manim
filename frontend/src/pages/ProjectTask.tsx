@@ -6,6 +6,7 @@ import { projectApi, Task, Project } from '@/services/project'
 import { getAppBase, resolveBackendUrl } from '@/services/api'
 import { useAuthStore } from '@/stores/authStore'
 import { motion } from 'framer-motion'
+import ExplainerTask from './ExplainerTask'
 import StickmanProjectTaskEntry from './StickmanProjectTaskEntry'
 import TemplateShowcase from '@/components/TemplateShowcase'
 import { useIsMobile } from '@/hooks/useIsMobile'
@@ -467,6 +468,10 @@ export default function ProjectTask() {
 
   if (project?.module_type === 'stickman') {
     return <StickmanProjectTaskEntry />
+  }
+
+  if (project?.module_type === 'explainer') {
+    return <ExplainerTask />
   }
 
   return (
