@@ -66,9 +66,26 @@ class User(Base):
                             permissions[key].update(value)
             except Exception:
                 pass
+        for record in self.module_permission_records or []:
+            if record.module_key not in permissions:
+                continue
+            record.check_and_reset_quota()
+            permissions[record.module_key].update({
+                "enabled": record.enabled,
+                "daily_limit": record.quota_limit,
+                "used_today": record.quota_used,
+                "last_reset_date": record.last_reset_at.isoformat() if record.last_reset_at else permissions[record.module_key].get("last_reset_date"),
+                "period": record.period or permissions[record.module_key].get("period", "daily"),
+            })
         return permissions
 
     def set_module_permissions(self, permissions: dict):
+        visual = permissions.get("visual") or {}
+        if "daily_limit" in visual and visual.get("daily_limit") is not None:
+            try:
+                self.daily_video_limit = int(visual.get("daily_limit") or 0)
+            except Exception:
+                pass
         self.module_permissions_json = json.dumps(permissions, ensure_ascii=False)
 
     def get_custom_voices(self):

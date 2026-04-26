@@ -151,7 +151,7 @@ class BackgroundTaskManager:
             estimated_points = self._count_content_points(project.final_script or "")
             
             bg_task.progress = 10
-            bg_task.message = f"准备生成代码（预计 {estimated_points} 个内容点）..."
+            bg_task.message = f"准备生成脚本（预计 {estimated_points} 个内容点）..."
             db.commit()
             
             template_prompt = None
@@ -162,13 +162,13 @@ class BackgroundTaskManager:
                     template_prompt = template.prompt
             
             bg_task.progress = 20
-            bg_task.message = "AI 正在生成代码..."
+            bg_task.message = "AI 正在生成脚本..."
             db.commit()
             
             # 进度更新回调函数
             def progress_callback(progress: int):
                 bg_task.progress = min(progress, 99)
-                bg_task.message = "AI 正在生成代码..."
+                bg_task.message = "AI 正在生成脚本..."
                 db.commit()
             
             manim_service = ManimService(db)
@@ -181,7 +181,7 @@ class BackgroundTaskManager:
             )
             
             bg_task.progress = 99
-            bg_task.message = "代码验证中..."
+            bg_task.message = "脚本检查中..."
             db.commit()
             
             fixed_code, warnings = manim_service.validate_code(code)
@@ -200,7 +200,7 @@ class BackgroundTaskManager:
             
             bg_task.status = "completed"
             bg_task.progress = 100
-            bg_task.message = "代码生成完成"
+            bg_task.message = "脚本生成完成"
             bg_task.result = fixed_code
             bg_task.completed_at = datetime.utcnow()
             db.commit()

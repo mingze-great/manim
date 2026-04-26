@@ -68,14 +68,14 @@ async def internal_render(
                     try:
                         compile(code_content, '<string>', 'exec')
                     except SyntaxError as e:
-                        yield f"data: {json.dumps({'type': 'error', 'content': '代码语法错误: ' + str(e)})}\n\n"
+                        yield f"data: {json.dumps({'type': 'error', 'content': '脚本语法检查未通过: ' + str(e)})}\n\n"
                         return
                     
                     manim_file = os.path.join(temp_dir, "scene.py")
                     with open(manim_file, "w", encoding="utf-8") as f:
                         f.write(code_content)
                     
-                    yield f"data: {json.dumps({'type': 'info', 'content': '代码已保存到临时文件'})}\n\n"
+                    yield f"data: {json.dumps({'type': 'info', 'content': '内容已保存到临时文件'})}\n\n"
                     
                     python_path = get_python_path()
                     

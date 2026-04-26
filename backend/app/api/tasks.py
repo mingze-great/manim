@@ -357,7 +357,7 @@ async def render_video_stream(
     manim_code_str = str(project.manim_code) if project.manim_code else ""
     if not manim_code_str:
         async def error_gen():
-            yield f"data: {json.dumps({'type': 'error', 'content': '请先生成代码'})}\n\n"
+            yield f"data: {json.dumps({'type': 'error', 'content': '请先生成脚本内容'})}\n\n"
         return StreamingResponse(error_gen(), media_type="text/event-stream")
     
     async def event_generator():
@@ -403,14 +403,14 @@ async def render_video_stream(
                     try:
                         compile(code_content, '<string>', 'exec')
                     except SyntaxError as e:
-                        yield f"data: {json.dumps({'type': 'error', 'content': '代码语法错误: ' + str(e)})}\n\n"
+                        yield f"data: {json.dumps({'type': 'error', 'content': '脚本语法检查未通过: ' + str(e)})}\n\n"
                         return
                     
                     manim_file = os.path.join(temp_dir, "scene.py")
                     with open(manim_file, "w", encoding="utf-8") as f:
                         f.write(code_content)
                     
-                    yield f"data: {json.dumps({'type': 'info', 'content': f'代码已保存到临时文件'})}\n\n"
+                    yield f"data: {json.dumps({'type': 'info', 'content': f'内容已保存到临时文件'})}\n\n"
                     
                     python_path = get_python_path()
                     

@@ -295,7 +295,7 @@ export default function Creator() {
               <div className="stickman-side-card">
                 <div className="stickman-tips">
                   <p>支持公式推演、定理证明、几何图解等多种数学场景。</p>
-                  <p>选择主题后将进入模板选择和代码生成流程。</p>
+                  <p>选择主题后将进入模板选择和脚本生成流程。</p>
                   <p>基于 Manim 动画引擎，充分发挥数学可视化优势。</p>
                 </div>
 

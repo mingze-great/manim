@@ -254,12 +254,12 @@ def render_video_task(task_id: int, project_id: int, template_id: int = None, cu
                 try:
                     manim_code = future.result(timeout=180)
                 except concurrent.futures.TimeoutError:
-                    update_task_progress(task_id, 20, "failed", error_message="Code generation timeout", log="代码生成超时！\n")
+                    update_task_progress(task_id, 20, "failed", error_message="Script generation timeout", log="脚本生成超时！\n")
                     raise RuntimeError("Code generation timeout")
             
             project.manim_code = manim_code
             db.commit()
-            update_task_progress(task_id, 20, "processing", log=f"代码生成完成 (长度: {len(manim_code)})\n")
+            update_task_progress(task_id, 20, "processing", log=f"脚本生成完成 (长度: {len(manim_code)})\n")
         
         if not manim_code:
             update_task_progress(task_id, 0, "failed", error_message="No code to render", log="没有可渲染的代码\n")
@@ -286,7 +286,7 @@ class {scene_name}(Scene):
             try:
                 compile(code_content, '<string>', 'exec')
             except SyntaxError as e:
-                update_task_progress(task_id, 50, "failed", error_message=f"Syntax error: {str(e)}", log=f"代码语法错误: {e}\n")
+                update_task_progress(task_id, 50, "failed", error_message=f"Syntax error: {str(e)}", log=f"脚本语法检查未通过: {e}\n")
                 raise RuntimeError(f"Syntax error: {str(e)}")
             
             manim_file = os.path.join(temp_dir, "scene.py")
@@ -450,7 +450,7 @@ def generate_code_task(task_id: int, project_id: int, template_id: int = None, m
             update_task_progress(task_id, 0, "failed", error_message="Project not found")
             return
         
-        update_task_progress(task_id, 5, "processing", log="开始生成代码...\n")
+        update_task_progress(task_id, 5, "processing", log="开始生成脚本...\n")
         
         try:
             update_task_progress(task_id, 10, "processing", log="准备生成脚本...\n")
@@ -482,7 +482,7 @@ def generate_code_task(task_id: int, project_id: int, template_id: int = None, m
                 while not future.done():
                     time.sleep(2)
                     progress = min(progress + 5, 80)
-                    update_task_progress(task_id, progress, "processing", log="代码生成中...\n")
+                    update_task_progress(task_id, progress, "processing", log="脚本生成中...\n")
                 
                 result = future.result(timeout=180)
             
@@ -492,16 +492,16 @@ def generate_code_task(task_id: int, project_id: int, template_id: int = None, m
                 project.status = "code_generated"
                 db.commit()
                 
-                update_task_progress(task_id, 100, "completed", log="代码生成完成！\n")
+                update_task_progress(task_id, 100, "completed", log="脚本生成完成！\n")
             else:
-                update_task_progress(task_id, 0, "failed", error_message="Code generation returned empty result", log="代码生成失败：返回空结果\n")
+                update_task_progress(task_id, 0, "failed", error_message="Script generation returned empty result", log="脚本生成失败：返回空结果\n")
         
         except concurrent.futures.TimeoutError:
-            update_task_progress(task_id, 0, "failed", error_message="Code generation timeout", log="代码生成超时\n")
+            update_task_progress(task_id, 0, "failed", error_message="Script generation timeout", log="脚本生成超时\n")
         except Exception as e:
             import traceback
             traceback.print_exc()
-            update_task_progress(task_id, 0, "failed", error_message=str(e), log=f"代码生成异常: {e}\n")
+            update_task_progress(task_id, 0, "failed", error_message=str(e), log=f"脚本生成异常: {e}\n")
     
     except Exception as e:
         import traceback

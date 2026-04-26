@@ -39,6 +39,12 @@ def _normalize_module_permissions(payload: dict, user: User) -> dict:
                 "period": payload[module_key].get("period", current.get("period", "daily")),
             })
             permissions[module_key] = current
+    visual_permission = permissions.get("visual") or {}
+    if visual_permission.get("daily_limit") is not None:
+        try:
+            user.daily_video_limit = int(visual_permission.get("daily_limit") or 0)
+        except Exception:
+            pass
     return permissions
 
 
@@ -67,7 +73,21 @@ def _sync_permissions_to_db(db, user: User, permissions: dict):
             record.quota_used = perm_data.get("used_today", record.quota_used)
             record.period = perm_data.get("period", record.period)
     
-    db.commit()
+    db.flush()
+
+
+def _frontend_version_payload(value: str):
+    frontend_version = str(value or "legacy")
+    if frontend_version not in ["legacy", "v2"]:
+        raise HTTPException(status_code=400, detail="frontend_version 只能是 legacy 或 v2")
+    return frontend_version
+
+
+def _normalize_visual_limit(limit: int):
+    normalized = int(limit or 0)
+    if normalized < 1 or normalized > 999:
+        raise HTTPException(status_code=400, detail="每日限额范围需在 1 到 999 之间")
+    return normalized
 def _count_admin_users(users: list[User]) -> int:
     return sum(1 for user in users if bool(user.is_admin))
 
@@ -256,8 +276,8 @@ async def get_user_detail(
     def get_status_text(status: str) -> str:
         status_map = {
             "chatting": "对话中",
-            "code_generating": "生成代码中",
-            "code_generated": "代码生成完成",
+            "code_generating": "生成脚本中",
+            "code_generated": "脚本生成完成",
             "processing": "渲染中",
             "completed": "视频生成成功",
             "failed": "生成失败"
@@ -378,11 +398,11 @@ async def update_user(
     if user_update.is_admin is not None:
         user.is_admin = user_update.is_admin
     if user_update.frontend_version is not None:
-        if user_update.frontend_version not in ["legacy", "v2"]:
-            raise HTTPException(status_code=400, detail="frontend_version 只能是 legacy 或 v2")
-        user.frontend_version = user_update.frontend_version
+        user.frontend_version = _frontend_version_payload(user_update.frontend_version)
     if user_update.module_permissions is not None:
-        user.set_module_permissions(_normalize_module_permissions(user_update.module_permissions, user))
+        permissions = _normalize_module_permissions(user_update.module_permissions, user)
+        user.set_module_permissions(permissions)
+        _sync_permissions_to_db(db, user, permissions)
     
     db.commit()
     db.refresh(user)
@@ -411,6 +431,7 @@ async def update_user_module_permissions(
 
     permissions = _normalize_module_permissions(payload, user)
     user.set_module_permissions(permissions)
+    _sync_permissions_to_db(db, user, permissions)
     db.commit()
     db.refresh(user)
 
@@ -441,6 +462,7 @@ async def batch_update_user_module_permissions(
             continue
         permissions = _normalize_module_permissions(updates, user)
         user.set_module_permissions(permissions)
+        _sync_permissions_to_db(db, user, permissions)
         updated_count += 1
     db.commit()
 
@@ -449,6 +471,42 @@ async def batch_update_user_module_permissions(
               resource="user", resource_id=None,
               details=f"批量更新 {updated_count} 个用户模块权限，跳过管理员 {skipped_admins} 个", request=request)
     return {"message": f"已更新 {updated_count} 个用户的模块权限，跳过管理员 {skipped_admins} 个", "updated_count": updated_count, "skipped_admins": skipped_admins}
+
+
+@router.post("/users/frontend-version/batch")
+async def batch_update_user_frontend_version(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+    request: Request = None,
+):
+    user_ids = payload.get("user_ids") or []
+    if not user_ids:
+        raise HTTPException(status_code=400, detail="请选择用户")
+    frontend_version = _frontend_version_payload(payload.get("frontend_version"))
+
+    users = db.query(User).filter(User.id.in_(user_ids)).all()
+    skipped_admins = _count_admin_users(users)
+    updated_count = 0
+    for user in users:
+        if user.is_admin:
+            continue
+        user.frontend_version = frontend_version
+        updated_count += 1
+    db.commit()
+
+    from app.api.auth import log_audit
+    log_audit(
+        db,
+        current_user.id,
+        current_user.username,
+        "USER_FRONTEND_VERSION_BATCH_UPDATE",
+        resource="user",
+        resource_id=None,
+        details=f"批量切换 {updated_count} 个用户前端版本为 {frontend_version}，跳过管理员 {skipped_admins} 个",
+        request=request,
+    )
+    return {"message": f"已切换 {updated_count} 个用户的前端版本，跳过管理员 {skipped_admins} 个", "updated_count": updated_count, "skipped_admins": skipped_admins}
 
 
 @router.delete("/users/{user_id}")
@@ -577,19 +635,61 @@ async def set_user_video_limit(
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
     
-    user.daily_video_limit = limit
+    normalized_limit = _normalize_visual_limit(limit)
+    user.daily_video_limit = normalized_limit
     permissions = user.get_module_permissions()
-    permissions.setdefault("visual", {}).update({"daily_limit": limit, "enabled": True})
+    permissions.setdefault("visual", {}).update({"daily_limit": normalized_limit, "enabled": True})
     user.set_module_permissions(permissions)
+    _sync_permissions_to_db(db, user, permissions)
     db.commit()
     
     from app.api.auth import log_audit
     log_audit(db, current_user.id, current_user.username, "SET_VIDEO_LIMIT",
               resource="user", resource_id=user_id,
-              details=f"设置用户 {user.username} 每日视频配额为 {limit}",
+              details=f"设置用户 {user.username} 每日思维可视化配额为 {normalized_limit}",
               request=request)
     
-    return {"message": "配额已更新", "daily_video_limit": limit}
+    return {"message": "配额已更新", "daily_video_limit": normalized_limit, "module_permissions": permissions}
+
+
+@router.post("/users/visual-limit/batch")
+async def batch_set_visual_limit(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+    request: Request = None,
+):
+    user_ids = payload.get("user_ids") or []
+    if not user_ids:
+        raise HTTPException(status_code=400, detail="请选择用户")
+    normalized_limit = _normalize_visual_limit(payload.get("daily_limit"))
+
+    users = db.query(User).filter(User.id.in_(user_ids)).all()
+    skipped_admins = _count_admin_users(users)
+    updated_count = 0
+    for user in users:
+        if user.is_admin:
+            continue
+        permissions = user.get_module_permissions()
+        permissions.setdefault("visual", {}).update({"daily_limit": normalized_limit, "enabled": True})
+        user.daily_video_limit = normalized_limit
+        user.set_module_permissions(permissions)
+        _sync_permissions_to_db(db, user, permissions)
+        updated_count += 1
+    db.commit()
+
+    from app.api.auth import log_audit
+    log_audit(
+        db,
+        current_user.id,
+        current_user.username,
+        "USER_VISUAL_LIMIT_BATCH_UPDATE",
+        resource="user",
+        resource_id=None,
+        details=f"批量设置 {updated_count} 个用户每日思维可视化配额为 {normalized_limit}，跳过管理员 {skipped_admins} 个",
+        request=request,
+    )
+    return {"message": f"已设置 {updated_count} 个用户的每日思维可视化配额，跳过管理员 {skipped_admins} 个", "updated_count": updated_count, "skipped_admins": skipped_admins, "daily_limit": normalized_limit}
 
 
 @router.post("/users/{user_id}/reset-password")

@@ -355,7 +355,7 @@ export default function ProjectTask() {
               } else if (content.includes('combining') || content.includes('writing') || content.includes('合成') || content.includes('保存')) {
                 setVideoProgress(prev => Math.min(Math.max(prev, 85) + 3, 95))
                 setVideoMessage('正在合成视频...')
-              } else if (content.includes('file') || content.includes('代码已保存') || content.includes('manim 命令')) {
+              } else if (content.includes('file') || content.includes('内容已保存') || content.includes('脚本已保存') || content.includes('manim 命令')) {
                 setVideoProgress(prev => Math.max(prev, 20))
                 setVideoMessage('准备渲染环境...')
               }

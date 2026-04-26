@@ -50,6 +50,11 @@ export default function AdminUsers() {
   const [videoLimitUser, setVideoLimitUser] = useState<User | null>(null)
   const [videoLimitValue, setVideoLimitValue] = useState<number>(5)
   const [videoLimitLoading, setVideoLimitLoading] = useState(false)
+  const [batchFrontendVersion, setBatchFrontendVersion] = useState<'legacy' | 'v2'>('v2')
+  const [batchVersionLoading, setBatchVersionLoading] = useState(false)
+  const [batchVisualLimitModalVisible, setBatchVisualLimitModalVisible] = useState(false)
+  const [batchVisualLimitValue, setBatchVisualLimitValue] = useState<number>(5)
+  const [batchVisualLimitLoading, setBatchVisualLimitLoading] = useState(false)
   const [selectedRowKeys, setSelectedRowKeys] = useState<number[]>([])
   const [permissionModalVisible, setPermissionModalVisible] = useState(false)
   const [permissionUser, setPermissionUser] = useState<User | null>(null)
@@ -57,8 +62,14 @@ export default function AdminUsers() {
   const [permissionLoading, setPermissionLoading] = useState(false)
   const [batchPermissionModalVisible, setBatchPermissionModalVisible] = useState(false)
 
+  const getVisualLimitValue = (user?: User | null) => {
+    const visualLimit = user?.module_permissions?.visual?.daily_limit
+    if (typeof visualLimit === 'number' && visualLimit > 0) return visualLimit
+    return user?.daily_video_limit || 5
+  }
+
   const defaultPermissions = (user?: User | null) => user?.module_permissions || {
-    visual: { enabled: true, daily_limit: user?.daily_video_limit || 5, used_today: 0, period: 'daily' },
+    visual: { enabled: true, daily_limit: getVisualLimitValue(user), used_today: 0, period: 'daily' },
     stickman: { enabled: false, daily_limit: 30, used_today: 0, period: 'monthly' },
     article: { enabled: false, daily_limit: 45, used_today: 0, period: 'monthly' },
   }
@@ -160,6 +171,20 @@ export default function AdminUsers() {
       }
     } catch (err: any) {
       message.error(err.response?.data?.detail || '切换版本失败')
+    }
+  }
+
+  const handleBatchFrontendVersionChange = async () => {
+    if (!selectedRowKeys.length) return
+    setBatchVersionLoading(true)
+    try {
+      const res = await adminApi.batchUpdateFrontendVersion(selectedRowKeys as number[], batchFrontendVersion)
+      message.success(res.data.message || `已批量切换为${batchFrontendVersion === 'v2' ? '新版本' : '老版本'}`)
+      fetchUsers()
+    } catch (err: any) {
+      message.error(err.response?.data?.detail || '批量切换版本失败')
+    } finally {
+      setBatchVersionLoading(false)
     }
   }
 
@@ -325,7 +350,7 @@ export default function AdminUsers() {
 
   const handleVideoLimitUser = (user: User) => {
     setVideoLimitUser(user)
-    setVideoLimitValue(user.daily_video_limit || 5)
+    setVideoLimitValue(getVisualLimitValue(user))
     setVideoLimitModalVisible(true)
   }
 
@@ -341,6 +366,21 @@ export default function AdminUsers() {
       message.error(err.response?.data?.detail || '操作失败')
     } finally {
       setVideoLimitLoading(false)
+    }
+  }
+
+  const handleBatchSetVisualLimit = async () => {
+    if (!selectedRowKeys.length) return
+    setBatchVisualLimitLoading(true)
+    try {
+      const res = await adminApi.batchSetVisualLimit(selectedRowKeys as number[], batchVisualLimitValue)
+      message.success(res.data.message || `已批量设置每日配额为 ${batchVisualLimitValue} 条`)
+      setBatchVisualLimitModalVisible(false)
+      fetchUsers()
+    } catch (err: any) {
+      message.error(err.response?.data?.detail || '批量设置失败')
+    } finally {
+      setBatchVisualLimitLoading(false)
     }
   }
 
@@ -582,6 +622,28 @@ export default function AdminUsers() {
               批量模块权限
             </Button>
           </Col>
+          <Col>
+            <Space.Compact>
+              <Select
+                value={batchFrontendVersion}
+                onChange={(value) => setBatchFrontendVersion(value as 'legacy' | 'v2')}
+                style={{ width: 120 }}
+                disabled={!selectedRowKeys.length}
+                options={[
+                  { label: '切到老版本', value: 'legacy' },
+                  { label: '切到新版本', value: 'v2' },
+                ]}
+              />
+              <Button loading={batchVersionLoading} disabled={!selectedRowKeys.length} onClick={handleBatchFrontendVersionChange}>
+                批量切版本
+              </Button>
+            </Space.Compact>
+          </Col>
+          <Col>
+            <Button disabled={!selectedRowKeys.length} onClick={() => setBatchVisualLimitModalVisible(true)}>
+              批量思维配额
+            </Button>
+          </Col>
         </Row>
       </Card>
 
@@ -603,9 +665,16 @@ export default function AdminUsers() {
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Badge status={record.is_active ? 'success' : 'error'} text={record.is_active ? '正常' : '已禁用'} />
                   {record.is_approved ? <Tag color="green">已通过</Tag> : <Tag color="orange">待审核</Tag>}
-                  <Tag color={(record.frontend_version || 'legacy') === 'v2' ? 'green' : 'default'}>
-                    {(record.frontend_version || 'legacy') === 'v2' ? '新版本' : '老版本'}
-                  </Tag>
+                  <Select
+                    size="small"
+                    style={{ width: 108 }}
+                    value={record.frontend_version || 'legacy'}
+                    onChange={(value) => handleFrontendVersionChange(record.id, value as 'legacy' | 'v2')}
+                    options={[
+                      { label: '老版本', value: 'legacy' },
+                      { label: '新版本', value: 'v2' },
+                    ]}
+                  />
                 </div>
                 <div className="mt-3 text-sm text-gray-600 space-y-1">
                   <div>有效期：{formatDateTime(record.expires_at)}</div>
@@ -872,6 +941,28 @@ export default function AdminUsers() {
             style={{ width: '100%' }}
           />
           <p className="text-xs text-gray-500 mt-2">配额范围：5-20 条/天</p>
+        </div>
+      </Modal>
+
+      <Modal
+        title={`批量设置每日思维可视化配额（已选 ${selectedRowKeys.length} 个用户）`}
+        open={batchVisualLimitModalVisible}
+        onCancel={() => setBatchVisualLimitModalVisible(false)}
+        onOk={handleBatchSetVisualLimit}
+        confirmLoading={batchVisualLimitLoading}
+        okText="确认"
+        cancelText="取消"
+      >
+        <div className="py-4">
+          <InputNumber
+            value={batchVisualLimitValue}
+            onChange={(v) => setBatchVisualLimitValue(v || 5)}
+            min={1}
+            max={999}
+            addonAfter="条/天"
+            style={{ width: '100%' }}
+          />
+          <p className="text-xs text-gray-500 mt-2">批量设置时会自动跳过管理员账号。</p>
         </div>
       </Modal>
 

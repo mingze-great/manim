@@ -1,9 +1,9 @@
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
-import { Layout, Menu, Avatar, Dropdown, Space, Button, Drawer, FloatButton } from 'antd'
+import { Layout, Menu, Avatar, Dropdown, Space, Button, Drawer } from 'antd'
 import type { MenuProps } from 'antd'
 import {
   PlusOutlined, HistoryOutlined, UserOutlined,
-  LogoutOutlined, MenuOutlined, BellOutlined, BookOutlined, SafetyOutlined
+  LogoutOutlined, MenuOutlined, BookOutlined, SafetyOutlined
 } from '@ant-design/icons'
 import { useAuthStore } from '@/stores/authStore'
 import { clearAuthArtifacts, syncCrossSiteLogout } from '@/utils/authSync'
@@ -145,12 +145,6 @@ export default function MainLayout() {
             <h1 className="page-title">{getPageTitle()}</h1>
           </div>
           <div className="header-right">
-            <FloatButton
-              badge={{ count: 3 }}
-              icon={<BellOutlined />}
-              type="primary"
-              className="notification-btn"
-            />
             <Dropdown menu={userMenu} placement="bottomRight">
               <Space className="user-info">
                 <Avatar 

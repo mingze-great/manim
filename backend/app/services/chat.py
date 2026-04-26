@@ -268,7 +268,7 @@ class ChatService:
                 self.db.commit()
             
             return {
-                "content": f"✅ 内容已确认！\n\n{project_final_script}\n\n⏳ 现在点击下方「生成代码和视频」按钮开始生成。",
+                "content": f"✅ 内容已确认！\n\n{project_final_script}\n\n⏳ 现在点击下方「生成脚本和视频」按钮开始生成。",
                 "is_final": True,
                 "final_script": project_final_script
             }
@@ -381,7 +381,7 @@ class ChatService:
             
             yield {
                 "type": "status",
-                "content": "⏳ 正在生成代码，请稍候..."
+                "content": "⏳ 正在生成脚本，请稍候..."
             }
             
             try:
@@ -394,7 +394,7 @@ class ChatService:
                 
                 yield {
                     "type": "final",
-                    "content": f"✅ 代码生成完成！\n\n```python\n{generated_code[:500]}...\n```\n\n请点击「使用此代码」保存并渲染视频。",
+                    "content": f"✅ 脚本生成完成！\n\n```python\n{generated_code[:500]}...\n```\n\n请点击「使用此脚本」保存并渲染视频。",
                     "is_final": True,
                     "final_script": project_final_script,
                     "generated_code": generated_code
@@ -402,7 +402,7 @@ class ChatService:
             except Exception as e:
                 yield {
                     "type": "error",
-                    "error": f"代码生成失败: {str(e)}"
+                    "error": f"脚本生成失败: {str(e)}"
                 }
             return
         
@@ -583,7 +583,7 @@ class ChatService:
             
             yield {
                 "type": "final",
-                "content": f"✅ 内容已确认！\n\n{final_script}\n\n⏳ 现在点击下方「生成代码和视频」按钮开始生成。",
+                "content": f"✅ 内容已确认！\n\n{final_script}\n\n⏳ 现在点击下方「生成脚本和视频」按钮开始生成。",
                 "is_final": True,
                 "final_script": final_script
             }

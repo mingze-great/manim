@@ -73,7 +73,7 @@ export default function ProjectChat() {
       if (currentCode) {
         setFixingCode(currentCode)
       }
-      const fixMessage = `渲染遇到以下错误，请基于当前内容修复：\n\n错误信息：\n\`\`\`\n${errorLog.substring(0, 1500)}\n\`\`\`\n\n请给出修复后的完整内容。`
+      const fixMessage = `渲染遇到以下错误，请基于当前脚本内容修复：\n\n错误信息：\n\`\`\`\n${errorLog.substring(0, 1500)}\n\`\`\`\n\n请给出修复后的完整脚本内容。`
       setInput(fixMessage)
       window.history.replaceState({}, document.title)
     } else if (location.state?.errorLog && location.state?.fromRender) {
@@ -586,7 +586,7 @@ export default function ProjectChat() {
       >
         <Alert 
           type="info" 
-          message="粘贴你的文案，系统会自动转换为标准格式并生成代码"
+          message="粘贴你的文案，系统会自动转换为标准格式并生成脚本"
           className="mb-3"
         />
         

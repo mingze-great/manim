@@ -131,6 +131,12 @@ export const adminApi = {
   updateUser: (id: number, data: { is_active?: boolean; is_admin?: boolean; frontend_version?: 'legacy' | 'v2' }) =>
     api.put<User>(`/admin/users/${id}`, data),
 
+  batchUpdateFrontendVersion: (userIds: number[], frontendVersion: 'legacy' | 'v2') =>
+    api.post<{ message: string; updated_count: number; skipped_admins: number }>(`/admin/users/frontend-version/batch`, {
+      user_ids: userIds,
+      frontend_version: frontendVersion,
+    }),
+
   updateUserModulePermissions: (id: number, modulePermissions: Record<string, any>) =>
     api.put<{ message: string; module_permissions: Record<string, any> }>(`/admin/users/${id}/module-permissions`, modulePermissions),
 
@@ -167,7 +173,13 @@ export const adminApi = {
     api.post<{ message: string; expires_at: string }>(`/admin/users/${userId}/extend`, null, { params: { days } }),
 
   setVideoLimit: (userId: number, limit: number) =>
-    api.post<{ message: string }>(`/admin/users/${userId}/set-video-limit`, null, { params: { limit } }),
+    api.post<{ message: string; daily_video_limit: number; module_permissions: Record<string, any> }>(`/admin/users/${userId}/set-video-limit`, null, { params: { limit } }),
+
+  batchSetVisualLimit: (userIds: number[], dailyLimit: number) =>
+    api.post<{ message: string; updated_count: number; skipped_admins: number; daily_limit: number }>(`/admin/users/visual-limit/batch`, {
+      user_ids: userIds,
+      daily_limit: dailyLimit,
+    }),
 
   getStatisticsOverview: (period: string = 'day') =>
     api.get<{
