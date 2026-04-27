@@ -623,6 +623,7 @@ class ExplainerGenerator:
     def _ensure_default_background(self, title: str, generation_flags: dict):
         style_key = str(generation_flags.get("visual_style_key") or "deep_blue_emotional")
         file_name = f"explainer_{style_key}.png"
+        self.background_dir.mkdir(parents=True, exist_ok=True)
         save_path = self.background_dir / file_name
         if save_path.exists():
             return str(save_path)
