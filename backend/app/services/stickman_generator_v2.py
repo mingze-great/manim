@@ -1148,6 +1148,7 @@ class StickmanGenerator:
         return {
             **raw,
             "viral_package_enabled": bool(raw.get("viral_package_enabled", True)),
+            "viral_outro_enabled": bool(raw.get("viral_outro_enabled", False)),
             "viral_hook_template_key": hook_template,
             "viral_outro_template_key": outro_template,
             "viral_title_mode": title_mode,
@@ -1189,10 +1190,11 @@ class StickmanGenerator:
             "healing_film": "soft cinematic bloom, emotional but premium, warm controlled palette",
         }.get(visual_style, "clean cinematic composition, premium lighting")
         return (
-            f"Short-video opening key art about {topic}. Main hook title concept: {title_text}. "
+            f"Short-video opening key art about {topic}. The poster must prominently render the exact Chinese title text: {title_text}. "
             f"{mood}. {hook_shape}. {style_hint}. "
-            "Reserve a clear title-safe area in the upper-middle part of the frame, but do not render any text. "
-            "No subtitles, no logos, no watermarks, no UI, no speech bubbles. "
+            f"画面中必须清晰写出这句中文标题：{title_text}。标题需要像短视频海报大字一样吸睛、炫酷、高级，并与整体画面风格统一。 "
+            "The title text must feel like a cool premium poster headline, visually integrated with the image style, bold, eye-catching, readable, and not inside any box or card. "
+            "Do not add any extra Chinese or English text besides that exact title. No subtitles, no logos, no watermarks, no UI, no speech bubbles. "
             "Single striking visual moment suitable for a Douyin/TikTok viral intro frame. 16:9, high contrast, premium, clean, readable composition."
         )
 
@@ -1228,6 +1230,24 @@ class StickmanGenerator:
         if current:
             lines.append(current)
         return lines[:3]
+
+    def _fit_image_cover(self, image: Image.Image, target_width: int, target_height: int):
+        width, height = image.size
+        if width <= 0 or height <= 0:
+            return image.resize((target_width, target_height), Image.Resampling.LANCZOS)
+        scale = max(target_width / width, target_height / height)
+        resized = image.resize((max(1, int(round(width * scale))), max(1, int(round(height * scale)))), Image.Resampling.LANCZOS)
+        left = max((resized.width - target_width) // 2, 0)
+        top = max((resized.height - target_height) // 2, 0)
+        return resized.crop((left, top, left + target_width, top + target_height))
+
+    def _normalize_package_image(self, image_path: str):
+        if not image_path or not os.path.exists(image_path):
+            return
+
+        with Image.open(image_path).convert("RGBA") as source:
+            canvas = self._fit_image_cover(source, 1920, 1080)
+        canvas.save(image_path, format="PNG")
 
     def _create_viral_title_asset(self, save_path: str, title_text: str, kicker: str, style_key: str, accent_color: tuple[int, int, int], subtitle: str | None = None):
         canvas = Image.new("RGBA", (1920, 1080), (0, 0, 0, 0))
@@ -1273,6 +1293,10 @@ class StickmanGenerator:
                 y += 54
         canvas.save(save_path, format="PNG")
 
+    def _intro_narration_text(self, topic: str):
+        clean_topic = str(topic or "这个主题").strip() or "这个主题"
+        return f"今天我们要讲的是《{clean_topic}》"
+
     def _generate_viral_package_assets(self, topic: str, image_output_dir: Path, aspect_ratio: str, storyboards: list[dict], generation_flags: dict, progress_callback=None):
         if not generation_flags.get("viral_package_enabled", True):
             return generation_flags
@@ -1281,39 +1305,24 @@ class StickmanGenerator:
         visual_style = str(generation_flags.get("viral_visual_style") or "cinematic_clean")
         title_text = str(generation_flags.get("viral_title_text") or topic)
         outro_text = str(generation_flags.get("viral_outro_text") or self._viral_outro_text(topic, str(generation_flags.get("viral_cta_mode") or "light_follow")))
+        outro_enabled = bool(generation_flags.get("viral_outro_enabled", False))
         hook_image_path = image_output_dir / f"hook_package_{uuid.uuid4().hex[:8]}.png"
-        hook_title_path = image_output_dir / f"hook_title_{uuid.uuid4().hex[:8]}.png"
-        outro_image_path = image_output_dir / f"outro_package_{uuid.uuid4().hex[:8]}.png"
-        outro_title_path = image_output_dir / f"outro_title_{uuid.uuid4().hex[:8]}.png"
         hook_scene = dict(storyboards[0] if storyboards else {})
         hook_scene["scene_title"] = title_text
         hook_scene["visual_focus"] = topic
         hook_result = self._generate_image(self._hook_visual_prompt(topic, title_text, hook_template, visual_style), str(hook_image_path), hook_scene, aspect_ratio)
-        self._create_viral_title_asset(str(hook_title_path), title_text, "爆款开头", "hook", (59, 130, 246), subtitle="高能开场，快速切入核心观点")
-        outro_scene = dict(storyboards[-1] if storyboards else {})
-        outro_scene["scene_title"] = outro_text
-        outro_scene["visual_focus"] = topic
-        outro_result = self._generate_image(self._outro_visual_prompt(topic, outro_text, outro_template, visual_style), str(outro_image_path), outro_scene, aspect_ratio)
-        self._create_viral_title_asset(str(outro_title_path), outro_text, "结尾收束", "outro", (245, 158, 11), subtitle="让用户记住这句，再离开")
-        if progress_callback:
-            progress_callback(18, "爆款开头与结尾包装已生成")
-        return {
-            **generation_flags,
-            "viral_hook_package": {
-                "template_key": hook_template,
-                "title_text": title_text,
-                "subtitle_text": "高能开场，快速切入核心观点",
-                "image_path": str(hook_image_path),
-                "image_url": f"/api/stickman-images/{hook_image_path.name}",
-                "title_asset_path": str(hook_title_path),
-                "title_asset_url": f"/api/stickman-images/{hook_title_path.name}",
-                "transition_in": "flash_cut",
-                "transition_out": "smoothleft",
-                "image_source": hook_result.get("image_source"),
-                "image_model_used": hook_result.get("model_used"),
-                "error_summary": hook_result.get("error_summary"),
-            },
-            "viral_outro_package": {
+        self._normalize_package_image(str(hook_image_path))
+        outro_package = None
+        if outro_enabled:
+            outro_image_path = image_output_dir / f"outro_package_{uuid.uuid4().hex[:8]}.png"
+            outro_title_path = image_output_dir / f"outro_title_{uuid.uuid4().hex[:8]}.png"
+            outro_scene = dict(storyboards[-1] if storyboards else {})
+            outro_scene["scene_title"] = outro_text
+            outro_scene["visual_focus"] = topic
+            outro_result = self._generate_image(self._outro_visual_prompt(topic, outro_text, outro_template, visual_style), str(outro_image_path), outro_scene, aspect_ratio)
+            self._normalize_package_image(str(outro_image_path))
+            self._create_viral_title_asset(str(outro_title_path), outro_text, "结尾收束", "outro", (245, 158, 11), subtitle="让用户记住这句，再离开")
+            outro_package = {
                 "template_key": outro_template,
                 "title_text": outro_text,
                 "subtitle_text": "轻收束，不突然切断",
@@ -1326,8 +1335,29 @@ class StickmanGenerator:
                 "image_source": outro_result.get("image_source"),
                 "image_model_used": outro_result.get("model_used"),
                 "error_summary": outro_result.get("error_summary"),
+            }
+        if progress_callback:
+            progress_callback(18, "爆款开头与结尾包装已生成")
+        payload = {
+            **generation_flags,
+            "viral_hook_package": {
+                "template_key": hook_template,
+                "title_text": title_text,
+                "subtitle_text": "高能开场，快速切入核心观点",
+                "image_path": str(hook_image_path),
+                "image_url": f"/api/stickman-images/{hook_image_path.name}",
+                "title_asset_path": None,
+                "title_asset_url": None,
+                "transition_in": "flash_cut",
+                "transition_out": "smoothleft",
+                "image_source": hook_result.get("image_source"),
+                "image_model_used": hook_result.get("model_used"),
+                "error_summary": hook_result.get("error_summary"),
             },
         }
+        if outro_package:
+            payload["viral_outro_package"] = outro_package
+        return payload
 
     def _attach_viral_package_metadata(self, storyboards: list[dict], generation_flags: Optional[dict]):
         if not storyboards or not generation_flags or not generation_flags.get("viral_package_enabled", True):
@@ -1637,6 +1667,20 @@ class StickmanGenerator:
                 clone["foreground_subjects"] = self._foreground_subjects_for_scene(clone, topic, len(exploded) + 1)
                 clone["foreground_events"] = self._foreground_events_for_scene(clone, len(exploded) + 1)
                 exploded.append(clone)
+        if exploded:
+            intro_scene = dict(exploded[0])
+            intro_text = self._intro_narration_text(topic)
+            intro_scene["scene_narration"] = intro_text
+            intro_scene["narration"] = intro_text
+            intro_scene["scene_title"] = str(topic or intro_scene.get("scene_title") or "主题").strip() or "主题"
+            intro_scene["scene_description"] = f"以主题《{str(topic or '').strip() or '主题'}》为核心的开场海报画面，仅用于吸引注意并引出主题。"
+            intro_scene["visual_focus"] = str(topic or intro_scene.get("visual_focus") or "主题").strip() or "主题"
+            intro_scene["foreground_subjects"] = []
+            intro_scene["foreground_events"] = []
+            intro_scene["subtitle_lines"] = []
+            intro_scene["viral_intro_scene"] = True
+            intro_scene["transition_type"] = "fade"
+            exploded.insert(0, intro_scene)
         for index, scene in enumerate(exploded, start=1):
             scene["scene_id"] = index
         return exploded
@@ -1917,40 +1961,66 @@ class StickmanGenerator:
             refined.extend(split_long_clause(part))
         return refined or [raw.strip()]
 
+    def _hook_package_title_end(self, duration: float):
+        duration = max(float(duration or 0.0), 0.5)
+        return min(duration, max(1.35, duration * 0.58))
+
+    def _outro_package_title_start(self, duration: float):
+        duration = max(float(duration or 0.0), 0.5)
+        return max(0.0, duration - 0.86)
+
+    def _subtitle_timing_window(self, scene: dict, duration: float):
+        start_at = 0.0
+        end_at = max(float(duration or 0.0), 0.2)
+
+        hook = scene.get("viral_hook_package") or {}
+        if hook:
+            hook_title_end = self._hook_package_title_end(end_at)
+            start_at = min(end_at - 0.2, hook_title_end + 0.08)
+
+        outro = scene.get("viral_outro_package") or {}
+        if outro:
+            outro_title_start = self._outro_package_title_start(end_at)
+            end_at = max(start_at + 0.2, outro_title_start - 0.08)
+
+        return round(max(start_at, 0.0), 2), round(max(end_at, start_at + 0.2), 2)
+
     def _timed_subtitles_for_scene(self, scene: dict, duration: float):
+        if scene.get("viral_intro_scene"):
+            return []
         existing = scene.get("subtitle_segments") or []
         subtitle_lead = 0.10
+        window_start, window_end = self._subtitle_timing_window(scene, duration)
         if existing:
             return [
                 {
                     "text": str(item.get("text") or ""),
                     "english": str(item.get("english") or ""),
-                    "start": max(0.0, float(item.get("start", 0.0)) - subtitle_lead),
-                    "end": float(item.get("end", duration)),
+                    "start": max(window_start, float(item.get("start", 0.0)) - subtitle_lead),
+                    "end": min(float(item.get("end", duration)), window_end),
                 }
                 for item in existing
-                if str(item.get("text") or "").strip()
+                if str(item.get("text") or "").strip() and min(float(item.get("end", duration)), window_end) > max(window_start, float(item.get("start", 0.0)) - subtitle_lead)
             ]
         lines = list(scene.get("subtitle_lines") or self._subtitle_blueprint_for_scene(scene))
         if not lines:
             return []
-        start_at = 0.0
         audio_duration = float(scene.get("audio_duration") or 0.0)
-        effective_duration = min(duration, audio_duration + 0.06) if audio_duration > 0 else duration
-        safe_duration = max(min(duration, effective_duration), 0.2)
+        effective_duration = min(window_end, audio_duration + 0.06) if audio_duration > 0 else window_end
+        safe_duration = max(min(window_end, effective_duration) - window_start, 0.2)
         if len(lines) == 1:
             item = lines[0]
             return [{
                 "text": self._strip_terminal_punctuation(str(item.get("text") or "")),
                 "english": self._sanitize_english_subtitle(str(item.get("english") or "")),
-                "start": 0.0,
-                "end": round(safe_duration, 2),
+                "start": window_start,
+                "end": round(window_start + safe_duration, 2),
             }]
         segment = safe_duration / max(len(lines), 1)
         timed = []
         for index, item in enumerate(lines):
-            start = round(max(0.0, start_at + index * segment - subtitle_lead), 2)
-            end = round(min(duration, start_at + (index + 1) * segment), 2)
+            start = round(max(window_start, window_start + index * segment - subtitle_lead), 2)
+            end = round(min(window_end, window_start + (index + 1) * segment), 2)
             timed.append({
                 "text": self._strip_terminal_punctuation(str(item.get("text") or "")),
                 "english": self._sanitize_english_subtitle(str(item.get("english") or "")),
@@ -1958,7 +2028,7 @@ class StickmanGenerator:
                 "end": max(end, start + 0.2),
             })
         if timed:
-            timed[-1]["end"] = round(duration, 2)
+            timed[-1]["end"] = round(window_end, 2)
         return timed
 
     def _create_foreground_asset(self, save_path: str, subject: dict, palette: dict):
@@ -2183,7 +2253,7 @@ class StickmanGenerator:
         bar_width = bar_right - bar_left
 
         # Keep the progress UI lightweight: a single thin bottom track plus section labels.
-        draw.rounded_rectangle((bar_left, progress_bar_y, bar_right, progress_bar_y + 10), radius=5, fill=(220, 220, 220, 225))
+        draw.rounded_rectangle((bar_left, progress_bar_y, bar_right, progress_bar_y + 10), radius=5, fill=(220, 220, 220, 120))
 
         label_font = self._load_font(20)
         for index, section in enumerate(sections, start=1):
@@ -2193,11 +2263,11 @@ class StickmanGenerator:
             right = int(bar_left + bar_width * end_ratio)
             center_x = int((left + right) / 2)
             if index < len(sections):
-                draw.line((right, progress_bar_y - 2, right, 1071), fill=(235, 235, 235, 165), width=2)
+                draw.line((right, progress_bar_y - 2, right, 1071), fill=(235, 235, 235, 110), width=2)
             label = str(section.get("title") or "内容")[:12]
             bbox = draw.textbbox((0, 0), label, font=label_font)
             text_width = bbox[2] - bbox[0]
-            draw.text((center_x - text_width / 2, label_y), label, fill=(120, 120, 120, 220), font=label_font)
+            draw.text((center_x - text_width / 2, label_y), label, fill=(120, 120, 120, 145), font=label_font)
         canvas.save(save_path, format="PNG")
 
     def _section_progress_position_expr(self, overlay: dict, width: int):
@@ -2235,10 +2305,11 @@ class StickmanGenerator:
 
         zh_lines = [chinese[i:i + 14] for i in range(0, len(chinese), 14)] or [chinese]
         en_lines = [english[i:i + 28] for i in range(0, len(english), 28)] if english else []
-        canvas = Image.new("RGBA", (1920, 132), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(canvas)
         zh_font = self._load_font(54)
         en_font = self._load_font(28)
+        canvas_height = 20 + len(zh_lines) * 58 + (10 if en_lines else 0) + len(en_lines) * 34 + 12
+        canvas = Image.new("RGBA", (1920, max(148, canvas_height)), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(canvas)
 
         y = 0
         for line in zh_lines:
@@ -2334,10 +2405,13 @@ class StickmanGenerator:
             else:
                 overlay_path = asset_dir / f"fg_{index}.png"
                 self._create_foreground_asset(str(overlay_path), subject, palette)
+            event_start = max(float(event.get("start", 0.0)), 0.0)
+            if scene.get("viral_hook_package") and subject_key.startswith("scene_image_"):
+                event_start = max(event_start, self._hook_package_title_end(duration) + 0.05)
             overlays.append({
                 "path": str(overlay_path),
-                "start": max(float(event.get("start", 0.0)), 0.0),
-                "end": min(float(duration), max(float(event.get("start", 0.0)) + max(float(event.get("duration", 0.4)), 0.25) + 1.0, 0.45)),
+                "start": event_start,
+                "end": min(float(duration), max(event_start + max(float(event.get("duration", 0.4)), 0.25) + 1.0, event_start + 0.45)),
                 "x_ratio": float(event.get("x_ratio", 0.58)),
                 "y_ratio": float(event.get("y_ratio", 0.42)),
                 "animation": str(event.get("animation") or "fade_in"),
@@ -2364,22 +2438,23 @@ class StickmanGenerator:
             image_path = str(hook.get("image_path") or "")
             title_path = str(hook.get("title_asset_path") or "")
             if image_path and os.path.exists(image_path):
+                image_end = duration if scene.get("viral_intro_scene") else min(duration, 0.92)
                 overlays.append({
                     "path": image_path,
                     "start": 0.0,
-                    "end": min(duration, 1.05),
+                    "end": image_end,
                     "animation": "fullscreen_hook",
                     "fade_in": 0.0,
-                    "fade_out": 0.18,
+                    "fade_out": 0.18 if scene.get("viral_intro_scene") else 0.14,
                 })
             if title_path and os.path.exists(title_path):
                 overlays.append({
                     "path": title_path,
-                    "start": 0.18,
-                    "end": min(duration, max(1.8, duration * 0.72)),
+                    "start": 0.12,
+                    "end": self._hook_package_title_end(duration),
                     "animation": "center_bounce",
-                    "fade_in": 0.10,
-                    "fade_out": 0.18,
+                    "fade_in": 0.08,
+                    "fade_out": 0.14,
                 })
         if outro:
             image_path = str(outro.get("image_path") or "")
@@ -2387,19 +2462,19 @@ class StickmanGenerator:
             if image_path and os.path.exists(image_path):
                 overlays.append({
                     "path": image_path,
-                    "start": max(0.0, duration - 1.15),
+                    "start": max(0.0, duration - 1.0),
                     "end": duration,
                     "animation": "fullscreen_outro",
-                    "fade_in": 0.16,
+                    "fade_in": 0.12,
                     "fade_out": 0.0,
                 })
             if title_path and os.path.exists(title_path):
                 overlays.append({
                     "path": title_path,
-                    "start": max(0.0, duration - 1.0),
+                    "start": self._outro_package_title_start(duration),
                     "end": duration,
                     "animation": "center_fade",
-                    "fade_in": 0.14,
+                    "fade_in": 0.10,
                     "fade_out": 0.0,
                 })
         return overlays
@@ -2440,7 +2515,7 @@ class StickmanGenerator:
         if animation == "fixed_bottom_panel":
             return "0", "0"
         if animation == "fixed_subtitle":
-            return "0", "900-h"
+            return "0", "822"
         if animation == "global_progress_marker":
             return self._section_progress_position_expr(overlay, width), "1018"
         if animation in {"fullscreen_hook", "fullscreen_outro"}:
@@ -3039,30 +3114,13 @@ class StickmanGenerator:
         for clip_path in clip_paths:
             cmd.extend(["-i", clip_path])
 
-        filter_parts = []
-        previous_label = "[0:v]"
-        elapsed = float(timeline[0].get("video_duration") or 0.3)
-        current_label_name = "v0"
-        for index in range(1, len(clip_paths)):
-            current_duration = float(timeline[index - 1].get("video_duration") or 0.3)
-            next_duration = float(timeline[index].get("video_duration") or 0.3)
-            transition_duration = self._transition_duration_for_pair(current_duration, next_duration)
-            transition_scene = storyboards[index - 1] if index - 1 < len(storyboards) else {}
-            transition_type = self._transition_type_for_scene(transition_scene, index)
-            offset = max(elapsed - transition_duration, 0.0)
-            output_label = f"v{index}"
-            filter_parts.append(
-                f"{previous_label}[{index}:v]xfade=transition={transition_type}:duration={transition_duration:.2f}:offset={offset:.2f}[{output_label}]"
-            )
-            previous_label = f"[{output_label}]"
-            current_label_name = output_label
-            elapsed = offset + next_duration
+        concat_inputs = "".join(f"[{index}:v]" for index in range(len(clip_paths)))
 
         cmd.extend([
             "-filter_complex",
-            ";".join(filter_parts),
+            f"{concat_inputs}concat=n={len(clip_paths)}:v=1:a=0[outv]",
             "-map",
-            f"[{current_label_name}]",
+            "[outv]",
             "-c:v",
             "libx264",
             "-preset",
