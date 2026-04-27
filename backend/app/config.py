@@ -8,9 +8,9 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 ENVIRONMENT_NAME = os.getenv("ENVIRONMENT", "development").strip().lower() or "development"
 ENV_FILES = [
-    str(BACKEND_DIR / ".env"),
     str(ROOT_DIR / ".env"),
     str(ROOT_DIR / f".env.{ENVIRONMENT_NAME}"),
+    str(BACKEND_DIR / ".env"),
 ]
 
 
