@@ -5,6 +5,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 import uuid
 from pathlib import Path
 from urllib.parse import urlparse
@@ -13,7 +14,7 @@ from typing import Optional
 import imageio_ffmpeg
 import requests
 from openai import OpenAI
-from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageStat
+from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps, ImageStat
 from pydub import AudioSegment
 import dashscope
 from dashscope.audio.tts_v2 import SpeechSynthesizer
@@ -32,8 +33,11 @@ class StickmanGenerator:
         self.image_api_key = self.settings.STICKMAN_IMAGE_API_KEY or getattr(self.settings, "IMAGE_API_KEY", "") or self.settings.DASHSCOPE_API_KEY
         self.image_base_url = self.settings.STICKMAN_IMAGE_BASE_URL or getattr(self.settings, "IMAGE_BASE_URL", "")
         self.image_model = self.settings.STICKMAN_IMAGE_MODEL or getattr(self.settings, "IMAGE_MODEL", "wan2.7-image")
-        self.scene_image_model = "z-image-turbo"
-        self.scene_image_size = "1120*1440"
+        self.scene_image_model = self.settings.STICKMAN_SCENE_IMAGE_MODEL or self.image_model or "qwen-image-max-2025-12-30"
+        self.scene_image_models = [item.strip() for item in (getattr(self.settings, "STICKMAN_SCENE_IMAGE_MODELS", "") or "").split(",") if item.strip()]
+        if self.scene_image_model and self.scene_image_model not in self.scene_image_models:
+            self.scene_image_models.insert(0, self.scene_image_model)
+        self.scene_image_size = "1664*928"
         self.image_models = [item.strip() for item in (self.settings.STICKMAN_IMAGE_MODELS or "").split(",") if item.strip()]
         if self.image_model and self.image_model not in self.image_models:
             self.image_models.insert(0, self.image_model)
@@ -1102,10 +1106,16 @@ class StickmanGenerator:
                 progress_callback(32, f"素材匹配完成 ({len(assets)}/{len(storyboards)})")
             return assets, flags
 
+        selected_scene_model = None
         for index, scene in enumerate(storyboards, start=1):
             prompt = self._resolved_scene_image_prompt(scene, str(scene.get("visual_focus") or scene.get("scene_title") or "主题"))
             scene_image_path = image_output_dir / f"scene_{index}_illustration_{uuid.uuid4().hex[:8]}.png"
-            illustration_result = self._generate_scene_illustration(prompt, str(scene_image_path), scene)
+            scene_with_model = dict(scene)
+            if selected_scene_model:
+                scene_with_model["scene_image_model_override"] = selected_scene_model
+                scene_with_model["scene_image_lock_model"] = True
+            illustration_result = self._generate_scene_illustration(prompt, str(scene_image_path), scene_with_model, aspect_ratio)
+            selected_scene_model = selected_scene_model or illustration_result.get("model_used")
             assets.append({
                 "scene_id": scene.get("scene_id", index),
                 "prompt": prompt,
@@ -1122,6 +1132,8 @@ class StickmanGenerator:
             })
             if progress_callback:
                 progress_callback(20 + int(index / len(storyboards) * 25), f"场景图生成中 ({index}/{len(storyboards)})")
+            if index < len(storyboards) and self.settings.DASHSCOPE_API_KEY and self.image_base_url:
+                time.sleep(2.0 if selected_scene_model else 1.2)
         return assets, flags
 
     def regenerate_single_image(
@@ -1141,7 +1153,7 @@ class StickmanGenerator:
         prompt = prompt_override or self._resolved_scene_image_prompt(scene, str(scene.get("visual_focus") or scene.get("scene_title") or "主题"))
         self._create_fixed_reference_background(str(image_path), aspect_ratio, scene, background_image_path)
         scene_image_path = image_output_dir / f"scene_{index}_illustration_{uuid.uuid4().hex[:8]}.png"
-        illustration_result = self._generate_scene_illustration(prompt, str(scene_image_path), scene)
+        illustration_result = self._generate_scene_illustration(prompt, str(scene_image_path), scene, aspect_ratio)
         return {
             "scene_id": scene.get("scene_id", index),
             "prompt": prompt,
@@ -1702,13 +1714,13 @@ class StickmanGenerator:
 
     def _timed_subtitles_for_scene(self, scene: dict, duration: float):
         existing = scene.get("subtitle_segments") or []
-        subtitle_lead = 0.10
+        subtitle_lead = 0.0
         if existing:
             return [
                 {
                     "text": str(item.get("text") or ""),
                     "english": str(item.get("english") or ""),
-                    "start": max(0.0, float(item.get("start", 0.0)) - subtitle_lead),
+                    "start": max(0.0, float(item.get("start", 0.0))),
                     "end": float(item.get("end", duration)),
                 }
                 for item in existing
@@ -1729,17 +1741,21 @@ class StickmanGenerator:
                 "start": 0.0,
                 "end": round(safe_duration, 2),
             }]
-        segment = safe_duration / max(len(lines), 1)
+        weights = [max(len(str(item.get("text") or "").strip()), 1) for item in lines]
+        total_weight = max(sum(weights), 1)
         timed = []
+        cursor = 0.0
         for index, item in enumerate(lines):
-            start = round(max(0.0, start_at + index * segment - subtitle_lead), 2)
-            end = round(min(duration, start_at + (index + 1) * segment), 2)
+            slice_duration = safe_duration * (weights[index] / total_weight)
+            start = round(cursor, 2)
+            end = round(min(duration, cursor + slice_duration), 2)
             timed.append({
                 "text": self._strip_terminal_punctuation(str(item.get("text") or "")),
                 "english": self._sanitize_english_subtitle(str(item.get("english") or "")),
                 "start": start,
                 "end": max(end, start + 0.2),
             })
+            cursor = timed[-1]["end"]
         if timed:
             timed[-1]["end"] = round(duration, 2)
         return timed
@@ -1832,21 +1848,108 @@ class StickmanGenerator:
         canvas.alpha_composite(image, (x, y))
         canvas.save(image_path, format="PNG")
 
+    def _scene_frame_size(self, aspect_ratio: str):
+        if aspect_ratio == "9:16":
+            return 928, 1664
+        return 1664, 928
+
+    def _normalize_scene_frame(self, image_path: str, aspect_ratio: str, background_color=(8, 20, 58)):
+        target_size = self._scene_frame_size(aspect_ratio)
+        image = Image.open(image_path).convert("RGBA")
+        image = self._crop_dark_frame_edges(image)
+        background = Image.new("RGBA", image.size, (*background_color, 255))
+        background.alpha_composite(image)
+        fitted = ImageOps.fit(background.convert("RGB"), target_size, method=Image.Resampling.LANCZOS, centering=(0.5, 0.5))
+        fitted.save(image_path, format="PNG")
+
+    def _crop_dark_frame_edges(self, image: Image.Image):
+        rgb = image.convert("RGB")
+        width, height = rgb.size
+        left = 0
+        right = width - 1
+        top = 0
+        bottom = height - 1
+
+        def row_is_dark(y: int):
+            stat = ImageStat.Stat(rgb.crop((0, y, width, y + 1)))
+            return sum(stat.mean) / 3 < 16
+
+        def col_is_dark(x: int):
+            stat = ImageStat.Stat(rgb.crop((x, 0, x + 1, height)))
+            return sum(stat.mean) / 3 < 16
+
+        while top < bottom and row_is_dark(top):
+            top += 1
+        while bottom > top and row_is_dark(bottom):
+            bottom -= 1
+        while left < right and col_is_dark(left):
+            left += 1
+        while right > left and col_is_dark(right):
+            right -= 1
+
+        if left == 0 and right == width - 1 and top == 0 and bottom == height - 1:
+            return image
+        cropped = image.crop((left, top, right + 1, bottom + 1))
+        return cropped if cropped.width > 0 and cropped.height > 0 else image
+
+    def _create_scene_frame_fallback(self, save_path: str, scene: dict, aspect_ratio: str):
+        width, height = self._scene_frame_size(aspect_ratio)
+        canvas = Image.new("RGB", (width, height), (8, 20, 58))
+        draw = ImageDraw.Draw(canvas)
+        title_font = self._load_font(64 if aspect_ratio == "16:9" else 56)
+        body_font = self._load_font(36 if aspect_ratio == "16:9" else 34)
+        accent = (82, 196, 255)
+        text = str(scene.get("visual_focus") or scene.get("scene_title") or "重点")[:18]
+        subtitle = str(scene.get("scene_description") or "").strip()[:32]
+        draw.rectangle((0, int(height * 0.78), width, height), fill=(5, 12, 36))
+        draw.ellipse((int(width * 0.10), int(height * 0.16), int(width * 0.34), int(height * 0.60)), outline=(255, 255, 255), width=8)
+        draw.line((int(width * 0.22), int(height * 0.43), int(width * 0.22), int(height * 0.72)), fill=(255, 255, 255), width=8)
+        draw.line((int(width * 0.22), int(height * 0.52), int(width * 0.15), int(height * 0.61)), fill=(255, 255, 255), width=7)
+        draw.line((int(width * 0.22), int(height * 0.52), int(width * 0.31), int(height * 0.59)), fill=(255, 255, 255), width=7)
+        draw.line((int(width * 0.22), int(height * 0.72), int(width * 0.16), int(height * 0.85)), fill=(255, 255, 255), width=7)
+        draw.line((int(width * 0.22), int(height * 0.72), int(width * 0.29), int(height * 0.84)), fill=(255, 255, 255), width=7)
+        card = (int(width * 0.42), int(height * 0.18), int(width * 0.90), int(height * 0.62))
+        draw.rounded_rectangle(card, radius=28, fill=(10, 32, 86), outline=accent, width=4)
+        draw.text((card[0] + 44, card[1] + 44), text, fill=(255, 255, 255), font=title_font)
+        if subtitle:
+            draw.text((card[0] + 44, card[1] + 148), subtitle, fill=(214, 233, 255), font=body_font)
+        draw.line((card[0] + 44, card[1] + 128, card[0] + 220, card[1] + 128), fill=accent, width=5)
+        canvas.save(save_path, format="PNG")
+
     def _create_scene_image_fallback(self, save_path: str, scene: dict):
         palette = self._warm_palette_for_scene(scene)
         self._create_foreground_asset(save_path, {"kind": "scene_illustration", "label": str(scene.get("visual_focus") or "主题")[:8]}, palette)
 
-    def _generate_scene_illustration(self, prompt: str, save_path: str, scene: dict):
+    def _generate_scene_illustration(self, prompt: str, save_path: str, scene: dict, aspect_ratio: str = "16:9"):
+        model_override = str(scene.get("scene_image_model_override") or "").strip()
+        lock_model = bool(scene.get("scene_image_lock_model"))
+        previous_override = getattr(self, "_scene_image_model_override", "")
+        previous_lock = getattr(self, "_scene_image_lock_model", False)
+        self._scene_image_model_override = model_override
+        self._scene_image_lock_model = lock_model
         if self.settings.DASHSCOPE_API_KEY and self.image_base_url:
             try:
-                result = self._generate_scene_image_via_dashscope(prompt, save_path)
-                self._remove_white_background(save_path)
-                self._normalize_scene_illustration(save_path)
+                result = self._generate_scene_image_via_dashscope(prompt, save_path, aspect_ratio)
+                if scene.get("scene_image_mode") == "full_frame":
+                    self._normalize_scene_frame(save_path, aspect_ratio)
+                else:
+                    self._remove_white_background(save_path)
+                    self._normalize_scene_illustration(save_path)
                 result["image_source"] = result.get("image_source") or "model"
                 return result
             except Exception:
-                pass
-        self._create_scene_image_fallback(save_path, scene)
+                if scene.get("scene_image_mode") == "full_frame":
+                    raise
+            finally:
+                self._scene_image_model_override = previous_override
+                self._scene_image_lock_model = previous_lock
+        else:
+            self._scene_image_model_override = previous_override
+            self._scene_image_lock_model = previous_lock
+        if scene.get("scene_image_mode") == "full_frame":
+            self._create_scene_frame_fallback(save_path, scene, aspect_ratio)
+        else:
+            self._create_scene_image_fallback(save_path, scene)
         return {
             "used_fallback": True,
             "image_source": "fallback",
@@ -1854,45 +1957,78 @@ class StickmanGenerator:
             "error_summary": "场景插画生成失败，已使用本地极简火柴人插画降级。",
         }
 
-    def _generate_scene_image_via_dashscope(self, prompt: str, save_path: str):
-        response = requests.post(
-            self.image_base_url,
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.settings.DASHSCOPE_API_KEY}",
-            },
-            json={
-                "model": self.scene_image_model,
-                "input": {
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": [{"text": prompt}],
-                        }
-                    ]
-                },
-                "parameters": {
-                    "prompt_extend": False,
-                    "size": self.scene_image_size,
-                },
-            },
-            timeout=120,
-        )
-        response.raise_for_status()
-        result = response.json()
-        image_url = self._extract_image_url(result)
-        if not image_url:
-            raise RuntimeError(f"场景图生成失败: {result}")
-        image_response = requests.get(image_url, timeout=120)
-        image_response.raise_for_status()
-        with open(save_path, "wb") as file:
-            file.write(image_response.content)
-        return {
-            "used_fallback": False,
-            "image_source": "model",
-            "model_used": self.scene_image_model,
-            "error_summary": None,
-        }
+    def _generate_scene_image_via_dashscope(self, prompt: str, save_path: str, aspect_ratio: str = "16:9"):
+        last_error = None
+        models_to_try = [item for item in self.scene_image_models if item]
+        model_override = str(getattr(self, "_scene_image_model_override", "") or "").strip()
+        lock_model = bool(getattr(self, "_scene_image_lock_model", False))
+        if model_override:
+            if lock_model:
+                models_to_try = [model_override]
+            else:
+                models_to_try = [model_override, *[item for item in models_to_try if item != model_override]]
+        if not models_to_try:
+            models_to_try = [self.scene_image_model]
+        for model_index, model in enumerate(models_to_try):
+            max_attempts = 6 if lock_model else 4
+            for attempt in range(max_attempts):
+                try:
+                    response = requests.post(
+                        self.image_base_url,
+                        headers={
+                            "Content-Type": "application/json",
+                            "Authorization": f"Bearer {self.settings.DASHSCOPE_API_KEY}",
+                        },
+                        json={
+                            "model": model,
+                            "input": {
+                                "messages": [
+                                    {
+                                        "role": "user",
+                                        "content": [{"text": prompt}],
+                                    }
+                                ]
+                            },
+                            "parameters": {
+                                "prompt_extend": False,
+                                "size": self._resolve_scene_image_size(aspect_ratio),
+                            },
+                        },
+                        timeout=120,
+                    )
+                    response.raise_for_status()
+                    result = response.json()
+                    image_url = self._extract_image_url(result)
+                    if not image_url:
+                        raise RuntimeError(f"场景图生成失败: {result}")
+                    image_response = requests.get(image_url, timeout=120)
+                    image_response.raise_for_status()
+                    with open(save_path, "wb") as file:
+                        file.write(image_response.content)
+                    return {
+                        "used_fallback": False,
+                        "image_source": "model",
+                        "model_used": model,
+                        "error_summary": None,
+                    }
+                except Exception as exc:
+                    last_error = exc
+                    if attempt < (max_attempts - 1) and self._is_retryable_scene_image_error(exc):
+                        time.sleep((4.0 if lock_model else 1.2) * (attempt + 1))
+                        continue
+                    break
+            if model_index < len(models_to_try) - 1:
+                time.sleep(0.8)
+        raise last_error or RuntimeError("场景图生成失败")
+
+    def _resolve_scene_image_size(self, aspect_ratio: str):
+        if aspect_ratio == "9:16":
+            return "928*1664"
+        return "1664*928"
+
+    def _is_retryable_scene_image_error(self, error: Exception):
+        text = str(error).lower()
+        return any(token in text for token in ["429", "too many requests", "connection reset", "connection aborted", "10054", "timed out", "timeout"])
 
     def _create_subtitle_asset(self, save_path: str, subtitle: dict | str, palette: dict):
         if isinstance(subtitle, dict):
@@ -2311,7 +2447,10 @@ class StickmanGenerator:
 
         if provider == "dashscope_cosyvoice":
             try:
-                model = self.tts_model or "cosyvoice-v3-plus"
+                if voice.startswith("cosyvoice-v3.5-plus-"):
+                    model = "cosyvoice-v3.5-plus"
+                else:
+                    model = "cosyvoice-v3-flash"
                 synthesizer = SpeechSynthesizer(model=model, voice=voice)
                 audio_bytes = synthesizer.call(text)
                 with open(save_path, 'wb') as file:
@@ -2552,42 +2691,46 @@ class StickmanGenerator:
                 "y": (anchor_y, anchor_y, anchor_y),
             },
             "slow_push_center": {
-                "zoom": (base_zoom, 1.1, 1.18 if scene_duration > 3.2 else 1.14),
-                "x": (self._clamp_ratio(anchor_x - 0.05), anchor_x, self._clamp_ratio(anchor_x + 0.03)),
-                "y": (anchor_y + 0.03, anchor_y, anchor_y - 0.02),
+                "zoom": (base_zoom, 1.04, 1.08 if scene_duration > 2.6 else 1.06),
+                "x": (anchor_x, anchor_x, anchor_x),
+                "y": (anchor_y, anchor_y, anchor_y),
             },
             "pull_out_soft": {
-                "zoom": (1.16, 1.08, 1.0),
-                "x": (anchor_x, self._clamp_ratio(anchor_x - 0.04), self._clamp_ratio(anchor_x + 0.03)),
-                "y": (anchor_y, anchor_y - 0.02, anchor_y + 0.02),
+                "zoom": (1.08, 1.04, 1.0),
+                "x": (anchor_x, anchor_x, anchor_x),
+                "y": (anchor_y, anchor_y, anchor_y),
             },
             "micro_pan_left": {
-                "zoom": (1.06, 1.1, 1.14),
-                "x": (self._clamp_ratio(anchor_x + 0.18), self._clamp_ratio(anchor_x + 0.07), self._clamp_ratio(anchor_x - 0.05)),
-                "y": (anchor_y, anchor_y - 0.012, anchor_y),
+                "zoom": (1.03, 1.04, 1.05),
+                "x": (anchor_x, anchor_x, anchor_x),
+                "y": (anchor_y, anchor_y, anchor_y),
             },
             "micro_pan_right": {
-                "zoom": (1.06, 1.1, 1.14),
-                "x": (self._clamp_ratio(anchor_x - 0.18), self._clamp_ratio(anchor_x - 0.07), self._clamp_ratio(anchor_x + 0.05)),
-                "y": (anchor_y, anchor_y + 0.012, anchor_y),
+                "zoom": (1.03, 1.04, 1.05),
+                "x": (anchor_x, anchor_x, anchor_x),
+                "y": (anchor_y, anchor_y, anchor_y),
             },
             "push_left_focus": {
-                "zoom": (1.04, 1.14, 1.22 if scene_duration > 3.0 else 1.18),
-                "x": (self._clamp_ratio(anchor_x - 0.16), self._clamp_ratio(anchor_x - 0.07), anchor_x),
-                "y": (anchor_y + 0.03, anchor_y, self._clamp_ratio(anchor_y - 0.04)),
+                "zoom": (1.02, 1.06, 1.1 if scene_duration > 2.6 else 1.08),
+                "x": (anchor_x, anchor_x, anchor_x),
+                "y": (anchor_y, anchor_y, anchor_y),
             },
             "push_right_focus": {
-                "zoom": (1.04, 1.14, 1.22 if scene_duration > 3.0 else 1.18),
-                "x": (self._clamp_ratio(anchor_x + 0.16), self._clamp_ratio(anchor_x + 0.07), anchor_x),
-                "y": (anchor_y + 0.03, anchor_y, self._clamp_ratio(anchor_y - 0.04)),
+                "zoom": (1.02, 1.06, 1.1 if scene_duration > 2.6 else 1.08),
+                "x": (anchor_x, anchor_x, anchor_x),
+                "y": (anchor_y, anchor_y, anchor_y),
             },
             "hold_then_push": {
-                "zoom": (1.0, 1.02, 1.16),
-                "x": (anchor_x, self._clamp_ratio(anchor_x - 0.02), self._clamp_ratio(anchor_x + 0.03)),
-                "y": (anchor_y, anchor_y, self._clamp_ratio(anchor_y - 0.03)),
+                "zoom": (1.0, 1.02, 1.08),
+                "x": (anchor_x, anchor_x, anchor_x),
+                "y": (anchor_y, anchor_y, anchor_y),
             },
         }
         return {"preset": preset, **spec_map.get(preset, spec_map["static"])}
+
+    def _linear_expr(self, first: float, third: float, frames: int):
+        end_frames = max(frames - 1, 1)
+        return f"{first:.4f}+({third:.4f}-{first:.4f})*on/{end_frames}"
 
     def _piecewise_expr(self, first: float, second: float, third: float, frames: int):
         midpoint = max(frames // 2, 1)
@@ -2698,13 +2841,11 @@ class StickmanGenerator:
             filter_expr = f"scale=1920:1080,fps={fps},trim=duration={float(duration):.3f}"
         else:
             spec = self._motion_spec_for_scene(scene, index, duration)
-            zoom_expr = self._piecewise_expr(*spec["zoom"], frames)
-            x_progress = self._piecewise_expr(*spec["x"], frames)
-            y_progress = self._piecewise_expr(*spec["y"], frames)
-            x_expr = f"(iw-iw/zoom)*({x_progress})"
-            y_expr = f"(ih-ih/zoom)*({y_progress})"
+            zoom_expr = self._linear_expr(spec["zoom"][0], spec["zoom"][2], frames)
+            x_expr = "(iw-iw/zoom)/2"
+            y_expr = "(ih-ih/zoom)/2"
             filter_expr = (
-                "scale=2400:1350:force_original_aspect_ratio=increase,"
+                "scale=2200:1238,"
                 f"zoompan=z='{zoom_expr}':x='{x_expr}':y='{y_expr}':d=1:s=1920x1080:fps={fps},"
                 f"trim=duration={float(duration):.3f},fps={fps}"
             )
@@ -2743,6 +2884,8 @@ class StickmanGenerator:
         cmd.extend([
             "-c:v",
             "libx264",
+            "-threads",
+            "2",
             "-preset",
             "veryfast",
             "-pix_fmt",
@@ -2776,6 +2919,8 @@ class StickmanGenerator:
             "[vout]",
             "-c:v",
             "libx264",
+            "-threads",
+            "2",
             "-preset",
             "veryfast",
             "-pix_fmt",

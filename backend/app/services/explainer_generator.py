@@ -32,6 +32,8 @@ class ExplainerGenerator:
         storyboards = []
         for index, scene in enumerate(script_data.get("storyboards") or [], start=1):
             storyboards.append(self._normalize_scene(scene, index, title, normalized_count, hook_mode))
+        if storyboards:
+            storyboards[0] = self._strengthen_first_scene(storyboards[0], title)
         return {
             "title": title,
             "script": "\n".join(scene.get("narration_text") or "" for scene in storyboards),
@@ -76,7 +78,7 @@ class ExplainerGenerator:
         report(5, "开始生成讲解型视频")
         script_bundle = self.generate_storyboard_data(source_text, storyboard_count, opening_hook_mode, visual_style_key, target_duration)
         report(20, "脚本生成完成")
-        engine_storyboards = self._to_engine_storyboards(script_bundle["storyboards"], script_bundle["title"], script_bundle["generation_flags"])
+        engine_storyboards = self._to_engine_storyboards(script_bundle["storyboards"], script_bundle["title"], {**script_bundle["generation_flags"], "aspect_ratio": aspect_ratio})
         effective_background_path = background_image_path or self._ensure_default_background(script_bundle["title"], script_bundle["generation_flags"])
         with tempfile.TemporaryDirectory(prefix="explainer_") as _:
             image_assets, image_flags = self._generate_engine_images(
@@ -125,7 +127,7 @@ class ExplainerGenerator:
         generation_flags: Optional[dict] = None,
     ):
         topic = self._fallback_title(source_text)
-        engine_storyboards = self._to_engine_storyboards(storyboards, topic, generation_flags or {})
+        engine_storyboards = self._to_engine_storyboards(storyboards, topic, {**(generation_flags or {}), "aspect_ratio": aspect_ratio})
         effective_background_path = background_image_path or self._ensure_default_background(topic, generation_flags or {})
         assets, flags = self._generate_engine_images(
             engine_storyboards,
@@ -154,7 +156,7 @@ class ExplainerGenerator:
         generation_flags: Optional[dict] = None,
     ):
         topic = self._fallback_title(source_text)
-        engine_storyboards = self._to_engine_storyboards(storyboards, topic, generation_flags or {})
+        engine_storyboards = self._to_engine_storyboards(storyboards, topic, {**(generation_flags or {}), "aspect_ratio": aspect_ratio})
         effective_background_path = background_image_path or self._ensure_default_background(topic, generation_flags or {})
         asset, used_fallback = self.engine.regenerate_single_image(
             engine_storyboards[scene_index],
@@ -166,6 +168,13 @@ class ExplainerGenerator:
             style_reference_image_path,
             style_reference_notes,
         )
+        asset = {
+            **asset,
+            "image_path": asset.get("scene_image_path") or asset.get("image_path"),
+            "image_url": asset.get("scene_image_url") or asset.get("image_url"),
+            "image_source": asset.get("scene_image_source") or asset.get("image_source"),
+            "model_used": asset.get("scene_image_model_used") or asset.get("model_used"),
+        }
         scene = dict(storyboards[scene_index])
         scene["image_url"] = asset.get("scene_image_url") or asset.get("image_url")
         scene["visual_prompt"] = asset.get("prompt")
@@ -205,17 +214,18 @@ class ExplainerGenerator:
 
     def _generate_script(self, source_text: str, storyboard_count: int, hook_mode: str, style_key: str, target_duration: int):
         prompt = (
-            f'请为主题或原始文案“{source_text}”生成一个中文抖音风格讲解型视频脚本。'
+            f'请为主题或原始文案“{source_text}”生成一个中文高留存讲解型视频脚本。'
             f'总共生成 {storyboard_count} 个分镜，目标总时长约 {target_duration} 秒。'
-            '要求：前3秒必须抓人；每镜头只表达一个点；文案要像短视频口播；字幕要短句；结尾必须有收束或拔高。'
+            '要求：前3秒必须抓人；开头第一句必须像真实短视频爆款开场，先打中痛点再抛出反差；每镜头只表达一个点；文案要像短视频口播；字幕要短句；结尾必须有收束或拔高。'
             f'开头模式：{hook_mode}。视觉风格：{style_key}。'
+            '首幕禁止空泛表达，禁止“今天聊聊”“很多人都这样”这类弱开场。首幕字幕必须在12字内，最好带反差、提问或情绪刺点。'
             '必须返回 JSON，不要输出解释。结构如下：'
             '{"title":"视频标题","hook_title":"开头主标题","hook_subtitle":"开头副标题","hook_conflict_point":"冲突点","ending_payoff":"结尾收束句","storyboards":[{"scene_title":"第一幕","hook_level":"high","narration_text":"配音文案","subtitle_text":"字幕短句","visual_description":"画面描述","camera_motion":"slow_zoom_in","transition_type":"fade","emotion_tone":"tense","duration":3.0,"attention_goal":"hook","punch_phrase":"击中句","beat_type":"hook","keywords":["关键词1","关键词2"]}]}'
         )
         try:
             response = self.engine._chat_completion(
                 messages=[
-                    {"role": "system", "content": "你是擅长抖音爆款讲解视频的中文短视频编导，擅长输出高留存、高节奏的分镜 JSON。"},
+                    {"role": "system", "content": "你是擅长中文高留存讲解视频的短视频编导，擅长输出高节奏、强钩子的分镜 JSON。"},
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0.85,
@@ -250,21 +260,39 @@ class ExplainerGenerator:
         topic = self._fallback_title(source_text)
         hook_phrase = self._first_hook_phrase(topic)
         payoff_phrase = self._payoff_phrase(topic)
+        middle_lines = [
+            "你怕气氛变僵，所以总是先忍。",
+            "你把别人的感受排前面，自己的情绪却没人接住。",
+            "你越会体谅别人，别人越容易默认你没事。",
+            "委屈攒久了，最后伤到的只会是你自己。",
+            "真正要改的，不是脾气，是你总把自己放最后。",
+            "你不是脆弱，你只是太久没站在自己这边了。",
+        ]
+        visual_lines = [
+            "一个人站在画面中央，肩膀微缩，周围留白很大，压抑感明显。",
+            "两个人在对话，一方欲言又止，空气像被按住一样僵住。",
+            "主人公把别人推到前景中央，自己被挤到角落里，情绪被忽略。",
+            "表面上还在微笑配合，胸口却像压着一块石头。",
+            "主人公慢慢站直，看向前方，情绪从委屈转向清醒。",
+            "画面里的人终于把手收回自己胸前，像是在重新站回自己这边。",
+        ]
         storyboards = []
         for index in range(1, storyboard_count + 1):
             beat_type = "hook" if index == 1 else "payoff" if index == storyboard_count else "expand"
-            subtitle = hook_phrase if index == 1 else payoff_phrase if index == storyboard_count else f"{topic}第{index}点"
+            middle_line = middle_lines[(index - 2) % len(middle_lines)] if 1 < index < storyboard_count else ""
+            visual_line = visual_lines[(index - 1) % len(visual_lines)]
+            subtitle = hook_phrase if index == 1 else payoff_phrase if index == storyboard_count else middle_line
             narration = (
-                f"{hook_phrase}，很多人不是不会表达，而是太习惯先压住自己。" if index == 1
+                self._first_hook_narration(topic) if index == 1
                 else f"{payoff_phrase}。你真正要做的，不是继续忍，而是把自己放回重要位置。" if index == storyboard_count
-                else f"{topic}的第{index}个关键点。"
+                else middle_line
             )
             storyboards.append({
                 "scene_title": f"第{index}幕",
                 "hook_level": "high" if index == 1 else "medium",
                 "narration_text": narration,
                 "subtitle_text": subtitle,
-                "visual_description": f"围绕{topic}的第{index}个讲解画面，构图清晰，适合字幕叠加。",
+                "visual_description": visual_line,
                 "camera_motion": "slow_zoom_in" if index % 2 else "pan_right",
                 "transition_type": "fade",
                 "emotion_tone": "tense" if index == 1 else "calm",
@@ -277,21 +305,43 @@ class ExplainerGenerator:
             })
         return {
             "title": topic,
-            "hook_title": topic,
-            "hook_subtitle": "前3秒抓住注意力",
+            "hook_title": self._first_hook_phrase(topic),
+            "hook_subtitle": "你总在先委屈自己",
             "hook_conflict_point": topic,
             "ending_payoff": f"这就是{topic}真正值得记住的一点。",
             "storyboards": storyboards,
         }
+
+    def _strengthen_first_scene(self, scene: dict, title: str):
+        boosted = dict(scene)
+        hook_phrase = self._first_hook_phrase(title)
+        hook_narration = self._first_hook_narration(title)
+        boosted["hook_level"] = "high"
+        boosted["beat_type"] = "hook"
+        boosted["attention_goal"] = "hook"
+        boosted["energy_level"] = "high"
+        boosted["duration"] = min(max(float(boosted.get("duration") or 0), 2.4), 2.8)
+        subtitle_text = str(boosted.get("subtitle_text") or "").strip()
+        if not subtitle_text or len(subtitle_text) > 16 or "第1" in subtitle_text:
+            boosted["subtitle_text"] = hook_phrase
+        narration_text = str(boosted.get("narration_text") or "").strip()
+        if not narration_text or len(narration_text) < 18 or "很多人" in narration_text[:8]:
+            boosted["narration_text"] = hook_narration
+        punch_phrase = str(boosted.get("punch_phrase") or "").strip()
+        if not punch_phrase or len(punch_phrase) > 16:
+            boosted["punch_phrase"] = hook_phrase
+        return boosted
 
     def _normalize_scene(self, scene: dict, index: int, title: str, total: int, hook_mode: str):
         beat_type = str(scene.get("beat_type") or ("hook" if index == 1 else "payoff" if index >= total else "expand")).strip().lower()
         attention_goal = str(scene.get("attention_goal") or beat_type).strip().lower()
         subtitle_text = str(scene.get("subtitle_text") or scene.get("narration_text") or scene.get("narration") or "").strip()
         narration_text = str(scene.get("narration_text") or scene.get("narration") or subtitle_text).strip()
-        camera_motion = str(scene.get("camera_motion") or scene.get("motion_preset") or ("slow_zoom_in" if index % 2 else "pan_right")).strip()
-        duration = float(scene.get("duration") or 3.5)
-        duration = max(2.0, min(duration, 5.5))
+        narration_text = self._compress_scene_narration(narration_text, index, total, title)
+        subtitle_text = narration_text
+        camera_motion = self._stable_camera_motion(scene, index)
+        duration = float(scene.get("duration") or 2.6)
+        duration = max(1.8, min(duration, 2.8))
         normalized = {
             "scene_index": index,
             "scene_title": str(scene.get("scene_title") or f"第{index}幕").strip(),
@@ -319,7 +369,7 @@ class ExplainerGenerator:
         total = len(storyboards)
         for index, scene in enumerate(storyboards, start=1):
             narration = str(scene.get("narration_text") or scene.get("subtitle_text") or "").strip()
-            subtitle_text = str(scene.get("subtitle_text") or narration).strip()
+            subtitle_text = narration
             mapped_scene = {
                 "scene_id": index,
                 "scene_title": scene.get("scene_title") or f"第{index}幕",
@@ -341,13 +391,15 @@ class ExplainerGenerator:
                 "background_group": f"stage_{1 + ((index - 1) // 2)}",
                 "palette_mode": "classic_stickman",
                 "foreground_density": "dense" if index <= 2 else "medium",
-                "subtitle_lines": [{"text": part} for part in self._subtitle_segments_from_text(subtitle_text)],
+                "subtitle_lines": [{"text": part} for part in self._subtitle_segments_from_text(narration)],
                 "emphasis_beats": [scene.get("punch_phrase") or subtitle_text[:16]],
+                "foreground_subjects": [],
+                "foreground_events": [],
+                "scene_image_mode": "full_frame",
+                "scene_image_aspect_ratio": generation_flags.get("aspect_ratio") or "16:9",
             }
             mapped_scene["background_prompt"] = self.engine._background_prompt_for_scene(mapped_scene, topic, index)
             mapped_scene["scene_image_prompt"] = self._scene_image_prompt_for_scene(scene, topic, total, generation_flags)
-            mapped_scene["foreground_subjects"] = self._foreground_subjects_for_scene(scene, index, total)
-            mapped_scene["foreground_events"] = self._foreground_events_for_scene(scene, index, total)
             mapped.append(mapped_scene)
         return mapped
 
@@ -387,16 +439,29 @@ class ExplainerGenerator:
 
     def _scene_image_prompt_for_scene(self, scene: dict, topic: str, total: int, generation_flags: dict):
         style_key = str(generation_flags.get("visual_style_key") or "deep_blue_emotional")
-        visual = str(scene.get("visual_description") or topic)
+        aspect_ratio = str(generation_flags.get("aspect_ratio") or "16:9")
+        visual = self._sanitize_image_instruction_text(str(scene.get("visual_description") or topic))
         emotion = str(scene.get("emotion_tone") or "calm")
         beat = str(scene.get("beat_type") or "expand")
-        focus = str(scene.get("punch_phrase") or scene.get("subtitle_text") or topic)
+        focus = self._sanitize_image_instruction_text(str(scene.get("punch_phrase") or scene.get("subtitle_text") or topic))
+        frame_instruction = "16:9 horizontal full-bleed composition" if aspect_ratio == "16:9" else "9:16 vertical full-bleed composition"
         return (
-            "Create a Chinese short-video explainer scene in a viral Douyin style. "
-            "Deep blue background, white line-art characters and props, selective bright accent colors, strong focal hierarchy, editorial composition, readable subtitle-safe bottom area, no baked subtitles, no text inside image. "
+            "Create a Chinese explainer scene illustration. "
+            f"Use a {frame_instruction}. The image must fully cover the frame edge to edge with no black borders, no empty padding, no transparent background, and no letterboxing. "
+            "Deep blue background, white line-art characters and props, selective bright accent colors, strong focal hierarchy, editorial composition, readable subtitle-safe bottom area. "
+            "Keep one strictly consistent illustration style across all scenes in the same video: same line quality, same character design, same palette, same visual language. "
+            "Generate the image according to the meaning of the current storyboard narration and visual description. Match the scene content to the narration, not to a platform or product interface. Use one single continuous scene, not a collage, not a moodboard, not a storyboard grid, not multiple panels, not split screen, not a comic page. "
+            "Absolutely do not render any readable text inside the image: no Chinese characters, no English words, no numbers, no labels, no subtitles, no title cards, no posters, no signs, no speech bubbles, no chat bubbles, no handwritten notes, no UI text, no captions. If the model tends to add text, replace it with abstract shapes or leave the area blank. Avoid obvious logos, watermarks, platform symbols, phone app interfaces, dashboards, laptops, tablets, charts, and commercial UI unless the visual description explicitly requires them. "
             f"Style key: {style_key}. Beat type: {beat}. Emotion: {emotion}. Topic: {topic}. Core focus: {focus}. Visual description: {visual}. "
-            "The frame should feel emotionally charged, concise, modern, and optimized for the first-screen attention of a short video."
+            "The frame should feel emotionally charged, concise, modern, cover the whole screen, and remain visually clean and consistent with the other scenes."
         )
+
+    def _sanitize_image_instruction_text(self, text: str):
+        cleaned = str(text or "")
+        cleaned = re.sub(r"[‘’'\"]([^‘’'\"]{1,20})[‘’'\"]", "", cleaned)
+        cleaned = cleaned.replace("‘", "").replace("’", "").replace('"', "")
+        cleaned = re.sub(r"\s+", " ", cleaned).strip(" ，。！？；、")
+        return cleaned
 
     def _sync_storyboards_with_assets(self, storyboards: list[dict], image_assets: list[dict]):
         synced = []
@@ -417,9 +482,25 @@ class ExplainerGenerator:
             return [raw]
         return parts[:2] if len(parts) > 2 and len(raw) < 28 else parts
 
+    def _compress_scene_narration(self, text: str, index: int, total: int, title: str):
+        raw = re.sub(r"\s+", " ", str(text or "")).strip()
+        if not raw:
+            return self._first_hook_narration(title) if index == 1 else f"{title[:10]}，先别再往心里压。"
+        max_len = 20 if index == 1 else 22
+        if len(raw) <= max_len:
+            return raw
+        clauses = [item.strip() for item in re.split(r"(?<=[，。！？!?；;])\s*", raw) if item.strip()]
+        compact = ""
+        for clause in clauses:
+            if len(compact + clause) > max_len and compact:
+                break
+            compact += clause
+        compact = compact or raw[:max_len]
+        return compact.rstrip("，。！？；;、,")
+
     def _duration_range_from_scene(self, scene: dict):
         duration = float(scene.get("duration") or 3.5)
-        if duration <= 2.5:
+        if duration <= 3.0:
             return "2-3"
         if duration <= 4.0:
             return "3-4"
@@ -460,6 +541,14 @@ class ExplainerGenerator:
         }
         return mapping.get(camera_motion.lower(), "push_in")
 
+    def _stable_camera_motion(self, scene: dict, index: int):
+        raw = str(scene.get("camera_motion") or scene.get("motion_preset") or "").strip().lower()
+        if raw == "slow_zoom_out":
+            return "slow_zoom_out"
+        if raw in {"pan_left", "pan_right", "parallax_light", "fade", ""}:
+            return "slow_zoom_in" if index % 2 else "slow_zoom_out"
+        return "slow_zoom_in"
+
     def _fallback_title(self, source_text: str):
         cleaned = re.sub(r"\s+", " ", str(source_text or "")).strip()
         if not cleaned:
@@ -472,7 +561,7 @@ class ExplainerGenerator:
         try:
             self.engine.material_library_enabled = False
             self.engine.material_library = []
-            return self.engine.generate_images(
+            assets, flags = self.engine.generate_images(
                 storyboards,
                 aspect_ratio,
                 project_id,
@@ -481,6 +570,36 @@ class ExplainerGenerator:
                 style_reference_image_path,
                 style_reference_notes,
             )
+            normalized_assets = []
+            ai_scene_count = 0
+            fallback_scene_count = 0
+            for asset in assets or []:
+                clone = dict(asset)
+                scene_image_path = clone.get("scene_image_path")
+                scene_image_url = clone.get("scene_image_url")
+                scene_image_source = clone.get("scene_image_source")
+                if scene_image_path:
+                    clone["image_path"] = scene_image_path
+                if scene_image_url:
+                    clone["image_url"] = scene_image_url
+                if scene_image_source:
+                    clone["image_source"] = scene_image_source
+                if clone.get("scene_image_model_used"):
+                    clone["model_used"] = clone.get("scene_image_model_used")
+                if clone.get("image_source") == "model":
+                    ai_scene_count += 1
+                else:
+                    fallback_scene_count += 1
+                normalized_assets.append(clone)
+            normalized_flags = {
+                **(flags or {}),
+                "image_provider_status": "scene_images" if ai_scene_count else "scene_fallback",
+                "dynamic_video_mode": "per_scene_ai_image_motion",
+                "background_mode": "per_scene_images",
+                "scene_ai_image_count": ai_scene_count,
+                "scene_fallback_count": fallback_scene_count,
+            }
+            return normalized_assets, normalized_flags
         finally:
             self.engine.material_library_enabled = original_enabled
             self.engine.material_library = original_library
@@ -527,9 +646,18 @@ class ExplainerGenerator:
 
     def _first_hook_phrase(self, topic: str):
         clean = str(topic or "").replace("为什么", "").replace("？", "").replace("?", "").strip()
+        if "懂事" in clean and "委屈" in clean:
+            return "懂事，怎么成了你的软肋？"
         if clean:
-            return f"越{clean[:10]} 越容易委屈自己"
+            return f"{clean[:10]}，为什么总先伤你自己？"
         return "你越懂事 越容易委屈自己"
+
+    def _first_hook_narration(self, topic: str):
+        clean = str(topic or "").strip()
+        if "懂事" in clean and "委屈" in clean:
+            return "越懂事的人，越习惯先委屈自己。最难受时，你还先体谅别人。"
+        hook_phrase = self._first_hook_phrase(topic)
+        return f"{hook_phrase}。你总把自己放到最后。"
 
     def _payoff_phrase(self, topic: str):
         clean = str(topic or "").strip()
