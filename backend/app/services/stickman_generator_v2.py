@@ -839,6 +839,7 @@ class StickmanGenerator:
         style_reference_image_path: str | None = None,
         style_reference_notes: str | None = None,
         opening_template_key: str | None = None,
+        generation_flags: Optional[dict] = None,
     ):
         self._require_config()
         storyboard_count = max(2, min(int(storyboard_count or 3), 20))
@@ -867,6 +868,8 @@ class StickmanGenerator:
                 background_image_path=background_image_path,
                 style_reference_image_path=style_reference_image_path,
                 style_reference_notes=style_reference_notes,
+                topic=topic,
+                generation_flags=generation_flags,
             )
             if voice_source in {"upload", "record"} and voice_file_path:
                 audio_track = str(Path(temp_dir) / "user_voice.mp3")
@@ -901,6 +904,7 @@ class StickmanGenerator:
             timeline = self._ensure_timeline_covers_audio(timeline, total_audio_duration)
             self._attach_scene_timing_metadata(scenes, timeline, audio_segments)
             self._attach_section_timing_metadata(scenes)
+            self._attach_viral_package_metadata(scenes, generation_flags)
 
             report(68, "时间轴计算完成")
 
@@ -942,6 +946,7 @@ class StickmanGenerator:
         tts_provider: str | None = None,
         tts_voice: str | None = None,
         tts_rate: str | None = None,
+        generation_flags: Optional[dict] = None,
     ):
         def report(progress: int, message: str):
             if progress_callback:
@@ -998,6 +1003,8 @@ class StickmanGenerator:
             timeline = self._ensure_timeline_covers_audio(timeline, total_audio_duration)
             self._attach_scene_timing_metadata(storyboards, timeline, audio_segments)
             self._attach_section_timing_metadata(storyboards)
+            generation_flags = self._resolve_viral_generation_flags(topic, generation_flags)
+            self._attach_viral_package_metadata(storyboards, generation_flags)
 
             report(58, "时间轴计算完成")
             clip_paths = []
@@ -1019,7 +1026,7 @@ class StickmanGenerator:
                 "script": "\n".join(scene.get("narration", "") for scene in storyboards),
                 "storyboards": storyboards,
                 "image_assets": image_assets,
-                "generation_flags": {"composed_from_assets": True},
+                "generation_flags": {**generation_flags, "composed_from_assets": True},
                 "duration": sum(item["video_duration"] for item in timeline),
                 "video_path": final_path,
             }
@@ -1058,12 +1065,14 @@ class StickmanGenerator:
         script_data["script"] = "\n".join(scene.get("scene_narration") or scene.get("narration") or "" for scene in script_data["storyboards"])
         return script_data
 
-    def generate_images(self, storyboards: list[dict], aspect_ratio: str, project_id: Optional[int] = None, progress_callback=None, background_image_path: Optional[str] = None, style_reference_image_path: Optional[str] = None, style_reference_notes: Optional[str] = None):
+    def generate_images(self, storyboards: list[dict], aspect_ratio: str, project_id: Optional[int] = None, progress_callback=None, background_image_path: Optional[str] = None, style_reference_image_path: Optional[str] = None, style_reference_notes: Optional[str] = None, topic: Optional[str] = None, generation_flags: Optional[dict] = None):
         assets = []
         image_output_dir = self._get_image_output_dir(project_id)
         image_output_dir.mkdir(parents=True, exist_ok=True)
         fixed_background_path = image_output_dir / f"fixed_background_{uuid.uuid4().hex[:8]}.png"
         self._create_fixed_reference_background(str(fixed_background_path), aspect_ratio, storyboards[0] if storyboards else None, background_image_path)
+        resolved_topic = str(topic or (storyboards[0].get("visual_focus") if storyboards else "") or "火柴人视频").strip()
+        generation_flags = self._resolve_viral_generation_flags(resolved_topic, generation_flags)
         flags = {
             "image_fallback_used": False,
             "fallback_count": 0,
@@ -1074,6 +1083,8 @@ class StickmanGenerator:
             "background_source": str(Path(background_image_path) if background_image_path else self.direct_psychology_background),
             "fixed_background_path": str(fixed_background_path),
         }
+        flags.update(generation_flags)
+        flags.update(self._generate_viral_package_assets(resolved_topic, image_output_dir, aspect_ratio, storyboards, generation_flags, progress_callback))
 
         material_assets, material_flags = self._build_material_assets(storyboards, image_output_dir, aspect_ratio)
         flags.update(material_flags)
@@ -1123,6 +1134,212 @@ class StickmanGenerator:
             if progress_callback:
                 progress_callback(20 + int(index / len(storyboards) * 25), f"场景图生成中 ({index}/{len(storyboards)})")
         return assets, flags
+
+    def _resolve_viral_generation_flags(self, topic: str, generation_flags: Optional[dict] = None):
+        raw = dict(generation_flags or {})
+        opening_template = str(raw.get("opening_template_key") or "hook_question")
+        title_mode = str(raw.get("viral_title_mode") or "hook_title")
+        hook_template = str(raw.get("viral_hook_template_key") or ("big_number_flash" if opening_template == "big_number" else "shock_reveal"))
+        outro_template = str(raw.get("viral_outro_template_key") or "quote_soft_cta")
+        visual_style = str(raw.get("viral_visual_style") or "cinematic_clean")
+        cta_mode = str(raw.get("viral_cta_mode") or "light_follow")
+        title_text = str(raw.get("viral_title_text") or self._viral_title_text(topic, title_mode, opening_template)).strip()
+        outro_text = str(raw.get("viral_outro_text") or self._viral_outro_text(topic, cta_mode)).strip()
+        return {
+            **raw,
+            "viral_package_enabled": bool(raw.get("viral_package_enabled", True)),
+            "viral_hook_template_key": hook_template,
+            "viral_outro_template_key": outro_template,
+            "viral_title_mode": title_mode,
+            "viral_visual_style": visual_style,
+            "viral_cta_mode": cta_mode,
+            "viral_title_text": title_text,
+            "viral_outro_text": outro_text,
+        }
+
+    def _viral_title_text(self, topic: str, title_mode: str, opening_template_key: str):
+        clean_topic = str(topic or "火柴人视频").strip() or "火柴人视频"
+        if title_mode == "raw_topic":
+            return clean_topic
+        if opening_template_key == "big_number":
+            return f"3秒看懂{clean_topic}"
+        if any(token in clean_topic for token in ["为什么", "为何", "怎么", "如何"]):
+            return clean_topic
+        return f"你真的懂{clean_topic}吗？"
+
+    def _viral_outro_text(self, topic: str, cta_mode: str):
+        clean_topic = str(topic or "这个主题").strip() or "这个主题"
+        if cta_mode == "series_tease":
+            return f"看懂{clean_topic}，下一步你会更知道该怎么做。"
+        if cta_mode == "comment_prompt":
+            return f"如果你也被{clean_topic}困住过，评论区聊聊。"
+        return f"看懂{clean_topic}，才有机会真正改变自己。"
+
+    def _hook_visual_prompt(self, topic: str, title_text: str, template_key: str, visual_style: str):
+        mood = "high emotional contrast, social-media viral hook, cinematic opening frame"
+        if template_key == "big_number_flash":
+            hook_shape = "strong visual hierarchy, dramatic number-card composition, explosive contrast"
+        elif template_key == "contrast_split":
+            hook_shape = "before-after split composition, emotional contrast, left-right tension"
+        else:
+            hook_shape = "subject close-up, tension in composition, strong depth, suspenseful reveal"
+        style_hint = {
+            "cinematic_clean": "clean cinematic composition, premium lighting, crisp edges",
+            "neon_punch": "neon accents, punchy highlights, fast short-video energy",
+            "healing_film": "soft cinematic bloom, emotional but premium, warm controlled palette",
+        }.get(visual_style, "clean cinematic composition, premium lighting")
+        return (
+            f"Short-video opening key art about {topic}. Main hook title concept: {title_text}. "
+            f"{mood}. {hook_shape}. {style_hint}. "
+            "Reserve a clear title-safe area in the upper-middle part of the frame, but do not render any text. "
+            "No subtitles, no logos, no watermarks, no UI, no speech bubbles. "
+            "Single striking visual moment suitable for a Douyin/TikTok viral intro frame. 16:9, high contrast, premium, clean, readable composition."
+        )
+
+    def _outro_visual_prompt(self, topic: str, outro_text: str, template_key: str, visual_style: str):
+        ending_shape = "calm emotional release, visual closure, one strong final composition"
+        if template_key == "reverse_summary":
+            ending_shape = "from tension to relief, emotional resolution, stable final frame"
+        style_hint = {
+            "cinematic_clean": "clean cinematic composition, restrained premium ending",
+            "neon_punch": "controlled highlight accents with a softer ending tone",
+            "healing_film": "warm soft closing mood, emotional but not melodramatic",
+        }.get(visual_style, "clean cinematic ending")
+        return (
+            f"Short-video ending key art about {topic}. Final takeaway concept: {outro_text}. "
+            f"{ending_shape}. {style_hint}. "
+            "Reserve a clean central-lower safe area for a final quote overlay, but do not render any text. "
+            "No subtitles, no logos, no watermarks, no UI. Visually satisfying final frame for a viral short-video outro. 16:9."
+        )
+
+    def _wrap_text_for_font(self, draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont, max_width: int):
+        chars = list(str(text or "").strip()) or [" "]
+        lines = []
+        current = ""
+        for char in chars:
+            probe = current + char
+            bbox = draw.textbbox((0, 0), probe, font=font)
+            width = bbox[2] - bbox[0]
+            if current and width > max_width:
+                lines.append(current)
+                current = char
+            else:
+                current = probe
+        if current:
+            lines.append(current)
+        return lines[:3]
+
+    def _create_viral_title_asset(self, save_path: str, title_text: str, kicker: str, style_key: str, accent_color: tuple[int, int, int], subtitle: str | None = None):
+        canvas = Image.new("RGBA", (1920, 1080), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(canvas)
+        title_font = self._load_font(108)
+        subtitle_font = self._load_font(42)
+        kicker_font = self._load_font(34)
+        shadow = (0, 0, 0, 180)
+        panel_fill = (255, 255, 255, 70)
+        kicker_text = str(kicker or "爆款开头").strip()
+        title = str(title_text or "主题标题").strip() or "主题标题"
+        lines = self._wrap_text_for_font(draw, title, title_font, 1320)
+        subtitle_text = str(subtitle or "").strip()
+        top = 210 if style_key != "outro" else 530
+        panel_width = 1450
+        panel_left = (1920 - panel_width) // 2
+        panel_height = 310 if subtitle_text else 250
+        panel_top = top - 40
+        draw.rounded_rectangle((panel_left, panel_top, panel_left + panel_width, panel_top + panel_height), radius=42, fill=panel_fill, outline=(*accent_color, 220), width=4)
+        kicker_bbox = draw.textbbox((0, 0), kicker_text, font=kicker_font)
+        kicker_w = kicker_bbox[2] - kicker_bbox[0]
+        kicker_h = kicker_bbox[3] - kicker_bbox[1]
+        kicker_left = panel_left + 48
+        kicker_top = panel_top - 26
+        draw.rounded_rectangle((kicker_left, kicker_top, kicker_left + kicker_w + 42, kicker_top + kicker_h + 18), radius=24, fill=(*accent_color, 245))
+        draw.text((kicker_left + 21, kicker_top + 7), kicker_text, fill=(255, 255, 255, 255), font=kicker_font)
+        y = top
+        for line in lines:
+            bbox = draw.textbbox((0, 0), line, font=title_font)
+            width = bbox[2] - bbox[0]
+            x = (1920 - width) / 2
+            for dx, dy in [(-3, 0), (3, 0), (0, -3), (0, 3), (2, 2)]:
+                draw.text((x + dx, y + dy), line, fill=shadow, font=title_font)
+            draw.text((x, y), line, fill=(255, 255, 255, 255), font=title_font, stroke_width=2, stroke_fill=(*accent_color, 255))
+            y += 122
+        if subtitle_text:
+            sub_lines = self._wrap_text_for_font(draw, subtitle_text, subtitle_font, 1200)
+            for sub_line in sub_lines[:2]:
+                bbox = draw.textbbox((0, 0), sub_line, font=subtitle_font)
+                width = bbox[2] - bbox[0]
+                x = (1920 - width) / 2
+                draw.text((x, y + 12), sub_line, fill=(242, 242, 242, 240), font=subtitle_font)
+                y += 54
+        canvas.save(save_path, format="PNG")
+
+    def _generate_viral_package_assets(self, topic: str, image_output_dir: Path, aspect_ratio: str, storyboards: list[dict], generation_flags: dict, progress_callback=None):
+        if not generation_flags.get("viral_package_enabled", True):
+            return generation_flags
+        hook_template = str(generation_flags.get("viral_hook_template_key") or "shock_reveal")
+        outro_template = str(generation_flags.get("viral_outro_template_key") or "quote_soft_cta")
+        visual_style = str(generation_flags.get("viral_visual_style") or "cinematic_clean")
+        title_text = str(generation_flags.get("viral_title_text") or topic)
+        outro_text = str(generation_flags.get("viral_outro_text") or self._viral_outro_text(topic, str(generation_flags.get("viral_cta_mode") or "light_follow")))
+        hook_image_path = image_output_dir / f"hook_package_{uuid.uuid4().hex[:8]}.png"
+        hook_title_path = image_output_dir / f"hook_title_{uuid.uuid4().hex[:8]}.png"
+        outro_image_path = image_output_dir / f"outro_package_{uuid.uuid4().hex[:8]}.png"
+        outro_title_path = image_output_dir / f"outro_title_{uuid.uuid4().hex[:8]}.png"
+        hook_scene = dict(storyboards[0] if storyboards else {})
+        hook_scene["scene_title"] = title_text
+        hook_scene["visual_focus"] = topic
+        hook_result = self._generate_image(self._hook_visual_prompt(topic, title_text, hook_template, visual_style), str(hook_image_path), hook_scene, aspect_ratio)
+        self._create_viral_title_asset(str(hook_title_path), title_text, "爆款开头", "hook", (59, 130, 246), subtitle="高能开场，快速切入核心观点")
+        outro_scene = dict(storyboards[-1] if storyboards else {})
+        outro_scene["scene_title"] = outro_text
+        outro_scene["visual_focus"] = topic
+        outro_result = self._generate_image(self._outro_visual_prompt(topic, outro_text, outro_template, visual_style), str(outro_image_path), outro_scene, aspect_ratio)
+        self._create_viral_title_asset(str(outro_title_path), outro_text, "结尾收束", "outro", (245, 158, 11), subtitle="让用户记住这句，再离开")
+        if progress_callback:
+            progress_callback(18, "爆款开头与结尾包装已生成")
+        return {
+            **generation_flags,
+            "viral_hook_package": {
+                "template_key": hook_template,
+                "title_text": title_text,
+                "subtitle_text": "高能开场，快速切入核心观点",
+                "image_path": str(hook_image_path),
+                "image_url": f"/api/stickman-images/{hook_image_path.name}",
+                "title_asset_path": str(hook_title_path),
+                "title_asset_url": f"/api/stickman-images/{hook_title_path.name}",
+                "transition_in": "flash_cut",
+                "transition_out": "smoothleft",
+                "image_source": hook_result.get("image_source"),
+                "image_model_used": hook_result.get("model_used"),
+                "error_summary": hook_result.get("error_summary"),
+            },
+            "viral_outro_package": {
+                "template_key": outro_template,
+                "title_text": outro_text,
+                "subtitle_text": "轻收束，不突然切断",
+                "image_path": str(outro_image_path),
+                "image_url": f"/api/stickman-images/{outro_image_path.name}",
+                "title_asset_path": str(outro_title_path),
+                "title_asset_url": f"/api/stickman-images/{outro_title_path.name}",
+                "transition_in": "fade",
+                "transition_out": "fadeblack",
+                "image_source": outro_result.get("image_source"),
+                "image_model_used": outro_result.get("model_used"),
+                "error_summary": outro_result.get("error_summary"),
+            },
+        }
+
+    def _attach_viral_package_metadata(self, storyboards: list[dict], generation_flags: Optional[dict]):
+        if not storyboards or not generation_flags or not generation_flags.get("viral_package_enabled", True):
+            return storyboards
+        hook_package = generation_flags.get("viral_hook_package") or {}
+        outro_package = generation_flags.get("viral_outro_package") or {}
+        if hook_package:
+            storyboards[0]["viral_hook_package"] = hook_package
+            storyboards[0]["transition_type"] = str(hook_package.get("transition_out") or storyboards[0].get("transition_type") or "smoothleft")
+        if outro_package:
+            storyboards[-1]["viral_outro_package"] = outro_package
+        return storyboards
 
     def regenerate_single_image(
         self,
@@ -2083,6 +2300,7 @@ class StickmanGenerator:
         subject_map = {str(item.get("key")): item for item in (scene.get("foreground_subjects") or []) if item.get("key")}
         palette = self._warm_palette_for_scene(scene)
         overlays = []
+        overlays.extend(self._build_viral_package_overlays(scene, duration))
         if scene.get("sections_meta"):
             panel_path = asset_dir / "bottom_panel.png"
             marker_path = asset_dir / "progress_marker.png"
@@ -2137,6 +2355,55 @@ class StickmanGenerator:
             })
         return overlays
 
+    def _build_viral_package_overlays(self, scene: dict, duration: float):
+        overlays = []
+        hook = scene.get("viral_hook_package") or {}
+        outro = scene.get("viral_outro_package") or {}
+        duration = max(float(duration or 0.0), 0.5)
+        if hook:
+            image_path = str(hook.get("image_path") or "")
+            title_path = str(hook.get("title_asset_path") or "")
+            if image_path and os.path.exists(image_path):
+                overlays.append({
+                    "path": image_path,
+                    "start": 0.0,
+                    "end": min(duration, 1.05),
+                    "animation": "fullscreen_hook",
+                    "fade_in": 0.0,
+                    "fade_out": 0.18,
+                })
+            if title_path and os.path.exists(title_path):
+                overlays.append({
+                    "path": title_path,
+                    "start": 0.18,
+                    "end": min(duration, max(1.8, duration * 0.72)),
+                    "animation": "center_bounce",
+                    "fade_in": 0.10,
+                    "fade_out": 0.18,
+                })
+        if outro:
+            image_path = str(outro.get("image_path") or "")
+            title_path = str(outro.get("title_asset_path") or "")
+            if image_path and os.path.exists(image_path):
+                overlays.append({
+                    "path": image_path,
+                    "start": max(0.0, duration - 1.15),
+                    "end": duration,
+                    "animation": "fullscreen_outro",
+                    "fade_in": 0.16,
+                    "fade_out": 0.0,
+                })
+            if title_path and os.path.exists(title_path):
+                overlays.append({
+                    "path": title_path,
+                    "start": max(0.0, duration - 1.0),
+                    "end": duration,
+                    "animation": "center_fade",
+                    "fade_in": 0.14,
+                    "fade_out": 0.0,
+                })
+        return overlays
+
     def _overlay_position_expr(self, overlay_path: str, overlay: dict):
         animation = str(overlay.get("animation") or "fade_in")
         start = float(overlay.get("start", 0.0))
@@ -2176,6 +2443,8 @@ class StickmanGenerator:
             return "0", "900-h"
         if animation == "global_progress_marker":
             return self._section_progress_position_expr(overlay, width), "1018"
+        if animation in {"fullscreen_hook", "fullscreen_outro"}:
+            return "0", "0"
         return str(fixed_x), str(fixed_y)
 
     def _resolve_image_size(self, aspect_ratio: str):
@@ -2769,11 +3038,31 @@ class StickmanGenerator:
         cmd = ["ffmpeg", "-y"]
         for clip_path in clip_paths:
             cmd.extend(["-i", clip_path])
+
+        filter_parts = []
+        previous_label = "[0:v]"
+        elapsed = float(timeline[0].get("video_duration") or 0.3)
+        current_label_name = "v0"
+        for index in range(1, len(clip_paths)):
+            current_duration = float(timeline[index - 1].get("video_duration") or 0.3)
+            next_duration = float(timeline[index].get("video_duration") or 0.3)
+            transition_duration = self._transition_duration_for_pair(current_duration, next_duration)
+            transition_scene = storyboards[index - 1] if index - 1 < len(storyboards) else {}
+            transition_type = self._transition_type_for_scene(transition_scene, index)
+            offset = max(elapsed - transition_duration, 0.0)
+            output_label = f"v{index}"
+            filter_parts.append(
+                f"{previous_label}[{index}:v]xfade=transition={transition_type}:duration={transition_duration:.2f}:offset={offset:.2f}[{output_label}]"
+            )
+            previous_label = f"[{output_label}]"
+            current_label_name = output_label
+            elapsed = offset + next_duration
+
         cmd.extend([
             "-filter_complex",
-            f"{''.join(f'[{index}:v]' for index in range(len(clip_paths)))}concat=n={len(clip_paths)}:v=1:a=0[vout]",
+            ";".join(filter_parts),
             "-map",
-            "[vout]",
+            f"[{current_label_name}]",
             "-c:v",
             "libx264",
             "-preset",

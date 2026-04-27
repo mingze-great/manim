@@ -209,11 +209,15 @@ def generate_stickman_script(
 ):
     project = _get_stickman_project(db, current_user, project_id)
     generator = _build_stickman_generator(project)
+    try:
+        generation_flags = json.loads(project.generation_flags or "{}")
+    except Exception:
+        generation_flags = {}
     project_final_script = str(project.final_script or "").strip()
     if project_final_script and hasattr(generator, "build_storyboards_from_script_text"):
         script_data = generator.build_storyboards_from_script_text(str(project.theme), project_final_script)
     else:
-        script_data = generator.generate_script_data(str(project.theme), int(project.storyboard_count or 3))
+        script_data = generator.generate_script_data(str(project.theme), int(project.storyboard_count or 3), opening_template_key=str(generation_flags.get("opening_template_key") or "hook_question"))
     project.final_script = script_data.get("script")
     project.storyboard_json = json.dumps(script_data.get("storyboards") or [], ensure_ascii=False)
     project.status = "draft"
@@ -260,13 +264,19 @@ def generate_stickman_images(
             raise HTTPException(status_code=403, detail=reason or '系统繁忙，请稍后再试')
     
     generator = _build_stickman_generator(project)
+    try:
+        generation_flags = json.loads(project.generation_flags or "{}")
+    except Exception:
+        generation_flags = {}
     assets, flags = generator.generate_images(
         storyboards,
         str(project.aspect_ratio or "16:9"),
         project_id,
+        topic=str(project.theme),
         background_image_path=str(project.background_image_path) if project.background_image_path else None,
         style_reference_image_path=str(project.style_reference_image_path) if project.style_reference_image_path else None,
         style_reference_notes=str(project.style_reference_notes) if project.style_reference_notes else None,
+        generation_flags=generation_flags,
     )
     flags["stickman_variant"] = str(getattr(project, 'stickman_variant', 'legacy') or 'legacy')
     flags["stickman_variant_label"] = _stickman_variant_label(project)

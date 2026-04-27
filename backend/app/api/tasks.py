@@ -729,6 +729,7 @@ async def generate_stickman_video_stream(
                 str(project_local.style_reference_image_path) if project_local.style_reference_image_path else None,
                 str(project_local.style_reference_notes) if project_local.style_reference_notes else None,
                 str(generation_flags.get("opening_template_key") or "hook_question"),
+                generation_flags,
             ))
 
             while True:
@@ -877,6 +878,10 @@ async def compose_stickman_video_stream(
                 )
 
             generator = _build_stickman_generator(project_local)
+            try:
+                generation_flags = json.loads(project_local.generation_flags or "{}")
+            except Exception:
+                generation_flags = {}
             generation_task = asyncio.create_task(asyncio.to_thread(
                 generator.compose_from_assets,
                 str(project_local.theme),
@@ -888,6 +893,7 @@ async def compose_stickman_video_stream(
                 str(project_local.tts_provider or "edge_tts"),
                 str(project_local.tts_voice or "zh-CN-XiaoxiaoNeural"),
                 str(project_local.tts_rate or "+0%"),
+                generation_flags,
             ))
 
             while True:
