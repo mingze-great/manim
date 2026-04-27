@@ -1,7 +1,35 @@
-import { Card, Descriptions, Tag, Row, Col, Divider } from 'antd'
+import { useEffect, useState } from 'react'
+import { Card, Descriptions, Tag, Row, Col, Divider, Button, Input, Space, message } from 'antd'
 import { SafetyOutlined, LockOutlined, GlobalOutlined, CheckCircleOutlined, DatabaseOutlined, ApiOutlined, CodeOutlined, SecurityScanOutlined } from '@ant-design/icons'
+import api from '@/services/api'
 
 export default function AdminSettings() {
+  const [explainerPromptTemplate, setExplainerPromptTemplate] = useState('')
+  const [savingPrompt, setSavingPrompt] = useState(false)
+
+  useEffect(() => {
+    const loadConfigs = async () => {
+      try {
+        const { data } = await api.get('/admin/system-config/explainer_scene_image_prompt_template')
+        setExplainerPromptTemplate(data.value || '')
+      } catch {
+      }
+    }
+    loadConfigs()
+  }, [])
+
+  const handleSavePromptTemplate = async () => {
+    setSavingPrompt(true)
+    try {
+      await api.post('/admin/system-config/explainer_scene_image_prompt_template', { value: explainerPromptTemplate })
+      message.success('讲解型视频出图 prompt 模板已保存')
+    } catch {
+      message.error('保存 prompt 模板失败')
+    } finally {
+      setSavingPrompt(false)
+    }
+  }
+
   return (
     <div>
       <div className="mb-6">
@@ -141,6 +169,33 @@ export default function AdminSettings() {
                 <Tag color="green" icon={<CheckCircleOutlined />}>已启用</Tag>
               </Descriptions.Item>
             </Descriptions>
+          </Card>
+        </Col>
+
+        <Col xs={24}>
+          <Card className="hover-lift" style={{ borderRadius: '16px' }}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center">
+                <CodeOutlined className="text-xl text-indigo-500" />
+              </div>
+              <div>
+                <div className="text-lg font-medium">讲解型视频图片 Prompt</div>
+                <div className="text-gray-400 text-sm">控制讲解型视频模块分镜图的模型出图提示词模板</div>
+              </div>
+            </div>
+            <Divider className="my-3" />
+            <Space direction="vertical" style={{ width: '100%' }} size="middle">
+              <div className="text-sm text-gray-500 leading-6">
+                可用变量：<code>{'{frame_instruction}'}</code>、<code>{'{style_key}'}</code>、<code>{'{beat}'}</code>、<code>{'{emotion}'}</code>、<code>{'{topic}'}</code>、<code>{'{focus}'}</code>、<code>{'{visual}'}</code>、<code>{'{total}'}</code>
+              </div>
+              <Input.TextArea
+                rows={12}
+                value={explainerPromptTemplate}
+                onChange={(e) => setExplainerPromptTemplate(e.target.value)}
+                placeholder="留空时使用系统默认 prompt。你也可以在这里写完整模板，例如：Create a Chinese explainer scene illustration... Style key: {style_key}. Visual description: {visual}."
+              />
+              <Button type="primary" onClick={handleSavePromptTemplate} loading={savingPrompt}>保存讲解型视频 Prompt 模板</Button>
+            </Space>
           </Card>
         </Col>
       </Row>

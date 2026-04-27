@@ -52,6 +52,29 @@ def _stickman_variant_label(project: Project | None = None):
     return '增强讲解' if project and str(getattr(project, 'stickman_variant', 'legacy') or 'legacy') == 'v2' else '标准讲解'
 
 
+def _apply_opening_image_override(project: Project, assets: list[dict], flags: dict):
+    try:
+        preview_asset = json.loads(project.preview_image_asset_json or "null")
+    except Exception:
+        preview_asset = None
+    if not isinstance(preview_asset, dict) or not assets:
+        return assets, flags
+    opening_scene_path = preview_asset.get("scene_image_path") or preview_asset.get("image_path")
+    opening_scene_url = preview_asset.get("scene_image_url") or preview_asset.get("image_url")
+    if not opening_scene_path or not opening_scene_url:
+        return assets, flags
+    first = dict(assets[0])
+    first["scene_image_path"] = opening_scene_path
+    first["scene_image_url"] = opening_scene_url
+    first["scene_image_source"] = preview_asset.get("scene_image_source") or "uploaded_opening_image"
+    first["scene_image_model_used"] = preview_asset.get("scene_image_model_used")
+    first["error_summary"] = preview_asset.get("error_summary") or "已使用你指定的开头图作为第一幕。"
+    updated_assets = list(assets)
+    updated_assets[0] = first
+    updated_flags = {**flags, "opening_image_locked": True}
+    return updated_assets, updated_flags
+
+
 def _build_explainer_generator():
     return ExplainerGenerator()
 
@@ -302,6 +325,7 @@ def generate_stickman_images(
         style_reference_notes=str(project.style_reference_notes) if project.style_reference_notes else None,
         generation_flags=generation_flags,
     )
+    assets, flags = _apply_opening_image_override(project, assets, flags)
     flags["stickman_variant"] = str(getattr(project, 'stickman_variant', 'legacy') or 'legacy')
     flags["stickman_variant_label"] = _stickman_variant_label(project)
     project.image_assets_json = json.dumps(assets, ensure_ascii=False)
@@ -349,6 +373,41 @@ def generate_stickman_preview_image(
         asset["stickman_variant"] = str(getattr(project, 'stickman_variant', 'legacy') or 'legacy')
     project.preview_image_asset_json = json.dumps(asset, ensure_ascii=False)
     project.preview_regen_count = preview_count + 1
+    db.commit()
+    db.refresh(project)
+    return project
+
+
+@router.post("/{project_id}/stickman/opening-image", response_model=ProjectResponse)
+async def upload_stickman_opening_image(
+    project_id: int,
+    file: UploadFile = File(...),
+    current_user: Annotated[User, Depends(get_current_user)] = None,
+    db: Annotated[Session, Depends(get_db)] = None,
+):
+    project = _get_stickman_project(db, current_user, project_id)
+    suffix = Path(file.filename or "opening.png").suffix.lower()
+    if suffix not in {".png", ".jpg", ".jpeg", ".webp"}:
+        raise HTTPException(status_code=400, detail="仅支持 png/jpg/jpeg/webp 图片")
+    base_dir = Path(__file__).resolve().parents[2] / "uploads" / "stickman_images" / "opening_images"
+    base_dir.mkdir(parents=True, exist_ok=True)
+    image_path = base_dir / f"project_{project_id}_{uuid.uuid4().hex}{suffix}"
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="图片文件为空")
+    with open(image_path, "wb") as buffer:
+        buffer.write(content)
+    project.preview_image_asset_json = json.dumps({
+        "scene_id": 1,
+        "scene_image_path": str(image_path),
+        "scene_image_url": f"/api/stickman-images/{image_path.name}",
+        "scene_image_source": "uploaded_opening_image",
+        "image_path": str(image_path),
+        "image_url": f"/api/stickman-images/{image_path.name}",
+        "used_fallback": False,
+        "error_summary": "已上传开头图，生成时会直接作为第一幕使用。",
+    }, ensure_ascii=False)
+    project.preview_regen_count = 0
     db.commit()
     db.refresh(project)
     return project

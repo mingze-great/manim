@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Alert, Button, Card, Input, InputNumber, Select, message } from 'antd'
+import { Alert, Button, Card, Input, InputNumber, Select, Space, Steps, Tag, message } from 'antd'
 import { ArrowLeftOutlined, NotificationOutlined, RocketOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
@@ -89,23 +89,46 @@ export default function ExplainerCreator() {
           />
 
           <Card className="stickman-panel" bordered={false}>
-            <div className="stickman-form-grid">
-              <div className="stickman-main-stack">
-                <label className="stickman-label">主题或原始文案</label>
-                <TextArea
-                  value={sourceText}
-                  onChange={(e) => setSourceText(e.target.value)}
-                  rows={12}
-                  placeholder={`输入一个主题，或直接粘贴一段原始文案，例如：
+            <div className="workflow-shell">
+              <div className="workflow-main">
+                <Card size="small" title="原始文案输入">
+                  <Space direction="vertical" style={{ width: '100%' }} size="middle">
+                    <label className="stickman-label">主题或原始文案</label>
+                    <TextArea
+                      value={sourceText}
+                      onChange={(e) => setSourceText(e.target.value)}
+                      rows={14}
+                      placeholder={`输入一个主题，或直接粘贴一段原始文案，例如：
 • 为什么越懂事的人，越容易委屈自己
 • 你以为自己在休息，其实是在慢性消耗
 • 如果一个人突然不联系你了，真相可能只有这3种`}
-                />
+                    />
+                    <Alert type="info" message="推荐做法" description="尽量直接粘贴完整文案。系统会按文案节奏自动拆成 3-10 幕，并根据内容估算整体时长。" />
+                  </Space>
+                </Card>
+
+                <Card size="small" title="流程说明">
+                  <Steps
+                    direction="vertical"
+                    size="small"
+                    current={4}
+                    items={[
+                      { title: '先粘贴文案', description: '先把内容说清楚，不必一开始就压得太短。' },
+                      { title: '生成开头与分镜', description: '先看前 3 秒是否抓人，再继续。' },
+                      { title: '生成图片', description: '确认风格、文案和每幕画面一致。' },
+                      { title: '合成成片', description: '最后检查旁白、字幕和画面节奏。' },
+                    ]}
+                  />
+                </Card>
               </div>
 
-              <div className="stickman-side-stack stickman-side-sticky">
+              <div className="workflow-side">
                 <div className="stickman-side-card space-y-4">
                   <div className="stickman-side-section-title">核心设置</div>
+                  <div className="stickman-side-meta">
+                    <div className="aspect-pill">16:9 横屏</div>
+                    <Tag color="blue">讲解型视频</Tag>
+                  </div>
                   <div className="stickman-compact-grid">
                     <div className="stickman-side-section">
                       <label className="stickman-label">开头钩子</label>
@@ -161,6 +184,7 @@ export default function ExplainerCreator() {
                     <p>前 3 秒会优先生成冲突、反问、数字或反常识钩子。</p>
                     <p>字幕优先走短句策略，减少“说明书腔”，分镜支持 3-10 幕。</p>
                     <p>视频时长会根据文案和配音自动控制，不需要提前手填秒数。</p>
+                    <p>分镜图走模型生成；管理员可在后台系统设置里替换生成 prompt 模板。</p>
                   </div>
 
                   <Button type="primary" icon={<RocketOutlined />} onClick={handleCreate} loading={loading} size="large" block className="btn-gradient">

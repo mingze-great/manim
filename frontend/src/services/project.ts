@@ -129,6 +129,13 @@ export const projectApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
   },
+  uploadStickmanOpeningImage: (id: number, file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post<Project>(`/projects/${id}/stickman/opening-image`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
   generateStickmanPreviewImage: (id: number, regenerate: boolean = false) => api.post<Project>(`/projects/${id}/stickman/preview-image`, { regenerate }),
   getStickmanVoiceLibrary: () => api.get<{ voices: StickmanVoiceOption[] }>(`/projects/stickman/voice-library`),
   previewStickmanVoice: (data: { text?: string; tts_provider?: string; tts_voice?: string; tts_rate?: string }) =>

@@ -6,6 +6,8 @@ from typing import Optional
 
 from PIL import Image, ImageDraw
 
+from app.database import SessionLocal
+from app.models.system_config import SystemConfig
 from app.services.stickman_generator_v2 import StickmanGenerator as StickmanGeneratorV2
 
 
@@ -453,7 +455,7 @@ class ExplainerGenerator:
         beat = str(scene.get("beat_type") or "expand")
         focus = self._sanitize_image_instruction_text(str(scene.get("punch_phrase") or scene.get("subtitle_text") or topic))
         frame_instruction = "16:9 horizontal full-bleed composition" if aspect_ratio == "16:9" else "9:16 vertical full-bleed composition"
-        return (
+        default_prompt = (
             "Create a Chinese explainer scene illustration. "
             f"Use a {frame_instruction}. The image must fully cover the frame edge to edge with no black borders, no empty padding, no transparent background, and no letterboxing. "
             "Deep blue background, white line-art characters and props, selective bright accent colors, strong focal hierarchy, editorial composition, readable subtitle-safe bottom area. "
@@ -463,6 +465,31 @@ class ExplainerGenerator:
             f"Style key: {style_key}. Beat type: {beat}. Emotion: {emotion}. Topic: {topic}. Core focus: {focus}. Visual description: {visual}. "
             "The frame should feel emotionally charged, concise, modern, cover the whole screen, and remain visually clean and consistent with the other scenes."
         )
+        template = self._get_scene_prompt_template()
+        if not template:
+            return default_prompt
+        try:
+            return str(template).format(
+                frame_instruction=frame_instruction,
+                style_key=style_key,
+                beat=beat,
+                emotion=emotion,
+                topic=topic,
+                focus=focus,
+                visual=visual,
+                total=total,
+            )
+        except Exception:
+            return template if "{" not in str(template) else default_prompt
+
+    def _get_scene_prompt_template(self):
+        db = SessionLocal()
+        try:
+            config = db.query(SystemConfig).filter(SystemConfig.key == "explainer_scene_image_prompt_template").first()
+            value = str(config.value or "").strip() if config else ""
+            return value or None
+        finally:
+            db.close()
 
     def _sanitize_image_instruction_text(self, text: str):
         cleaned = str(text or "")

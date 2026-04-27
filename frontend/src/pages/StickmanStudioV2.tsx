@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Alert, Button, Card, Col, Input, Row, Select, Space, Spin, Steps, Switch, Tabs, Tag, Upload, message } from 'antd'
-import { EditOutlined, PlayCircleOutlined, PictureOutlined, RocketOutlined, UploadOutlined } from '@ant-design/icons'
+import { Alert, Button, Card, Input, Select, Space, Spin, Steps, Tag, Upload, message } from 'antd'
+import { PlayCircleOutlined, PictureOutlined, RocketOutlined, UploadOutlined } from '@ant-design/icons'
 import { Project, projectApi, StickmanVoiceOption } from '@/services/project'
 import { getAppBase, resolveBackendUrl } from '@/services/api'
 import { useAuthStore } from '@/stores/authStore'
@@ -52,14 +52,6 @@ function resolvePreferredPreviewUrl(asset?: ImageAsset | null) {
   return resolveAssetUrl(asset?.scene_image_url || asset?.image_url || '')
 }
 
-function resolveStyleReferenceUrl(path?: string | null) {
-  if (!path) return ''
-  const fileName = path.split(/[/\\]/).pop()
-  if (!fileName) return ''
-  const base = getAppBase()
-  return `${base}/api/style-reference-images/${fileName}`
-}
-
 function resolveBackgroundUrl(path?: string | null) {
   if (!path) return ''
   const fileName = path.split(/[/\\]/).pop()
@@ -77,7 +69,6 @@ export default function StickmanStudio() {
   const [storyboards, setStoryboards] = useState<Storyboard[]>([])
   const [imageAssets, setImageAssets] = useState<ImageAsset[]>([])
   const [finalScript, setFinalScript] = useState('')
-  const [styleNotes, setStyleNotes] = useState('')
   const [voiceLibrary, setVoiceLibrary] = useState<StickmanVoiceOption[]>([])
   const [previewAudioUrl, setPreviewAudioUrl] = useState<string | null>(null)
   const [previewImageAsset, setPreviewImageAsset] = useState<ImageAsset | null>(null)
@@ -93,24 +84,11 @@ export default function StickmanStudio() {
   }, [project?.generation_flags])
 
   const openingTemplate = String(parsedFlags.opening_template_key || 'hook_question')
-  const viralPackageEnabled = parsedFlags.viral_package_enabled !== false
-  const viralHookTemplate = String(parsedFlags.viral_hook_template_key || (openingTemplate === 'big_number' ? 'big_number_flash' : 'shock_reveal'))
-  const viralOutroTemplate = String(parsedFlags.viral_outro_template_key || 'quote_soft_cta')
-  const viralTitleMode = String(parsedFlags.viral_title_mode || 'hook_title')
-  const viralVisualStyle = String(parsedFlags.viral_visual_style || 'cinematic_clean')
-  const viralCtaMode = String(parsedFlags.viral_cta_mode || 'light_follow')
-  const viralTitleText = String(parsedFlags.viral_title_text || '')
-  const viralOutroText = String(parsedFlags.viral_outro_text || '')
-  const hookPackage = parsedFlags.viral_hook_package || null
-  const outroPackage = parsedFlags.viral_outro_package || null
-
-  const resolvePackageUrl = (path?: string | null) => resolveBackendUrl(path)
 
   const loadProject = async () => {
     const { data } = await projectApi.get(Number(id))
     setProject(data)
     setFinalScript(data.final_script || '')
-    setStyleNotes(data.style_reference_notes || '')
     try {
       setStoryboards(JSON.parse(data.storyboard_json || '[]'))
     } catch {
@@ -134,7 +112,6 @@ export default function StickmanStudio() {
         setVoiceLibrary(voiceRes.data.voices || [])
         setProject(data)
         setFinalScript(data.final_script || '')
-        setStyleNotes(data.style_reference_notes || '')
         try {
           setStoryboards(JSON.parse(data.storyboard_json || '[]'))
         } catch {
@@ -158,10 +135,6 @@ export default function StickmanStudio() {
     }
     run()
   }, [id])
-
-  const updateScene = (index: number, patch: Partial<Storyboard>) => {
-    setStoryboards((prev) => prev.map((item, i) => (i === index ? { ...item, ...patch } : item)))
-  }
 
   const handleGenerateScript = async () => {
     setSaving(true)
@@ -219,15 +192,15 @@ export default function StickmanStudio() {
     }
   }
 
-  const handleUploadStyleReference = async (file: File) => {
+  const handleUploadOpeningImage = async (file: File) => {
     setSaving(true)
     try {
-      const { data } = await projectApi.uploadStyleReference(Number(id), file, styleNotes)
+      const { data } = await projectApi.uploadStickmanOpeningImage(Number(id), file)
       setProject(data)
-      setStyleNotes(data.style_reference_notes || '')
-      message.success('风格参考图已上传')
+      setPreviewImageAsset(data.preview_image_asset_json ? JSON.parse(data.preview_image_asset_json) : null)
+      message.success('开头图已上传，后续会直接作为第一幕使用')
     } catch (error: any) {
-      message.error(error.response?.data?.detail || '上传风格参考图失败')
+      message.error(error.response?.data?.detail || '上传开头图失败')
     } finally {
       setSaving(false)
     }
@@ -246,42 +219,6 @@ export default function StickmanStudio() {
       setSaving(false)
     }
     return false
-  }
-
-  const handleRegenerateImage = async (index: number) => {
-    setSaving(true)
-    try {
-      const { data } = await projectApi.regenerateStickmanImage(Number(id), index, { prompt: imageAssets[index]?.prompt })
-      setProject(data)
-      setImageAssets(JSON.parse(data.image_assets_json || '[]'))
-      message.success(`第 ${index + 1} 张图片已重生成`)
-    } catch (error: any) {
-      message.error(error.response?.data?.detail || '重生成图片失败')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleRegenerateFallbackImages = async () => {
-    const fallbackIndexes = imageAssets.map((asset, index) => asset?.used_fallback ? index : -1).filter((index) => index >= 0)
-    if (!fallbackIndexes.length) {
-      message.info('当前没有降级图需要重生')
-      return
-    }
-
-    setSaving(true)
-    try {
-      for (const index of fallbackIndexes) {
-        const { data } = await projectApi.regenerateStickmanImage(Number(id), index, { prompt: imageAssets[index]?.prompt })
-        setProject(data)
-        setImageAssets(JSON.parse(data.image_assets_json || '[]'))
-      }
-      message.success(`已重生 ${fallbackIndexes.length} 张降级图`)
-    } catch (error: any) {
-      message.error(error.response?.data?.detail || '批量重生降级图失败')
-    } finally {
-      setSaving(false)
-    }
   }
 
   const handleComposeVideo = async () => {
@@ -388,342 +325,116 @@ export default function StickmanStudio() {
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
-      <Alert type="success" message="增强讲解工作台" description="当前项目正在使用增强讲解模块，固定背景、素材库匹配和分步合成能力只在这个模块内演进。" />
+      <Alert type="success" message="增强讲解工作台" description="按 4 步完成：生成文案、确定开头图、上传背景图、开始生成成片。" />
       <Card
         title={project?.title || '视频讲解分步创作'}
         extra={<Space><Tag color="gold">分步创作</Tag><Button onClick={() => navigate(`/project/${id}/task`)}>去任务页</Button></Space>}
       >
         <div className="workflow-shell">
           <div className="workflow-main">
-          <Space direction="vertical" size="large" style={{ width: '100%' }}>
-          <Alert type="info" message="你现在处于分步创作模式" description="可以先生成脚本与分镜，再逐段调整，最后生成图片和视频。" />
-          <Steps current={imageAssets.length ? 2 : storyboards.length ? 1 : 0} items={[{ title: '生成脚本' }, { title: '确认分镜' }, { title: '生成图片' }, { title: '去任务页合成' }]} />
-          </Space>
+            <Alert type="info" message="只需要按这 4 步操作" description="1. 生成或粘贴文案  2. 确定开头图  3. 上传背景图  4. 开始生成视频。页面不会再展示素材库、视频原理或其他复杂控制。" />
+            <Steps current={4} items={[{ title: '文案' }, { title: '开头图' }, { title: '背景图' }, { title: '开始生成' }]} />
 
-          <Tabs
-            items={[
-              {
-                key: 'script',
-                label: '脚本与分镜',
-                children: (
-                  <Space direction="vertical" size="large" style={{ width: '100%' }}>
-                    <Space>
-                      <Button type="primary" icon={<RocketOutlined />} onClick={handleGenerateScript} loading={saving}>生成脚本和分镜</Button>
-                      <Button onClick={handleSaveStoryboards} loading={saving}>保存修改</Button>
-                    </Space>
-                    <Input.TextArea rows={5} value={finalScript} onChange={(e) => setFinalScript(e.target.value)} placeholder="完整脚本文案" />
-                    <Row gutter={[16, 16]}>
-                      {storyboards.map((scene, index) => (
-                        <Col span={12} key={scene.scene_id || index}>
-                          <Card title={scene.scene_title || `第${index + 1}幕`} extra={<Tag>{scene.camera_type || '镜头未设定'}</Tag>}>
-                            <Space direction="vertical" style={{ width: '100%' }}>
-                              <Input value={scene.scene_title} onChange={(e) => updateScene(index, { scene_title: e.target.value })} placeholder="分镜标题" />
-                               <Input.TextArea rows={3} value={scene.scene_description} onChange={(e) => updateScene(index, { scene_description: e.target.value })} placeholder="场景描述" />
-                               <Input.TextArea rows={3} value={scene.narration} onChange={(e) => updateScene(index, { narration: e.target.value })} placeholder="旁白" />
-                               <Input.TextArea rows={2} value={scene.background_prompt || ''} onChange={(e) => updateScene(index, { background_prompt: e.target.value })} placeholder="背景提示词 / 固定背景上的场景变化说明" />
-                               <Input value={scene.camera_type} onChange={(e) => updateScene(index, { camera_type: e.target.value })} placeholder="镜头类型" />
-                               <Input value={scene.character_action} onChange={(e) => updateScene(index, { character_action: e.target.value })} placeholder="人物动作" />
-                               <Input value={scene.layout_hint} onChange={(e) => updateScene(index, { layout_hint: e.target.value })} placeholder="构图提示" />
-                               {index === 0 && (
-                                 <Select
-                                   value={scene.opening_template_key || openingTemplate}
-                                   onChange={(value) => updateScene(index, { opening_template_key: value })}
-                                   options={[
-                                     { label: '反问钩子型', value: 'hook_question' },
-                                     { label: '爆点数字型', value: 'big_number' },
-                                   ]}
-                                   style={{ width: '100%' }}
-                                 />
-                               )}
-                               <Select
-                                 value={scene.duration_range || '2-4'}
-                                onChange={(value) => updateScene(index, { duration_range: value })}
-                                options={[
-                                  { label: '1-2 秒', value: '1-2' },
-                                  { label: '2-4 秒', value: '2-4' },
-                                  { label: '4-6 秒', value: '4-6' },
-                                 ]}
-                                 style={{ width: '100%' }}
-                               />
-                               {!!scene.foreground_events?.length && <Alert type="success" message={`前景事件 ${scene.foreground_events.length} 个`} description={scene.foreground_events.map((item) => `${item.target}:${item.animation}@${item.start}s`).join(' / ')} />}
-                               {!!scene.subtitle_lines?.length && <Alert type="info" message={`字幕分段 ${scene.subtitle_lines.length} 条`} description={scene.subtitle_lines.map((item) => item.text).join(' / ')} />}
-                             </Space>
-                           </Card>
-                         </Col>
-                      ))}
-                    </Row>
-                  </Space>
-                ),
-              },
-              {
-                key: 'images',
-                label: '图片控制',
-                children: (
-                  <Space direction="vertical" size="large" style={{ width: '100%' }}>
-                    <Space>
-                      <Button type="primary" icon={<PictureOutlined />} onClick={handleGenerateImages} loading={saving} disabled={!storyboards.length || !previewImageAsset}>生成全部图片</Button>
-                      <Button onClick={handleRegenerateFallbackImages} loading={saving} disabled={!imageAssets.some((asset) => asset?.used_fallback) || !useAuthStore.getState().user?.is_admin}>只重生降级图</Button>
-                      <Tag color={parsedFlags.image_fallback_used ? 'orange' : 'green'}>
-                        {parsedFlags.image_fallback_used ? '包含降级图片' : '真实图片生成'}
-                      </Tag>
-                      {!!parsedFlags.fallback_count && <Tag color="red">{parsedFlags.fallback_count} 张为降级图</Tag>}
-                    </Space>
-                    {parsedFlags.image_fallback_used && (
-                      <Alert
-                        type="warning"
-                        message="当前开发环境图片模型并非全部真实生成"
-                        description="检测到至少一张图走了降级占位图。通常是图片模型额度、权限或可用性问题导致。你仍可编辑 prompt 后单张重生。"
-                      />
-                    )}
-                    <Row gutter={[16, 16]}>
-                      {storyboards.map((scene, index) => {
-                        const asset = imageAssets[index]
-                        return (
-                          <Col span={12} key={`image-${scene.scene_id || index}`}>
-                             <Card title={scene.scene_title || `第${index + 1}幕`} extra={<Button size="small" icon={<EditOutlined />} onClick={() => handleRegenerateImage(index)} loading={saving} disabled={!useAuthStore.getState().user?.is_admin}>重生图片</Button>}>
-                              <Space direction="vertical" style={{ width: '100%' }}>
-                                {resolvePreferredPreviewUrl(asset) ? <img src={resolvePreferredPreviewUrl(asset)} alt={scene.scene_title || `scene-${index + 1}`} style={{ width: '100%', borderRadius: 12, border: '1px solid #eee' }} /> : <div className="workflow-preview-box">未生成图片</div>}
-                                 <Space wrap>
-                                   <Tag color={asset?.used_fallback ? 'orange' : 'green'}>{asset?.used_fallback ? '降级占位图' : '真实模型图'}</Tag>
-                                   {asset?.model_used && <Tag>{asset.model_used}</Tag>}
-                                   {asset?.model_requested && asset.model_requested !== asset.model_used && <Tag color="purple">请求模型 {asset.model_requested}</Tag>}
-                                   {asset?.image_source && <Tag>{asset.image_source === 'model' ? '模型生成' : '占位降级'}</Tag>}
-                                   {asset?.scene_image_source && <Tag color="blue">{asset.scene_image_source === 'material_library' ? '素材库匹配' : asset.scene_image_source === 'model' ? '场景插画模型' : '本地插画降级'}</Tag>}
-                                 </Space>
-                                <Input.TextArea rows={4} value={asset?.prompt || ''} onChange={(e) => setImageAssets((prev) => prev.map((item, i) => i === index ? { ...item, prompt: e.target.value } : item))} placeholder="图片提示词" />
-                                {asset?.error_summary && <Alert type={asset?.used_fallback ? 'warning' : 'info'} message={asset.error_summary} />}
-                              </Space>
-                            </Card>
-                          </Col>
-                        )
-                      })}
-                    </Row>
-                  </Space>
-                ),
-              },
-            ]}
-          />
+            <Card size="small" title="第一步：生成文案或直接使用你的文案">
+              <Space direction="vertical" style={{ width: '100%' }} size="middle">
+                <Alert type="info" message="你可以完全使用自己的文案" description="如果你已经有完整文案，直接在下方编辑框里修改并保存即可；如果还没有，再点“生成脚本和分镜”。" />
+                <Space>
+                  <Button type="primary" icon={<RocketOutlined />} onClick={handleGenerateScript} loading={saving}>生成文案</Button>
+                  <Button onClick={handleSaveStoryboards} loading={saving}>保存当前文案</Button>
+                </Space>
+                <Input.TextArea rows={8} value={finalScript} onChange={(e) => setFinalScript(e.target.value)} placeholder="完整脚本文案。你可以完全替换成自己的文案。" />
+              </Space>
+            </Card>
+
+            <Card size="small" title="第二步：确定开头图">
+              <Space direction="vertical" style={{ width: '100%' }} size="middle">
+                <Alert type="info" message="开头图的作用" description="视频开头就是先展示这 1 张图。你可以让系统生成，也可以自己上传一张图，后续会直接作为第一幕使用。" />
+                {resolvePreferredPreviewUrl(previewImageAsset) ? (
+                  <img src={resolvePreferredPreviewUrl(previewImageAsset)} alt="opening-preview" style={{ width: '100%', borderRadius: 12, border: '1px solid #eee', maxWidth: 560 }} />
+                ) : (
+                  <div className="workflow-preview-box">还没有开头图</div>
+                )}
+                <Space wrap>
+                  <Button type="primary" onClick={() => handleGeneratePreviewImage(false)} loading={saving} disabled={!storyboards.length}>生成开头图</Button>
+                  <Button onClick={() => handleGeneratePreviewImage(true)} loading={saving} disabled={!previewImageAsset}>重生开头图</Button>
+                  <Upload beforeUpload={handleUploadOpeningImage} showUploadList={false} accept=".png,.jpg,.jpeg,.webp">
+                    <Button icon={<UploadOutlined />} loading={saving}>上传开头图</Button>
+                  </Upload>
+                </Space>
+                {previewImageAsset?.error_summary && <Alert type="success" message={previewImageAsset.error_summary} />}
+              </Space>
+            </Card>
+
+            <Card size="small" title="第三步：上传背景图">
+              <Space direction="vertical" style={{ width: '100%' }} size="middle">
+                <Alert type="info" message="背景图的作用" description="背景图会贯穿整条视频，后续每一幕都会在这张底图上叠加讲解元素。开头图决定第一眼，背景图决定整条视频的整体氛围。" />
+                {project?.background_image_path ? (
+                  <img src={resolveBackgroundUrl(project.background_image_path)} alt="background-reference" style={{ width: '100%', borderRadius: 12, border: '1px solid #eee', maxWidth: 560 }} />
+                ) : (
+                  <div className="workflow-preview-box">当前还没有自定义背景图，将使用默认背景</div>
+                )}
+                <Upload beforeUpload={handleUploadBackgroundImage} showUploadList={false} accept=".png,.jpg,.jpeg,.webp">
+                  <Button icon={<UploadOutlined />} loading={saving}>上传背景图</Button>
+                </Upload>
+              </Space>
+            </Card>
+
+            <Card size="small" title="第四步：开始生成">
+              <Space direction="vertical" style={{ width: '100%' }} size="middle">
+                <Alert type="success" message="默认风格说明" description="如果你不上传开头图，系统会按默认风格 prompt 生成；这个默认风格可以由管理员在后台系统设置中统一调整。" />
+                <Space wrap>
+                  <Button type="primary" icon={<PictureOutlined />} onClick={handleGenerateImages} loading={saving} disabled={!storyboards.length}>开始生成图片</Button>
+                  <Button type="primary" onClick={handleComposeVideo} loading={saving} disabled={!imageAssets.length}>开始生成视频</Button>
+                </Space>
+                {!!composeProgress && <div>当前进度：{composeProgress}% {composeMessage}</div>}
+                {project?.video_url && <video src={resolveBackendUrl(project.video_url)} controls className="workflow-video-preview" />}
+              </Space>
+            </Card>
           </div>
 
           <div className="workflow-side">
-          <Card size="small" title="参考风格图">
+          <Card size="small" title="当前设置摘要">
             <Space direction="vertical" style={{ width: '100%' }}>
-              <Alert type="info" message="优化版默认使用固定心理类背景和素材库匹配；上传参考图后，会在保留稳定构图的前提下吸收画风特征。" />
-              <Alert type="success" message="当前优化版视觉方向" description="固定背景底板 + 前景素材递进 + 字幕安全区固定，优先保证短视频节奏和可读性。" />
-              {project?.style_reference_image_path && (
-                <img src={resolveStyleReferenceUrl(project.style_reference_image_path)} alt="style-reference" style={{ width: 240, borderRadius: 12, border: '1px solid #eee' }} />
-              )}
-              {project?.style_reference_profile && (
-                <Alert type="success" message="已提取到参考图风格特征" description={project.style_reference_profile} />
-              )}
-              <Input.TextArea rows={3} value={styleNotes} onChange={(e) => setStyleNotes(e.target.value)} placeholder="可选：补充说明想保留的风格特点，例如极简线稿、暖色调、手绘感" />
-              <Upload beforeUpload={handleUploadStyleReference} showUploadList={false} accept=".png,.jpg,.jpeg,.webp">
-                <Button icon={<UploadOutlined />} loading={saving}>上传风格参考图</Button>
-              </Upload>
-            </Space>
-          </Card>
-          <Card size="small" title="固定背景图">
-            <Space direction="vertical" style={{ width: '100%' }}>
-              <Alert type="info" message="优化版默认使用固定背景。上传后可替换当前项目整条视频的底图。" />
-              {project?.background_image_path && (
-                <img src={resolveBackgroundUrl(project.background_image_path)} alt="background-reference" style={{ width: 280, borderRadius: 12, border: '1px solid #eee' }} />
-              )}
-              <Upload beforeUpload={handleUploadBackgroundImage} showUploadList={false} accept=".png,.jpg,.jpeg,.webp">
-                <Button icon={<UploadOutlined />} loading={saving}>上传背景图</Button>
-              </Upload>
-            </Space>
-          </Card>
-          <Card size="small" title="优化版开头模板">
-            <Space direction="vertical" style={{ width: '100%' }}>
-              <Alert type="info" message="优化版会把开头模板直接写入首幕节奏，用于强化短视频前 3 秒的抓人效果。" />
+              <Tag color="gold">增强讲解</Tag>
+              <Tag color="blue">16:9 横屏</Tag>
+              <Alert type="info" message="开头钩子" description="这里只保留对用户真正有帮助的开头钩子选择。" />
               <Select
                 value={openingTemplate}
-                onChange={(value) => handleUpdateGenerationFlags({ opening_template_key: value, workflow_variant: 'v2_optimized' })}
+                onChange={(value) => handleUpdateGenerationFlags({ opening_template_key: value })}
                 options={[
                   { label: '反问钩子型', value: 'hook_question' },
                   { label: '爆点数字型', value: 'big_number' },
                 ]}
                 style={{ width: 260 }}
               />
+              <Alert type="success" message="图片说明" description="开头图决定用户第一眼看到什么；背景图决定整条视频的整体氛围。默认风格由后台 prompt 控制，不需要用户理解底层原理。" />
             </Space>
           </Card>
-          <Card size="small" title="爆款开头/结尾包装">
-            <Space direction="vertical" style={{ width: '100%' }} size="middle">
-              <Alert type="success" message="该包装层只增强当前讲解项目首尾，不改你当前正文分镜主流程。" />
-              <div className="flex items-center gap-3">
-                <span className="text-sm text-gray-600">启用爆款包装</span>
-                <Switch checked={viralPackageEnabled} onChange={(checked) => handleUpdateGenerationFlags({ viral_package_enabled: checked, workflow_variant: 'v2_viral_package' })} />
-                <Tag color={viralPackageEnabled ? 'green' : 'default'}>{viralPackageEnabled ? '已启用' : '未启用'}</Tag>
-              </div>
-              <Row gutter={16}>
-                <Col span={12}>
-                  <div className="mb-2 text-sm text-gray-500">开头模板</div>
-                  <Select
-                    value={viralHookTemplate}
-                    onChange={(value) => handleUpdateGenerationFlags({ viral_hook_template_key: value })}
-                    style={{ width: '100%' }}
-                    disabled={!viralPackageEnabled}
-                    options={[
-                      { label: '冲击揭示型', value: 'shock_reveal' },
-                      { label: '爆点数字型', value: 'big_number_flash' },
-                      { label: '反差对比型', value: 'contrast_split' },
-                    ]}
-                  />
-                </Col>
-                <Col span={12}>
-                  <div className="mb-2 text-sm text-gray-500">结尾模板</div>
-                  <Select
-                    value={viralOutroTemplate}
-                    onChange={(value) => handleUpdateGenerationFlags({ viral_outro_template_key: value })}
-                    style={{ width: '100%' }}
-                    disabled={!viralPackageEnabled}
-                    options={[
-                      { label: '金句轻 CTA', value: 'quote_soft_cta' },
-                      { label: '情绪反转总结', value: 'reverse_summary' },
-                      { label: '连载留钩型', value: 'series_tease' },
-                    ]}
-                  />
-                </Col>
-              </Row>
-              <Row gutter={16}>
-                <Col span={8}>
-                  <div className="mb-2 text-sm text-gray-500">标题模式</div>
-                  <Select
-                    value={viralTitleMode}
-                    onChange={(value) => handleUpdateGenerationFlags({ viral_title_mode: value })}
-                    style={{ width: '100%' }}
-                    disabled={!viralPackageEnabled}
-                    options={[
-                      { label: '爆款标题', value: 'hook_title' },
-                      { label: '原主题', value: 'raw_topic' },
-                    ]}
-                  />
-                </Col>
-                <Col span={8}>
-                  <div className="mb-2 text-sm text-gray-500">视觉风格</div>
-                  <Select
-                    value={viralVisualStyle}
-                    onChange={(value) => handleUpdateGenerationFlags({ viral_visual_style: value })}
-                    style={{ width: '100%' }}
-                    disabled={!viralPackageEnabled}
-                    options={[
-                      { label: '电影感克制', value: 'cinematic_clean' },
-                      { label: '霓虹冲击', value: 'neon_punch' },
-                      { label: '治愈电影感', value: 'healing_film' },
-                    ]}
-                  />
-                </Col>
-                <Col span={8}>
-                  <div className="mb-2 text-sm text-gray-500">结尾 CTA</div>
-                  <Select
-                    value={viralCtaMode}
-                    onChange={(value) => handleUpdateGenerationFlags({ viral_cta_mode: value })}
-                    style={{ width: '100%' }}
-                    disabled={!viralPackageEnabled}
-                    options={[
-                      { label: '轻关注引导', value: 'light_follow' },
-                      { label: '评论互动', value: 'comment_prompt' },
-                      { label: '连载留钩', value: 'series_tease' },
-                    ]}
-                  />
-                </Col>
-              </Row>
-              <Row gutter={16}>
-                <Col span={12}>
-                  <div className="mb-2 text-sm text-gray-500">当前开头标题</div>
-                  <Input value={viralTitleText || '生成图片后自动产出'} readOnly disabled={!viralPackageEnabled} />
-                </Col>
-                <Col span={12}>
-                  <div className="mb-2 text-sm text-gray-500">当前结尾金句</div>
-                  <Input value={viralOutroText || '生成图片后自动产出'} readOnly disabled={!viralPackageEnabled} />
-                </Col>
-              </Row>
-              <Row gutter={16}>
-                <Col span={12}>
-                  <Card size="small" title="开头包装预览">
-                    <Space direction="vertical" style={{ width: '100%' }}>
-                      {hookPackage?.image_url ? (
-                        <img src={resolvePackageUrl(hookPackage.image_url)} alt="hook-package" style={{ width: '100%', borderRadius: 12, border: '1px solid #eee' }} />
-                      ) : (
-                        <div className="workflow-preview-box" style={{ minHeight: 180 }}>生成图片后显示开头包装预览</div>
-                      )}
-                      <div className="text-xs text-gray-500">{hookPackage?.title_text || viralTitleText || '尚未生成开头标题'}</div>
-                      {hookPackage?.error_summary && <Alert type="warning" message={hookPackage.error_summary} />}
-                    </Space>
-                  </Card>
-                </Col>
-                <Col span={12}>
-                  <Card size="small" title="结尾包装预览">
-                    <Space direction="vertical" style={{ width: '100%' }}>
-                      {outroPackage?.image_url ? (
-                        <img src={resolvePackageUrl(outroPackage.image_url)} alt="outro-package" style={{ width: '100%', borderRadius: 12, border: '1px solid #eee' }} />
-                      ) : (
-                        <div className="workflow-preview-box" style={{ minHeight: 180 }}>生成图片后显示结尾包装预览</div>
-                      )}
-                      <div className="text-xs text-gray-500">{outroPackage?.title_text || viralOutroText || '尚未生成结尾金句'}</div>
-                      {outroPackage?.error_summary && <Alert type="warning" message={outroPackage.error_summary} />}
-                    </Space>
-                  </Card>
-                </Col>
-              </Row>
-              {useAuthStore.getState().user?.is_admin && (hookPackage || outroPackage) && (
-                <Alert
-                  type="info"
-                  message="管理员调试信息"
-                  description={`hook=${hookPackage?.template_key || '-'} | outro=${outroPackage?.template_key || '-'} | visual=${viralVisualStyle}`}
-                />
-              )}
-            </Space>
-          </Card>
-          <Card size="small" title="风格预览图">
+          <Card size="small" title="配音设置">
             <Space direction="vertical" style={{ width: '100%' }}>
-              <Alert type="info" message="先生成 1 张预览图确认风格，满意后再生成全部分镜图，能明显降低图片成本。" />
-              {resolvePreferredPreviewUrl(previewImageAsset) ? (
-                <img src={resolvePreferredPreviewUrl(previewImageAsset)} alt="preview-scene" style={{ width: '100%', borderRadius: 12, border: '1px solid #eee' }} />
-              ) : (
-                <div className="workflow-preview-box">尚未生成风格预览图</div>
-              )}
-              <Space wrap>
-                <Button type="primary" onClick={() => handleGeneratePreviewImage(false)} loading={saving} disabled={!storyboards.length}>生成预览图</Button>
-                <Button onClick={() => handleGeneratePreviewImage(true)} loading={saving} disabled={!previewImageAsset || (!useAuthStore.getState().user?.is_admin && (project?.preview_regen_count || 0) >= 1)}>重生预览图</Button>
-                {!!previewImageAsset && <Tag color="green">预览图已生成</Tag>}
-                {!useAuthStore.getState().user?.is_admin && <Tag color="orange">普通用户仅可重生 1 次预览图</Tag>}
+              <Select
+                value={project?.tts_voice}
+                onChange={(value) => {
+                  const selectedVoice = voiceLibrary.find((item) => item.value === value)
+                  handleUpdateVoiceConfig({ tts_voice: value, tts_provider: selectedVoice?.provider || 'dashscope_cosyvoice' })
+                }}
+                options={voiceLibrary}
+                style={{ width: '100%' }}
+              />
+              <Select
+                value={project?.tts_rate || '+0%'}
+                onChange={(value) => handleUpdateVoiceConfig({ tts_rate: value })}
+                options={[
+                  { label: '偏慢', value: '-15%' },
+                  { label: '标准', value: '+0%' },
+                  { label: '偏快', value: '+15%' },
+                ]}
+                style={{ width: '100%' }}
+              />
+              <Space>
+                <Button icon={<PlayCircleOutlined />} onClick={handlePreviewVoice}>试听当前音色</Button>
+                {previewAudioUrl && <audio controls src={previewAudioUrl} />}
               </Space>
-              {previewImageAsset?.error_summary && <Alert type="warning" message={previewImageAsset.error_summary} />}
-            </Space>
-          </Card>
-          <Card size="small" title="视频合成">
-            <Space direction="vertical" style={{ width: '100%' }}>
-              <Card size="small" title="配音设置">
-                <Space direction="vertical" style={{ width: '100%' }}>
-                  <Select
-                    value={project?.tts_voice}
-                    onChange={(value) => {
-                      const selectedVoice = voiceLibrary.find((item) => item.value === value)
-                      handleUpdateVoiceConfig({ tts_voice: value, tts_provider: selectedVoice?.provider || 'dashscope_cosyvoice' })
-                    }}
-                    options={voiceLibrary}
-                    style={{ width: '100%' }}
-                  />
-                  <Select
-                    value={project?.tts_rate || '+0%'}
-                    onChange={(value) => handleUpdateVoiceConfig({ tts_rate: value })}
-                    options={[
-                      { label: '偏慢', value: '-15%' },
-                      { label: '标准', value: '+0%' },
-                      { label: '偏快', value: '+15%' },
-                    ]}
-                    style={{ width: '100%' }}
-                  />
-                  <Space>
-                    <Button icon={<PlayCircleOutlined />} onClick={handlePreviewVoice}>试听当前音色</Button>
-                    {previewAudioUrl && <audio controls src={previewAudioUrl} />}
-                  </Space>
-                </Space>
-              </Card>
-              <Button type="primary" onClick={handleComposeVideo} loading={saving} disabled={!imageAssets.length}>直接合成视频</Button>
-              {!!composeProgress && <div>合成进度：{composeProgress}% {composeMessage}</div>}
-              {project?.video_url && <video src={resolveBackendUrl(project.video_url)} controls className="workflow-video-preview" />}
             </Space>
           </Card>
           </div>
