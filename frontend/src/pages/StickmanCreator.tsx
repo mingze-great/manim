@@ -5,6 +5,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
 import { projectApi, StickmanVoiceOption } from '@/services/project'
 import TopicCategorySelector from './Creator/components/TopicCategorySelector'
+import TopicExamples from './Creator/components/TopicExamples'
 import AudioRecorder from './Creator/components/AudioRecorder'
 import { VideoTopicCategory } from '@/services/videoTopic'
 import './Creator/Creator.css'
@@ -241,16 +242,32 @@ export default function StickmanCreator() {
             description={stickmanVariant === 'v2' ? '不会再跳回通用首页配置，后续所有设置都在这个专属页面完成。' : '标准讲解也使用独立创建页，避免与其他模块配置混在一起。'}
           />
 
-          <Card>
-            <div className="mb-6">
-              <div className="flex items-center gap-2 mb-4">
-                <BulbOutlined className="text-xl text-indigo-500" />
-                <span className="text-lg font-medium">选择热门方向</span>
-                {selectedStickmanCategory && <Tag color="blue">已选：{selectedStickmanCategory.name}</Tag>}
-              </div>
-              <TopicCategorySelector onSelect={handleStickmanCategorySelect} />
+          {selectedStickmanCategory ? (
+            <div className="max-w-2xl mx-auto">
+              <Button onClick={() => setSelectedStickmanCategory(null)} className="mb-4">
+                返回选择方向
+              </Button>
+              <TopicExamples
+                category={selectedStickmanCategory}
+                onSelect={(topic) => {
+                  setStickmanTopic(topic)
+                  setSelectedStickmanCategory(null)
+                }}
+                titlePrefix="热门主题"
+              />
             </div>
-          </Card>
+          ) : (
+            <Card>
+              <div className="mb-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <BulbOutlined className="text-xl text-indigo-500" />
+                  <span className="text-lg font-medium">选择热门方向</span>
+                  {stickmanTopic.trim() && <Tag color="blue">当前主题已填充</Tag>}
+                </div>
+                <TopicCategorySelector onSelect={handleStickmanCategorySelect} />
+              </div>
+            </Card>
+          )}
 
           <Divider>或直接输入主题并配置参数</Divider>
 

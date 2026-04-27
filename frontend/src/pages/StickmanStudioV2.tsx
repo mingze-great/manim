@@ -332,7 +332,7 @@ export default function StickmanStudio() {
       >
         <div className="workflow-shell">
           <div className="workflow-main">
-            <Alert type="info" message="只需要按这 4 步操作" description="1. 生成或粘贴文案  2. 确定开头图  3. 上传背景图  4. 开始生成视频。页面不会再展示素材库、视频原理或其他复杂控制。" />
+            <Alert type="info" message="只需要按这 4 步操作" description="1. 生成或粘贴文案  2. 确定开头图  3. 上传背景图  4. 开始生成视频。" />
             <Steps current={4} items={[{ title: '文案' }, { title: '开头图' }, { title: '背景图' }, { title: '开始生成' }]} />
 
             <Card size="small" title="第一步：生成文案或直接使用你的文案">
@@ -381,7 +381,7 @@ export default function StickmanStudio() {
 
             <Card size="small" title="第四步：开始生成">
               <Space direction="vertical" style={{ width: '100%' }} size="middle">
-                <Alert type="success" message="默认风格说明" description="如果你不上传开头图，系统会按默认风格 prompt 生成；这个默认风格可以由管理员在后台系统设置中统一调整。" />
+                <Alert type="success" message="默认风格说明" description="如果你不上传开头图，系统会自动生成默认风格的开头图。" />
                 <Space wrap>
                   <Button type="primary" icon={<PictureOutlined />} onClick={handleGenerateImages} loading={saving} disabled={!storyboards.length}>开始生成图片</Button>
                   <Button type="primary" onClick={handleComposeVideo} loading={saving} disabled={!imageAssets.length}>开始生成视频</Button>
@@ -407,7 +407,7 @@ export default function StickmanStudio() {
                 ]}
                 style={{ width: 260 }}
               />
-              <Alert type="success" message="图片说明" description="开头图决定用户第一眼看到什么；背景图决定整条视频的整体氛围。默认风格由后台 prompt 控制，不需要用户理解底层原理。" />
+              <Alert type="success" message="图片说明" description="开头图决定用户第一眼看到什么；背景图决定整条视频的整体氛围。" />
             </Space>
           </Card>
           <Card size="small" title="配音设置">
