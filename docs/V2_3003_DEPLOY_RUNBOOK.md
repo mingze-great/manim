@@ -2,7 +2,7 @@
 
 ## Target
 
-- Branch: `feature/v2-ui-mobile-ux-recover-3003`
+- Branch: `feature/stickman-v2-viral-hook-optimization-acceptance`
 - Frontend: `3003`
 - Backend: `8003`
 - Deploy root: `/opt/manim-v2-3003-snapshot`
@@ -42,7 +42,7 @@ Following this runbook should reproduce the current `3003` behavior using:
 ## Deployment Steps
 
 ```bash
-git clone --branch feature/v2-ui-mobile-ux-recover-3003 --single-branch https://github.com/mingze-great/manim.git /opt/manim-v2-3003-snapshot
+git clone --branch feature/stickman-v2-viral-hook-optimization-acceptance --single-branch https://github.com/mingze-great/manim.git /opt/manim-v2-3003-snapshot
 cd /opt/manim-v2-3003-snapshot
 bash deploy/deploy-v2-3003.sh
 ```

@@ -47,7 +47,7 @@
 - 使用 `resolveBackendUrl('/api/tasks/available-models')`
 - 请求带 `Authorization`
 
-## 4. 旧版示例视频 / 火柴人视频预览失败
+## 4. 旧版示例视频 / 视频讲解预览失败
 
 现象：
 - 提示视频不存在或下载失败

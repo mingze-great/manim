@@ -141,9 +141,11 @@ class StickmanGenerator:
         configured = str(getattr(self.settings, "STICKMAN_V2_FONT_PATHS", "") or "").strip()
         candidates = [item.strip() for item in configured.split(",") if item.strip()]
         if os.name == "nt":
-            candidates.extend([r"C:\Windows\Fonts\msyh.ttc", r"C:\Windows\Fonts\simhei.ttf"])
+            candidates.extend([r"C:\Windows\Fonts\msyhbd.ttc", r"C:\Windows\Fonts\msyh.ttc", r"C:\Windows\Fonts\simhei.ttf"])
         else:
             candidates.extend([
+                "/usr/share/fonts/truetype/noto/NotoSansCJK-Bold.ttc",
+                "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
                 "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
                 "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
                 "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
@@ -619,7 +621,7 @@ class StickmanGenerator:
         return self.tts_voice_library
 
     def _strip_terminal_punctuation(self, text: str):
-        return re.sub(r"[，。,.!?！？；;：:]+$", "", str(text or "").strip())
+        return re.sub(r'[，。,.!?！？；;：:、…·~～"\'”’）)】〕》」』]+$', "", str(text or "").strip())
 
     def _sanitize_english_subtitle(self, text: str):
         cleaned = str(text or "").replace("|", " ").strip()
@@ -848,7 +850,7 @@ class StickmanGenerator:
             if progress_callback:
                 progress_callback(progress, message)
 
-        report(5, "开始生成火柴人视频")
+        report(5, "开始生成视频讲解")
         script_data = self.generate_script_data(topic, storyboard_count, opening_template_key=opening_template_key)
         report(20, "脚本生成完成")
 
@@ -923,7 +925,7 @@ class StickmanGenerator:
             report(90, "视频拼接完成")
 
             final_path = self._merge_video_and_audio(merged_clip, audio_track)
-            report(100, "火柴人视频生成完成")
+            report(100, "视频讲解生成完成")
 
             return {
                 "title": script_data.get("title") or topic,
@@ -1020,7 +1022,7 @@ class StickmanGenerator:
             report(88, "视频拼接完成")
 
             final_path = self._merge_video_and_audio(merged_clip, audio_track)
-            report(100, "火柴人视频合成完成")
+            report(100, "视频讲解合成完成")
             return {
                 "title": topic,
                 "script": "\n".join(scene.get("narration", "") for scene in storyboards),
@@ -1071,7 +1073,7 @@ class StickmanGenerator:
         image_output_dir.mkdir(parents=True, exist_ok=True)
         fixed_background_path = image_output_dir / f"fixed_background_{uuid.uuid4().hex[:8]}.png"
         self._create_fixed_reference_background(str(fixed_background_path), aspect_ratio, storyboards[0] if storyboards else None, background_image_path)
-        resolved_topic = str(topic or (storyboards[0].get("visual_focus") if storyboards else "") or "火柴人视频").strip()
+        resolved_topic = str(topic or (storyboards[0].get("visual_focus") if storyboards else "") or "视频讲解").strip()
         generation_flags = self._resolve_viral_generation_flags(resolved_topic, generation_flags)
         flags = {
             "image_fallback_used": False,
@@ -1159,7 +1161,7 @@ class StickmanGenerator:
         }
 
     def _viral_title_text(self, topic: str, title_mode: str, opening_template_key: str):
-        clean_topic = str(topic or "火柴人视频").strip() or "火柴人视频"
+        clean_topic = str(topic or "视频讲解").strip() or "视频讲解"
         if title_mode == "raw_topic":
             return clean_topic
         if opening_template_key == "big_number":
@@ -1961,6 +1963,65 @@ class StickmanGenerator:
             refined.extend(split_long_clause(part))
         return refined or [raw.strip()]
 
+    def _split_chinese_subtitle_lines(self, text: str):
+        cleaned = re.sub(r"\s+", "", str(text or "").strip())
+        if not cleaned:
+            return [" "]
+        if len(cleaned) <= 15:
+            return [self._strip_terminal_punctuation(cleaned) or cleaned]
+
+        midpoint = (len(cleaned) + 1) // 2
+        first = cleaned[:midpoint].strip()
+        second = cleaned[midpoint:].strip()
+        if second and re.match(r"^[，。！？；：、】【）》〕】」』,.!?;:]", second):
+            first += second[0]
+            second = second[1:].strip()
+        lines = [self._strip_terminal_punctuation(line) or line for line in [first, second] if line]
+        return lines or [self._strip_terminal_punctuation(cleaned) or cleaned]
+
+    def _render_centered_chinese_lines(self, draw: ImageDraw.ImageDraw, lines: list[str], font: ImageFont.ImageFont, canvas_width: int, start_y: int, line_height: int, fill, stroke_width: int = 0, stroke_fill=None):
+        y = start_y
+        for line in lines:
+            chars = list(str(line or "").strip()) or [" "]
+            cell_width = line_height
+            total_width = cell_width * len(chars)
+            start_x = (canvas_width - total_width) / 2
+            for index, char in enumerate(chars):
+                bbox = draw.textbbox((0, 0), char, font=font)
+                char_width = bbox[2] - bbox[0]
+                x = start_x + index * cell_width + (cell_width - char_width) / 2
+                draw.text((x, y), char, fill=fill, font=font, stroke_width=stroke_width, stroke_fill=stroke_fill)
+            y += line_height
+        return y
+
+    def _wrap_english_subtitle_lines(self, draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont, max_width: int, max_lines: int = 2):
+        cleaned = self._sanitize_english_subtitle(text)
+        if not cleaned:
+            return []
+        words = [word for word in cleaned.split(" ") if word]
+        if not words:
+            return []
+
+        lines = []
+        current = words[0]
+        for word in words[1:]:
+            candidate = f"{current} {word}"
+            bbox = draw.textbbox((0, 0), candidate, font=font)
+            if current and (bbox[2] - bbox[0]) > max_width:
+                lines.append(current)
+                current = word
+            else:
+                current = candidate
+        if current:
+            lines.append(current)
+
+        if len(lines) <= max_lines:
+            return lines
+
+        collapsed = lines[:max_lines - 1]
+        collapsed.append(" ".join(lines[max_lines - 1:]))
+        return collapsed
+
     def _hook_package_title_end(self, duration: float):
         duration = max(float(duration or 0.0), 0.5)
         return min(duration, max(1.35, duration * 0.58))
@@ -2188,19 +2249,16 @@ class StickmanGenerator:
         else:
             chinese = str(subtitle or "").strip() or " "
             english = self._sanitize_english_subtitle(self._translate_subtitle_to_english(chinese))
-        zh_lines = [chinese[i:i + 14] for i in range(0, len(chinese), 14)] or [chinese]
-        en_lines = [english[i:i + 28] for i in range(0, len(english), 28)] if english else []
         zh_font = self._load_font(56)
         en_font = self._load_font(32)
+        probe = Image.new("RGBA", (1680, 220), (0, 0, 0, 0))
+        probe_draw = ImageDraw.Draw(probe)
+        zh_lines = self._split_chinese_subtitle_lines(chinese)
+        en_lines = self._wrap_english_subtitle_lines(probe_draw, english, en_font, 1320) if english else []
         canvas_height = 24 + len(zh_lines) * 62 + (12 if en_lines else 0) + len(en_lines) * 40
         canvas = Image.new("RGBA", (1680, max(canvas_height, 132)), (0, 0, 0, 0))
         draw = ImageDraw.Draw(canvas)
-        y = 0
-        for line in zh_lines:
-            bbox = draw.textbbox((0, 0), line, font=zh_font)
-            text_width = bbox[2] - bbox[0]
-            draw.text(((1680 - text_width) / 2, y), line, fill=(0, 0, 0, 255), font=zh_font)
-            y += 62
+        y = self._render_centered_chinese_lines(draw, zh_lines, zh_font, 1680, 0, 62, (0, 0, 0, 255))
         if en_lines:
             y += 8
             for line in en_lines:
@@ -2267,7 +2325,7 @@ class StickmanGenerator:
             label = str(section.get("title") or "内容")[:12]
             bbox = draw.textbbox((0, 0), label, font=label_font)
             text_width = bbox[2] - bbox[0]
-            draw.text((center_x - text_width / 2, label_y), label, fill=(120, 120, 120, 145), font=label_font)
+            draw.text((center_x - text_width / 2, label_y), label, fill=(0, 0, 0, 255), font=label_font)
         canvas.save(save_path, format="PNG")
 
     def _section_progress_position_expr(self, overlay: dict, width: int):
@@ -2303,20 +2361,17 @@ class StickmanGenerator:
             chinese = str(subtitle or "").strip() or " "
             english = self._sanitize_english_subtitle(self._translate_subtitle_to_english(chinese))
 
-        zh_lines = [chinese[i:i + 14] for i in range(0, len(chinese), 14)] or [chinese]
-        en_lines = [english[i:i + 28] for i in range(0, len(english), 28)] if english else []
         zh_font = self._load_font(54)
         en_font = self._load_font(28)
+        probe = Image.new("RGBA", (1920, 240), (0, 0, 0, 0))
+        probe_draw = ImageDraw.Draw(probe)
+        zh_lines = self._split_chinese_subtitle_lines(chinese)
+        en_lines = self._wrap_english_subtitle_lines(probe_draw, english, en_font, 1500) if english else []
         canvas_height = 20 + len(zh_lines) * 58 + (10 if en_lines else 0) + len(en_lines) * 34 + 12
         canvas = Image.new("RGBA", (1920, max(148, canvas_height)), (0, 0, 0, 0))
         draw = ImageDraw.Draw(canvas)
 
-        y = 0
-        for line in zh_lines:
-            bbox = draw.textbbox((0, 0), line, font=zh_font)
-            text_width = bbox[2] - bbox[0]
-            draw.text(((1920 - text_width) / 2, y), line, fill=(22, 22, 22, 255), font=zh_font, stroke_width=2, stroke_fill=(255, 255, 255, 220))
-            y += 58
+        y = self._render_centered_chinese_lines(draw, zh_lines, zh_font, 1920, 0, 58, (22, 22, 22, 255), stroke_width=2, stroke_fill=(255, 255, 255, 220))
         if en_lines:
             y += 2
             for line in en_lines:

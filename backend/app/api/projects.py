@@ -36,7 +36,7 @@ from app.tasks.celery_tasks import generate_chat_celery
 MODULE_LABELS = {
     "manim": "思维可视化",
     "math": "数学可视化",
-    "stickman": "火柴人视频",
+    "stickman": "视频讲解",
 }
 
 
@@ -47,7 +47,7 @@ def _build_stickman_generator(project: Project | None = None):
 
 
 def _stickman_variant_label(project: Project | None = None):
-    return '优化版' if project and str(getattr(project, 'stickman_variant', 'legacy') or 'legacy') == 'v2' else '经典版'
+    return '增强讲解' if project and str(getattr(project, 'stickman_variant', 'legacy') or 'legacy') == 'v2' else '标准讲解'
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 limiter = Limiter(key_func=get_remote_address)
@@ -69,7 +69,7 @@ def preview_stickman_voice(
     current_user: Annotated[User, Depends(get_current_user)],
 ):
     generator = StickmanGeneratorLegacy()
-    sample_text = str(payload.get("text") or "你好，这是一段火柴人视频的配音试听。")
+    sample_text = str(payload.get("text") or "你好，这是一段视频讲解项目的配音试听。")
     provider = str(payload.get("tts_provider") or "dashscope_cosyvoice")
     voice = str(payload.get("tts_voice") or "longshuo_v3")
     rate = str(payload.get("tts_rate") or "+0%")

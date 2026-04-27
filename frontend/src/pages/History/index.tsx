@@ -337,7 +337,7 @@ export default function History() {
               })}
             </div>
           )},
-          { key: 'stickman', label: `火柴人视频 (${projects.filter(p => p.module_type === 'stickman').length})`, children: (
+          { key: 'stickman', label: `视频讲解 (${projects.filter(p => p.module_type === 'stickman').length})`, children: (
             <div className="projects-grid">
               {projects.filter(p => p.module_type === 'stickman').map((project) => {
                 const task = tasks[project.id]

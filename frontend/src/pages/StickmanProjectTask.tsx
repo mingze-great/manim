@@ -32,7 +32,7 @@ const stageRules = [
   { key: 'script', title: '脚本生成', match: ['脚本生成完成'] },
   { key: 'image', title: '图片生成', match: ['图像生成中'] },
   { key: 'audio', title: '配音处理', match: ['配音生成中', '已使用用户音频', '音轨合成完成'] },
-  { key: 'video', title: '视频合成', match: ['视频片段合成中', '视频拼接完成', '火柴人视频生成完成'] },
+  { key: 'video', title: '视频合成', match: ['视频片段合成中', '视频拼接完成', '视频讲解生成完成'] },
 ]
 
 export default function StickmanProjectTask() {
@@ -116,7 +116,7 @@ export default function StickmanProjectTask() {
       })
 
       if (!response.ok) {
-        throw new Error('启动火柴人视频任务失败')
+        throw new Error('启动视频讲解任务失败')
       }
 
       const reader = response.body?.getReader()
@@ -146,7 +146,7 @@ export default function StickmanProjectTask() {
           if (parsed.type === 'success') {
             setProgress(100)
             setMessageText(parsed.content || '生成完成')
-            message.success('火柴人视频生成完成')
+            message.success('视频讲解生成完成')
           }
           if (parsed.type === 'error') {
             throw new Error(parsed.content || '生成失败')
@@ -205,13 +205,13 @@ export default function StickmanProjectTask() {
   return (
     <div className="max-w-5xl mx-auto p-6">
       <Card
-        title={project?.title || '火柴人视频任务'}
+        title={project?.title || '视频讲解任务'}
         extra={<Space><Button onClick={() => navigate(`/project/${id}/stickman`)}>分步创作</Button><Button onClick={() => navigate('/creator')}>返回创作首页</Button></Space>}
       >
         <div className="space-y-6">
           <Alert
             type="info"
-            message="火柴人模块第一版"
+            message="标准讲解任务流"
             description="当前流程直接根据主题与分镜数生成脚本、图片、配音并合成视频，不进入聊天打磨。"
           />
 
@@ -243,7 +243,7 @@ export default function StickmanProjectTask() {
           })()}
 
             <Descriptions bordered column={1} size="small">
-              <Descriptions.Item label="生成模块">火柴人视频</Descriptions.Item>
+              <Descriptions.Item label="生成模块">视频讲解</Descriptions.Item>
               <Descriptions.Item label="视频主题">{project?.theme}</Descriptions.Item>
               <Descriptions.Item label="视频比例">{project?.aspect_ratio || '16:9'}</Descriptions.Item>
               <Descriptions.Item label="分镜数量">{project?.storyboard_count || 3}</Descriptions.Item>
@@ -293,7 +293,7 @@ export default function StickmanProjectTask() {
               className="btn-gradient-warm"
               size="large"
             >
-              {project?.video_url ? '重新生成火柴人视频' : '开始生成火柴人视频'}
+              {project?.video_url ? '重新生成讲解视频' : '开始生成讲解视频'}
             </Button>
 
             {project?.video_url && (

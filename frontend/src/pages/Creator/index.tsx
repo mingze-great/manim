@@ -140,7 +140,7 @@ export default function Creator() {
             内容创作助手
           </h1>
           <p className="hero-subtitle">
-            在统一入口选择动画视频、火柴人视频或公众号文章模块，再进入各自独立的创作流程
+            在统一入口选择动画视频、视频讲解或公众号文章模块，再进入各自独立的创作流程
           </p>
         </div>
       </div>
@@ -165,7 +165,7 @@ export default function Creator() {
               options={[
                 { label: '思维可视化', value: 'manim' },
                 { label: '数学可视化', value: 'math' },
-                { label: '火柴人视频', value: 'stickman' },
+                { label: '视频讲解', value: 'stickman' },
                 { label: '公众号文章', value: 'article' },
               ]}
             />
@@ -192,8 +192,8 @@ export default function Creator() {
               <div className="module-card-icon module-card-icon-orange">
                 <VideoCameraOutlined />
               </div>
-              <h3>火柴人视频</h3>
-              <p>先进入版本选择页，再进入经典版或优化版火柴人创作流程。</p>
+              <h3>视频讲解</h3>
+              <p>先进入版本选择页，再进入标准讲解或增强讲解创作流程。</p>
             </Card>
 
             <Card className={`module-card ${moduleType === 'article' ? 'active' : ''} ${!articleEnabled ? 'module-card-disabled' : ''}`} onClick={() => { setModuleType('article'); handleArticleModeEnter() }}>
@@ -317,19 +317,19 @@ export default function Creator() {
         ) : moduleType === 'stickman' ? (
           <div className="stickman-panel">
             <div className="stickman-panel-head">
-              <h2>火柴人视频模块</h2>
-              <p>火柴人已经迁移为独立创建流，先选择版本，再进入对应的专属配置页。</p>
+              <h2>视频讲解模块</h2>
+              <p>视频讲解已经迁移为独立创建流，先选择版本，再进入对应的专属配置页。</p>
             </div>
 
             <Alert
               type="info"
-              message="火柴人配置已独立"
-              description="为了避免选完版本后又回到首页配置，现在经典版和优化版都使用独立创建页。"
+              message="视频讲解配置已独立"
+              description="为了避免选完版本后又回到首页配置，现在标准讲解和增强讲解都使用独立创建页。"
             />
 
             <div className="mt-6 flex gap-3 flex-wrap">
               <Button type="primary" icon={<VideoCameraOutlined />} onClick={() => navigate('/creator/stickman')}>
-                去选择火柴人版本
+                去选择讲解版本
               </Button>
               <Button onClick={() => setModuleType('manim')}>返回思维可视化</Button>
             </div>

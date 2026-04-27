@@ -5,13 +5,13 @@ import { useNavigate } from 'react-router-dom'
 const variantCards = [
   {
     value: 'legacy',
-    title: '经典版火柴人',
-    description: '保持基线分支的原有火柴人创作流程，适合继续沿用已有制作习惯。',
+    title: '标准讲解',
+    description: '保留稳定直接的视频讲解流程，适合延续当前使用习惯。',
   },
   {
     value: 'v2',
-    title: '优化版火柴人',
-    description: '进入新版火柴人工作流，后续新增优化与能力都落在这个模块。',
+    title: '增强讲解',
+    description: '进入增强版视频讲解流程，后续新增优化与能力都会优先落在这里。',
   },
 ]
 
@@ -24,10 +24,10 @@ export default function StickmanModuleEntry() {
       <div className="text-center space-y-2">
         <div className="flex items-center justify-center gap-2 text-orange-500 text-lg font-medium">
           <VideoCameraOutlined />
-          <span>火柴人模块选择</span>
+          <span>视频讲解模块选择</span>
         </div>
-        <h1 className="text-3xl font-bold">选择火柴人版本</h1>
-        <p className="text-gray-500">先进入版本选择页，再进入对应的火柴人制作流程。经典版和优化版会长期并存。</p>
+        <h1 className="text-3xl font-bold">选择视频讲解版本</h1>
+        <p className="text-gray-500">先选择版本，再进入对应的视频讲解流程。标准讲解和增强讲解会长期并存。</p>
       </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

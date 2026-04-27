@@ -291,7 +291,7 @@ export default function StickmanStudio() {
     if (!project) return
     try {
       const { data } = await projectApi.previewStickmanVoice({
-        text: '你好，这是当前火柴人视频的配音试听。',
+        text: '你好，这是当前视频讲解项目的配音试听。',
         tts_provider: project.tts_provider,
         tts_voice: project.tts_voice,
         tts_rate: project.tts_rate,
@@ -338,7 +338,7 @@ export default function StickmanStudio() {
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
       <Card
-        title={project?.title || '火柴人分步创作'}
+        title={project?.title || '视频讲解分步创作'}
         extra={<Space><Tag color="gold">分步创作</Tag><Button onClick={() => navigate(`/project/${id}/task`)}>去任务页</Button></Space>}
       >
         <Space direction="vertical" size="large" style={{ width: '100%' }}>
@@ -417,7 +417,7 @@ export default function StickmanStudio() {
                   </Space>
                 </Space>
               </Card>
-              <Button type="primary" onClick={handleComposeVideo} loading={saving} disabled={!imageAssets.length}>直接合成视频</Button>
+              <Button type="primary" onClick={handleComposeVideo} loading={saving} disabled={!imageAssets.length}>直接合成讲解视频</Button>
               {!!composeProgress && <div>合成进度：{composeProgress}% {composeMessage}</div>}
               {project?.video_url && <video src={resolveBackendUrl(project.video_url)} controls style={{ width: '100%', borderRadius: 12 }} />}
             </Space>

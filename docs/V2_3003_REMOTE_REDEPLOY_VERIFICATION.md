@@ -2,11 +2,11 @@
 
 ## Goal
 
-Verify that pulling branch `feature/v2-ui-mobile-ux-recover-3003` and running the standard deployment flow can reproduce the current `3003/8003` behavior.
+Verify that pulling branch `feature/stickman-v2-viral-hook-optimization-acceptance` and running the standard deployment flow can reproduce the current `3003/8003` behavior.
 
 ## Branch
 
-- `feature/v2-ui-mobile-ux-recover-3003`
+- `feature/stickman-v2-viral-hook-optimization-acceptance`
 
 ## Deploy Root
 

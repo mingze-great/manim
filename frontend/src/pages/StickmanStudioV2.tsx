@@ -333,7 +333,7 @@ export default function StickmanStudio() {
     if (!project) return
     try {
       const { data } = await projectApi.previewStickmanVoice({
-        text: '你好，这是当前火柴人视频的配音试听。',
+        text: '你好，这是当前视频讲解项目的配音试听。',
         tts_provider: project.tts_provider,
         tts_voice: project.tts_voice,
         tts_rate: project.tts_rate,
@@ -387,9 +387,9 @@ export default function StickmanStudio() {
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
-      <Alert type="success" message="优化版火柴人工作台" description="当前项目正在使用优化版火柴人模块，固定背景、素材库匹配和分步合成能力只在这个模块内演进。" />
+      <Alert type="success" message="增强讲解工作台" description="当前项目正在使用增强讲解模块，固定背景、素材库匹配和分步合成能力只在这个模块内演进。" />
       <Card
-        title={project?.title || '火柴人分步创作'}
+        title={project?.title || '视频讲解分步创作'}
         extra={<Space><Tag color="gold">分步创作</Tag><Button onClick={() => navigate(`/project/${id}/task`)}>去任务页</Button></Space>}
       >
         <Space direction="vertical" size="large" style={{ width: '100%' }}>
@@ -438,7 +438,7 @@ export default function StickmanStudio() {
           </Card>
           <Card size="small" title="爆款开头/结尾包装">
             <Space direction="vertical" style={{ width: '100%' }} size="middle">
-              <Alert type="success" message="该包装层只增强新版火柴人首尾，不改你当前正文分镜主流程。" />
+              <Alert type="success" message="该包装层只增强当前讲解项目首尾，不改你当前正文分镜主流程。" />
               <div className="flex items-center gap-3">
                 <span className="text-sm text-gray-600">启用爆款包装</span>
                 <Switch checked={viralPackageEnabled} onChange={(checked) => handleUpdateGenerationFlags({ viral_package_enabled: checked, workflow_variant: 'v2_viral_package' })} />

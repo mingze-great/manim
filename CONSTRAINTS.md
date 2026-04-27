@@ -22,9 +22,9 @@
 
 ### 1.1 V2.0 当前标准分支
 
-- `feature/v2-ui-mobile-ux-recover-3003` 作为当前 `v2.0` 标准分支
-- 该分支用于复现并部署当前新版 `3003/8003` 的完整行为
-- 当前 `3003` 重部署、模板视频跨端口预览、思维可视化对话流式、后台/个人中心/脚本页布局优化，均以该分支为准
+- `feature/stickman-v2-viral-hook-optimization-acceptance` 作为当前 `3003/8003` 标准验证分支
+- 该分支用于复现并部署当前 `3003/8003` 的完整行为
+- 当前 `3003` 重部署与视频讲解链路验证，均以该分支为准
 
 ### 1.2 V2 后续优化强制流程
 
@@ -122,7 +122,7 @@ git checkout feature/template-preview-video
 |------|------|------|------|------|------|
 | 旧站 | `/opt/manim` | `feature/legacy-v2-redirect` | `/` | `8000` | 旧版业务 + 版本分流能力 |
 | 新站 | `/opt/manim-v2` | `feature/chat-style-and-reference-code` | `3002` | `8002` | 新版业务 |
-| V2.0 测试站 | `/opt/manim-v2-3003-snapshot` | `feature/v2-ui-mobile-ux-recover-3003` | `3003` | `8003` | 当前 v2.0 标准验证环境 |
+| V2.0 测试站 | `/opt/manim-v2-3003-snapshot` | `feature/stickman-v2-viral-hook-optimization-acceptance` | `3003` | `8003` | 当前 3003 标准验证环境 |
 
 其他说明：
 - 新站服务：`manim-v2-backend.service`

@@ -76,7 +76,7 @@ export default function Dashboard() {
               我的作品
             </h1>
             <p className="text-gray-500 dark:text-gray-400 text-sm">
-              管理您的思维可视化、火柴人视频与公众号文章作品
+              管理您的思维可视化、视频讲解与公众号文章作品
             </p>
           </div>
         </div>

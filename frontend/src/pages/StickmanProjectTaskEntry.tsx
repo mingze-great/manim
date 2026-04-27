@@ -30,7 +30,7 @@ export default function StickmanProjectTaskEntry() {
     return (
       <>
         <div className="max-w-5xl mx-auto px-6 pt-6">
-          <Alert type="success" message="当前为火柴人优化版任务流" description="这里展示新版火柴人生成/合成任务，不影响经典版任务流。" />
+          <Alert type="success" message="当前为增强讲解任务流" description="这里展示增强讲解生成/合成任务，不影响标准讲解任务流。" />
         </div>
         <StickmanProjectTaskV2 />
       </>
@@ -40,7 +40,7 @@ export default function StickmanProjectTaskEntry() {
   return (
     <>
       <div className="max-w-5xl mx-auto px-6 pt-6">
-        <Alert type="info" message="当前为火柴人经典版任务流" description="这里保留基线火柴人任务流，便于与优化版并存使用。" />
+        <Alert type="info" message="当前为标准讲解任务流" description="这里保留稳定的视频讲解任务流，便于与增强讲解并存使用。" />
       </div>
       <StickmanProjectTaskLegacy />
     </>

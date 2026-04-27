@@ -751,7 +751,7 @@ export default function AdminUsers() {
                 <Descriptions.Item label="模块权限">
                   <Space wrap>
                     {Object.entries(selectedUser.module_permissions || {}).map(([moduleKey, permission]) => {
-                      const labels: Record<string, string> = { visual: '思维可视化', stickman: '火柴人视频', article: '公众号文章' }
+                      const labels: Record<string, string> = { visual: '思维可视化', stickman: '视频讲解', article: '公众号文章' }
                       return (
                         <Tag key={moduleKey} color={permission.enabled ? 'green' : 'default'}>
                           {labels[moduleKey] || moduleKey}: {permission.enabled ? `${permission.used_today || 0}/${permission.daily_limit}` : '关闭'}
@@ -986,7 +986,7 @@ export default function AdminUsers() {
         </div>
         <div className="mb-3 text-gray-500 text-sm">管理员账号默认无限制，批量设置时将自动跳过管理员。</div>
         {['visual', 'stickman', 'article'].map((moduleKey) => {
-          const labels: Record<string, string> = { visual: '思维可视化', stickman: '火柴人视频', article: '公众号文章' }
+          const labels: Record<string, string> = { visual: '思维可视化', stickman: '视频讲解', article: '公众号文章' }
           const current: any = permissionDraft[moduleKey] || { enabled: false, daily_limit: 0, used_today: 0, period: moduleKey === 'visual' ? 'daily' : 'monthly' }
           const period = current.period || (moduleKey === 'visual' ? 'daily' : 'monthly')
           return (
@@ -1034,7 +1034,7 @@ export default function AdminUsers() {
         </div>
         <div className="mb-3 text-gray-500 text-sm">批量设置时会自动排除管理员账号，仅作用于普通用户。仅修改本次勾选的模块，未勾选模块保持不变。</div>
         {['visual', 'stickman', 'article'].map((moduleKey) => {
-          const labels: Record<string, string> = { visual: '思维可视化', stickman: '火柴人视频', article: '公众号文章' }
+          const labels: Record<string, string> = { visual: '思维可视化', stickman: '视频讲解', article: '公众号文章' }
           const current: any = permissionDraft[moduleKey] || { enabled: true, daily_limit: moduleKey === 'article' ? 45 : moduleKey === 'stickman' ? 30 : 5, period: moduleKey === 'visual' ? 'daily' : 'monthly' }
           const period = current.period || (moduleKey === 'visual' ? 'daily' : 'monthly')
           const applyThisModule = !!batchPermissionApply[moduleKey]

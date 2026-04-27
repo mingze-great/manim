@@ -36,7 +36,7 @@ def _build_stickman_generator(project: Project | None = None):
 
 
 def _stickman_variant_label(project: Project | None = None):
-    return '优化版' if project and str(getattr(project, 'stickman_variant', 'legacy') or 'legacy') == 'v2' else '经典版'
+    return '增强讲解' if project and str(getattr(project, 'stickman_variant', 'legacy') or 'legacy') == 'v2' else '标准讲解'
 
 
 def _project_query_for_user(db: Session, current_user: User):
@@ -667,7 +667,7 @@ async def generate_stickman_video_stream(
 
     if str(project.module_type or "manim") != "stickman":
         async def error_gen():
-            yield f"data: {json.dumps({'type': 'error', 'content': '当前项目不是火柴人模块'})}\n\n"
+            yield f"data: {json.dumps({'type': 'error', 'content': '当前项目不是视频讲解模块'})}\n\n"
         return StreamingResponse(error_gen(), media_type="text/event-stream")
 
     task = Task(
@@ -697,7 +697,7 @@ async def generate_stickman_video_stream(
             task_local.status = "processing"
             task_local.progress = 1
             project_local.status = "rendering"
-            task_local.log = (task_local.log or "") + f"开始{_stickman_variant_label(project_local)}火柴人生成\n"
+            task_local.log = (task_local.log or "") + f"开始{_stickman_variant_label(project_local)}视频讲解生成\n"
             db_session.commit()
 
             progress_queue: asyncio.Queue[dict] = asyncio.Queue()
@@ -778,10 +778,10 @@ async def generate_stickman_video_stream(
             task_local.status = "completed"
             task_local.video_url = video_url
             task_local.error_message = None
-            task_local.log = (task_local.log or "") + "火柴人视频生成完成\n"
+            task_local.log = (task_local.log or "") + "视频讲解生成完成\n"
             db_session.commit()
 
-            yield f"data: {json.dumps({'type': 'success', 'content': '火柴人视频生成完成', 'video_url': video_url})}\n\n"
+            yield f"data: {json.dumps({'type': 'success', 'content': '视频讲解生成完成', 'video_url': video_url})}\n\n"
         except Exception as exc:
             task_local = db_session.query(Task).filter(Task.id == task.id).first()
             project_local = db_session.query(Project).filter(Project.id == project_id).first()
@@ -826,7 +826,7 @@ async def compose_stickman_video_stream(
 
     if str(project.module_type or "manim") != "stickman":
         async def error_gen():
-            yield f"data: {json.dumps({'type': 'error', 'content': '当前项目不是火柴人模块'})}\n\n"
+            yield f"data: {json.dumps({'type': 'error', 'content': '当前项目不是视频讲解模块'})}\n\n"
         return StreamingResponse(error_gen(), media_type="text/event-stream")
 
     task = Task(
@@ -865,7 +865,7 @@ async def compose_stickman_video_stream(
             task_local.status = "processing"
             task_local.progress = 1
             project_local.status = "rendering"
-            task_local.log = (task_local.log or "") + f"开始{_stickman_variant_label(project_local)}火柴人合成\n"
+            task_local.log = (task_local.log or "") + f"开始{_stickman_variant_label(project_local)}视频讲解合成\n"
             db_session.commit()
 
             progress_queue: asyncio.Queue[dict] = asyncio.Queue()
@@ -936,10 +936,10 @@ async def compose_stickman_video_stream(
             task_local.status = "completed"
             task_local.video_url = video_url
             task_local.error_message = None
-            task_local.log = (task_local.log or "") + "火柴人视频合成完成\n"
+            task_local.log = (task_local.log or "") + "视频讲解合成完成\n"
             db_session.commit()
 
-            yield f"data: {json.dumps({'type': 'success', 'content': '火柴人视频合成完成', 'video_url': video_url})}\n\n"
+            yield f"data: {json.dumps({'type': 'success', 'content': '视频讲解合成完成', 'video_url': video_url})}\n\n"
         except Exception as exc:
             task_local = db_session.query(Task).filter(Task.id == task.id).first()
             project_local = db_session.query(Project).filter(Project.id == project_id).first()

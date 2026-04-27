@@ -153,11 +153,11 @@ export default function StickmanCreator() {
 
   const handleStickmanCreate = async () => {
     if (!stickmanEnabled) {
-      message.warning('当前账号未开通火柴人视频模块，请联系管理员开通')
+      message.warning('当前账号未开通视频讲解模块，请联系管理员开通')
       return
     }
     if (scriptMode === 'ai' && !stickmanTopic.trim()) {
-      message.warning('请输入火柴人视频主题')
+      message.warning('请输入视频讲解主题')
       return
     }
     if (scriptMode === 'custom' && !customScript.trim()) {
@@ -171,12 +171,12 @@ export default function StickmanCreator() {
 
     const selectedVoice = safeVoiceOptions.find((item) => item.value === ttsVoice)
     const resolvedTheme = scriptMode === 'custom'
-      ? (stickmanTopic.trim() || customScript.trim().split(/\r?\n/)[0]?.slice(0, 24) || '火柴人视频')
+      ? (stickmanTopic.trim() || customScript.trim().split(/\r?\n/)[0]?.slice(0, 24) || '视频讲解')
       : stickmanTopic.trim()
     setLoading(true)
     try {
       const { data } = await projectApi.create({
-        title: `火柴人视频-${resolvedTheme}`,
+        title: `视频讲解-${resolvedTheme}`,
         theme: resolvedTheme,
         module_type: 'stickman',
         stickman_variant: stickmanVariant,
@@ -212,10 +212,10 @@ export default function StickmanCreator() {
     }
   }
 
-  const title = stickmanVariant === 'v2' ? '优化版火柴人' : '经典版火柴人'
+  const title = stickmanVariant === 'v2' ? '增强讲解' : '标准讲解'
   const description = stickmanVariant === 'v2'
-    ? '你正在配置优化版火柴人项目。创建完成后会直接进入优化版任务流或分步创作页。'
-    : '你正在配置经典版火柴人项目。创建完成后会进入经典版对应流程。'
+    ? '你正在配置增强讲解项目。创建完成后会直接进入增强讲解任务流或分步创作页。'
+    : '你正在配置标准讲解项目。创建完成后会进入标准讲解对应流程。'
 
   return (
     <div className="creator-page">
@@ -238,8 +238,8 @@ export default function StickmanCreator() {
 
           <Alert
             type={stickmanVariant === 'v2' ? 'success' : 'info'}
-            message={stickmanVariant === 'v2' ? '当前为优化版专属创建页' : '当前为经典版专属创建页'}
-            description={stickmanVariant === 'v2' ? '不会再跳回通用首页配置，后续所有设置都在这个专属页面完成。' : '经典版也使用独立创建页，避免与其他模块配置混在一起。'}
+            message={stickmanVariant === 'v2' ? '当前为增强讲解专属创建页' : '当前为标准讲解专属创建页'}
+            description={stickmanVariant === 'v2' ? '不会再跳回通用首页配置，后续所有设置都在这个专属页面完成。' : '标准讲解也使用独立创建页，避免与其他模块配置混在一起。'}
           />
 
           {selectedStickmanCategory ? (
@@ -266,7 +266,7 @@ export default function StickmanCreator() {
           <div className="stickman-panel">
             <div className="stickman-panel-head">
               <h2>{title}项目配置</h2>
-              <p>{stickmanVariant === 'v2' ? '当前为优化版火柴人流程，可继续选择热门方向和主题，并直接完成创建。' : '当前为经典版火柴人流程，可继续选择热门方向和主题，并直接完成创建。'}</p>
+              <p>{stickmanVariant === 'v2' ? '当前为增强讲解流程，可继续选择热门方向和主题，并直接完成创建。' : '当前为标准讲解流程，可继续选择热门方向和主题，并直接完成创建。'}</p>
             </div>
 
             <div className="stickman-form-grid">
@@ -391,7 +391,7 @@ export default function StickmanCreator() {
                       <Input value={customVoiceLabel} onChange={(e) => setCustomVoiceLabel(e.target.value)} placeholder="例如：我的成长男声 / 温柔陪伴女声" style={{ marginTop: 8 }} />
                       <Button style={{ marginTop: 12 }} onClick={handleCreateCustomVoice} loading={loading} icon={<AudioOutlined />}>优化并创建我的音色</Button>
                     </div>
-                    <Alert style={{ marginTop: 12 }} type="info" showIcon message="新上线模块，默认支持试用 2 次；如需长期使用请联系管理员开通。公众号约 0.6-1.5 元/篇，火柴人视频按分镜计费。" />
+                    <Alert style={{ marginTop: 12 }} type="info" showIcon message="新上线模块，默认支持试用 2 次；如需长期使用请联系管理员开通。公众号约 0.6-1.5 元/篇，视频讲解按分镜计费。" />
                   </>
                 )}
 
@@ -415,7 +415,7 @@ export default function StickmanCreator() {
                 </div>
 
                 <div className="stickman-tips">
-                  <p>{stickmanVariant === 'v2' ? '优化版会进入专属 v2 工作流，不再回到通用首页配置。' : '经典版会保持原有火柴人制作逻辑，但入口与创建页已独立。'}</p>
+                  <p>{stickmanVariant === 'v2' ? '增强讲解会进入专属工作流，不再回到通用首页配置。' : '标准讲解会保持原有制作逻辑，但入口与创建页已独立。'}</p>
                   <p>{scriptMode === 'custom' ? '当前会优先使用你输入的完整文案，再自动拆成大的部分和小分镜。' : '当前会根据主题自动生成完整文案、再拆成大的部分和小分镜。'}</p>
                   <p>当前版本默认生成 16:9 横版视频。</p>
                   <p>支持 AI 配音、浏览器录音和音频文件上传。</p>

@@ -46,9 +46,9 @@
 ### Safer Git fetch/ls-remote/push
 
 ```bash
-python scripts/git_retry.py --repo E:\ai\agent_stickman_3003_upgrade -- ls-remote origin refs/heads/feature/stickman-v2-on-3003
-python scripts/git_retry.py --repo E:\ai\agent_stickman_3003_upgrade -- fetch origin feature/stickman-v2-on-3003
-python scripts/git_retry.py --repo E:\ai\agent_stickman_3003_upgrade -- push origin HEAD:feature/stickman-v2-on-3003
+python scripts/git_retry.py --repo E:\ai\agent_stickman_v2_viral_hook_acceptance -- ls-remote origin refs/heads/feature/stickman-v2-viral-hook-optimization-acceptance
+python scripts/git_retry.py --repo E:\ai\agent_stickman_v2_viral_hook_acceptance -- fetch origin feature/stickman-v2-viral-hook-optimization-acceptance
+python scripts/git_retry.py --repo E:\ai\agent_stickman_v2_viral_hook_acceptance -- push origin HEAD:feature/stickman-v2-viral-hook-optimization-acceptance
 ```
 
 ### Safer remote command execution

@@ -30,7 +30,7 @@ export default function StickmanStudioEntry() {
     return (
       <>
         <div className="max-w-6xl mx-auto px-6 pt-6">
-          <Alert type="success" message="当前为火柴人优化版模块" description="这个项目走新版火柴人工作流，后续优化只影响优化版，不覆盖经典版。" />
+          <Alert type="success" message="当前为增强讲解模块" description="这个项目走增强讲解工作流，后续优化只影响增强讲解，不覆盖标准讲解。" />
         </div>
         <StickmanStudioV2 />
       </>
@@ -40,7 +40,7 @@ export default function StickmanStudioEntry() {
   return (
     <>
       <div className="max-w-6xl mx-auto px-6 pt-6">
-        <Alert type="info" message="当前为火柴人经典版模块" description="这个项目保持基线火柴人工作流，适合继续沿用原有制作流程。" />
+        <Alert type="info" message="当前为标准讲解模块" description="这个项目保持稳定的视频讲解工作流，适合继续沿用原有制作流程。" />
       </div>
       <StickmanStudioLegacy />
     </>

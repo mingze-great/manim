@@ -197,7 +197,7 @@ class StickmanGenerator:
             if progress_callback:
                 progress_callback(progress, message)
 
-        report(5, "开始生成火柴人视频")
+        report(5, "开始生成视频讲解")
         script_data = self.generate_script_data(topic, storyboard_count, opening_template_key=opening_template_key)
         report(20, "脚本生成完成")
 
@@ -257,7 +257,7 @@ class StickmanGenerator:
             report(90, "视频拼接完成")
 
             final_path = self._merge_video_and_audio(merged_clip, audio_track)
-            report(100, "火柴人视频生成完成")
+            report(100, "视频讲解生成完成")
 
             return {
                 "title": script_data.get("title") or topic,
@@ -340,7 +340,7 @@ class StickmanGenerator:
             report(88, "视频拼接完成")
 
             final_path = self._merge_video_and_audio(merged_clip, audio_track)
-            report(100, "火柴人视频合成完成")
+            report(100, "视频讲解合成完成")
             return {
                 "title": topic,
                 "script": "\n".join(scene.get("narration", "") for scene in storyboards),

@@ -26,7 +26,7 @@ export default function AdminModuleStats() {
 
   const items = [
     { key: 'visual', title: '思维可视化', icon: <HighlightOutlined />, color: '#2563eb', data: stats?.visual },
-    { key: 'stickman', title: '火柴人视频', icon: <VideoCameraOutlined />, color: '#f59e0b', data: stats?.stickman },
+    { key: 'stickman', title: '视频讲解', icon: <VideoCameraOutlined />, color: '#f59e0b', data: stats?.stickman },
     { key: 'article', title: '公众号文章', icon: <FileTextOutlined />, color: '#7c3aed', data: stats?.article },
   ]
 
@@ -34,7 +34,7 @@ export default function AdminModuleStats() {
     <div className="p-6 space-y-6">
       <div>
         <h2 className="text-2xl font-bold">模块统计看板</h2>
-        <p className="text-gray-500 mt-1">查看思维可视化、火柴人视频和公众号文章三个模块的运营情况</p>
+        <p className="text-gray-500 mt-1">查看思维可视化、视频讲解和公众号文章三个模块的运营情况</p>
       </div>
       <Row gutter={[16, 16]}>
         {items.map((item) => (
