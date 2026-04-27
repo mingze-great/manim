@@ -719,24 +719,43 @@ async def generate_stickman_video_stream(
                 generation_flags = json.loads(project_local.generation_flags or "{}")
             except Exception:
                 generation_flags = {}
-            generation_task = asyncio.create_task(asyncio.to_thread(
-                lambda: generator.generate(
-                    str(project_local.theme),
-                    int(project_local.storyboard_count or 3),
-                    report,
-                    str(project_local.aspect_ratio or "16:9"),
-                    str(project_local.voice_source or "ai"),
-                    str(project_local.voice_file_path) if project_local.voice_file_path else None,
-                    str(project_local.tts_provider or "edge_tts"),
-                    str(project_local.tts_voice or "zh-CN-XiaoxiaoNeural"),
-                    str(project_local.tts_rate or "+0%"),
-                    str(project_local.background_image_path) if getattr(project_local, 'background_image_path', None) else None,
-                    str(project_local.style_reference_image_path) if project_local.style_reference_image_path else None,
-                    str(project_local.style_reference_notes) if project_local.style_reference_notes else None,
-                    opening_template_key=str(generation_flags.get("opening_template_key") or "hook_question"),
-                    generation_flags=generation_flags,
-                )
-            ))
+            if str(getattr(project_local, 'stickman_variant', 'legacy') or 'legacy') == 'v2':
+                generation_task = asyncio.create_task(asyncio.to_thread(
+                    lambda: generator.generate(
+                        str(project_local.theme),
+                        int(project_local.storyboard_count or 3),
+                        report,
+                        str(project_local.aspect_ratio or "16:9"),
+                        str(project_local.voice_source or "ai"),
+                        str(project_local.voice_file_path) if project_local.voice_file_path else None,
+                        str(project_local.tts_provider or "edge_tts"),
+                        str(project_local.tts_voice or "zh-CN-XiaoxiaoNeural"),
+                        str(project_local.tts_rate or "+0%"),
+                        str(project_local.background_image_path) if getattr(project_local, 'background_image_path', None) else None,
+                        str(project_local.style_reference_image_path) if project_local.style_reference_image_path else None,
+                        str(project_local.style_reference_notes) if project_local.style_reference_notes else None,
+                        opening_template_key=str(generation_flags.get("opening_template_key") or "hook_question"),
+                        generation_flags=generation_flags,
+                    )
+                ))
+            else:
+                generation_task = asyncio.create_task(asyncio.to_thread(
+                    lambda: generator.generate(
+                        str(project_local.theme),
+                        int(project_local.storyboard_count or 3),
+                        report,
+                        str(project_local.aspect_ratio or "16:9"),
+                        str(project_local.voice_source or "ai"),
+                        str(project_local.voice_file_path) if project_local.voice_file_path else None,
+                        str(project_local.tts_provider or "edge_tts"),
+                        str(project_local.tts_voice or "zh-CN-XiaoxiaoNeural"),
+                        str(project_local.tts_rate or "+0%"),
+                        str(project_local.background_image_path) if getattr(project_local, 'background_image_path', None) else None,
+                        str(project_local.style_reference_image_path) if project_local.style_reference_image_path else None,
+                        str(project_local.style_reference_notes) if project_local.style_reference_notes else None,
+                        opening_template_key=str(generation_flags.get("opening_template_key") or "hook_question"),
+                    )
+                ))
 
             while True:
                 if generation_task.done() and progress_queue.empty():
@@ -888,19 +907,33 @@ async def compose_stickman_video_stream(
                 generation_flags = json.loads(project_local.generation_flags or "{}")
             except Exception:
                 generation_flags = {}
-            generation_task = asyncio.create_task(asyncio.to_thread(
-                generator.compose_from_assets,
-                str(project_local.theme),
-                storyboards,
-                image_assets,
-                report,
-                str(project_local.voice_source or "ai"),
-                str(project_local.voice_file_path) if project_local.voice_file_path else None,
-                str(project_local.tts_provider or "edge_tts"),
-                str(project_local.tts_voice or "zh-CN-XiaoxiaoNeural"),
-                str(project_local.tts_rate or "+0%"),
-                generation_flags,
-            ))
+            if str(getattr(project_local, 'stickman_variant', 'legacy') or 'legacy') == 'v2':
+                generation_task = asyncio.create_task(asyncio.to_thread(
+                    generator.compose_from_assets,
+                    str(project_local.theme),
+                    storyboards,
+                    image_assets,
+                    report,
+                    str(project_local.voice_source or "ai"),
+                    str(project_local.voice_file_path) if project_local.voice_file_path else None,
+                    str(project_local.tts_provider or "edge_tts"),
+                    str(project_local.tts_voice or "zh-CN-XiaoxiaoNeural"),
+                    str(project_local.tts_rate or "+0%"),
+                    generation_flags,
+                ))
+            else:
+                generation_task = asyncio.create_task(asyncio.to_thread(
+                    generator.compose_from_assets,
+                    str(project_local.theme),
+                    storyboards,
+                    image_assets,
+                    report,
+                    str(project_local.voice_source or "ai"),
+                    str(project_local.voice_file_path) if project_local.voice_file_path else None,
+                    str(project_local.tts_provider or "edge_tts"),
+                    str(project_local.tts_voice or "zh-CN-XiaoxiaoNeural"),
+                    str(project_local.tts_rate or "+0%"),
+                ))
 
             while True:
                 if generation_task.done() and progress_queue.empty():

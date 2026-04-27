@@ -1,4 +1,5 @@
 import { Alert, Button, Card, Col, Collapse, Divider, Row, Steps, Tag, Typography } from 'antd'
+import type { CSSProperties } from 'react'
 import {
   BulbOutlined,
   FileTextOutlined,
@@ -10,6 +11,14 @@ import {
 import { useNavigate } from 'react-router-dom'
 
 const { Title, Paragraph } = Typography
+
+const screenshotStyle: CSSProperties = {
+  width: '100%',
+  borderRadius: 18,
+  border: '1px solid #d7e6ef',
+  boxShadow: '0 12px 28px rgba(15, 23, 42, 0.08)',
+  background: '#fff',
+}
 
 export default function Docs() {
   const navigate = useNavigate()
@@ -36,6 +45,29 @@ export default function Docs() {
     { title: '生成文案', description: '支持 AI 草稿、自己写文案、段落编辑和局部 AI 重写。' },
     { title: '生成并调整配图', description: '图片与正文段落位置绑定，支持重生、调整插图位置、手机预览。' },
     { title: '排版与复制', description: '生成排版后，直接复制图文内容到公众号编辑器，而不是复制源码。' },
+  ]
+
+  const beginnerGuide = [
+    {
+      title: '第一步：进入开始创作',
+      description: '登录后，左侧菜单点击“开始创作”。这里是整个平台的统一入口，不需要分别记住不同模块地址。',
+      image: '/help/creator-overview.svg',
+    },
+    {
+      title: '第二步：进入视频讲解大类',
+      description: '如果你想做口播/讲解类视频，先进入“视频讲解”，再在下一级页面选择标准讲解、增强讲解或讲解型视频。',
+      image: '/help/stickman-entry.svg',
+    },
+    {
+      title: '第三步：填写讲解型视频内容',
+      description: '把完整文案直接粘贴进创作台。系统会自动按文案节奏拆分分镜，分镜数量支持 3-10，时长也会根据文案和配音自动控制。',
+      image: '/help/explainer-creator.svg',
+    },
+    {
+      title: '第四步：管理员上传模板示例视频',
+      description: '管理员进入后台模板管理，可以为模板上传示例 MP4，方便普通用户直接预览效果。',
+      image: '/help/admin-template-upload.svg',
+    },
   ]
 
   return (
@@ -92,6 +124,37 @@ export default function Docs() {
       </Card>
 
       <Card style={{ marginBottom: 24, borderRadius: 20 }}>
+        <Title level={4}>零基础完整教程</Title>
+        <Paragraph type="secondary" style={{ marginBottom: 20 }}>
+          如果你第一次使用平台，可以直接按下面 4 步走。每一步都配了页面截图，先照着做，再慢慢熟悉高级功能。
+        </Paragraph>
+        {beginnerGuide.map((item, index) => (
+          <div key={item.title} style={{ marginBottom: index === beginnerGuide.length - 1 ? 0 : 28 }}>
+            <Title level={5} style={{ marginBottom: 8 }}>{index + 1}. {item.title}</Title>
+            <Paragraph style={{ color: '#4b5563', lineHeight: 1.8 }}>{item.description}</Paragraph>
+            <img src={item.image} alt={item.title} style={screenshotStyle} />
+          </div>
+        ))}
+      </Card>
+
+      <Card style={{ marginBottom: 24, borderRadius: 20 }}>
+        <Title level={4}>讲解型视频推荐操作顺序</Title>
+        <Steps
+          direction="vertical"
+          size="small"
+          current={6}
+          items={[
+            { title: '先输入原始文案或主题', description: '不需要先压缩到很短，先把你的内容说明白。' },
+            { title: '选择分镜数量', description: '新手建议先用 4-6 幕，便于快速检查结构。' },
+            { title: '先生成开头与分镜', description: '先看前 3 秒钩子够不够强，再决定是否继续。' },
+            { title: '再生成图片', description: '如果画面方向不对，先改分镜文字，不要急着反复重生。' },
+            { title: '最后合成视频', description: '检查字幕、旁白、节奏是否一致。' },
+            { title: '满意后再批量复用', description: '等你跑通一次，再开始追求更复杂的风格和效率。' },
+          ]}
+        />
+      </Card>
+
+      <Card style={{ marginBottom: 24, borderRadius: 20 }}>
         <Title level={4}><SafetyOutlined /> 管理员怎么用</Title>
         <Collapse
           items={[
@@ -108,7 +171,12 @@ export default function Docs() {
             {
               key: '3',
               label: '模块看板',
-               children: <div style={{ color: '#4b5563', lineHeight: 1.8 }}>可查看思维可视化、视频讲解、公众号文章三个模块的累计、今日、成功数、失败数和成功率。</div>,
+                children: <div style={{ color: '#4b5563', lineHeight: 1.8 }}>可查看思维可视化、视频讲解、公众号文章三个模块的累计、今日、成功数、失败数和成功率。</div>,
+            },
+            {
+              key: '4',
+              label: '模板示例视频怎么上传',
+              children: <div style={{ color: '#4b5563', lineHeight: 1.8 }}>进入“管理后台” - “视频风格模板管理”，在模板卡片上点击“上传示例视频”，选择一个 MP4 文件即可。上传成功后，模板卡片会出现“预览示例”按钮，普通用户也能直接预览效果。</div>,
             },
           ]}
         />
@@ -121,6 +189,7 @@ export default function Docs() {
           <li>思维可视化模块始终可用，不受其他模块权限影响。</li>
           <li>公众号文章配图后，请先在手机预览中确认图文顺序，再复制图文内容到公众号编辑器。</li>
           <li>如果视频讲解音色没有变化，建议先在试听入口确认音色，再重新生成视频。</li>
+          <li>如果管理员上传模板示例视频失败，先确认文件格式是 MP4，且当前账号确实是管理员。</li>
         </ul>
       </Card>
 

@@ -44,6 +44,9 @@ export function resolveBackendUrl(path?: string | null) {
 
 api.interceptors.request.use((config) => {
   const token = useAuthStore.getState().token
+  if (typeof FormData !== 'undefined' && config.data instanceof FormData && config.headers) {
+    delete (config.headers as any)['Content-Type']
+  }
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }

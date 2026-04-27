@@ -271,8 +271,9 @@
 
 .stickman-form-grid {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.95fr);
   gap: 20px;
+  align-items: start;
 }
 
 .stickman-side-card {
@@ -280,6 +281,63 @@
   border: 1px solid #f4d6b7;
   border-radius: 16px;
   padding: 18px;
+}
+
+.stickman-main-stack,
+.stickman-side-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.stickman-side-sticky {
+  position: sticky;
+  top: 18px;
+}
+
+.stickman-compact-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.stickman-side-section {
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid #f0d7bd;
+  border-radius: 14px;
+}
+
+.stickman-side-section-title {
+  margin-bottom: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #17394f;
+}
+
+.stickman-upload-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.stickman-preview-image {
+  width: 100%;
+  margin-top: 12px;
+  border-radius: 12px;
+  border: 1px solid #eee;
+}
+
+.stickman-create-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.stickman-side-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .aspect-pill {
@@ -338,6 +396,15 @@
   .module-card-grid,
   .stickman-form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .stickman-compact-grid,
+  .stickman-upload-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .stickman-side-sticky {
+    position: static;
   }
 
   .visual-theme-wrap {

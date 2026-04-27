@@ -90,7 +90,7 @@ export default function ExplainerCreator() {
 
           <Card className="stickman-panel" bordered={false}>
             <div className="stickman-form-grid">
-              <div>
+              <div className="stickman-main-stack">
                 <label className="stickman-label">主题或原始文案</label>
                 <TextArea
                   value={sourceText}
@@ -103,66 +103,70 @@ export default function ExplainerCreator() {
                 />
               </div>
 
-              <div className="stickman-side-card space-y-4">
-                <div>
-                  <label className="stickman-label">开头钩子</label>
-                  <Select value={openingHookMode} onChange={setOpeningHookMode} style={{ width: '100%' }} options={[
-                    { label: '反问钩子', value: 'hook_question' },
-                    { label: '数字爆点', value: 'big_number' },
-                  ]} />
-                </div>
+              <div className="stickman-side-stack stickman-side-sticky">
+                <div className="stickman-side-card space-y-4">
+                  <div className="stickman-side-section-title">核心设置</div>
+                  <div className="stickman-compact-grid">
+                    <div className="stickman-side-section">
+                      <label className="stickman-label">开头钩子</label>
+                      <Select value={openingHookMode} onChange={setOpeningHookMode} style={{ width: '100%' }} options={[
+                        { label: '反问钩子', value: 'hook_question' },
+                        { label: '数字爆点', value: 'big_number' },
+                      ]} />
+                    </div>
+                    <div className="stickman-side-section">
+                      <label className="stickman-label">分镜数量</label>
+                      <InputNumber min={3} max={10} value={storyboardCount} onChange={(value) => setStoryboardCount(Number(value) || 6)} style={{ width: '100%' }} />
+                    </div>
+                  </div>
 
-                <div>
-                  <label className="stickman-label">视觉方向</label>
-                  <Select value={visualStyleKey} onChange={setVisualStyleKey} style={{ width: '100%' }} options={[
-                    { label: '深蓝情绪线稿', value: 'deep_blue_emotional' },
-                    { label: '观点冷峻线稿', value: 'opinion_editorial' },
-                    { label: '治愈成长线稿', value: 'growth_soft_glow' },
-                  ]} />
-                </div>
+                  <div className="stickman-side-section">
+                    <label className="stickman-label">视觉方向</label>
+                    <Select value={visualStyleKey} onChange={setVisualStyleKey} style={{ width: '100%' }} options={[
+                      { label: '深蓝情绪线稿', value: 'deep_blue_emotional' },
+                      { label: '观点冷峻线稿', value: 'opinion_editorial' },
+                      { label: '治愈成长线稿', value: 'growth_soft_glow' },
+                    ]} />
+                  </div>
 
-                <div>
-                  <label className="stickman-label">分镜数量</label>
-                  <InputNumber min={3} max={10} value={storyboardCount} onChange={(value) => setStoryboardCount(Number(value) || 6)} style={{ width: '100%' }} />
-                </div>
+                  <div className="stickman-compact-grid">
+                    <div className="stickman-side-section">
+                      <label className="stickman-label">AI 音色</label>
+                      <Select value={ttsVoice} onChange={setTtsVoice} style={{ width: '100%' }} options={[
+                        { label: '元气女声', value: 'longanhuan' },
+                        { label: '稳重男声', value: 'longshuo_v3' },
+                        { label: '阳光男声', value: 'longanyang' },
+                        { label: '理性播报男声', value: 'sambert-zhiming-v1' },
+                      ]} />
+                    </div>
+                    <div className="stickman-side-section">
+                      <label className="stickman-label">语速</label>
+                      <Select value={ttsRate} onChange={setTtsRate} style={{ width: '100%' }} options={[
+                        { label: '偏慢', value: '-10%' },
+                        { label: '标准', value: '+0%' },
+                        { label: '偏快', value: '+15%' },
+                      ]} />
+                    </div>
+                  </div>
 
-                <div>
-                  <label className="stickman-label">AI 音色</label>
-                  <Select value={ttsVoice} onChange={setTtsVoice} style={{ width: '100%' }} options={[
-                    { label: '元气女声', value: 'longanhuan' },
-                    { label: '稳重男声', value: 'longshuo_v3' },
-                    { label: '阳光男声', value: 'longanyang' },
-                    { label: '理性播报男声', value: 'sambert-zhiming-v1' },
-                  ]} />
-                </div>
+                  <div className="stickman-side-section">
+                    <label className="stickman-label">工作流</label>
+                    <Select value={generationMode} onChange={(value) => setGenerationMode(value)} style={{ width: '100%' }} options={[
+                      { label: '分步创作', value: 'step_by_step' },
+                      { label: '一键生成', value: 'one_click' },
+                    ]} />
+                  </div>
 
-                <div>
-                  <label className="stickman-label">语速</label>
-                  <Select value={ttsRate} onChange={setTtsRate} style={{ width: '100%' }} options={[
-                    { label: '偏慢', value: '-10%' },
-                    { label: '标准', value: '+0%' },
-                    { label: '偏快', value: '+15%' },
-                  ]} />
-                </div>
+                  <div className="stickman-tips">
+                    <p>前 3 秒会优先生成冲突、反问、数字或反常识钩子。</p>
+                    <p>字幕优先走短句策略，减少“说明书腔”，分镜支持 3-10 幕。</p>
+                    <p>视频时长会根据文案和配音自动控制，不需要提前手填秒数。</p>
+                  </div>
 
-                <div>
-                  <label className="stickman-label">工作流</label>
-                  <Select value={generationMode} onChange={(value) => setGenerationMode(value)} style={{ width: '100%' }} options={[
-                    { label: '分步创作', value: 'step_by_step' },
-                    { label: '一键生成', value: 'one_click' },
-                  ]} />
+                  <Button type="primary" icon={<RocketOutlined />} onClick={handleCreate} loading={loading} size="large" block className="btn-gradient">
+                    开始制作讲解型视频
+                  </Button>
                 </div>
-
-                <div className="stickman-tips">
-                  <p>前 3 秒会优先生成冲突、反问、数字或反常识钩子。</p>
-                  <p>字幕优先走短句策略，减少“说明书腔”，分镜支持 3-10 幕。</p>
-                  <p>视频时长会根据文案和配音自动控制，不需要提前手填秒数。</p>
-                  <p>建议先用分步创作确认开头和分镜，再一键合成最终视频。</p>
-                </div>
-
-                <Button type="primary" icon={<RocketOutlined />} onClick={handleCreate} loading={loading} size="large" block className="btn-gradient">
-                  开始制作讲解型视频
-                </Button>
               </div>
             </div>
           </Card>

@@ -1,0 +1,31 @@
+<svg width="1440" height="900" viewBox="0 0 1440 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="1440" height="900" fill="#F6F8FB"/>
+<rect x="120" y="80" width="1200" height="180" rx="28" fill="url(#g1)"/>
+<text x="180" y="160" fill="#FFFFFF" font-family="Arial" font-size="44" font-weight="700">视频讲解模块选择</text>
+<text x="180" y="208" fill="#EAF6FF" font-family="Arial" font-size="24">标准讲解、增强讲解、讲解型视频分开进入</text>
+<rect x="120" y="320" width="360" height="360" rx="24" fill="#FFFFFF" stroke="#D8E4EC"/>
+<rect x="540" y="320" width="360" height="360" rx="24" fill="#FFFFFF" stroke="#D8E4EC"/>
+<rect x="960" y="320" width="360" height="360" rx="24" fill="#FFFFFF" stroke="#F1D5B1"/>
+<circle cx="190" cy="390" r="26" fill="#FFF0E3"/>
+<circle cx="610" cy="390" r="26" fill="#FFF0E3"/>
+<circle cx="1030" cy="390" r="26" fill="#FFF0E3"/>
+<text x="170" y="470" fill="#17394F" font-family="Arial" font-size="32" font-weight="700">标准讲解</text>
+<text x="590" y="470" fill="#17394F" font-family="Arial" font-size="32" font-weight="700">增强讲解</text>
+<text x="995" y="470" fill="#17394F" font-family="Arial" font-size="32" font-weight="700">讲解型视频</text>
+<text x="170" y="520" fill="#667985" font-family="Arial" font-size="22">适合常规讲解和稳定流程</text>
+<text x="590" y="520" fill="#667985" font-family="Arial" font-size="22">适合更强镜头与素材控制</text>
+<text x="995" y="520" fill="#667985" font-family="Arial" font-size="22">适合分镜图+字幕+配音一体化</text>
+<rect x="170" y="590" width="260" height="52" rx="16" fill="#E28A3D"/>
+<rect x="590" y="590" width="260" height="52" rx="16" fill="#E28A3D"/>
+<rect x="1010" y="590" width="260" height="52" rx="16" fill="#E28A3D"/>
+<text x="247" y="624" fill="#FFFFFF" font-family="Arial" font-size="24" font-weight="700">进入标准讲解</text>
+<text x="665" y="624" fill="#FFFFFF" font-family="Arial" font-size="24" font-weight="700">进入增强讲解</text>
+<text x="1074" y="624" fill="#FFFFFF" font-family="Arial" font-size="24" font-weight="700">进入讲解型视频</text>
+<defs>
+<linearGradient id="g1" x1="120" y1="80" x2="1320" y2="260" gradientUnits="userSpaceOnUse">
+<stop stop-color="#153A52"/>
+<stop offset="0.65" stop-color="#1D5D70"/>
+<stop offset="1" stop-color="#EF9542"/>
+</linearGradient>
+</defs>
+</svg>
