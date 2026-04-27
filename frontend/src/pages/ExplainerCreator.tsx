@@ -13,8 +13,7 @@ export default function ExplainerCreator() {
   const user = useAuthStore((state) => state.user)
   const [loading, setLoading] = useState(false)
   const [sourceText, setSourceText] = useState('')
-  const [storyboardCount, setStoryboardCount] = useState(10)
-  const [targetDuration, setTargetDuration] = useState(45)
+  const [storyboardCount, setStoryboardCount] = useState(6)
   const [openingHookMode, setOpeningHookMode] = useState('hook_question')
   const [visualStyleKey, setVisualStyleKey] = useState('deep_blue_emotional')
   const [ttsVoice, setTtsVoice] = useState('longanhuan')
@@ -52,7 +51,6 @@ export default function ExplainerCreator() {
         generation_flags: JSON.stringify({
           opening_hook_mode: openingHookMode,
           visual_style_key: visualStyleKey,
-          target_duration: targetDuration,
           scene_count: storyboardCount,
           subtitle_mode: 'short_punch',
         }),
@@ -87,10 +85,10 @@ export default function ExplainerCreator() {
           <Alert
             type="success"
             message="目标：抖音爆款讲解视频"
-            description="系统会优先生成强钩子开头、短句字幕、快节奏分镜和更强的观点表达。"
+            description="系统会优先生成强钩子开头、短句字幕、快节奏分镜和更强的观点表达，最终时长会跟随文案和配音自动收敛。"
           />
 
-          <Card>
+          <Card className="stickman-panel" bordered={false}>
             <div className="stickman-form-grid">
               <div>
                 <label className="stickman-label">主题或原始文案</label>
@@ -125,12 +123,7 @@ export default function ExplainerCreator() {
 
                 <div>
                   <label className="stickman-label">分镜数量</label>
-                  <InputNumber min={8} max={15} value={storyboardCount} onChange={(value) => setStoryboardCount(Number(value) || 10)} style={{ width: '100%' }} />
-                </div>
-
-                <div>
-                  <label className="stickman-label">目标时长（秒）</label>
-                  <InputNumber min={25} max={120} step={5} value={targetDuration} onChange={(value) => setTargetDuration(Number(value) || 45)} style={{ width: '100%' }} />
+                  <InputNumber min={3} max={10} value={storyboardCount} onChange={(value) => setStoryboardCount(Number(value) || 6)} style={{ width: '100%' }} />
                 </div>
 
                 <div>
@@ -162,7 +155,8 @@ export default function ExplainerCreator() {
 
                 <div className="stickman-tips">
                   <p>前 3 秒会优先生成冲突、反问、数字或反常识钩子。</p>
-                  <p>字幕优先走短句策略，减少“说明书腔”。</p>
+                  <p>字幕优先走短句策略，减少“说明书腔”，分镜支持 3-10 幕。</p>
+                  <p>视频时长会根据文案和配音自动控制，不需要提前手填秒数。</p>
                   <p>建议先用分步创作确认开头和分镜，再一键合成最终视频。</p>
                 </div>
 

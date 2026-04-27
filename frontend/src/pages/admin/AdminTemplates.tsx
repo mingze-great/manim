@@ -126,8 +126,8 @@ export default function AdminTemplates() {
       await templateApi.uploadExampleVideo(templateId, file)
       message.success('视频上传成功')
       fetchTemplates()
-    } catch (err) {
-      message.error('视频上传失败')
+    } catch (err: any) {
+      message.error(err?.response?.data?.detail || '视频上传失败')
     } finally {
       setUploading(false)
     }

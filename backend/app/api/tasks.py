@@ -720,21 +720,22 @@ async def generate_stickman_video_stream(
             except Exception:
                 generation_flags = {}
             generation_task = asyncio.create_task(asyncio.to_thread(
-                generator.generate,
-                str(project_local.theme),
-                int(project_local.storyboard_count or 3),
-                report,
-                str(project_local.aspect_ratio or "16:9"),
-                str(project_local.voice_source or "ai"),
-                str(project_local.voice_file_path) if project_local.voice_file_path else None,
-                str(project_local.tts_provider or "edge_tts"),
-                str(project_local.tts_voice or "zh-CN-XiaoxiaoNeural"),
-                str(project_local.tts_rate or "+0%"),
-                str(project_local.background_image_path) if getattr(project_local, 'background_image_path', None) else None,
-                str(project_local.style_reference_image_path) if project_local.style_reference_image_path else None,
-                str(project_local.style_reference_notes) if project_local.style_reference_notes else None,
-                str(generation_flags.get("opening_template_key") or "hook_question"),
-                generation_flags,
+                lambda: generator.generate(
+                    str(project_local.theme),
+                    int(project_local.storyboard_count or 3),
+                    report,
+                    str(project_local.aspect_ratio or "16:9"),
+                    str(project_local.voice_source or "ai"),
+                    str(project_local.voice_file_path) if project_local.voice_file_path else None,
+                    str(project_local.tts_provider or "edge_tts"),
+                    str(project_local.tts_voice or "zh-CN-XiaoxiaoNeural"),
+                    str(project_local.tts_rate or "+0%"),
+                    str(project_local.background_image_path) if getattr(project_local, 'background_image_path', None) else None,
+                    str(project_local.style_reference_image_path) if project_local.style_reference_image_path else None,
+                    str(project_local.style_reference_notes) if project_local.style_reference_notes else None,
+                    opening_template_key=str(generation_flags.get("opening_template_key") or "hook_question"),
+                    generation_flags=generation_flags,
+                )
             ))
 
             while True:
@@ -1022,22 +1023,23 @@ async def generate_explainer_video_stream(
                 generation_flags = {}
             generator = _build_explainer_generator()
             generation_task = asyncio.create_task(asyncio.to_thread(
-                generator.generate,
-                str(project_local.theme),
-                int(project_local.storyboard_count or 10),
-                report,
-                str(project_local.aspect_ratio or "16:9"),
-                str(project_local.voice_source or "ai"),
-                str(project_local.voice_file_path) if project_local.voice_file_path else None,
-                str(project_local.tts_provider or "dashscope_cosyvoice"),
-                str(project_local.tts_voice or "longshuo_v3"),
-                str(project_local.tts_rate or "+0%"),
-                str(project_local.background_image_path) if getattr(project_local, 'background_image_path', None) else None,
-                str(project_local.style_reference_image_path) if project_local.style_reference_image_path else None,
-                str(project_local.style_reference_notes) if project_local.style_reference_notes else None,
-                str(generation_flags.get("opening_hook_mode") or "hook_question"),
-                str(generation_flags.get("visual_style_key") or "deep_blue_emotional"),
-                int(generation_flags.get("target_duration") or 45),
+                lambda: generator.generate(
+                    str(project_local.theme),
+                    int(project_local.storyboard_count or 6),
+                    report,
+                    str(project_local.aspect_ratio or "16:9"),
+                    str(project_local.voice_source or "ai"),
+                    str(project_local.voice_file_path) if project_local.voice_file_path else None,
+                    str(project_local.tts_provider or "dashscope_cosyvoice"),
+                    str(project_local.tts_voice or "longshuo_v3"),
+                    str(project_local.tts_rate or "+0%"),
+                    str(project_local.background_image_path) if getattr(project_local, 'background_image_path', None) else None,
+                    str(project_local.style_reference_image_path) if project_local.style_reference_image_path else None,
+                    str(project_local.style_reference_notes) if project_local.style_reference_notes else None,
+                    opening_hook_mode=str(generation_flags.get("opening_hook_mode") or "hook_question"),
+                    visual_style_key=str(generation_flags.get("visual_style_key") or "deep_blue_emotional"),
+                    target_duration=int(generation_flags.get("target_duration") or 0) or None,
+                )
             ))
             while True:
                 if generation_task.done() and progress_queue.empty():

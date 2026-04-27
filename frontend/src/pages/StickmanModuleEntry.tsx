@@ -2,6 +2,7 @@ import { Card, Button, message } from 'antd'
 import { VideoCameraOutlined, ArrowLeftOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
+import './Creator/Creator.css'
 
 const variantCards = [
   {
@@ -40,34 +41,43 @@ export default function StickmanModuleEntry() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto p-6 space-y-6">
-      <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/creator')}>返回创作首页</Button>
-      <div className="text-center space-y-2">
-        <div className="flex items-center justify-center gap-2 text-orange-500 text-lg font-medium">
-          <VideoCameraOutlined />
-          <span>视频讲解模块选择</span>
+    <div className="creator-page">
+      <div className="creator-hero creator-hero-sunrise">
+        <div className="hero-content">
+          <h1 className="hero-title">
+            <VideoCameraOutlined className="mr-3" />
+            视频讲解模块选择
+          </h1>
+          <p className="hero-subtitle">选择标准讲解、增强讲解或讲解型视频，进入各自独立工作流。</p>
         </div>
-        <h1 className="text-3xl font-bold">选择视频讲解版本</h1>
-        <p className="text-gray-500">先选择模块，再进入对应的视频讲解流程。标准讲解、增强讲解和讲解型视频会长期并存。</p>
       </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {variantCards.map((item) => (
-          <Card key={item.value} hoverable onClick={() => handleEnter(item.value)} className={item.value === 'explainer' && !explainerEnabled ? 'opacity-60' : ''}>
-            <div className="space-y-4">
-              <div>
-                <h2 className="text-xl font-semibold mb-2">{item.title}</h2>
-                <p className="text-gray-500 mb-0">{item.description}</p>
+      <div className="creator-container">
+        <div className="flex gap-3 flex-wrap mb-6">
+          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/creator')}>返回创作首页</Button>
+        </div>
+
+        <div className="module-card-grid">
+          {variantCards.map((item) => (
+            <Card key={item.value} hoverable onClick={() => handleEnter(item.value)} className={`module-card ${item.value === 'explainer' && !explainerEnabled ? 'module-card-disabled' : ''}`}>
+              <div className="space-y-4">
+                <div className="module-card-icon module-card-icon-orange">
+                  <VideoCameraOutlined />
+                </div>
+                <div>
+                  <h3>{item.title}</h3>
+                  <p>{item.description}</p>
+                </div>
+                <Button type="primary" block className="btn-gradient-warm" disabled={item.value === 'explainer' && !explainerEnabled} onClick={(event) => {
+                  event.stopPropagation()
+                  handleEnter(item.value)
+                }}>
+                  进入{item.title}
+                </Button>
               </div>
-              <Button type="primary" block disabled={item.value === 'explainer' && !explainerEnabled} onClick={(event) => {
-                event.stopPropagation()
-                handleEnter(item.value)
-              }}>
-                进入{item.title}
-              </Button>
-            </div>
-          </Card>
-        ))}
+            </Card>
+          ))}
+        </div>
       </div>
     </div>
   )

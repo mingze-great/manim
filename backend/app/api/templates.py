@@ -303,7 +303,7 @@ async def upload_example_video(
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
     
-    if not file.filename or not file.filename.endswith('.mp4'):
+    if not file.filename or pathlib.Path(file.filename).suffix.lower() != '.mp4':
         raise HTTPException(status_code=400, detail="Only MP4 files are allowed")
     
     videos_dirs = _template_example_video_dirs()
@@ -315,6 +315,8 @@ async def upload_example_video(
     primary_path = videos_dirs[0] / filename
     
     content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="上传文件为空")
     with open(primary_path, 'wb') as f:
         f.write(content)
 

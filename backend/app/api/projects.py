@@ -103,7 +103,7 @@ def create_project(
             raise HTTPException(status_code=400, detail="stickman_variant 仅支持 legacy 或 v2")
         project.storyboard_count = max(2, min(int(project.storyboard_count or 3), stickman_storyboard_limit))
     elif module_key == "explainer":
-        project.storyboard_count = max(8, min(int(project.storyboard_count or 10), 15))
+        project.storyboard_count = max(3, min(int(project.storyboard_count or 6), 10))
     allowed, reason = current_user.can_use_module(module_key, db)
     if not allowed:
         raise HTTPException(status_code=403, detail=reason or f"系统繁忙，请稍后再试")
@@ -189,7 +189,7 @@ def update_project(
     elif project.module_type == "explainer":
         data = project_update.model_dump(exclude_unset=True)
         if "storyboard_count" in data and data["storyboard_count"] is not None:
-            data["storyboard_count"] = max(8, min(int(data["storyboard_count"]), 15))
+            data["storyboard_count"] = max(3, min(int(data["storyboard_count"]), 10))
     else:
         data = project_update.model_dump(exclude_unset=True)
     
@@ -408,10 +408,11 @@ def generate_explainer_storyboard(
         generation_flags = {}
     opening_hook_mode = str(payload.get("opening_hook_mode") or generation_flags.get("opening_hook_mode") or "hook_question")
     visual_style_key = str(payload.get("visual_style_key") or generation_flags.get("visual_style_key") or "deep_blue_emotional")
-    target_duration = int(payload.get("target_duration") or generation_flags.get("target_duration") or 45)
+    target_duration_value = payload.get("target_duration")
+    target_duration = int(target_duration_value) if target_duration_value not in (None, "") else None
     result = generator.generate_storyboard_data(
         str(project.theme),
-        int(project.storyboard_count or 10),
+        int(project.storyboard_count or 6),
         opening_hook_mode,
         visual_style_key,
         target_duration,

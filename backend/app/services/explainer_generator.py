@@ -23,10 +23,10 @@ class ExplainerGenerator:
         visual_style_key: str | None = None,
         target_duration: int | None = None,
     ):
-        normalized_count = max(8, min(int(storyboard_count or 10), 15))
+        normalized_count = max(3, min(int(storyboard_count or 6), 10))
         hook_mode = str(opening_hook_mode or "hook_question").strip() or "hook_question"
         style_key = str(visual_style_key or "deep_blue_emotional").strip() or "deep_blue_emotional"
-        target_duration = max(25, min(int(target_duration or 45), 180))
+        target_duration = self._resolve_target_duration(source_text, normalized_count, target_duration)
         script_data = self._generate_script(source_text, normalized_count, hook_mode, style_key, target_duration)
         title = str(script_data.get("title") or self._fallback_title(source_text)).strip()
         storyboards = []
@@ -311,6 +311,14 @@ class ExplainerGenerator:
             "ending_payoff": f"这就是{topic}真正值得记住的一点。",
             "storyboards": storyboards,
         }
+
+    def _resolve_target_duration(self, source_text: str, storyboard_count: int, target_duration: int | None):
+        if target_duration is not None:
+            return max(12, min(int(target_duration), 180))
+        text = re.sub(r"\s+", "", str(source_text or ""))
+        estimated_by_text = max(16, min(len(text) // 6, 90)) if text else 0
+        estimated_by_scenes = storyboard_count * 4
+        return max(18, min(max(estimated_by_text, estimated_by_scenes), 90))
 
     def _strengthen_first_scene(self, scene: dict, title: str):
         boosted = dict(scene)

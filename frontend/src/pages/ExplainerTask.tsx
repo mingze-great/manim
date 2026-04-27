@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Alert, Button, Card, Descriptions, Progress, Space, Spin, Steps, Tag, message } from 'antd'
-import { DownloadOutlined, PlayCircleOutlined } from '@ant-design/icons'
+import { Alert, Button, Card, Descriptions, Progress, Spin, Steps, Tag, message } from 'antd'
+import { ArrowLeftOutlined, DownloadOutlined, PlayCircleOutlined } from '@ant-design/icons'
 import { Project, Task, projectApi } from '@/services/project'
 import { resolveBackendUrl } from '@/services/api'
 import { useAuthStore } from '@/stores/authStore'
+import './Creator/Creator.css'
 
 const taskStatusText: Record<string, string> = {
   pending: '等待中',
@@ -151,9 +152,23 @@ export default function ExplainerTask() {
   if (loading) return <div className="flex items-center justify-center h-64"><Spin size="large" /></div>
 
   return (
-    <div className="max-w-5xl mx-auto p-6">
-      <Alert type="success" message="讲解型视频任务流" description="当前流程会优先生成钩子开头、快节奏分镜和抖音风格讲解成片。" className="mb-4" />
-      <Card title={project?.title || '讲解型视频任务'} extra={<Space><Button onClick={() => navigate(`/project/${id}/explainer`)}>分步创作</Button><Button onClick={() => navigate('/creator/explainer')}>新建讲解视频</Button></Space>}>
+    <div className="creator-page">
+      <div className="creator-hero creator-hero-sunrise">
+        <div className="hero-content">
+          <h1 className="hero-title">讲解型视频任务流</h1>
+          <p className="hero-subtitle">统一展示当前生成阶段、日志和最终视频，便于复查开头钩子与整体节奏。</p>
+        </div>
+      </div>
+
+      <div className="creator-container space-y-6">
+        <div className="flex gap-3 flex-wrap">
+          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/creator/stickman')}>返回视频讲解</Button>
+          <Button onClick={() => navigate(`/project/${id}/explainer`)}>分步创作</Button>
+          <Button onClick={() => navigate('/creator/explainer')}>新建讲解视频</Button>
+        </div>
+
+        <Alert type="success" message="讲解型视频任务流" description="当前流程会优先生成钩子开头、快节奏分镜和抖音风格讲解成片。" className="mb-4" />
+        <Card className="stickman-panel" bordered={false} title={project?.title || '讲解型视频任务'}>
         <div className="space-y-6">
           <Descriptions bordered column={1} size="small">
             <Descriptions.Item label="生成模块">讲解型视频</Descriptions.Item>
@@ -192,7 +207,8 @@ export default function ExplainerTask() {
             </video>
           )}
         </div>
-      </Card>
+        </Card>
+      </div>
     </div>
   )
 }

@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Alert, Button, Card, Input, InputNumber, Select, Space, Spin, Tag, Upload, message } from 'antd'
-import { PlayCircleOutlined, ReloadOutlined, RocketOutlined, UploadOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, PlayCircleOutlined, ReloadOutlined, RocketOutlined, UploadOutlined } from '@ant-design/icons'
 import { Project, projectApi } from '@/services/project'
 import { getAppBase } from '@/services/api'
 import { useAuthStore } from '@/stores/authStore'
+import './Creator/Creator.css'
 
 type Storyboard = Record<string, any>
 type ImageAsset = Record<string, any>
@@ -78,7 +79,6 @@ export default function ExplainerStudio() {
       const { data } = await projectApi.generateExplainerStoryboard(Number(id), {
         opening_hook_mode: flags.opening_hook_mode || 'hook_question',
         visual_style_key: flags.visual_style_key || 'deep_blue_emotional',
-        target_duration: Number(flags.target_duration || 45),
       })
       setProject(data)
       setTitle(data.title || '')
@@ -215,9 +215,22 @@ export default function ExplainerStudio() {
   if (loading) return <div className="flex items-center justify-center h-64"><Spin size="large" /></div>
 
   return (
-    <div className="max-w-6xl mx-auto p-6 space-y-6">
-      <Alert type="success" message="讲解型视频分步工作台" description="先把开头和节奏调顺，再生成图片，最后合成并复看前 3 秒效果。" />
-      <Card title={project?.title || '讲解型视频工作台'} extra={<Space><Tag color="blue">抖音爆款导向</Tag><Button onClick={() => navigate(`/project/${id}/task`)}>去任务页</Button></Space>}>
+    <div className="creator-page">
+      <div className="creator-hero creator-hero-sunrise">
+        <div className="hero-content">
+          <h1 className="hero-title">讲解型视频分步工作台</h1>
+          <p className="hero-subtitle">先把开头和节奏调顺，再生成图片，最后合成并复看前 3 秒效果。</p>
+        </div>
+      </div>
+
+      <div className="creator-container space-y-6">
+        <div className="flex gap-3 flex-wrap">
+          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/creator/stickman')}>返回视频讲解</Button>
+          <Button onClick={() => navigate(`/project/${id}/task`)}>去任务页</Button>
+        </div>
+
+        <Alert type="success" message="讲解型视频分步工作台" description="风格、节奏和分镜都在这里统一调整，页面样式也与系统创作台保持一致。" />
+        <Card className="stickman-panel" bordered={false} title={project?.title || '讲解型视频工作台'} extra={<Tag color="blue">抖音爆款导向</Tag>}>
         <Space direction="vertical" size="large" style={{ width: '100%' }}>
           <Card size="small" title="基础设置">
             <Space direction="vertical" style={{ width: '100%' }}>
@@ -233,11 +246,7 @@ export default function ExplainerStudio() {
                   const { data } = await projectApi.update(Number(id), { generation_flags: JSON.stringify(next) } as any)
                   setProject(data)
                 }} options={[{ label: '深蓝情绪线稿', value: 'deep_blue_emotional' }, { label: '观点冷峻线稿', value: 'opinion_editorial' }, { label: '治愈成长线稿', value: 'growth_soft_glow' }]} />
-                <InputNumber min={25} max={120} step={5} value={Number(flags.target_duration || 45)} onChange={async (value) => {
-                  const next = { ...flags, target_duration: Number(value) || 45 }
-                  const { data } = await projectApi.update(Number(id), { generation_flags: JSON.stringify(next) } as any)
-                  setProject(data)
-                }} style={{ width: '100%' }} />
+                <InputNumber disabled value={Number(flags.target_duration || 0)} addonAfter="秒" style={{ width: '100%' }} />
               </div>
               <Button type="primary" icon={<RocketOutlined />} onClick={handleGenerateStoryboard} loading={saving}>生成开头与分镜</Button>
             </Space>
@@ -293,7 +302,8 @@ export default function ExplainerStudio() {
           {!!composeMessage && <Alert type={composeProgress >= 100 ? 'success' : 'info'} message={composeMessage} description={`当前进度 ${composeProgress}%`} />}
           {!!project?.video_url && <video src={resolveAssetUrl(project.video_url)} controls className="w-full rounded-xl shadow-lg" style={{ maxHeight: '60vh' }}>您的浏览器不支持视频播放</video>}
         </Space>
-      </Card>
+        </Card>
+      </div>
     </div>
   )
 }

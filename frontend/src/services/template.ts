@@ -46,9 +46,7 @@ export const templateApi = {
   uploadExampleVideo: (id: number, file: File) => {
     const formData = new FormData()
     formData.append('file', file)
-    return api.post<{ message: string; video_url: string }>(`/templates/${id}/example-video`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    })
+    return api.post<{ message: string; video_url: string }>(`/templates/${id}/example-video`, formData)
   },
   deleteExampleVideo: (id: number) => api.delete(`/templates/${id}/example-video`),
 }
