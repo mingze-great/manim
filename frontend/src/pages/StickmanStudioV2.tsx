@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Alert, Button, Card, Col, Input, Row, Select, Space, Spin, Steps, Tabs, Tag, Upload, message } from 'antd'
+import { Alert, Button, Card, Col, Input, Row, Select, Space, Spin, Steps, Switch, Tabs, Tag, Upload, message } from 'antd'
 import { EditOutlined, PlayCircleOutlined, PictureOutlined, RocketOutlined, UploadOutlined } from '@ant-design/icons'
 import { Project, projectApi, StickmanVoiceOption } from '@/services/project'
 import { getAppBase, resolveBackendUrl } from '@/services/api'
@@ -92,6 +92,18 @@ export default function StickmanStudio() {
   }, [project?.generation_flags])
 
   const openingTemplate = String(parsedFlags.opening_template_key || 'hook_question')
+  const viralPackageEnabled = parsedFlags.viral_package_enabled !== false
+  const viralHookTemplate = String(parsedFlags.viral_hook_template_key || (openingTemplate === 'big_number' ? 'big_number_flash' : 'shock_reveal'))
+  const viralOutroTemplate = String(parsedFlags.viral_outro_template_key || 'quote_soft_cta')
+  const viralTitleMode = String(parsedFlags.viral_title_mode || 'hook_title')
+  const viralVisualStyle = String(parsedFlags.viral_visual_style || 'cinematic_clean')
+  const viralCtaMode = String(parsedFlags.viral_cta_mode || 'light_follow')
+  const viralTitleText = String(parsedFlags.viral_title_text || '')
+  const viralOutroText = String(parsedFlags.viral_outro_text || '')
+  const hookPackage = parsedFlags.viral_hook_package || null
+  const outroPackage = parsedFlags.viral_outro_package || null
+
+  const resolvePackageUrl = (path?: string | null) => resolveBackendUrl(path)
 
   const loadProject = async () => {
     const { data } = await projectApi.get(Number(id))
@@ -422,6 +434,134 @@ export default function StickmanStudio() {
                 ]}
                 style={{ width: 260 }}
               />
+            </Space>
+          </Card>
+          <Card size="small" title="爆款开头/结尾包装">
+            <Space direction="vertical" style={{ width: '100%' }} size="middle">
+              <Alert type="success" message="该包装层只增强新版火柴人首尾，不改你当前正文分镜主流程。" />
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-gray-600">启用爆款包装</span>
+                <Switch checked={viralPackageEnabled} onChange={(checked) => handleUpdateGenerationFlags({ viral_package_enabled: checked, workflow_variant: 'v2_viral_package' })} />
+                <Tag color={viralPackageEnabled ? 'green' : 'default'}>{viralPackageEnabled ? '已启用' : '未启用'}</Tag>
+              </div>
+              <Row gutter={16}>
+                <Col span={12}>
+                  <div className="mb-2 text-sm text-gray-500">开头模板</div>
+                  <Select
+                    value={viralHookTemplate}
+                    onChange={(value) => handleUpdateGenerationFlags({ viral_hook_template_key: value })}
+                    style={{ width: '100%' }}
+                    disabled={!viralPackageEnabled}
+                    options={[
+                      { label: '冲击揭示型', value: 'shock_reveal' },
+                      { label: '爆点数字型', value: 'big_number_flash' },
+                      { label: '反差对比型', value: 'contrast_split' },
+                    ]}
+                  />
+                </Col>
+                <Col span={12}>
+                  <div className="mb-2 text-sm text-gray-500">结尾模板</div>
+                  <Select
+                    value={viralOutroTemplate}
+                    onChange={(value) => handleUpdateGenerationFlags({ viral_outro_template_key: value })}
+                    style={{ width: '100%' }}
+                    disabled={!viralPackageEnabled}
+                    options={[
+                      { label: '金句轻 CTA', value: 'quote_soft_cta' },
+                      { label: '情绪反转总结', value: 'reverse_summary' },
+                      { label: '连载留钩型', value: 'series_tease' },
+                    ]}
+                  />
+                </Col>
+              </Row>
+              <Row gutter={16}>
+                <Col span={8}>
+                  <div className="mb-2 text-sm text-gray-500">标题模式</div>
+                  <Select
+                    value={viralTitleMode}
+                    onChange={(value) => handleUpdateGenerationFlags({ viral_title_mode: value })}
+                    style={{ width: '100%' }}
+                    disabled={!viralPackageEnabled}
+                    options={[
+                      { label: '爆款标题', value: 'hook_title' },
+                      { label: '原主题', value: 'raw_topic' },
+                    ]}
+                  />
+                </Col>
+                <Col span={8}>
+                  <div className="mb-2 text-sm text-gray-500">视觉风格</div>
+                  <Select
+                    value={viralVisualStyle}
+                    onChange={(value) => handleUpdateGenerationFlags({ viral_visual_style: value })}
+                    style={{ width: '100%' }}
+                    disabled={!viralPackageEnabled}
+                    options={[
+                      { label: '电影感克制', value: 'cinematic_clean' },
+                      { label: '霓虹冲击', value: 'neon_punch' },
+                      { label: '治愈电影感', value: 'healing_film' },
+                    ]}
+                  />
+                </Col>
+                <Col span={8}>
+                  <div className="mb-2 text-sm text-gray-500">结尾 CTA</div>
+                  <Select
+                    value={viralCtaMode}
+                    onChange={(value) => handleUpdateGenerationFlags({ viral_cta_mode: value })}
+                    style={{ width: '100%' }}
+                    disabled={!viralPackageEnabled}
+                    options={[
+                      { label: '轻关注引导', value: 'light_follow' },
+                      { label: '评论互动', value: 'comment_prompt' },
+                      { label: '连载留钩', value: 'series_tease' },
+                    ]}
+                  />
+                </Col>
+              </Row>
+              <Row gutter={16}>
+                <Col span={12}>
+                  <div className="mb-2 text-sm text-gray-500">当前开头标题</div>
+                  <Input value={viralTitleText || '生成图片后自动产出'} readOnly disabled={!viralPackageEnabled} />
+                </Col>
+                <Col span={12}>
+                  <div className="mb-2 text-sm text-gray-500">当前结尾金句</div>
+                  <Input value={viralOutroText || '生成图片后自动产出'} readOnly disabled={!viralPackageEnabled} />
+                </Col>
+              </Row>
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Card size="small" title="开头包装预览">
+                    <Space direction="vertical" style={{ width: '100%' }}>
+                      {hookPackage?.image_url ? (
+                        <img src={resolvePackageUrl(hookPackage.image_url)} alt="hook-package" style={{ width: '100%', borderRadius: 12, border: '1px solid #eee' }} />
+                      ) : (
+                        <div style={{ height: 180, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fafafa', borderRadius: 12 }}>生成图片后显示开头包装预览</div>
+                      )}
+                      <div className="text-xs text-gray-500">{hookPackage?.title_text || viralTitleText || '尚未生成开头标题'}</div>
+                      {hookPackage?.error_summary && <Alert type="warning" message={hookPackage.error_summary} />}
+                    </Space>
+                  </Card>
+                </Col>
+                <Col span={12}>
+                  <Card size="small" title="结尾包装预览">
+                    <Space direction="vertical" style={{ width: '100%' }}>
+                      {outroPackage?.image_url ? (
+                        <img src={resolvePackageUrl(outroPackage.image_url)} alt="outro-package" style={{ width: '100%', borderRadius: 12, border: '1px solid #eee' }} />
+                      ) : (
+                        <div style={{ height: 180, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fafafa', borderRadius: 12 }}>生成图片后显示结尾包装预览</div>
+                      )}
+                      <div className="text-xs text-gray-500">{outroPackage?.title_text || viralOutroText || '尚未生成结尾金句'}</div>
+                      {outroPackage?.error_summary && <Alert type="warning" message={outroPackage.error_summary} />}
+                    </Space>
+                  </Card>
+                </Col>
+              </Row>
+              {useAuthStore.getState().user?.is_admin && (hookPackage || outroPackage) && (
+                <Alert
+                  type="info"
+                  message="管理员调试信息"
+                  description={`hook=${hookPackage?.template_key || '-'} | outro=${outroPackage?.template_key || '-'} | visual=${viralVisualStyle}`}
+                />
+              )}
             </Space>
           </Card>
           <Card size="small" title="风格预览图">
