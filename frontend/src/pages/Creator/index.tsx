@@ -12,7 +12,7 @@ import './Creator.css'
 
 const { TextArea } = Input
 
-type ModuleType = 'manim' | 'math' | 'stickman' | 'explainer' | 'article'
+type ModuleType = 'manim' | 'math' | 'stickman' | 'article'
 
 export default function Creator() {
   const navigate = useNavigate()
@@ -30,7 +30,6 @@ export default function Creator() {
 
   const permissions = user?.module_permissions || {}
   const stickmanEnabled = user?.is_admin || permissions.stickman?.enabled !== false
-  const explainerEnabled = user?.is_admin || permissions.explainer?.enabled !== false
   const articleEnabled = user?.is_admin || permissions.article?.enabled !== false
 
   const handleCategorySelect = (category: VideoTopicCategory) => {
@@ -158,10 +157,6 @@ export default function Creator() {
                   navigate('/creator/stickman')
                   return
                 }
-                if (next === 'explainer') {
-                  navigate('/creator/explainer')
-                  return
-                }
                 setModuleType(next)
                 if (next === 'article') {
                   handleArticleModeEnter()
@@ -171,7 +166,6 @@ export default function Creator() {
                 { label: '思维可视化', value: 'manim' },
                 { label: '数学可视化', value: 'math' },
                 { label: '视频讲解', value: 'stickman' },
-                { label: '讲解型视频', value: 'explainer' },
                 { label: '公众号文章', value: 'article' },
               ]}
             />
@@ -200,14 +194,6 @@ export default function Creator() {
               </div>
               <h3>视频讲解</h3>
               <p>先进入版本选择页，再进入标准讲解或增强讲解创作流程。</p>
-            </Card>
-
-            <Card className={`module-card ${moduleType === 'explainer' ? 'active' : ''} ${!explainerEnabled ? 'module-card-disabled' : ''}`} onClick={() => navigate('/creator/explainer')}>
-              <div className="module-card-icon" style={{ color: '#1d4ed8' }}>
-                <VideoCameraOutlined />
-              </div>
-              <h3>讲解型视频</h3>
-              <p>围绕抖音爆款逻辑生成强钩子开头、快节奏分镜、字幕、配音与合成视频。</p>
             </Card>
 
             <Card className={`module-card ${moduleType === 'article' ? 'active' : ''} ${!articleEnabled ? 'module-card-disabled' : ''}`} onClick={() => { setModuleType('article'); handleArticleModeEnter() }}>
