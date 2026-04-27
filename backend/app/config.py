@@ -1,11 +1,22 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
 import os
+from pathlib import Path
+
+
+ROOT_DIR = Path(__file__).resolve().parents[2]
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+ENVIRONMENT_NAME = os.getenv("ENVIRONMENT", "development").strip().lower() or "development"
+ENV_FILES = [
+    str(BACKEND_DIR / ".env"),
+    str(ROOT_DIR / ".env"),
+    str(ROOT_DIR / f".env.{ENVIRONMENT_NAME}"),
+]
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env"),
+        env_file=tuple(ENV_FILES),
         extra="ignore"
     )
     

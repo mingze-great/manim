@@ -17,7 +17,7 @@ export default function ExplainerCreator() {
   const [targetDuration, setTargetDuration] = useState(45)
   const [openingHookMode, setOpeningHookMode] = useState('hook_question')
   const [visualStyleKey, setVisualStyleKey] = useState('deep_blue_emotional')
-  const [ttsVoice, setTtsVoice] = useState('longxiaochun_v2')
+  const [ttsVoice, setTtsVoice] = useState('longanhuan')
   const [ttsRate, setTtsRate] = useState('+0%')
   const [generationMode, setGenerationMode] = useState<'one_click' | 'step_by_step'>('step_by_step')
 
@@ -136,10 +136,10 @@ export default function ExplainerCreator() {
                 <div>
                   <label className="stickman-label">AI 音色</label>
                   <Select value={ttsVoice} onChange={setTtsVoice} style={{ width: '100%' }} options={[
-                    { label: '知性女声', value: 'longxiaochun_v2' },
                     { label: '元气女声', value: 'longanhuan' },
                     { label: '稳重男声', value: 'longshuo_v3' },
                     { label: '阳光男声', value: 'longanyang' },
+                    { label: '理性播报男声', value: 'sambert-zhiming-v1' },
                   ]} />
                 </div>
 
