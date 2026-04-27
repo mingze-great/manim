@@ -1,0 +1,32 @@
+<svg width="1440" height="920" viewBox="0 0 1440 920" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="1440" height="920" fill="#F5F7FB"/>
+<rect x="80" y="60" width="1280" height="150" rx="28" fill="url(#g2)"/>
+<text x="140" y="138" fill="#FFFFFF" font-family="Arial" font-size="42" font-weight="700">视频讲解详情页</text>
+<text x="140" y="184" fill="#EAF6FF" font-family="Arial" font-size="24">左边集中编辑脚本与图片，右边固定控制风格和合成</text>
+<rect x="80" y="250" width="860" height="590" rx="24" fill="#FFFFFF" stroke="#D8E4EC"/>
+<text x="120" y="314" fill="#17394F" font-family="Arial" font-size="32" font-weight="700">左侧主编辑区</text>
+<rect x="120" y="344" width="780" height="72" rx="18" fill="#F8FAFC" stroke="#D8E4EC"/>
+<text x="150" y="388" fill="#667985" font-family="Arial" font-size="22">脚本与分镜 / 图片控制 两个主标签页</text>
+<rect x="120" y="440" width="370" height="330" rx="18" fill="#FBFCFE" stroke="#D8E4EC"/>
+<rect x="530" y="440" width="370" height="330" rx="18" fill="#FBFCFE" stroke="#D8E4EC"/>
+<text x="156" y="500" fill="#17394F" font-family="Arial" font-size="26" font-weight="700">分镜 1</text>
+<text x="566" y="500" fill="#17394F" font-family="Arial" font-size="26" font-weight="700">分镜 2</text>
+<text x="156" y="548" fill="#667985" font-family="Arial" font-size="22">标题 / 场景描述 / 旁白 / 镜头</text>
+<text x="566" y="548" fill="#667985" font-family="Arial" font-size="22">标题 / 场景描述 / 旁白 / 镜头</text>
+<rect x="980" y="250" width="380" height="590" rx="24" fill="#FFF9EF" stroke="#F3D7B9"/>
+<text x="1020" y="314" fill="#17394F" font-family="Arial" font-size="32" font-weight="700">右侧控制区</text>
+<text x="1020" y="370" fill="#7B6856" font-family="Arial" font-size="22">参考风格图</text>
+<text x="1020" y="410" fill="#7B6856" font-family="Arial" font-size="22">开头模板</text>
+<text x="1020" y="450" fill="#7B6856" font-family="Arial" font-size="22">预览图</text>
+<text x="1020" y="490" fill="#7B6856" font-family="Arial" font-size="22">配音设置</text>
+<text x="1020" y="530" fill="#7B6856" font-family="Arial" font-size="22">合成视频</text>
+<rect x="1020" y="588" width="260" height="52" rx="16" fill="#E28A3D"/>
+<text x="1084" y="622" fill="#FFFFFF" font-family="Arial" font-size="24" font-weight="700">直接合成视频</text>
+<defs>
+<linearGradient id="g2" x1="80" y1="60" x2="1360" y2="210" gradientUnits="userSpaceOnUse">
+<stop stop-color="#153A52"/>
+<stop offset="0.65" stop-color="#1D5D70"/>
+<stop offset="1" stop-color="#EF9542"/>
+</linearGradient>
+</defs>
+</svg>

@@ -231,7 +231,41 @@ export default function ExplainerStudio() {
 
         <Alert type="success" message="讲解型视频分步工作台" description="风格、节奏和分镜都在这里统一调整，页面样式也与系统创作台保持一致。" />
         <Card className="stickman-panel" bordered={false} title={project?.title || '讲解型视频工作台'} extra={<Tag color="blue">抖音爆款导向</Tag>}>
-        <Space direction="vertical" size="large" style={{ width: '100%' }}>
+        <div className="workflow-shell">
+          <div className="workflow-main">
+          <Card size="small" title="分镜列表">
+            <Space direction="vertical" style={{ width: '100%' }}>
+              {storyboards.map((scene, index) => (
+                <Card key={index} size="small" title={<Space><span>{scene.scene_title || `第${index + 1}幕`}</span><Tag color={scene.beat_type === 'hook' ? 'red' : scene.beat_type === 'payoff' ? 'green' : 'blue'}>{scene.beat_type || 'expand'}</Tag></Space>} extra={<Button size="small" icon={<ReloadOutlined />} onClick={() => handleRegenerateImage(index)} loading={saving}>重生单图</Button>}>
+                  <Space direction="vertical" style={{ width: '100%' }}>
+                    <Input value={scene.scene_title} onChange={(e) => updateScene(index, { scene_title: e.target.value })} placeholder="镜头标题" />
+                    <Input value={scene.subtitle_text} onChange={(e) => updateScene(index, { subtitle_text: e.target.value })} placeholder="字幕短句" />
+                    <Input.TextArea rows={3} value={scene.narration_text} onChange={(e) => updateScene(index, { narration_text: e.target.value })} placeholder="配音文案" />
+                    <Input.TextArea rows={3} value={scene.visual_description} onChange={(e) => updateScene(index, { visual_description: e.target.value })} placeholder="画面描述" />
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                      <Input value={scene.punch_phrase} onChange={(e) => updateScene(index, { punch_phrase: e.target.value })} placeholder="击中句" />
+                      <Select value={scene.camera_motion || 'slow_zoom_in'} onChange={(value) => updateScene(index, { camera_motion: value })} options={[{ label: '慢推近', value: 'slow_zoom_in' }, { label: '慢拉远', value: 'slow_zoom_out' }, { label: '平移左', value: 'pan_left' }, { label: '平移右', value: 'pan_right' }, { label: '轻景深', value: 'parallax_light' }]} />
+                      <Select value={scene.energy_level || 'medium'} onChange={(value) => updateScene(index, { energy_level: value })} options={[{ label: '高能量', value: 'high' }, { label: '中能量', value: 'medium' }, { label: '低能量', value: 'low' }]} />
+                      <InputNumber min={2} max={6} step={0.5} value={Number(scene.duration || 3.5)} onChange={(value) => updateScene(index, { duration: Number(value) || 3.5 })} style={{ width: '100%' }} />
+                    </div>
+                    {!!scene.image_url && <img src={resolveAssetUrl(scene.image_url)} alt={`scene-${index + 1}`} style={{ width: 220, borderRadius: 12, border: '1px solid #eee' }} />}
+                  </Space>
+                </Card>
+              ))}
+            </Space>
+          </Card>
+
+          <div className="workflow-toolbar">
+            <Button onClick={handleSaveStoryboard} loading={saving}>保存分镜</Button>
+            <Button type="primary" onClick={handleGenerateImages} loading={saving} disabled={!storyboards.length}>生成全部图片</Button>
+            <Button icon={<PlayCircleOutlined />} onClick={handleCompose} loading={saving} disabled={!imageAssets.length}>合成视频</Button>
+          </div>
+
+          {!!composeMessage && <Alert type={composeProgress >= 100 ? 'success' : 'info'} message={composeMessage} description={`当前进度 ${composeProgress}%`} />}
+          {!!project?.video_url && <video src={resolveAssetUrl(project.video_url)} controls className="w-full rounded-xl shadow-lg" style={{ maxHeight: '60vh' }}>您的浏览器不支持视频播放</video>}
+          </div>
+
+          <div className="workflow-side">
           <Card size="small" title="基础设置">
             <Space direction="vertical" style={{ width: '100%' }}>
               <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="视频标题 / 开头标题" />
@@ -270,38 +304,8 @@ export default function ExplainerStudio() {
               </Space>
             </Space>
           </Card>
-
-          <Card size="small" title="分镜列表">
-            <Space direction="vertical" style={{ width: '100%' }}>
-              {storyboards.map((scene, index) => (
-                <Card key={index} size="small" title={<Space><span>{scene.scene_title || `第${index + 1}幕`}</span><Tag color={scene.beat_type === 'hook' ? 'red' : scene.beat_type === 'payoff' ? 'green' : 'blue'}>{scene.beat_type || 'expand'}</Tag></Space>} extra={<Button size="small" icon={<ReloadOutlined />} onClick={() => handleRegenerateImage(index)} loading={saving}>重生单图</Button>}>
-                  <Space direction="vertical" style={{ width: '100%' }}>
-                    <Input value={scene.scene_title} onChange={(e) => updateScene(index, { scene_title: e.target.value })} placeholder="镜头标题" />
-                    <Input value={scene.subtitle_text} onChange={(e) => updateScene(index, { subtitle_text: e.target.value })} placeholder="字幕短句" />
-                    <Input.TextArea rows={3} value={scene.narration_text} onChange={(e) => updateScene(index, { narration_text: e.target.value })} placeholder="配音文案" />
-                    <Input.TextArea rows={3} value={scene.visual_description} onChange={(e) => updateScene(index, { visual_description: e.target.value })} placeholder="画面描述" />
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                      <Input value={scene.punch_phrase} onChange={(e) => updateScene(index, { punch_phrase: e.target.value })} placeholder="击中句" />
-                      <Select value={scene.camera_motion || 'slow_zoom_in'} onChange={(value) => updateScene(index, { camera_motion: value })} options={[{ label: '慢推近', value: 'slow_zoom_in' }, { label: '慢拉远', value: 'slow_zoom_out' }, { label: '平移左', value: 'pan_left' }, { label: '平移右', value: 'pan_right' }, { label: '轻景深', value: 'parallax_light' }]} />
-                      <Select value={scene.energy_level || 'medium'} onChange={(value) => updateScene(index, { energy_level: value })} options={[{ label: '高能量', value: 'high' }, { label: '中能量', value: 'medium' }, { label: '低能量', value: 'low' }]} />
-                      <InputNumber min={2} max={6} step={0.5} value={Number(scene.duration || 3.5)} onChange={(value) => updateScene(index, { duration: Number(value) || 3.5 })} style={{ width: '100%' }} />
-                    </div>
-                    {!!scene.image_url && <img src={resolveAssetUrl(scene.image_url)} alt={`scene-${index + 1}`} style={{ width: 220, borderRadius: 12, border: '1px solid #eee' }} />}
-                  </Space>
-                </Card>
-              ))}
-            </Space>
-          </Card>
-
-          <Space wrap>
-            <Button onClick={handleSaveStoryboard} loading={saving}>保存分镜</Button>
-            <Button type="primary" onClick={handleGenerateImages} loading={saving} disabled={!storyboards.length}>生成全部图片</Button>
-            <Button icon={<PlayCircleOutlined />} onClick={handleCompose} loading={saving} disabled={!imageAssets.length}>合成视频</Button>
-          </Space>
-
-          {!!composeMessage && <Alert type={composeProgress >= 100 ? 'success' : 'info'} message={composeMessage} description={`当前进度 ${composeProgress}%`} />}
-          {!!project?.video_url && <video src={resolveAssetUrl(project.video_url)} controls className="w-full rounded-xl shadow-lg" style={{ maxHeight: '60vh' }}>您的浏览器不支持视频播放</video>}
-        </Space>
+          </div>
+        </div>
         </Card>
       </div>
     </div>

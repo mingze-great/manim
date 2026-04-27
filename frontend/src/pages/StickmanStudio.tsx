@@ -5,6 +5,7 @@ import { EditOutlined, PlayCircleOutlined, PictureOutlined, RocketOutlined, Uplo
 import { Project, projectApi, StickmanVoiceOption } from '@/services/project'
 import { getAppBase, resolveBackendUrl } from '@/services/api'
 import { useAuthStore } from '@/stores/authStore'
+import './Creator/Creator.css'
 
 type Storyboard = {
   scene_id: number
@@ -341,9 +342,112 @@ export default function StickmanStudio() {
         title={project?.title || '视频讲解分步创作'}
         extra={<Space><Tag color="gold">分步创作</Tag><Button onClick={() => navigate(`/project/${id}/task`)}>去任务页</Button></Space>}
       >
-        <Space direction="vertical" size="large" style={{ width: '100%' }}>
-          <Alert type="info" message="你现在处于分步创作模式" description="可以先生成脚本与分镜，再逐段调整，最后生成图片和视频。" />
-          <Steps current={imageAssets.length ? 2 : storyboards.length ? 1 : 0} items={[{ title: '生成脚本' }, { title: '确认分镜' }, { title: '生成图片' }, { title: '去任务页合成' }]} />
+        <div className="workflow-shell">
+          <div className="workflow-main">
+            <Alert type="info" message="你现在处于分步创作模式" description="可以先生成脚本与分镜，再逐段调整，最后生成图片和视频。" />
+            <Steps current={imageAssets.length ? 2 : storyboards.length ? 1 : 0} items={[{ title: '生成脚本' }, { title: '确认分镜' }, { title: '生成图片' }, { title: '去任务页合成' }]} />
+            <Tabs
+              items={[
+                {
+                  key: 'script',
+                  label: '脚本与分镜',
+                  children: (
+                    <Space direction="vertical" size="large" style={{ width: '100%' }}>
+                      <div className="workflow-toolbar">
+                        <Button type="primary" icon={<RocketOutlined />} onClick={handleGenerateScript} loading={saving}>生成脚本和分镜</Button>
+                        <Button onClick={handleSaveStoryboards} loading={saving}>保存修改</Button>
+                      </div>
+                      <Input.TextArea rows={5} value={finalScript} onChange={(e) => setFinalScript(e.target.value)} placeholder="完整脚本文案" />
+                      <Row gutter={[16, 16]}>
+                        {storyboards.map((scene, index) => (
+                          <Col span={12} key={scene.scene_id || index}>
+                            <Card title={scene.scene_title || `第${index + 1}幕`} extra={<Tag>{scene.camera_type || '镜头未设定'}</Tag>}>
+                              <Space direction="vertical" style={{ width: '100%' }}>
+                                <Input value={scene.scene_title} onChange={(e) => updateScene(index, { scene_title: e.target.value })} placeholder="分镜标题" />
+                                <Input.TextArea rows={3} value={scene.scene_description} onChange={(e) => updateScene(index, { scene_description: e.target.value })} placeholder="场景描述" />
+                                <Input.TextArea rows={3} value={scene.narration} onChange={(e) => updateScene(index, { narration: e.target.value })} placeholder="旁白" />
+                                <Input.TextArea rows={2} value={scene.background_prompt || ''} onChange={(e) => updateScene(index, { background_prompt: e.target.value })} placeholder="背景提示词 / 场景底板描述" />
+                                <Input value={scene.camera_type} onChange={(e) => updateScene(index, { camera_type: e.target.value })} placeholder="镜头类型" />
+                                <Input value={scene.character_action} onChange={(e) => updateScene(index, { character_action: e.target.value })} placeholder="人物动作" />
+                                <Input value={scene.layout_hint} onChange={(e) => updateScene(index, { layout_hint: e.target.value })} placeholder="构图提示" />
+                                {index === 0 && (
+                                  <Select
+                                    value={scene.opening_template_key || openingTemplate}
+                                    onChange={(value) => updateScene(index, { opening_template_key: value })}
+                                    options={[
+                                      { label: '反问钩子型', value: 'hook_question' },
+                                      { label: '爆点数字型', value: 'big_number' },
+                                    ]}
+                                    style={{ width: '100%' }}
+                                  />
+                                )}
+                                <Select
+                                  value={scene.duration_range || '2-4'}
+                                  onChange={(value) => updateScene(index, { duration_range: value })}
+                                  options={[
+                                    { label: '1-2 秒', value: '1-2' },
+                                    { label: '2-4 秒', value: '2-4' },
+                                    { label: '4-6 秒', value: '4-6' },
+                                  ]}
+                                  style={{ width: '100%' }}
+                                />
+                                {!!scene.foreground_events?.length && <Alert type="success" message={`前景事件 ${scene.foreground_events.length} 个`} description={scene.foreground_events.map((item) => `${item.target}:${item.animation}@${item.start}s`).join(' / ')} />}
+                                {!!scene.subtitle_lines?.length && <Alert type="info" message={`字幕分段 ${scene.subtitle_lines.length} 条`} description={scene.subtitle_lines.map((item) => item.text).join(' / ')} />}
+                              </Space>
+                            </Card>
+                          </Col>
+                        ))}
+                      </Row>
+                    </Space>
+                  ),
+                },
+                {
+                  key: 'images',
+                  label: '图片控制',
+                  children: (
+                    <Space direction="vertical" size="large" style={{ width: '100%' }}>
+                      <div className="workflow-toolbar">
+                        <Button type="primary" icon={<PictureOutlined />} onClick={handleGenerateImages} loading={saving} disabled={!storyboards.length || !previewImageAsset}>生成全部图片</Button>
+                        <Button onClick={handleRegenerateFallbackImages} loading={saving} disabled={!imageAssets.some((asset) => asset?.used_fallback) || !useAuthStore.getState().user?.is_admin}>只重生降级图</Button>
+                        <Tag color={parsedFlags.image_fallback_used ? 'orange' : 'green'}>
+                          {parsedFlags.image_fallback_used ? '包含降级图片' : '真实图片生成'}
+                        </Tag>
+                        {parsedFlags.image_auto_switched ? <Tag color="blue">已自动切模型</Tag> : null}
+                        {!!parsedFlags.fallback_count && <Tag color="red">{parsedFlags.fallback_count} 张为降级图</Tag>}
+                        {!!parsedFlags.image_switch_count && <Tag color="blue">{parsedFlags.image_switch_count} 张自动切换成功</Tag>}
+                      </div>
+                      {parsedFlags.image_auto_switched && !parsedFlags.image_fallback_used && <Alert type="info" message="图片主模型已自动切换到可用模型" description="当前开发环境的高阶图片模型额度不足，系统已自动切换到可用的普通模型继续真实出图。" />}
+                      {parsedFlags.image_fallback_used && <Alert type="warning" message="当前开发环境图片模型并非全部真实生成" description="检测到至少一张图走了降级占位图。通常是图片模型额度、权限或可用性问题导致。你仍可编辑 prompt 后单张重生。" />}
+                      <Row gutter={[16, 16]}>
+                        {storyboards.map((scene, index) => {
+                          const asset = imageAssets[index]
+                          return (
+                            <Col span={12} key={`image-${scene.scene_id || index}`}>
+                              <Card title={scene.scene_title || `第${index + 1}幕`} extra={<Button size="small" icon={<EditOutlined />} onClick={() => handleRegenerateImage(index)} loading={saving} disabled={!useAuthStore.getState().user?.is_admin}>重生图片</Button>}>
+                                <Space direction="vertical" style={{ width: '100%' }}>
+                                  {asset?.image_url ? <img src={resolveAssetUrl(asset.image_url)} alt={scene.scene_title || `scene-${index + 1}`} style={{ width: '100%', borderRadius: 12, border: '1px solid #eee' }} /> : <div className="workflow-preview-box">未生成图片</div>}
+                                  <Space wrap>
+                                    <Tag color={asset?.used_fallback ? 'orange' : 'green'}>{asset?.used_fallback ? '降级占位图' : '真实模型图'}</Tag>
+                                    {asset?.model_used && <Tag>{asset.model_used}</Tag>}
+                                    {asset?.model_requested && asset?.model_requested !== asset?.model_used && <Tag color="blue">原始请求 {asset.model_requested}</Tag>}
+                                    {asset?.image_source && <Tag>{asset.image_source === 'model' ? '模型生成' : '占位降级'}</Tag>}
+                                  </Space>
+                                  <Input.TextArea rows={4} value={asset?.prompt || ''} onChange={(e) => setImageAssets((prev) => prev.map((item, i) => i === index ? { ...item, prompt: e.target.value } : item))} placeholder="图片提示词" />
+                                  {asset?.error_summary && <Alert type={asset?.used_fallback ? 'warning' : 'info'} message={asset.error_summary} />}
+                                </Space>
+                              </Card>
+                            </Col>
+                          )
+                        })}
+                      </Row>
+                    </Space>
+                  ),
+                },
+              ]}
+            />
+          </div>
+
+          <div className="workflow-side">
           <Card size="small" title="参考风格图">
             <Space direction="vertical" style={{ width: '100%' }}>
               <Alert type="info" message="默认使用 4_23 参考视频方向的画风；上传参考图后，会优先按参考图风格生成。" />
@@ -378,9 +482,9 @@ export default function StickmanStudio() {
             <Space direction="vertical" style={{ width: '100%' }}>
               <Alert type="info" message="先生成 1 张预览图确认风格，满意后再生成全部分镜图，能明显降低图片成本。" />
               {previewImageAsset?.image_url ? (
-                <img src={resolveAssetUrl(previewImageAsset.image_url)} alt="preview-scene" style={{ width: '100%', maxWidth: 420, borderRadius: 12, border: '1px solid #eee' }} />
+                <img src={resolveAssetUrl(previewImageAsset.image_url)} alt="preview-scene" style={{ width: '100%', borderRadius: 12, border: '1px solid #eee' }} />
               ) : (
-                <div style={{ height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fafafa', borderRadius: 12 }}>尚未生成风格预览图</div>
+                <div className="workflow-preview-box">尚未生成风格预览图</div>
               )}
               <Space wrap>
                 <Button type="primary" onClick={() => handleGeneratePreviewImage(false)} loading={saving} disabled={!storyboards.length}>生成预览图</Button>
@@ -419,122 +523,11 @@ export default function StickmanStudio() {
               </Card>
               <Button type="primary" onClick={handleComposeVideo} loading={saving} disabled={!imageAssets.length}>直接合成讲解视频</Button>
               {!!composeProgress && <div>合成进度：{composeProgress}% {composeMessage}</div>}
-              {project?.video_url && <video src={resolveBackendUrl(project.video_url)} controls style={{ width: '100%', borderRadius: 12 }} />}
+              {project?.video_url && <video src={resolveBackendUrl(project.video_url)} controls className="workflow-video-preview" />}
             </Space>
           </Card>
-
-          <Tabs
-            items={[
-              {
-                key: 'script',
-                label: '脚本与分镜',
-                children: (
-                  <Space direction="vertical" size="large" style={{ width: '100%' }}>
-                    <Space>
-                      <Button type="primary" icon={<RocketOutlined />} onClick={handleGenerateScript} loading={saving}>生成脚本和分镜</Button>
-                      <Button onClick={handleSaveStoryboards} loading={saving}>保存修改</Button>
-                    </Space>
-                    <Input.TextArea rows={5} value={finalScript} onChange={(e) => setFinalScript(e.target.value)} placeholder="完整脚本文案" />
-                    <Row gutter={[16, 16]}>
-                      {storyboards.map((scene, index) => (
-                        <Col span={12} key={scene.scene_id || index}>
-                          <Card title={scene.scene_title || `第${index + 1}幕`} extra={<Tag>{scene.camera_type || '镜头未设定'}</Tag>}>
-                            <Space direction="vertical" style={{ width: '100%' }}>
-                              <Input value={scene.scene_title} onChange={(e) => updateScene(index, { scene_title: e.target.value })} placeholder="分镜标题" />
-                               <Input.TextArea rows={3} value={scene.scene_description} onChange={(e) => updateScene(index, { scene_description: e.target.value })} placeholder="场景描述" />
-                               <Input.TextArea rows={3} value={scene.narration} onChange={(e) => updateScene(index, { narration: e.target.value })} placeholder="旁白" />
-                               <Input.TextArea rows={2} value={scene.background_prompt || ''} onChange={(e) => updateScene(index, { background_prompt: e.target.value })} placeholder="背景提示词 / 场景底板描述" />
-                               <Input value={scene.camera_type} onChange={(e) => updateScene(index, { camera_type: e.target.value })} placeholder="镜头类型" />
-                               <Input value={scene.character_action} onChange={(e) => updateScene(index, { character_action: e.target.value })} placeholder="人物动作" />
-                               <Input value={scene.layout_hint} onChange={(e) => updateScene(index, { layout_hint: e.target.value })} placeholder="构图提示" />
-                               {index === 0 && (
-                                 <Select
-                                   value={scene.opening_template_key || openingTemplate}
-                                   onChange={(value) => updateScene(index, { opening_template_key: value })}
-                                   options={[
-                                     { label: '反问钩子型', value: 'hook_question' },
-                                     { label: '爆点数字型', value: 'big_number' },
-                                   ]}
-                                   style={{ width: '100%' }}
-                                 />
-                               )}
-                               <Select
-                                 value={scene.duration_range || '2-4'}
-                                 onChange={(value) => updateScene(index, { duration_range: value })}
-                                options={[
-                                  { label: '1-2 秒', value: '1-2' },
-                                  { label: '2-4 秒', value: '2-4' },
-                                  { label: '4-6 秒', value: '4-6' },
-                                 ]}
-                                 style={{ width: '100%' }}
-                               />
-                               {!!scene.foreground_events?.length && <Alert type="success" message={`前景事件 ${scene.foreground_events.length} 个`} description={scene.foreground_events.map((item) => `${item.target}:${item.animation}@${item.start}s`).join(' / ')} />}
-                               {!!scene.subtitle_lines?.length && <Alert type="info" message={`字幕分段 ${scene.subtitle_lines.length} 条`} description={scene.subtitle_lines.map((item) => item.text).join(' / ')} />}
-                             </Space>
-                           </Card>
-                         </Col>
-                      ))}
-                    </Row>
-                  </Space>
-                ),
-              },
-              {
-                key: 'images',
-                label: '图片控制',
-                children: (
-                  <Space direction="vertical" size="large" style={{ width: '100%' }}>
-                    <Space>
-                      <Button type="primary" icon={<PictureOutlined />} onClick={handleGenerateImages} loading={saving} disabled={!storyboards.length || !previewImageAsset}>生成全部图片</Button>
-                      <Button onClick={handleRegenerateFallbackImages} loading={saving} disabled={!imageAssets.some((asset) => asset?.used_fallback) || !useAuthStore.getState().user?.is_admin}>只重生降级图</Button>
-                      <Tag color={parsedFlags.image_fallback_used ? 'orange' : 'green'}>
-                        {parsedFlags.image_fallback_used ? '包含降级图片' : '真实图片生成'}
-                      </Tag>
-                      {parsedFlags.image_auto_switched ? <Tag color="blue">已自动切模型</Tag> : null}
-                      {!!parsedFlags.fallback_count && <Tag color="red">{parsedFlags.fallback_count} 张为降级图</Tag>}
-                      {!!parsedFlags.image_switch_count && <Tag color="blue">{parsedFlags.image_switch_count} 张自动切换成功</Tag>}
-                    </Space>
-                    {parsedFlags.image_auto_switched && !parsedFlags.image_fallback_used && (
-                      <Alert
-                        type="info"
-                        message="图片主模型已自动切换到可用模型"
-                        description="当前开发环境的高阶图片模型额度不足，系统已自动切换到可用的普通模型继续真实出图。"
-                      />
-                    )}
-                    {parsedFlags.image_fallback_used && (
-                      <Alert
-                        type="warning"
-                        message="当前开发环境图片模型并非全部真实生成"
-                        description="检测到至少一张图走了降级占位图。通常是图片模型额度、权限或可用性问题导致。你仍可编辑 prompt 后单张重生。"
-                      />
-                    )}
-                    <Row gutter={[16, 16]}>
-                      {storyboards.map((scene, index) => {
-                        const asset = imageAssets[index]
-                        return (
-                          <Col span={12} key={`image-${scene.scene_id || index}`}>
-                             <Card title={scene.scene_title || `第${index + 1}幕`} extra={<Button size="small" icon={<EditOutlined />} onClick={() => handleRegenerateImage(index)} loading={saving} disabled={!useAuthStore.getState().user?.is_admin}>重生图片</Button>}>
-                              <Space direction="vertical" style={{ width: '100%' }}>
-                                {asset?.image_url ? <img src={resolveAssetUrl(asset.image_url)} alt={scene.scene_title || `scene-${index + 1}`} style={{ width: '100%', borderRadius: 12, border: '1px solid #eee' }} /> : <div style={{ height: 180, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fafafa', borderRadius: 12 }}>未生成图片</div>}
-                                <Space wrap>
-                                  <Tag color={asset?.used_fallback ? 'orange' : 'green'}>{asset?.used_fallback ? '降级占位图' : '真实模型图'}</Tag>
-                                  {asset?.model_used && <Tag>{asset.model_used}</Tag>}
-                                  {asset?.model_requested && asset?.model_requested !== asset?.model_used && <Tag color="blue">原始请求 {asset.model_requested}</Tag>}
-                                  {asset?.image_source && <Tag>{asset.image_source === 'model' ? '模型生成' : '占位降级'}</Tag>}
-                                </Space>
-                                <Input.TextArea rows={4} value={asset?.prompt || ''} onChange={(e) => setImageAssets((prev) => prev.map((item, i) => i === index ? { ...item, prompt: e.target.value } : item))} placeholder="图片提示词" />
-                                {asset?.error_summary && <Alert type={asset?.used_fallback ? 'warning' : 'info'} message={asset.error_summary} />}
-                              </Space>
-                            </Card>
-                          </Col>
-                        )
-                      })}
-                    </Row>
-                  </Space>
-                ),
-              },
-            ]}
-          />
-        </Space>
+          </div>
+        </div>
       </Card>
     </div>
   )

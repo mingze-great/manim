@@ -1,16 +1,17 @@
-import { Alert, Button, Card, Col, Collapse, Divider, Row, Steps, Tag, Typography } from 'antd'
 import type { CSSProperties } from 'react'
+import { Alert, Button, Card, Col, Divider, Row, Space, Steps, Typography } from 'antd'
 import {
-  BulbOutlined,
+  BookOutlined,
   FileTextOutlined,
   HighlightOutlined,
+  HistoryOutlined,
   PlayCircleOutlined,
-  SafetyOutlined,
+  RocketOutlined,
   VideoCameraOutlined,
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 
-const { Title, Paragraph } = Typography
+const { Title, Paragraph, Text } = Typography
 
 const screenshotStyle: CSSProperties = {
   width: '100%',
@@ -20,62 +21,74 @@ const screenshotStyle: CSSProperties = {
   background: '#fff',
 }
 
+const sectionCardStyle: CSSProperties = {
+  borderRadius: 20,
+  border: '1px solid #d7e6ef',
+}
+
+const visualFlow = [
+  '进入“开始创作”，选择“思维可视化”。',
+  '输入主题，进入对话页和 AI 一起打磨文案。',
+  '确认后进入任务页，生成脚本、渲染并下载视频。',
+]
+
+const stickmanFlow = [
+  '进入“视频讲解”，再选择标准讲解或增强讲解。',
+  '先生成脚本与分镜，再在详情页校正文案、镜头和图片。',
+  '确认后合成视频，在任务页或详情页预览成片。',
+]
+
+const explainerFlow = [
+  '进入“视频讲解”里的“讲解型视频”。',
+  '粘贴完整文案，系统自动拆成 3-10 幕并估算时长。',
+  '在分步工作台统一调整分镜、风格、图片和合成结果。',
+]
+
+const articleFlow = [
+  '进入“公众号文章”模块，选择轻量版或工作台。',
+  '生成正文、段落配图和排版。',
+  '在手机预览确认效果后，再复制到公众号编辑器。',
+]
+
+const quickLinks = [
+  {
+    title: '开始前必读',
+    description: '第一次使用系统前，先理解整体入口和推荐流程。',
+    icon: <BookOutlined style={{ fontSize: 26, color: '#1d4ed8' }} />,
+  },
+  {
+    title: '思维可视化',
+    description: '适合知识讲解、模型拆解、课程短视频。',
+    icon: <HighlightOutlined style={{ fontSize: 26, color: '#2563eb' }} />,
+  },
+  {
+    title: '视频讲解',
+    description: '适合口播讲解、观点表达、人物叙事。',
+    icon: <VideoCameraOutlined style={{ fontSize: 26, color: '#d97706' }} />,
+  },
+  {
+    title: '公众号文章',
+    description: '适合图文运营、长文内容生产和排版。',
+    icon: <FileTextOutlined style={{ fontSize: 26, color: '#7c3aed' }} />,
+  },
+]
+
+const commonTips = [
+  '第一次使用时，建议先完整跑通 1 条内容，再开始追求更复杂的风格和更长的文案。',
+  '如果你要做视频，请先把“脚本/分镜/预览图”确认好，再正式生成全部图片和最终视频。',
+  '如果你要做公众号文章，请先在平台内完成手机预览，再复制到公众号后台。',
+  '“我的作品”会统一存放不同模块的结果，建议按主题定期整理和删除旧项目。',
+]
+
 export default function Docs() {
   const navigate = useNavigate()
 
-  const visualSteps = [
-    { title: '进入开始创作', description: '在开始创作里选择思维可视化模块。普通用户默认开放此模块。' },
-    { title: '选择主题', description: '可以选择热门方向、热门主题，也可以直接输入自己的主题。' },
-    { title: '对话打磨', description: '进入对话页后补充要求，系统会流式输出文案内容。' },
-    { title: '生成脚本', description: '确认后生成思维可视化脚本。' },
-    { title: '渲染视频', description: '在任务页查看进度并下载最终视频。' },
-  ]
-
-  const stickmanSteps = [
-    { title: '进入开始创作', description: '在开始创作里切换到视频讲解模块。未开通时仍可浏览，但创建时会提示未开通。' },
-    { title: '选择主题与音色', description: '支持热门主题、AI 选题、音色选择、语速选择、录音或上传音频。' },
-    { title: '一键或分步', description: '可选择一键生成，也可进入分步创作：脚本、图片、配音、合成。' },
-    { title: '试听与参考图', description: '支持试听音色，也可上传风格参考图增强图片一致性。' },
-    { title: '合成视频', description: '在任务页或分步页直接合成视频并查看结果。' },
-  ]
-
-  const articleSteps = [
-    { title: '进入开始创作', description: '在开始创作里切换到公众号文章模块。未开通时可浏览入口，但进入创作时会提示权限。' },
-    { title: '选择轻量版或专业版', description: '轻量版适合快速出稿，专业版适合大纲、正文、配图、排版精修。' },
-    { title: '生成文案', description: '支持 AI 草稿、自己写文案、段落编辑和局部 AI 重写。' },
-    { title: '生成并调整配图', description: '图片与正文段落位置绑定，支持重生、调整插图位置、手机预览。' },
-    { title: '排版与复制', description: '生成排版后，直接复制图文内容到公众号编辑器，而不是复制源码。' },
-  ]
-
-  const beginnerGuide = [
-    {
-      title: '第一步：进入开始创作',
-      description: '登录后，左侧菜单点击“开始创作”。这里是整个平台的统一入口，不需要分别记住不同模块地址。',
-      image: '/help/creator-overview.svg',
-    },
-    {
-      title: '第二步：进入视频讲解大类',
-      description: '如果你想做口播/讲解类视频，先进入“视频讲解”，再在下一级页面选择标准讲解、增强讲解或讲解型视频。',
-      image: '/help/stickman-entry.svg',
-    },
-    {
-      title: '第三步：填写讲解型视频内容',
-      description: '把完整文案直接粘贴进创作台。系统会自动按文案节奏拆分分镜，分镜数量支持 3-10，时长也会根据文案和配音自动控制。',
-      image: '/help/explainer-creator.svg',
-    },
-    {
-      title: '第四步：管理员上传模板示例视频',
-      description: '管理员进入后台模板管理，可以为模板上传示例 MP4，方便普通用户直接预览效果。',
-      image: '/help/admin-template-upload.svg',
-    },
-  ]
-
   return (
-    <div style={{ padding: '32px 20px', maxWidth: 1180, margin: '0 auto' }}>
-      <div style={{ padding: 28, borderRadius: 24, background: 'linear-gradient(135deg, #123555 0%, #2a6b84 50%, #efb26c 100%)', color: '#fff', marginBottom: 24 }}>
-        <Title level={2} style={{ color: '#fff', marginBottom: 8 }}>使用教程</Title>
-        <Paragraph style={{ color: 'rgba(255,255,255,0.88)', marginBottom: 0 }}>
-          这是一套统一的内容创作平台，支持思维可视化、视频讲解和公众号文章三个模块。以下教程按模块拆分，帮助普通用户和管理员快速上手。
+    <div style={{ padding: '32px 20px', maxWidth: 1240, margin: '0 auto' }}>
+      <div style={{ padding: 32, borderRadius: 28, background: 'linear-gradient(135deg, #123555 0%, #2a6b84 50%, #efb26c 100%)', color: '#fff', marginBottom: 24 }}>
+        <Title level={2} style={{ color: '#fff', marginBottom: 8 }}>企业级使用手册</Title>
+        <Paragraph style={{ color: 'rgba(255,255,255,0.9)', marginBottom: 0, fontSize: 16 }}>
+          这是一份面向普通用户的完整系统教程，覆盖从进入系统、选择模块、生成内容，到复查结果和管理作品的全流程。你可以把它当成正式操作手册来用。
         </Paragraph>
       </div>
 
@@ -83,120 +96,170 @@ export default function Docs() {
         type="info"
         showIcon
         style={{ marginBottom: 24 }}
-        message="默认权限说明"
-        description="普通用户默认只开放思维可视化模块。视频讲解与公众号文章需要管理员在后台按用户单独或批量开通。管理员账号三模块默认无限制。"
+        message="适用范围"
+        description="本教程只讲普通用户如何使用整个系统，不涉及管理员后台、权限下发和系统配置。"
       />
 
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-        <Col xs={24} lg={8}>
-          <Card style={{ borderRadius: 20, border: '1px solid #d7e6ef', background: 'linear-gradient(180deg, #f7fbfd 0%, #ffffff 100%)' }}>
-            <HighlightOutlined style={{ fontSize: 28, color: '#2563eb' }} />
-            <Title level={4} style={{ marginTop: 12 }}>思维可视化</Title>
-            <Paragraph type="secondary">适合知识讲解、公式推导、思维模型拆解。先对话，再生成脚本和视频。</Paragraph>
-            <Steps direction="vertical" size="small" current={5} items={visualSteps} />
-          </Card>
-        </Col>
-        <Col xs={24} lg={8}>
-          <Card style={{ borderRadius: 20, border: '1px solid #f3d5a8', background: 'linear-gradient(180deg, #fff9ef 0%, #ffffff 100%)' }}>
-            <VideoCameraOutlined style={{ fontSize: 28, color: '#d97706' }} />
-            <Title level={4} style={{ marginTop: 12 }}>视频讲解</Title>
-            <Paragraph type="secondary">适合口播讲解、观点表达和人物叙事。支持多音色、参考风格图、分步创作。</Paragraph>
-            <Steps direction="vertical" size="small" current={5} items={stickmanSteps} />
-          </Card>
-        </Col>
-        <Col xs={24} lg={8}>
-          <Card style={{ borderRadius: 20, border: '1px solid #ddd6fe', background: 'linear-gradient(180deg, #fbfaff 0%, #ffffff 100%)' }}>
-            <FileTextOutlined style={{ fontSize: 28, color: '#7c3aed' }} />
-            <Title level={4} style={{ marginTop: 12 }}>公众号文章</Title>
-            <Paragraph type="secondary">适合公众号运营和图文创作，支持轻量版快速出稿和专业版精修工作台。</Paragraph>
-            <Steps direction="vertical" size="small" current={5} items={articleSteps} />
-          </Card>
-        </Col>
+        {quickLinks.map((item) => (
+          <Col xs={24} md={12} xl={6} key={item.title}>
+            <Card style={{ ...sectionCardStyle, height: '100%' }}>
+              {item.icon}
+              <Title level={5} style={{ marginTop: 14 }}>{item.title}</Title>
+              <Paragraph type="secondary" style={{ marginBottom: 0 }}>{item.description}</Paragraph>
+            </Card>
+          </Col>
+        ))}
       </Row>
 
-      <Card style={{ marginBottom: 24, borderRadius: 20 }}>
-        <Title level={4}><BulbOutlined /> 平台入口说明</Title>
-        <ul style={{ paddingLeft: 20, color: '#4b5563', lineHeight: 1.8 }}>
-          <li>左侧 <Tag color="blue">开始创作</Tag> 是所有创作模块的统一入口。</li>
-          <li>左侧 <Tag color="blue">我的作品</Tag> 统一查看思维可视化、视频讲解、公众号文章历史作品。</li>
-          <li>左侧不再单独放“公众号文章”，避免与开始创作重复。</li>
-        </ul>
-      </Card>
-
-      <Card style={{ marginBottom: 24, borderRadius: 20 }}>
-        <Title level={4}>零基础完整教程</Title>
-        <Paragraph type="secondary" style={{ marginBottom: 20 }}>
-          如果你第一次使用平台，可以直接按下面 4 步走。每一步都配了页面截图，先照着做，再慢慢熟悉高级功能。
+      <Card style={{ ...sectionCardStyle, marginBottom: 24 }}>
+        <Title level={4}><RocketOutlined /> 一、开始前先理解系统结构</Title>
+        <Paragraph style={{ color: '#4b5563', lineHeight: 1.9 }}>
+          系统的核心逻辑是：先从统一入口进入，再按内容类型进入不同工作流。你不需要记住很多页面，只需要记住左侧的三个核心入口：
+          <Text strong> 开始创作、我的作品、帮助中心</Text>。
         </Paragraph>
-        {beginnerGuide.map((item, index) => (
-          <div key={item.title} style={{ marginBottom: index === beginnerGuide.length - 1 ? 0 : 28 }}>
-            <Title level={5} style={{ marginBottom: 8 }}>{index + 1}. {item.title}</Title>
-            <Paragraph style={{ color: '#4b5563', lineHeight: 1.8 }}>{item.description}</Paragraph>
-            <img src={item.image} alt={item.title} style={screenshotStyle} />
-          </div>
-        ))}
-      </Card>
-
-      <Card style={{ marginBottom: 24, borderRadius: 20 }}>
-        <Title level={4}>讲解型视频推荐操作顺序</Title>
+        <img src="/help/creator-overview.svg" alt="开始创作总览" style={screenshotStyle} />
         <Steps
           direction="vertical"
           size="small"
+          current={4}
+          style={{ marginTop: 20 }}
+          items={[
+            { title: '开始创作', description: '所有新项目都从这里进入。' },
+            { title: '视频讲解是一个大类', description: '标准讲解、增强讲解、讲解型视频都收在这里。' },
+            { title: '我的作品', description: '查看和回访所有历史项目。' },
+            { title: '帮助中心', description: '忘记操作时，直接回到这里查看说明。' },
+          ]}
+        />
+      </Card>
+
+      <Card style={{ ...sectionCardStyle, marginBottom: 24 }}>
+        <Title level={4}>二、推荐的统一操作顺序</Title>
+        <Paragraph type="secondary">如果你是第一次使用，建议严格按这个顺序操作。</Paragraph>
+        <Steps
+          direction="vertical"
           current={6}
           items={[
-            { title: '先输入原始文案或主题', description: '不需要先压缩到很短，先把你的内容说明白。' },
-            { title: '选择分镜数量', description: '新手建议先用 4-6 幕，便于快速检查结构。' },
-            { title: '先生成开头与分镜', description: '先看前 3 秒钩子够不够强，再决定是否继续。' },
-            { title: '再生成图片', description: '如果画面方向不对，先改分镜文字，不要急着反复重生。' },
-            { title: '最后合成视频', description: '检查字幕、旁白、节奏是否一致。' },
-            { title: '满意后再批量复用', description: '等你跑通一次，再开始追求更复杂的风格和效率。' },
+            { title: '选择模块', description: '先判断你要做的是动画视频、讲解视频，还是公众号文章。' },
+            { title: '先做一个短项目', description: '先用较短内容验证流程，不要一开始就用超长文案。' },
+            { title: '先确认脚本和分镜', description: '脚本不顺时，后面的图片和成片都会跟着出问题。' },
+            { title: '再确认画面', description: '先看预览图/分镜图，再决定是否继续。' },
+            { title: '最后生成正式结果', description: '图片、视频、图文都建议在前面确认后再正式输出。' },
+            { title: '回到我的作品统一管理', description: '下载、复看、复用都从这里进行。' },
           ]}
         />
       </Card>
 
-      <Card style={{ marginBottom: 24, borderRadius: 20 }}>
-        <Title level={4}><SafetyOutlined /> 管理员怎么用</Title>
-        <Collapse
-          items={[
-            {
-              key: '1',
-              label: '用户权限与次数设置',
-              children: <div style={{ color: '#4b5563', lineHeight: 1.8 }}>后台支持为每个用户设置三模块开关和每日使用次数，也支持批量设置。管理员默认无限制，批量设置会自动跳过管理员。</div>,
-            },
-            {
-              key: '2',
-              label: '权限模板',
-              children: <div style={{ color: '#4b5563', lineHeight: 1.8 }}>支持“仅公众号”“仅视频”“三模块全开”“体验版”“企业版”等模板，方便快速下发权限。</div>,
-            },
-            {
-              key: '3',
-              label: '模块看板',
-                children: <div style={{ color: '#4b5563', lineHeight: 1.8 }}>可查看思维可视化、视频讲解、公众号文章三个模块的累计、今日、成功数、失败数和成功率。</div>,
-            },
-            {
-              key: '4',
-              label: '模板示例视频怎么上传',
-              children: <div style={{ color: '#4b5563', lineHeight: 1.8 }}>进入“管理后台” - “视频风格模板管理”，在模板卡片上点击“上传示例视频”，选择一个 MP4 文件即可。上传成功后，模板卡片会出现“预览示例”按钮，普通用户也能直接预览效果。</div>,
-            },
-          ]}
-        />
+      <Card style={{ ...sectionCardStyle, marginBottom: 24 }}>
+        <Title level={4}><HighlightOutlined /> 三、思维可视化全流程</Title>
+        <Paragraph style={{ color: '#4b5563', lineHeight: 1.9 }}>
+          思维可视化适合做知识拆解、课程短视频、公式推导和结构化讲解。它的优势是 <Text strong>先对话打磨内容，再生成脚本和视频</Text>。
+        </Paragraph>
+        <img src="/help/workflow-visual-chat.svg" alt="思维可视化对话工作流" style={screenshotStyle} />
+        <div style={{ marginTop: 18 }}>
+          {visualFlow.map((item, index) => (
+            <Paragraph key={item} style={{ marginBottom: 10, color: '#4b5563' }}>{index + 1}. {item}</Paragraph>
+          ))}
+        </div>
+        <Alert type="success" showIcon message="建议" description="如果你不确定主题该怎么写，先输入一句最朴素的话，再让 AI 帮你改成更适合视频的表达。" />
       </Card>
 
-      <Card style={{ marginBottom: 24, borderRadius: 20 }}>
-        <Title level={4}><PlayCircleOutlined /> 常见问题</Title>
-        <ul style={{ paddingLeft: 20, color: '#4b5563', lineHeight: 1.8 }}>
-          <li>如果火柴人或公众号入口显示可浏览但创建时提示未开通，这是正常的权限拦截行为。</li>
-          <li>思维可视化模块始终可用，不受其他模块权限影响。</li>
-          <li>公众号文章配图后，请先在手机预览中确认图文顺序，再复制图文内容到公众号编辑器。</li>
-          <li>如果视频讲解音色没有变化，建议先在试听入口确认音色，再重新生成视频。</li>
-          <li>如果管理员上传模板示例视频失败，先确认文件格式是 MP4，且当前账号确实是管理员。</li>
+      <Card style={{ ...sectionCardStyle, marginBottom: 24 }}>
+        <Title level={4}><VideoCameraOutlined /> 四、视频讲解全流程</Title>
+        <Paragraph style={{ color: '#4b5563', lineHeight: 1.9 }}>
+          视频讲解是系统里最完整的视频工作流。你先进入“视频讲解”大类，再选择最适合你的子模块。
+        </Paragraph>
+        <img src="/help/stickman-entry.svg" alt="视频讲解模块选择" style={screenshotStyle} />
+        <div style={{ marginTop: 18 }}>
+          {stickmanFlow.map((item, index) => (
+            <Paragraph key={item} style={{ marginBottom: 10, color: '#4b5563' }}>{index + 1}. {item}</Paragraph>
+          ))}
+        </div>
+        <Row gutter={[16, 16]}>
+          <Col xs={24} lg={12}>
+            <Card style={{ ...sectionCardStyle, height: '100%' }}>
+              <Title level={5}>标准讲解</Title>
+              <Paragraph type="secondary">适合追求稳定流程、快速出片、少做额外调试的用户。</Paragraph>
+              <ul style={{ paddingLeft: 20, color: '#4b5563', lineHeight: 1.8 }}>
+                <li>先生成脚本和分镜</li>
+                <li>再确认预览图和全部图片</li>
+                <li>最后合成视频</li>
+              </ul>
+            </Card>
+          </Col>
+          <Col xs={24} lg={12}>
+            <Card style={{ ...sectionCardStyle, height: '100%' }}>
+              <Title level={5}>增强讲解</Title>
+              <Paragraph type="secondary">适合对视觉控制更高、希望有更多风格与包装选项的用户。</Paragraph>
+              <ul style={{ paddingLeft: 20, color: '#4b5563', lineHeight: 1.8 }}>
+                <li>支持更强的风格控制</li>
+                <li>支持固定背景和更多包装能力</li>
+                <li>适合反复打磨成片节奏</li>
+              </ul>
+            </Card>
+          </Col>
+        </Row>
+        <img src="/help/workflow-stickman-studio.svg" alt="视频讲解详情页工作台" style={{ ...screenshotStyle, marginTop: 18 }} />
+      </Card>
+
+      <Card style={{ ...sectionCardStyle, marginBottom: 24 }}>
+        <Title level={4}><PlayCircleOutlined /> 五、讲解型视频全流程</Title>
+        <Paragraph style={{ color: '#4b5563', lineHeight: 1.9 }}>
+          如果你已经有一段完整文案，或者你想做更强的“短视频口播讲解”结构，优先使用讲解型视频模块。它的重点是 <Text strong>按文案自动拆分分镜、自动估算时长、统一管理图片和配音</Text>。
+        </Paragraph>
+        <img src="/help/explainer-creator.svg" alt="讲解型视频创建页" style={screenshotStyle} />
+        <div style={{ marginTop: 18 }}>
+          {explainerFlow.map((item, index) => (
+            <Paragraph key={item} style={{ marginBottom: 10, color: '#4b5563' }}>{index + 1}. {item}</Paragraph>
+          ))}
+        </div>
+        <img src="/help/workflow-explainer-studio.svg" alt="讲解型视频详情页工作台" style={{ ...screenshotStyle, marginTop: 18 }} />
+        <Alert type="warning" showIcon message="新手建议" description="第一次使用讲解型视频时，建议先选 4-6 幕。这样更容易快速检查开头钩子、文案节奏和画面一致性。" style={{ marginTop: 18 }} />
+      </Card>
+
+      <Card style={{ ...sectionCardStyle, marginBottom: 24 }}>
+        <Title level={4}><FileTextOutlined /> 六、公众号文章全流程</Title>
+        <Paragraph style={{ color: '#4b5563', lineHeight: 1.9 }}>
+          公众号文章模块适合做长文、图文运营和私域内容沉淀。推荐做法是先完成正文，再做配图和排版，最后在手机预览中确认成稿效果。
+        </Paragraph>
+        <img src="/help/workflow-article-studio.svg" alt="公众号文章工作台" style={screenshotStyle} />
+        <div style={{ marginTop: 18 }}>
+          {articleFlow.map((item, index) => (
+            <Paragraph key={item} style={{ marginBottom: 10, color: '#4b5563' }}>{index + 1}. {item}</Paragraph>
+          ))}
+        </div>
+        <Alert type="info" showIcon message="重要提醒" description="排版完成后，请复制图文内容，而不是复制源码。复制前务必先在手机预览中检查图文顺序。" />
+      </Card>
+
+      <Card style={{ ...sectionCardStyle, marginBottom: 24 }}>
+        <Title level={4}><HistoryOutlined /> 七、我的作品与日常管理</Title>
+        <Paragraph style={{ color: '#4b5563', lineHeight: 1.9 }}>
+          不管你做的是视频还是文章，最后都会进入“我的作品”。这里建议你把它当作企业内容资产库来管理。
+        </Paragraph>
+        <img src="/help/workflow-history.svg" alt="我的作品中心" style={screenshotStyle} />
+        <ul style={{ paddingLeft: 20, color: '#4b5563', lineHeight: 1.8, marginTop: 16 }}>
+          <li>完成后及时下载结果，避免项目太多难以管理。</li>
+          <li>保留代表性项目，删除无效测试项目，保持工作区清爽。</li>
+          <li>如果某个项目很接近你想要的效果，优先基于它继续修改，而不是重新开一个全新项目。</li>
         </ul>
+      </Card>
+
+      <Card style={{ ...sectionCardStyle, marginBottom: 24 }}>
+        <Title level={4}>八、常见问题</Title>
+        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+          {commonTips.map((item) => (
+            <Alert key={item} type="info" showIcon message={item} />
+          ))}
+        </Space>
       </Card>
 
       <Divider />
 
       <div style={{ textAlign: 'center' }}>
-        <Button type="primary" size="large" onClick={() => navigate('/creator')}>进入开始创作</Button>
+        <Space wrap>
+          <Button type="primary" size="large" onClick={() => navigate('/creator')}>进入开始创作</Button>
+          <Button size="large" onClick={() => navigate('/history')}>查看我的作品</Button>
+        </Space>
       </div>
     </div>
   )

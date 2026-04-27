@@ -1,0 +1,30 @@
+<svg width="1440" height="920" viewBox="0 0 1440 920" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="1440" height="920" fill="#F4F7FA"/>
+<rect x="80" y="60" width="1280" height="150" rx="28" fill="url(#g3)"/>
+<text x="140" y="138" fill="#FFFFFF" font-family="Arial" font-size="42" font-weight="700">讲解型视频详情页</text>
+<text x="140" y="184" fill="#EAF6FF" font-family="Arial" font-size="24">统一管理分镜、风格、图片与成片预览</text>
+<rect x="80" y="250" width="860" height="590" rx="24" fill="#FFFFFF" stroke="#D8E4EC"/>
+<text x="120" y="314" fill="#17394F" font-family="Arial" font-size="32" font-weight="700">左侧：分镜列表</text>
+<rect x="120" y="348" width="780" height="160" rx="18" fill="#FBFCFE" stroke="#D8E4EC"/>
+<rect x="120" y="532" width="780" height="160" rx="18" fill="#FBFCFE" stroke="#D8E4EC"/>
+<text x="154" y="400" fill="#17394F" font-family="Arial" font-size="24" font-weight="700">第 1 幕</text>
+<text x="154" y="446" fill="#667985" font-family="Arial" font-size="22">标题 / 字幕 / 配音文案 / 画面描述 / 能量级</text>
+<text x="154" y="584" fill="#17394F" font-family="Arial" font-size="24" font-weight="700">第 2 幕</text>
+<text x="154" y="630" fill="#667985" font-family="Arial" font-size="22">可继续编辑文案并重生单图</text>
+<rect x="980" y="250" width="380" height="590" rx="24" fill="#FFF7EF" stroke="#F3D7B9"/>
+<text x="1020" y="314" fill="#17394F" font-family="Arial" font-size="32" font-weight="700">右侧：控制区</text>
+<text x="1020" y="370" fill="#7B6856" font-family="Arial" font-size="22">基础设置</text>
+<text x="1020" y="410" fill="#7B6856" font-family="Arial" font-size="22">开头钩子 / 视觉方向</text>
+<text x="1020" y="450" fill="#7B6856" font-family="Arial" font-size="22">风格参考图 / 背景图</text>
+<text x="1020" y="490" fill="#7B6856" font-family="Arial" font-size="22">自动估算时长</text>
+<text x="1020" y="530" fill="#7B6856" font-family="Arial" font-size="22">合成与成片预览</text>
+<rect x="1020" y="588" width="240" height="52" rx="16" fill="#1C5A6B"/>
+<text x="1080" y="622" fill="#FFFFFF" font-family="Arial" font-size="24" font-weight="700">生成开头与分镜</text>
+<defs>
+<linearGradient id="g3" x1="80" y1="60" x2="1360" y2="210" gradientUnits="userSpaceOnUse">
+<stop stop-color="#153A52"/>
+<stop offset="0.65" stop-color="#1D5D70"/>
+<stop offset="1" stop-color="#EF9542"/>
+</linearGradient>
+</defs>
+</svg>
