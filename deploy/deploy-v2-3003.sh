@@ -2,7 +2,7 @@
 set -euo pipefail
 
 APP_ROOT="${APP_ROOT:-/opt/manim-v2-3003-snapshot}"
-BRANCH="${BRANCH:-feature/v2-ui-mobile-ux-recover-3003}"
+BRANCH="${BRANCH:-feature/stickman-v2-viral-hook-optimization-acceptance}"
 REMOTE="${REMOTE:-origin}"
 BACKEND_SERVICE="${BACKEND_SERVICE:-manim-v2-3003-backend.service}"
 WORKER_SERVICE="${WORKER_SERVICE:-manim-v2-3003-worker.service}"
