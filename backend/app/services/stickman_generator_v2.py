@@ -907,17 +907,25 @@ class StickmanGenerator:
         if not raw.strip():
             return []
 
-        def split_long_chunk(chunk: str, max_chars: int = 18) -> list[str]:
+        def split_long_chunk(chunk: str, max_chars: int = 16) -> list[str]:
             clean_chunk = self._normalize_storyboard_fragment(chunk)
+            if not clean_chunk:
+                return []
             if len(clean_chunk) <= max_chars:
-                return [clean_chunk] if clean_chunk else []
+                return [clean_chunk]
             if not re.search(r"[，；：,;:。！？!?]", clean_chunk):
-                return self._semantic_split_long_text(clean_chunk, preferred_max=16, hard_max=18)
+                return self._semantic_split_long_text(clean_chunk, preferred_max=14, hard_max=16)
             pieces = []
             current = ""
             for char in clean_chunk:
                 current += char
-                if len(current) >= max_chars and char in "，；：、,;:。！？!?":
+                if char in "。！？!?" and len(current) >= 8:
+                    normalized = self._normalize_storyboard_fragment(current)
+                    if normalized:
+                        pieces.append(normalized)
+                    current = ""
+                    continue
+                if len(current) >= max_chars and char in "，；：、,;:":
                     normalized = self._normalize_storyboard_fragment(current)
                     if normalized:
                         pieces.append(normalized)
@@ -935,19 +943,10 @@ class StickmanGenerator:
             if not clauses:
                 refined.extend(split_long_chunk(part))
                 continue
-            current = ""
             for clause in clauses:
-                candidate = f"{current}{clause}" if current else clause
-                if current and len(candidate) > 18:
-                    refined.extend(split_long_chunk(current))
-                    current = clause
-                else:
-                    current = candidate
-            if current:
-                refined.extend(split_long_chunk(current))
+                refined.extend(split_long_chunk(clause))
 
-        reviewed = self._review_semantic_segments(refined or [raw.strip()], soft_limit=18)
-        return reviewed or [raw.strip()]
+        return [item for item in refined if item]
     def _expand_storyboards_for_pacing(self, script_data: dict, topic: str):
         storyboards = script_data.get("storyboards") or []
         expanded = []
@@ -2342,42 +2341,31 @@ class StickmanGenerator:
         if not raw.strip():
             return []
 
-        if not re.search(r"[，,、。！？!?；;：:]", raw):
-            return self._semantic_split_long_text(raw, preferred_max=16, hard_max=18)
-
         def split_long_clause(clause: str):
-            clause = clause.strip()
+            clause = self._normalize_storyboard_fragment(clause)
             if not clause:
                 return []
-            if len(clause) <= 18:
+            if len(clause) <= 16:
                 return [clause]
             if not re.search(r"[，,、。！？!?；;：:]", clause):
-                return [clause]
+                return self._semantic_split_long_text(clause, preferred_max=14, hard_max=16)
 
             comma_parts = [item.strip() for item in re.split(r"(?<=[，,、])\s*", clause) if item.strip()]
             if len(comma_parts) > 1:
-                merged = []
-                current = ""
-                for part in comma_parts:
-                    candidate = f"{current}{part}" if current else part
-                    if current and len(candidate) > 18:
-                        merged.append(current)
-                        current = part
-                    else:
-                        current = candidate
-                if current:
-                    merged.append(current)
-                return merged
+                return [self._normalize_storyboard_fragment(part) for part in comma_parts if self._normalize_storyboard_fragment(part)]
 
             return [clause]
 
         parts = [item.strip() for item in re.split(r"(?<=[。！？!?；;])\s*", raw) if item.strip()]
         refined = []
         for part in (parts or [raw.strip()]):
-            refined.extend(split_long_clause(part))
-        reviewed = self._review_semantic_segments(refined or [raw.strip()], soft_limit=18)
-        return reviewed or [raw.strip()]
-
+            clauses = [item.strip() for item in re.split(r"[，；：,;:]\s*", part) if item.strip()]
+            if not clauses:
+                refined.extend(split_long_clause(part))
+                continue
+            for clause in clauses:
+                refined.extend(split_long_clause(clause))
+        return [item for item in refined if item]
     def _split_chinese_subtitle_lines(self, text: str):
         cleaned = re.sub(r"\s+", "", str(text or "").strip())
         if not cleaned:
