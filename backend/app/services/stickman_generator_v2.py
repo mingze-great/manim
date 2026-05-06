@@ -1,5 +1,6 @@
 import base64
 import json
+import logging
 import os
 import re
 import shutil
@@ -16,11 +17,17 @@ import requests
 from openai import OpenAI
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps, ImageStat
 from pydub import AudioSegment
+from pydub.effects import compress_dynamic_range
+from pydub.silence import detect_nonsilent
 import dashscope
 from dashscope.audio.tts_v2 import SpeechSynthesizer
 from dashscope.audio.tts import SpeechSynthesizer as SambertSpeechSynthesizer
 
 from app.config import get_settings
+from app.services.stickman_v2_assets import normalize_scene_overlay_image
+
+
+logger = logging.getLogger(__name__)
 
 
 class StickmanGenerator:
@@ -51,6 +58,11 @@ class StickmanGenerator:
         self.tts_api_key = self.settings.STICKMAN_TTS_API_KEY or getattr(self.settings, "IMAGE_API_KEY", "") or self.settings.DASHSCOPE_API_KEY
         self.tts_base_url = self.settings.STICKMAN_TTS_BASE_URL
         self.tts_model = self.settings.STICKMAN_TTS_MODEL
+        self.tts_fallback_models = [
+            item.strip()
+            for item in (getattr(self.settings, "STICKMAN_TTS_FALLBACK_MODELS", "") or "").split(",")
+            if item.strip()
+        ]
         self.tts_provider = self.settings.STICKMAN_TTS_PROVIDER
         self.tts_voice = self.settings.STICKMAN_TTS_VOICE
         self.tts_voice_library = self._load_tts_voice_library()
@@ -124,6 +136,9 @@ class StickmanGenerator:
             candidates.append(r"E:\ai\cankao\sucai_clean\materials.json")
             candidates.append(r"E:\ai\cankao\sucai_cropped\materials.json")
             candidates.append(r"E:\ai\cankao\sucai\materials.json")
+        else:
+            candidates.append("/opt/manim-v2-material-library/materials.json")
+            candidates.append("/opt/manim-v2-materials/materials.json")
         candidates.append(str(Path(__file__).resolve().parents[1] / "assets" / "materials" / "materials.json"))
         for candidate in candidates:
             if candidate and Path(candidate).exists():
@@ -145,16 +160,16 @@ class StickmanGenerator:
         configured = str(getattr(self.settings, "STICKMAN_V2_FONT_PATHS", "") or "").strip()
         candidates = [item.strip() for item in configured.split(",") if item.strip()]
         if os.name == "nt":
-            candidates.extend([r"C:\Windows\Fonts\msyhbd.ttc", r"C:\Windows\Fonts\msyh.ttc", r"C:\Windows\Fonts\simhei.ttf"])
+            candidates.extend([r"C:\Windows\Fonts\msyh.ttc", r"C:\Windows\Fonts\simhei.ttf", r"C:\Windows\Fonts\msyhbd.ttc"])
         else:
             candidates.extend([
-                "/usr/share/fonts/truetype/noto/NotoSansCJK-Bold.ttc",
-                "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
                 "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
                 "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
                 "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
                 "/usr/share/fonts/truetype/arphic/ukai.ttc",
                 "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                "/usr/share/fonts/truetype/noto/NotoSansCJK-Bold.ttc",
+                "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
             ])
         seen = set()
         ordered = []
@@ -174,6 +189,9 @@ class StickmanGenerator:
             candidates.append(r"E:\ai\cankao\sucai_clean")
             candidates.append(r"E:\ai\cankao\sucai_cropped")
             candidates.append(r"E:\ai\cankao\sucai")
+        else:
+            candidates.append("/opt/manim-v2-material-library")
+            candidates.append("/opt/manim-v2-materials")
         candidates.append(str(Path(__file__).resolve().parents[1] / "assets" / "materials"))
         for candidate in candidates:
             if candidate and Path(candidate).exists():
@@ -208,15 +226,15 @@ class StickmanGenerator:
                 auto_entries.append(self._normalize_material_entry({"file_name": image_path.name, "image_path": str(image_path)}))
         return [entry for entry in auto_entries if entry]
 
-    def _normalize_material_entry(self, entry: dict):
+    def _normalize_material_entry(self, entry: dict, source_dir: Optional[Path] = None):
         if not isinstance(entry, dict):
             return None
         file_name = str(entry.get("file_name") or "").strip()
         image_path = str(entry.get("image_path") or "").strip()
-        if not image_path and file_name and self.material_source_dir:
-            candidate = self.material_source_dir / file_name
-            if candidate.exists():
-                image_path = str(candidate)
+        base_dir = source_dir or self.material_source_dir
+        candidate = base_dir / file_name if file_name and base_dir else None
+        if (not image_path or not Path(image_path).exists()) and candidate and candidate.exists():
+            image_path = str(candidate)
         if not image_path or not Path(image_path).exists():
             return None
 
@@ -242,6 +260,24 @@ class StickmanGenerator:
         normalized["topics_norm"] = {self._normalize_tag(item) for item in (entry.get("applicable_topics") or []) if self._normalize_tag(item)}
         normalized["roles_norm"] = {self._normalize_tag(item) for item in (entry.get("storyboard_roles") or []) if self._normalize_tag(item)}
         normalized["negative_norm"] = {self._normalize_tag(item) for item in (entry.get("negative_keywords") or []) if self._normalize_tag(item)}
+        return normalized
+
+    def _load_material_library_from_paths(self, material_json_path: Optional[str], material_source_dir: Optional[str]):
+        manifest_path = Path(str(material_json_path or "").strip()) if str(material_json_path or "").strip() else None
+        source_dir = Path(str(material_source_dir or "").strip()) if str(material_source_dir or "").strip() else None
+        if not manifest_path or not manifest_path.exists():
+            return []
+        try:
+            payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except Exception:
+            return []
+        if not isinstance(payload, list):
+            return []
+        normalized = []
+        for entry in payload:
+            normalized_entry = self._normalize_material_entry(entry, source_dir=source_dir)
+            if normalized_entry:
+                normalized.append(normalized_entry)
         return normalized
 
     def _material_match_index(self, entry: dict):
@@ -541,16 +577,17 @@ class StickmanGenerator:
             canvas.alpha_composite(cropped, (x, y))
             canvas.save(target_path, format="PNG")
 
-    def _build_material_assets(self, storyboards: list[dict], image_output_dir: Path, aspect_ratio: str):
-        if not self.material_library:
+    def _build_material_assets(self, storyboards: list[dict], image_output_dir: Path, aspect_ratio: str, material_library: Optional[list[dict]] = None):
+        library = material_library if material_library is not None else self.material_library
+        if not library:
             return [], {
                 "material_library_used": False,
-                "material_library_reason": "素材库为空，已回退模型生成",
+                "material_library_reason": "图片库为空，已回退模型生成",
             }
 
-        if not any(item.get("has_semantic_metadata") for item in self.material_library):
+        if not any(item.get("has_semantic_metadata") for item in library):
             assets = []
-            material_pool = self.material_library[:]
+            material_pool = library[:]
             for index, scene in enumerate(storyboards, start=1):
                 material = material_pool[(index - 1) % len(material_pool)]
                 source_path = Path(material["image_path"])
@@ -570,26 +607,31 @@ class StickmanGenerator:
                     "material_file_name": material.get("file_name"),
                     "material_match_score": 1,
                     "material_match_reasons": ["fallback:sequential_material_library"],
-                    "error_summary": "素材库缺少语义标签，已按素材库顺序生成场景前景。",
+                    "error_summary": "画面已准备完成。",
                 })
             return assets, {
                 "material_library_used": True,
-                "material_library_count": len(self.material_library),
-                "material_selection_unique": len(self.material_library) >= len(storyboards),
-                "material_library_reason": "素材库缺少语义标签，已按顺序使用素材库",
+                "material_library_count": len(library),
+                "material_selection_unique": len(library) >= len(storyboards),
+                "material_library_reason": "图片库缺少语义标签，已按顺序使用图片库",
             }
 
-        selections = self._select_material_candidates(storyboards)
+        original_library = self.material_library
+        self.material_library = library
+        try:
+            selections = self._select_material_candidates(storyboards)
+        finally:
+            self.material_library = original_library
         if not selections or any(selection is None for selection in selections):
             return [], {
                 "material_library_used": False,
-                "material_library_reason": "素材匹配失败或素材数量不足",
+                "material_library_reason": "图片匹配失败或数量不足",
             }
 
         if any((selection or {}).get("score", 0) <= 0 for selection in selections):
             return [], {
                 "material_library_used": False,
-                "material_library_reason": "当前分镜与素材语义匹配度不足，已回退模型生成",
+                "material_library_reason": "当前分镜与图片语义匹配度不足，已回退模型生成",
             }
 
         assets = []
@@ -617,7 +659,7 @@ class StickmanGenerator:
             })
         return assets, {
             "material_library_used": True,
-            "material_library_count": len(self.material_library),
+            "material_library_count": len(library),
             "material_selection_unique": True,
         }
 
@@ -625,7 +667,7 @@ class StickmanGenerator:
         return self.tts_voice_library
 
     def _strip_terminal_punctuation(self, text: str):
-        return re.sub(r'[，。,.!?！？；;：:、…·~～"\'”’）)】〕》」』]+$', "", str(text or "").strip())
+        return re.sub(r'[，。,.!?！？；;：:、…·~～）)】〕]+$', "", str(text or "").strip())
 
     def _sanitize_english_subtitle(self, text: str):
         cleaned = str(text or "").replace("|", " ").strip()
@@ -708,31 +750,204 @@ class StickmanGenerator:
         parts = [item.strip() for item in re.split(r'(?<=[。！？!?])\s*', text or '') if item.strip()]
         return parts or ([text.strip()] if text and text.strip() else [])
 
-    def _split_script_for_storyboards(self, text: str) -> list[str]:
-        sentences = self._split_sentences(text)
-        refined = []
-        for sentence in sentences:
-            estimate = min(len(sentence) * 0.22, 10.0)
-            if estimate <= 4.8:
-                refined.append(sentence)
+    def _normalize_locked_subtitle_text(self, text: str) -> str:
+        cleaned = str(text or "").strip()
+        return cleaned.replace("“", "").replace("”", "").replace("‘", "").replace("’", "").replace('"', "").replace("'", "").replace("*", "")
+
+    def _normalize_storyboard_fragment(self, text: str) -> str:
+        cleaned = self._normalize_locked_subtitle_text(text)
+        cleaned = re.sub(r'^[，、；：:,.!?！？]+', '', cleaned)
+        cleaned = self._strip_terminal_punctuation(cleaned) or cleaned
+        return re.sub(r"\s+", "", cleaned).strip()
+
+    def _split_enumeration_items(self, text: str) -> list[str]:
+        raw = self._normalize_locked_subtitle_text(text)
+        if "、" not in raw:
+            return []
+        items = [self._normalize_storyboard_fragment(item) for item in raw.split("、") if self._normalize_storyboard_fragment(item)]
+        if len(items) < 2:
+            return []
+        if len(items) == 2 and items[1].startswith(items[0]):
+            return [self._normalize_storyboard_fragment(raw)]
+        if all(len(item) <= 10 for item in items):
+            return items
+        return []
+
+    def _quote_spans(self, text: str) -> list[tuple[int, int]]:
+        spans: list[tuple[int, int]] = []
+        patterns = [
+            r'“[^”]+”',
+            r'‘[^’]+’',
+            r'「[^」]+」',
+            r'『[^』]+』',
+            r'《[^》]+》',
+            r'"[^"]+"',
+            r"'[^']+'",
+        ]
+        for pattern in patterns:
+            for match in re.finditer(pattern, text or ""):
+                spans.append((match.start(), match.end()))
+        return spans
+
+    def _index_inside_quote_span(self, index: int, spans: list[tuple[int, int]]) -> bool:
+        return any(start < index < end for start, end in spans)
+
+    def _best_semantic_break_index(self, text: str, target: int, min_index: int, max_index: int) -> int:
+        content = str(text or "").strip()
+        if len(content) <= 1:
+            return 0
+        spans = self._quote_spans(content)
+        candidates: list[tuple[int, int]] = []
+
+        for match in re.finditer(r"[，；：、,;:]", content):
+            split_at = match.end()
+            if min_index <= split_at <= max_index and not self._index_inside_quote_span(split_at, spans):
+                candidates.append((split_at, 0))
+
+        before_cues = ["但是", "但", "所以", "于是", "然后", "而且", "并且", "不过", "可是", "如果", "当", "一到", "到了", "后来", "最后", "其实", "比如", "而是", "哪怕", "即使"]
+        after_cues = ["的时候", "之后", "以后", "的话", "这种", "这个", "那个", "就是", "不是", "只要", "因为"]
+
+        for cue in before_cues:
+            start = 0
+            while True:
+                idx = content.find(cue, start)
+                if idx < 0:
+                    break
+                if min_index <= idx <= max_index and not self._index_inside_quote_span(idx, spans):
+                    candidates.append((idx, 1))
+                start = idx + len(cue)
+
+        for cue in after_cues:
+            start = 0
+            while True:
+                idx = content.find(cue, start)
+                if idx < 0:
+                    break
+                split_at = idx + len(cue)
+                if min_index <= split_at <= max_index and not self._index_inside_quote_span(split_at, spans):
+                    candidates.append((split_at, 2))
+                start = idx + len(cue)
+
+        if not candidates:
+            return 0
+
+        def score(item: tuple[int, int]) -> tuple[int, int, int]:
+            split_at, priority = item
+            previous = content[:split_at].strip()
+            current = content[split_at:].strip()
+            awkward = int(previous.endswith(("的", "了", "呢", "吗", "啊", "呀", "吧", "和", "跟", "与", "及", "并", "而", "但", "却", "就", "也", "还", "又", "再", "先")))
+            awkward += int(current.startswith(("的", "了", "呢", "吗", "啊", "呀", "吧", "和", "跟", "与", "及", "并", "而", "但", "却", "就", "也", "还", "又", "再", "先")))
+            return (abs(split_at - target), priority, awkward)
+
+        return min(candidates, key=score)[0]
+
+    def _semantic_split_long_text(self, text: str, preferred_max: int, hard_max: int, min_tail: int = 6) -> list[str]:
+        remaining = self._normalize_locked_subtitle_text(text)
+        if not remaining:
+            return []
+        segments: list[str] = []
+        while len(remaining) > preferred_max:
+            max_index = min(max(preferred_max + 4, preferred_max), min(hard_max, len(remaining) - min_tail))
+            min_index = max(6, min(preferred_max - 4, max_index - 4))
+            target = min(preferred_max, max_index)
+            split_at = self._best_semantic_break_index(remaining, target, min_index, max_index)
+            if not split_at:
+                split_at = max_index
+            piece = self._normalize_storyboard_fragment(remaining[:split_at])
+            if not piece:
+                break
+            segments.append(piece)
+            remaining = remaining[split_at:].strip()
+        if remaining:
+            tail = self._normalize_storyboard_fragment(remaining)
+            if tail:
+                segments.append(tail)
+        return segments
+
+    def _review_semantic_segments(self, segments: list[str], soft_limit: int = 18) -> list[str]:
+        cleaned = [str(item or "").strip() for item in segments if str(item or "").strip()]
+        if len(cleaned) <= 1:
+            return cleaned
+
+        quote_openers = ("“", "‘", "「", "『", "《")
+        quote_closers = ("”", "’", "」", "』", "》")
+        reviewed: list[str] = []
+
+        def should_merge(previous: str, current: str) -> bool:
+            combined = previous + current
+            if len(combined) > soft_limit:
+                return False
+            if previous.endswith(quote_openers) or current.startswith(quote_closers):
+                return True
+            if current.startswith(previous):
+                return True
+            if len(previous) >= 2 and current.startswith(previous[-2:]):
+                return True
+            if previous.endswith(("，", "、", "；", ":", "：", "（", "(")):
+                return True
+            semantic_pairs = [
+                ("完成", "永远比完美更重要"),
+                ("怎么打破", "这个死循环"),
+            ]
+            return any(previous.endswith(left) and current.startswith(right) for left, right in semantic_pairs)
+
+        for segment in cleaned:
+            if not reviewed:
+                reviewed.append(segment)
                 continue
-            clauses = [item.strip() for item in re.split(r'(?<=[，；：,;])\s*', sentence) if item.strip()]
-            if len(clauses) <= 1:
-                refined.append(sentence)
+            previous = reviewed[-1]
+            if should_merge(previous, segment):
+                reviewed[-1] = previous + segment
+                continue
+            reviewed.append(segment)
+        return reviewed
+
+    def _split_script_for_storyboards(self, text: str) -> list[str]:
+        raw = str(text or "")
+        if not raw.strip():
+            return []
+
+        def split_long_chunk(chunk: str, max_chars: int = 18) -> list[str]:
+            clean_chunk = self._normalize_storyboard_fragment(chunk)
+            if len(clean_chunk) <= max_chars:
+                return [clean_chunk] if clean_chunk else []
+            if not re.search(r"[，；：,;:。！？!?]", clean_chunk):
+                return self._semantic_split_long_text(clean_chunk, preferred_max=16, hard_max=18)
+            pieces = []
+            current = ""
+            for char in clean_chunk:
+                current += char
+                if len(current) >= max_chars and char in "，；：、,;:。！？!?":
+                    normalized = self._normalize_storyboard_fragment(current)
+                    if normalized:
+                        pieces.append(normalized)
+                    current = ""
+            if current.strip():
+                normalized = self._normalize_storyboard_fragment(current)
+                if normalized:
+                    pieces.append(normalized)
+            return pieces or ([clean_chunk] if clean_chunk else [])
+
+        parts = [item.strip() for item in re.split(r"(?<=[。！？!?；;])\s*", raw) if item.strip()]
+        refined = []
+        for part in (parts or [raw.strip()]):
+            clauses = [item.strip() for item in re.split(r"[，；：,;:]\s*", part) if item.strip()]
+            if not clauses:
+                refined.extend(split_long_chunk(part))
                 continue
             current = ""
             for clause in clauses:
-                candidate = f"{current}{clause}"
-                candidate_estimate = min(len(candidate) * 0.22, 10.0)
-                if current and candidate_estimate > 4.8:
-                    refined.append(current)
+                candidate = f"{current}{clause}" if current else clause
+                if current and len(candidate) > 18:
+                    refined.extend(split_long_chunk(current))
                     current = clause
                 else:
                     current = candidate
             if current:
-                refined.append(current)
-        return refined or ([text.strip()] if text and text.strip() else [])
+                refined.extend(split_long_chunk(current))
 
+        reviewed = self._review_semantic_segments(refined or [raw.strip()], soft_limit=18)
+        return reviewed or [raw.strip()]
     def _expand_storyboards_for_pacing(self, script_data: dict, topic: str):
         storyboards = script_data.get("storyboards") or []
         expanded = []
@@ -763,7 +978,7 @@ class StickmanGenerator:
         script_data["script"] = "\n".join(scene.get("narration", "") for scene in expanded)
         return script_data
 
-    def build_storyboards_from_script_text(self, topic: str, script_text: str):
+    def build_storyboards_from_script_text(self, topic: str, script_text: str, include_intro_scene: bool = False):
         sentences = self._split_script_for_storyboards(script_text)
         storyboards = []
         total = len(sentences)
@@ -794,14 +1009,17 @@ class StickmanGenerator:
             scene["scene_image_prompt"] = self._scene_image_prompt_for_scene(scene, topic)
             scene["foreground_subjects"] = self._foreground_subjects_for_scene(scene, topic, index)
             scene["foreground_events"] = self._foreground_events_for_scene(scene, index)
-            scene["subtitle_lines"] = self._subtitle_blueprint_for_scene(scene)
+            scene["subtitle_lines"] = [{
+                "text": narration,
+                "english": self._sanitize_english_subtitle(self._translate_subtitle_to_english(narration)),
+            }]
             scene["emphasis_beats"] = self._emphasis_beats_for_scene(scene)
             storyboards.append(scene)
         sections = self._attach_sections(storyboards)
-        storyboards = self._explode_storyboards_for_segments(storyboards, topic)
+        storyboards = self._explode_storyboards_for_segments(storyboards, topic, include_intro_scene=include_intro_scene)
         return {
             "title": topic,
-            "script": "\n".join(sentences),
+            "script": str(script_text or "").strip(),
             "storyboards": storyboards,
             "sections": sections,
         }
@@ -846,6 +1064,7 @@ class StickmanGenerator:
         style_reference_notes: str | None = None,
         opening_template_key: str | None = None,
         generation_flags: Optional[dict] = None,
+        source_script: str | None = None,
     ):
         self._require_config()
         storyboard_count = max(2, min(int(storyboard_count or 3), 20))
@@ -855,8 +1074,21 @@ class StickmanGenerator:
                 progress_callback(progress, message)
 
         report(5, "开始生成视频讲解")
-        script_data = self.generate_script_data(topic, storyboard_count, opening_template_key=opening_template_key)
-        report(20, "脚本生成完成")
+        if str(source_script or "").strip():
+            script_data = self.build_storyboards_from_script_text(
+                topic,
+                str(source_script or ""),
+                include_intro_scene=bool((generation_flags or {}).get("opening_intro_enabled", False)),
+            )
+            report(20, "文案拆分完成")
+        else:
+            script_data = self.generate_script_data(
+                topic,
+                storyboard_count,
+                opening_template_key=opening_template_key,
+                include_intro_scene=bool((generation_flags or {}).get("opening_intro_enabled", False)),
+            )
+            report(20, "脚本生成完成")
 
         with tempfile.TemporaryDirectory(prefix="stickman_") as temp_dir:
             image_dir = Path(temp_dir) / "images"
@@ -953,6 +1185,7 @@ class StickmanGenerator:
         tts_voice: str | None = None,
         tts_rate: str | None = None,
         generation_flags: Optional[dict] = None,
+        source_script: str | None = None,
     ):
         def report(progress: int, message: str):
             if progress_callback:
@@ -963,7 +1196,7 @@ class StickmanGenerator:
         if not image_assets:
             raise RuntimeError("请先生成并确认图片")
 
-        report(5, "开始基于已确认素材合成视频")
+        report(5, "开始基于已确认内容合成视频")
         with tempfile.TemporaryDirectory(prefix="stickman_compose_") as temp_dir:
             audio_dir = Path(temp_dir) / "audio"
             clip_dir = Path(temp_dir) / "clips"
@@ -974,7 +1207,7 @@ class StickmanGenerator:
                 image_path = asset.get("image_path")
                 if not image_path or not os.path.exists(image_path):
                     raise RuntimeError(f"第 {index} 张分镜图片不存在，请重新生成图片")
-            report(20, "图片素材检查完成")
+            report(20, "图片检查完成")
 
             if voice_source in {"upload", "record"} and voice_file_path:
                 audio_track = str(Path(temp_dir) / "user_voice.mp3")
@@ -1007,6 +1240,7 @@ class StickmanGenerator:
 
             total_audio_duration = self._finalize_audio_track(audio_track)
             timeline = self._ensure_timeline_covers_audio(timeline, total_audio_duration)
+            self._attach_sections(storyboards)
             self._attach_scene_timing_metadata(storyboards, timeline, audio_segments)
             self._attach_section_timing_metadata(storyboards)
             generation_flags = self._resolve_viral_generation_flags(topic, generation_flags)
@@ -1029,7 +1263,7 @@ class StickmanGenerator:
             report(100, "视频讲解合成完成")
             return {
                 "title": topic,
-                "script": "\n".join(scene.get("narration", "") for scene in storyboards),
+                "script": str(source_script or "").strip() or "\n".join(scene.get("scene_narration") or scene.get("narration", "") for scene in storyboards),
                 "storyboards": storyboards,
                 "image_assets": image_assets,
                 "generation_flags": {**generation_flags, "composed_from_assets": True},
@@ -1037,7 +1271,7 @@ class StickmanGenerator:
                 "video_path": final_path,
             }
 
-    def generate_script_data(self, topic: str, storyboard_count: int, opening_template_key: Optional[str] = None):
+    def generate_script_data(self, topic: str, storyboard_count: int, opening_template_key: Optional[str] = None, include_intro_scene: bool = True):
         script_data = self._generate_script(topic, storyboard_count, opening_template_key=opening_template_key)
         script_data = self._expand_storyboards_for_pacing(script_data, topic)
         storyboards = script_data.get("storyboards") or []
@@ -1067,7 +1301,7 @@ class StickmanGenerator:
             scene.setdefault("emphasis_beats", self._emphasis_beats_for_scene(scene))
         sections = self._attach_sections(storyboards)
         script_data["sections"] = sections
-        script_data["storyboards"] = self._explode_storyboards_for_segments(storyboards, topic)
+        script_data["storyboards"] = self._explode_storyboards_for_segments(storyboards, topic, include_intro_scene=include_intro_scene)
         script_data["script"] = "\n".join(scene.get("scene_narration") or scene.get("narration") or "" for scene in script_data["storyboards"])
         return script_data
 
@@ -1079,6 +1313,15 @@ class StickmanGenerator:
         self._create_fixed_reference_background(str(fixed_background_path), aspect_ratio, storyboards[0] if storyboards else None, background_image_path)
         resolved_topic = str(topic or (storyboards[0].get("visual_focus") if storyboards else "") or "视频讲解").strip()
         generation_flags = self._resolve_viral_generation_flags(resolved_topic, generation_flags)
+        active_material_library = self.material_library
+        selected_scene_style = generation_flags.get("scene_style_library") if isinstance(generation_flags, dict) else None
+        if isinstance(selected_scene_style, dict):
+            override_library = self._load_material_library_from_paths(
+                str(selected_scene_style.get("material_json_path") or ""),
+                str(selected_scene_style.get("package_dir") or ""),
+            )
+            if override_library:
+                active_material_library = override_library
         flags = {
             "image_fallback_used": False,
             "fallback_count": 0,
@@ -1092,7 +1335,36 @@ class StickmanGenerator:
         flags.update(generation_flags)
         flags.update(self._generate_viral_package_assets(resolved_topic, image_output_dir, aspect_ratio, storyboards, generation_flags, progress_callback))
 
-        material_assets, material_flags = self._build_material_assets(storyboards, image_output_dir, aspect_ratio)
+        material_assets, material_flags = self._build_material_assets(storyboards, image_output_dir, aspect_ratio, material_library=active_material_library)
+        if not material_assets and active_material_library:
+            material_assets = []
+            for index, scene in enumerate(storyboards, start=1):
+                material = active_material_library[(index - 1) % len(active_material_library)]
+                source_path = Path(material["image_path"])
+                scene["matched_material_file"] = material.get("file_name")
+                scene["matched_material_score"] = 1
+                scene["matched_material_reasons"] = ["forced:sequential_material_library"]
+                material_assets.append({
+                    "scene_id": scene.get("scene_id", index),
+                    "prompt": f"material_forced:{material.get('file_name')}",
+                    "scene_image_path": str(source_path),
+                    "scene_image_url": None,
+                    "used_fallback": False,
+                    "image_source": "material_library",
+                    "model_used": None,
+                    "scene_image_source": "material_library",
+                    "scene_image_model_used": None,
+                    "material_file_name": material.get("file_name"),
+                    "material_match_score": 1,
+                    "material_match_reasons": ["forced:sequential_material_library"],
+                    "error_summary": "画面已准备完成。",
+                })
+            material_flags = {
+                "material_library_used": True,
+                "material_library_count": len(active_material_library),
+                "material_selection_unique": len(active_material_library) >= len(storyboards),
+                "material_library_reason": "图片库已强制启用，当前按顺序使用图片库",
+            }
         flags.update(material_flags)
         if material_assets:
             flags["image_provider_status"] = "material_library"
@@ -1113,10 +1385,10 @@ class StickmanGenerator:
                     "material_file_name": asset.get("material_file_name"),
                     "material_match_score": asset.get("material_match_score"),
                     "material_match_reasons": asset.get("material_match_reasons"),
-                    "error_summary": "已使用固定背景，素材人物会以居中场景图形式叠加出现。",
+                    "error_summary": "画面已准备完成。",
                 })
             if progress_callback:
-                progress_callback(32, f"素材匹配完成 ({len(assets)}/{len(storyboards)})")
+                progress_callback(32, f"画面准备完成 ({len(assets)}/{len(storyboards)})")
             return assets, flags
 
         selected_scene_model = None
@@ -1141,7 +1413,7 @@ class StickmanGenerator:
                 "model_used": None,
                 "scene_image_source": illustration_result.get("image_source", "fallback"),
                 "scene_image_model_used": illustration_result.get("model_used"),
-                "error_summary": illustration_result.get("error_summary") or "当前场景使用固定背景，动态讲解元素会在视频合成阶段居中叠加。",
+                "error_summary": illustration_result.get("error_summary") or "画面已准备完成。",
             })
             if progress_callback:
                 progress_callback(20 + int(index / len(storyboards) * 25), f"场景图生成中 ({index}/{len(storyboards)})")
@@ -1314,18 +1586,35 @@ class StickmanGenerator:
     def _generate_viral_package_assets(self, topic: str, image_output_dir: Path, aspect_ratio: str, storyboards: list[dict], generation_flags: dict, progress_callback=None):
         if not generation_flags.get("viral_package_enabled", True):
             return generation_flags
+        intro_enabled = bool(generation_flags.get("opening_intro_enabled", False))
         hook_template = str(generation_flags.get("viral_hook_template_key") or "shock_reveal")
         outro_template = str(generation_flags.get("viral_outro_template_key") or "quote_soft_cta")
         visual_style = str(generation_flags.get("viral_visual_style") or "cinematic_clean")
         title_text = str(generation_flags.get("viral_title_text") or topic)
         outro_text = str(generation_flags.get("viral_outro_text") or self._viral_outro_text(topic, str(generation_flags.get("viral_cta_mode") or "light_follow")))
         outro_enabled = bool(generation_flags.get("viral_outro_enabled", False))
-        hook_image_path = image_output_dir / f"hook_package_{uuid.uuid4().hex[:8]}.png"
-        hook_scene = dict(storyboards[0] if storyboards else {})
-        hook_scene["scene_title"] = title_text
-        hook_scene["visual_focus"] = topic
-        hook_result = self._generate_image(self._hook_visual_prompt(topic, title_text, hook_template, visual_style), str(hook_image_path), hook_scene, aspect_ratio)
-        self._normalize_package_image(str(hook_image_path))
+        hook_package = None
+        if intro_enabled:
+            hook_image_path = image_output_dir / f"hook_package_{uuid.uuid4().hex[:8]}.png"
+            hook_scene = dict(storyboards[0] if storyboards else {})
+            hook_scene["scene_title"] = title_text
+            hook_scene["visual_focus"] = topic
+            hook_result = self._generate_image(self._hook_visual_prompt(topic, title_text, hook_template, visual_style), str(hook_image_path), hook_scene, aspect_ratio)
+            self._normalize_package_image(str(hook_image_path))
+            hook_package = {
+                "template_key": hook_template,
+                "title_text": title_text,
+                "subtitle_text": "高能开场，快速切入核心观点",
+                "image_path": str(hook_image_path),
+                "image_url": f"/api/stickman-images/{hook_image_path.name}",
+                "title_asset_path": None,
+                "title_asset_url": None,
+                "transition_in": "flash_cut",
+                "transition_out": "smoothleft",
+                "image_source": hook_result.get("image_source"),
+                "image_model_used": hook_result.get("model_used"),
+                "error_summary": hook_result.get("error_summary"),
+            }
         outro_package = None
         if outro_enabled:
             outro_image_path = image_output_dir / f"outro_package_{uuid.uuid4().hex[:8]}.png"
@@ -1351,24 +1640,12 @@ class StickmanGenerator:
                 "error_summary": outro_result.get("error_summary"),
             }
         if progress_callback:
-            progress_callback(18, "爆款开头与结尾包装已生成")
-        payload = {
-            **generation_flags,
-            "viral_hook_package": {
-                "template_key": hook_template,
-                "title_text": title_text,
-                "subtitle_text": "高能开场，快速切入核心观点",
-                "image_path": str(hook_image_path),
-                "image_url": f"/api/stickman-images/{hook_image_path.name}",
-                "title_asset_path": None,
-                "title_asset_url": None,
-                "transition_in": "flash_cut",
-                "transition_out": "smoothleft",
-                "image_source": hook_result.get("image_source"),
-                "image_model_used": hook_result.get("model_used"),
-                "error_summary": hook_result.get("error_summary"),
-            },
-        }
+            progress_callback(18, "开头与结尾包装已生成")
+        payload = {**generation_flags}
+        if hook_package:
+            payload["viral_hook_package"] = hook_package
+        else:
+            payload.pop("viral_hook_package", None)
         if outro_package:
             payload["viral_outro_package"] = outro_package
         return payload
@@ -1376,11 +1653,18 @@ class StickmanGenerator:
     def _attach_viral_package_metadata(self, storyboards: list[dict], generation_flags: Optional[dict]):
         if not storyboards or not generation_flags or not generation_flags.get("viral_package_enabled", True):
             return storyboards
+        intro_enabled = bool(generation_flags.get("opening_intro_enabled", False))
         hook_package = generation_flags.get("viral_hook_package") or {}
         outro_package = generation_flags.get("viral_outro_package") or {}
-        if hook_package:
+        if intro_enabled and hook_package:
             storyboards[0]["viral_hook_package"] = hook_package
             storyboards[0]["transition_type"] = str(hook_package.get("transition_out") or storyboards[0].get("transition_type") or "smoothleft")
+            if storyboards[0].get("viral_intro_scene") and len(storyboards) > 1:
+                for scene in storyboards[1:]:
+                    scene.pop("viral_hook_package", None)
+        else:
+            for scene in storyboards:
+                scene.pop("viral_hook_package", None)
         if outro_package:
             storyboards[-1]["viral_outro_package"] = outro_package
         return storyboards
@@ -1415,7 +1699,7 @@ class StickmanGenerator:
             "model_used": None,
             "scene_image_source": illustration_result.get("image_source", "fallback"),
             "scene_image_model_used": illustration_result.get("model_used"),
-            "error_summary": illustration_result.get("error_summary") or "预览图展示的是固定背景，真正的动态场景图会在视频合成阶段居中叠加。",
+            "error_summary": illustration_result.get("error_summary") or "预览图已生成，可继续下一步。",
         }, False
 
     def _get_image_output_dir(self, project_id: Optional[int] = None):
@@ -1609,79 +1893,201 @@ class StickmanGenerator:
                 "english": self._sanitize_english_subtitle(self._translate_subtitle_to_english(clean_text)),
             })
         return result
-
     def _emphasis_beats_for_scene(self, scene: dict):
         keywords = [str(item).strip() for item in (scene.get("keywords") or []) if str(item).strip()]
         text = str(scene.get("narration") or "")
         candidates = keywords[:2] or [part for part in re.split(r"[，。！？、\s]+", text) if part][:2]
         return candidates
 
-    def _section_title_for_scene(self, scene: dict, index: int, total: int):
-        role = str(scene.get("performance_template") or scene.get("opening_template_key") or "").strip().lower()
-        if role in {"hook", "problem"}:
-            return "问题切入", "question"
-        if role in {"cause", "compare"}:
-            return "原因分析", "cause"
-        if role in {"method", "explain"}:
-            return "应对方法", "method"
-        if role in {"result", "summary", "transition"} or index >= total:
-            return "总结收束", "summary"
+    def _section_icon_for_index(self, index: int, total: int):
+        if total <= 1:
+            return "summary"
+        if index == 1:
+            return "question"
+        if index >= total:
+            return "summary"
+        return "method"
+
+    def _balanced_section_sizes(self, total: int):
+        total = max(int(total or 0), 0)
+        if total <= 0:
+            return []
         if total <= 3:
-            return ("问题切入", "question") if index == 1 else ("应对方法", "method")
-        if index <= max(1, total // 3):
-            return "问题切入", "question"
-        if index <= max(2, total * 2 // 3):
-            return "应对方法", "method"
-        return "总结收束", "summary"
+            return [1] * total
+        section_count = min(4, max(2, total // 2))
+        while section_count > 1 and (total / section_count) < 2:
+            section_count -= 1
+        base = total // section_count
+        remainder = total % section_count
+        return [base + (1 if index < remainder else 0) for index in range(section_count)]
+
+    def _section_title_from_texts(self, texts: list[str], fallback: str):
+        combined = "，".join(str(text or "").strip() for text in texts if str(text or "").strip())
+        if not combined:
+            return fallback[:8]
+
+        normalized = self._strip_terminal_punctuation(combined)
+        normalized = re.sub(r"[\"'“”‘’《》【】()（）]", "", normalized)
+        normalized = re.sub(r"\s+", "", normalized)
+        candidates = []
+
+        if "为什么" in normalized:
+            tail = normalized.split("为什么", 1)[1]
+            tail = re.split(r"[，。！？；：]", tail)[0]
+            tail = tail[:5]
+            if tail:
+                candidates.append(f"为什么{tail}"[:8])
+        for marker in ("别再", "不要再", "一定要", "千万别", "其实", "原来", "关键是"):
+            if marker in normalized:
+                tail = normalized.split(marker, 1)[1]
+                tail = re.split(r"[，。！？；：]", tail)[0]
+                tail = tail[: max(0, 8 - len(marker))]
+                if tail:
+                    candidates.append(f"{marker}{tail}"[:8])
+
+        chunks = [chunk for chunk in re.split(r"[，。！？；：、]", normalized) if chunk]
+        for chunk in chunks:
+            clean = re.sub(r"^(所以|然后|就是|如果|因为|但是|而且|其实|我们|你要|你会|这个|那个)", "", chunk)
+            clean = clean[:8]
+            if 3 <= len(clean) <= 8:
+                candidates.append(clean)
+        for chunk in chunks:
+            if 3 <= len(chunk) <= 8:
+                candidates.append(chunk[:8])
+
+        seen = set()
+        for candidate in candidates:
+            title = self._strip_terminal_punctuation(candidate).strip()
+            if 2 <= len(title) <= 8 and title not in seen:
+                seen.add(title)
+                return title
+        return fallback[:8]
+
+    def _clean_section_title(self, title: str, fallback: str):
+        clean = re.sub(r"[\s\-:：，。！？!?,；;、'\"“”‘’()（）【】《》]", "", str(title or "").strip())
+        clean = clean[:8]
+        if 2 <= len(clean) <= 8:
+            return clean
+        return fallback[:8]
+
+    def _generate_section_titles(self, section_text_groups: list[list[str]]):
+        if not section_text_groups:
+            return []
+
+        fallback_titles = [
+            self._section_title_from_texts(group, fallback=f"第{index}部分")
+            for index, group in enumerate(section_text_groups, start=1)
+        ]
+        numbered_sections = []
+        for index, group in enumerate(section_text_groups, start=1):
+            combined = "\n".join(f"- {str(text or '').strip()}" for text in group if str(text or '').strip())
+            if combined:
+                numbered_sections.append(f"第{index}部分：\n{combined}")
+        if not numbered_sections:
+            return fallback_titles
+
+        try:
+            response = self._chat_completion(
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "你是短视频分段标题助手。"
+                            "请根据每一部分的内容，总结一个4到8个汉字的进度条标题。"
+                            "标题必须概括这部分含义，不能直接照抄开头几个字，"
+                            "不要带标点，不要编号，不要解释。"
+                            "只返回 JSON 数组字符串。"
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": (
+                            "请给下面每个部分各写一个短标题，按顺序返回 JSON 数组。\n\n"
+                            + "\n\n".join(numbered_sections)
+                        ),
+                    },
+                ],
+                temperature=0.2,
+                max_tokens=220,
+            )
+            content = (response.choices[0].message.content or "").strip()
+            match = re.search(r"\[[\s\S]*\]", content)
+            payload = json.loads(match.group(0) if match else content)
+            if isinstance(payload, list):
+                titles = []
+                for index, fallback in enumerate(fallback_titles):
+                    candidate = payload[index] if index < len(payload) else fallback
+                    titles.append(self._clean_section_title(str(candidate or ""), fallback))
+                if len(titles) == len(fallback_titles):
+                    return titles
+        except Exception:
+            pass
+        return fallback_titles
 
     def _attach_sections(self, storyboards: list[dict]):
         total = len(storyboards)
+        sizes = self._balanced_section_sizes(total)
         sections = []
-        last_key = None
-        for index, scene in enumerate(storyboards, start=1):
-            title, icon_key = self._section_title_for_scene(scene, index, total)
-            key = (title, icon_key)
-            if key != last_key:
-                sections.append({
-                    "section_id": len(sections) + 1,
-                    "title": title,
-                    "icon_key": icon_key,
-                    "start_scene_index": index,
-                    "end_scene_index": index,
-                })
-                last_key = key
-            else:
-                sections[-1]["end_scene_index"] = index
-            scene["section_id"] = sections[-1]["section_id"]
-            scene["section_title"] = title
-            scene["section_icon_key"] = icon_key
+        section_groups = []
+        cursor = 0
+        for _, size in enumerate(sizes, start=1):
+            group = storyboards[cursor:cursor + size]
+            if not group:
+                continue
+            section_groups.append([
+                [str(item.get("scene_narration") or item.get("narration") or "").strip() for item in group],
+                group,
+            ])
+            cursor += len(group)
+
+        titles = self._generate_section_titles([texts for texts, _ in section_groups])
+
+        cursor = 0
+        for section_index, size in enumerate(sizes, start=1):
+            group = storyboards[cursor:cursor + size]
+            if not group:
+                continue
+            section_title = titles[len(sections)] if len(sections) < len(titles) else self._section_title_from_texts(
+                [str(item.get("scene_narration") or item.get("narration") or "").strip() for item in group],
+                fallback=f"第{section_index}部分",
+            )
+            icon_key = self._section_icon_for_index(section_index, len(sizes))
+            section = {
+                "section_id": len(sections) + 1,
+                "title": section_title,
+                "icon_key": icon_key,
+                "start_scene_index": cursor + 1,
+                "end_scene_index": cursor + len(group),
+            }
+            sections.append(section)
+            for scene in group:
+                scene["section_id"] = section["section_id"]
+                scene["section_title"] = section_title
+                scene["section_icon_key"] = icon_key
+            cursor += len(group)
         return sections
 
-    def _explode_storyboards_for_segments(self, storyboards: list[dict], topic: str):
+    def _explode_storyboards_for_segments(self, storyboards: list[dict], topic: str, include_intro_scene: bool = True):
         exploded = []
         for scene in storyboards:
+            clone = dict(scene)
             subtitle_lines = list(scene.get("subtitle_lines") or self._subtitle_blueprint_for_scene(scene))
-            if not subtitle_lines:
-                subtitle_lines = [{"text": str(scene.get("scene_narration") or scene.get("narration") or topic).strip()}]
-            for seg_index, subtitle in enumerate(subtitle_lines, start=1):
-                text = str(subtitle.get("text") or "").strip() or str(scene.get("scene_narration") or scene.get("narration") or topic).strip()
-                clone = dict(scene)
-                clone["segment_index_within_scene"] = seg_index
-                clone["source_scene_id"] = scene.get("scene_id")
-                clone["scene_narration"] = text
-                clone["narration"] = text
-                clone["scene_title"] = str(scene.get("section_title") or scene.get("scene_title") or f"第{scene.get('scene_id')}幕")
-                clone["subtitle_lines"] = [{
-                    "text": text,
-                    "english": str(subtitle.get("english") or "").strip(),
-                }]
-                clone["visual_focus"] = self._infer_scene_focus(text, topic)
-                clone["scene_description"] = f"围绕{text[:14]}的单句讲解画面，仅表达当前字幕段内容。"
-                clone["scene_image_prompt"] = self._scene_image_prompt_for_scene(clone, topic)
-                clone["foreground_subjects"] = self._foreground_subjects_for_scene(clone, topic, len(exploded) + 1)
-                clone["foreground_events"] = self._foreground_events_for_scene(clone, len(exploded) + 1)
-                exploded.append(clone)
-        if exploded:
+            full_text = self._normalize_storyboard_fragment(scene.get("scene_narration") or scene.get("narration") or topic)
+            if not subtitle_lines and full_text:
+                subtitle_lines = [{"text": full_text, "english": ""}]
+            clone["segment_index_within_scene"] = 1
+            clone["source_scene_id"] = scene.get("scene_id")
+            clone["scene_narration"] = full_text
+            clone["narration"] = full_text
+            clone["scene_title"] = str(scene.get("section_title") or scene.get("scene_title") or f"第{scene.get('scene_id')}幕")
+            clone["subtitle_lines"] = subtitle_lines
+            clone["visual_focus"] = self._infer_scene_focus(full_text, topic)
+            clone["scene_description"] = f"围绕{full_text[:14]}的讲解画面，仅表达当前分镜内容。"
+            clone["scene_image_prompt"] = self._scene_image_prompt_for_scene(clone, topic)
+            clone["foreground_subjects"] = self._foreground_subjects_for_scene(clone, topic, len(exploded) + 1)
+            clone["foreground_events"] = self._foreground_events_for_scene(clone, len(exploded) + 1)
+            exploded.append(clone)
+        if exploded and include_intro_scene:
             intro_scene = dict(exploded[0])
             intro_text = self._intro_narration_text(topic)
             intro_scene["scene_narration"] = intro_text
@@ -1691,8 +2097,13 @@ class StickmanGenerator:
             intro_scene["visual_focus"] = str(topic or intro_scene.get("visual_focus") or "主题").strip() or "主题"
             intro_scene["foreground_subjects"] = []
             intro_scene["foreground_events"] = []
-            intro_scene["subtitle_lines"] = []
+            intro_scene["subtitle_lines"] = [{
+                "text": intro_text,
+                "english": self._sanitize_english_subtitle(self._translate_subtitle_to_english(intro_text)),
+            }]
             intro_scene["viral_intro_scene"] = True
+            intro_scene["opening_intro_scene"] = True
+            intro_scene["performance_template"] = "opening_intro"
             intro_scene["transition_type"] = "fade"
             exploded.insert(0, intro_scene)
         for index, scene in enumerate(exploded, start=1):
@@ -1931,11 +2342,16 @@ class StickmanGenerator:
         if not raw.strip():
             return []
 
+        if not re.search(r"[，,、。！？!?；;：:]", raw):
+            return self._semantic_split_long_text(raw, preferred_max=16, hard_max=18)
+
         def split_long_clause(clause: str):
             clause = clause.strip()
             if not clause:
                 return []
             if len(clause) <= 18:
+                return [clause]
+            if not re.search(r"[，,、。！？!?；;：:]", clause):
                 return [clause]
 
             comma_parts = [item.strip() for item in re.split(r"(?<=[，,、])\s*", clause) if item.strip()]
@@ -1953,38 +2369,34 @@ class StickmanGenerator:
                     merged.append(current)
                 return merged
 
-            pieces = []
-            current = clause
-            while len(current) > 18:
-                cut = current.rfind("，", 0, 18)
-                if cut <= 0:
-                    cut = current.rfind(",", 0, 18)
-                if cut <= 0:
-                    cut = current.rfind("、", 0, 18)
-                if cut <= 0:
-                    cut = 16
-                pieces.append(current[:cut + 1].strip())
-                current = current[cut + 1:].strip()
-            if current:
-                pieces.append(current)
-            return [item for item in pieces if item]
+            return [clause]
 
         parts = [item.strip() for item in re.split(r"(?<=[。！？!?；;])\s*", raw) if item.strip()]
         refined = []
         for part in (parts or [raw.strip()]):
             refined.extend(split_long_clause(part))
-        return refined or [raw.strip()]
+        reviewed = self._review_semantic_segments(refined or [raw.strip()], soft_limit=18)
+        return reviewed or [raw.strip()]
 
     def _split_chinese_subtitle_lines(self, text: str):
         cleaned = re.sub(r"\s+", "", str(text or "").strip())
         if not cleaned:
             return [" "]
-        if len(cleaned) <= 15:
+        if len(cleaned) <= 18:
             return [self._strip_terminal_punctuation(cleaned) or cleaned]
 
-        midpoint = (len(cleaned) + 1) // 2
-        first = cleaned[:midpoint].strip()
-        second = cleaned[midpoint:].strip()
+        target = max(8, min((len(cleaned) + 1) // 2, 14))
+        split_at = self._best_semantic_break_index(cleaned, target, 8, min(18, len(cleaned) - 4))
+        if not split_at:
+            split_at = target
+        numeral_chars = "一二三四五六七八九十百千万0123456789两几多半"
+        if 1 <= split_at < len(cleaned):
+            while split_at > 8 and split_at < len(cleaned) and cleaned[split_at - 1] in numeral_chars and cleaned[split_at] not in "，。！？；：、】【）》〕】」』,.!?;:" and cleaned[split_at] not in numeral_chars:
+                split_at -= 1
+            while split_at < min(18, len(cleaned) - 4) and cleaned[split_at - 1] not in "，。！？；：、】【）》〕】」』,.!?;:" and cleaned[split_at] in numeral_chars:
+                split_at += 1
+        first = cleaned[:split_at].strip()
+        second = cleaned[split_at:].strip()
         if second and re.match(r"^[，。！？；：、】【）》〕】」』,.!?;:]", second):
             first += second[0]
             second = second[1:].strip()
@@ -2047,7 +2459,7 @@ class StickmanGenerator:
         end_at = max(float(duration or 0.0), 0.2)
 
         hook = scene.get("viral_hook_package") or {}
-        if hook:
+        if hook and not scene.get("viral_intro_scene"):
             hook_title_end = self._hook_package_title_end(end_at)
             start_at = min(end_at - 0.2, hook_title_end + 0.08)
 
@@ -2059,8 +2471,6 @@ class StickmanGenerator:
         return round(max(start_at, 0.0), 2), round(max(end_at, start_at + 0.2), 2)
 
     def _timed_subtitles_for_scene(self, scene: dict, duration: float):
-        if scene.get("viral_intro_scene"):
-            return []
         existing = scene.get("subtitle_segments") or []
         window_start, window_end = self._subtitle_timing_window(scene, duration)
         subtitle_lead = 0.0
@@ -2079,7 +2489,8 @@ class StickmanGenerator:
         if not lines:
             return []
         audio_duration = float(scene.get("audio_duration") or 0.0)
-        effective_duration = min(window_end, audio_duration + 0.06) if audio_duration > 0 else window_end
+        audio_lead = float(scene.get("audio_lead") or 0.18)
+        effective_duration = min(window_end, audio_lead + audio_duration + 0.06) if audio_duration > 0 else window_end
         safe_duration = max(min(window_end, effective_duration) - window_start, 0.2)
         if len(lines) == 1:
             item = lines[0]
@@ -2095,7 +2506,8 @@ class StickmanGenerator:
         cursor = window_start
         for index, item in enumerate(lines):
             slice_duration = safe_duration * (weights[index] / total_weight)
-            start = round(cursor, 2)
+            lead = min(0.16, max(slice_duration * 0.22, 0.06))
+            start = round(max(window_start, cursor - lead), 2)
             end = round(min(window_end, cursor + slice_duration), 2)
             timed.append({
                 "text": self._strip_terminal_punctuation(str(item.get("text") or "")),
@@ -2449,7 +2861,8 @@ class StickmanGenerator:
         # Keep the progress UI lightweight: a single thin bottom track plus section labels.
         draw.rounded_rectangle((bar_left, progress_bar_y, bar_right, progress_bar_y + 10), radius=5, fill=(220, 220, 220, 120))
 
-        label_font = self._load_font(20)
+        label_font = self._load_font(18)
+        previous_end = -9999
         for index, section in enumerate(sections, start=1):
             start_ratio = float(section.get("start_ratio", 0.0))
             end_ratio = float(section.get("end_ratio", start_ratio))
@@ -2458,10 +2871,13 @@ class StickmanGenerator:
             center_x = int((left + right) / 2)
             if index < len(sections):
                 draw.line((right, progress_bar_y - 2, right, 1071), fill=(235, 235, 235, 110), width=2)
-            label = str(section.get("title") or "内容")[:12]
+            label = str(section.get("title") or "内容")[:8]
             bbox = draw.textbbox((0, 0), label, font=label_font)
             text_width = bbox[2] - bbox[0]
-            draw.text((center_x - text_width / 2, label_y), label, fill=(0, 0, 0, 255), font=label_font)
+            text_x = center_x - text_width / 2
+            text_y = label_y - 20 if text_x < previous_end + 16 else label_y
+            draw.text((text_x, text_y), label, fill=(0, 0, 0, 255), font=label_font)
+            previous_end = max(previous_end, text_x + text_width)
         canvas.save(save_path, format="PNG")
 
     def _section_progress_position_expr(self, overlay: dict, width: int):
@@ -2507,7 +2923,7 @@ class StickmanGenerator:
         canvas = Image.new("RGBA", (1920, max(148, canvas_height)), (0, 0, 0, 0))
         draw = ImageDraw.Draw(canvas)
 
-        y = self._render_centered_chinese_lines(draw, zh_lines, zh_font, 1920, 0, 58, (22, 22, 22, 255), stroke_width=2, stroke_fill=(255, 255, 255, 220))
+        y = self._render_centered_chinese_lines(draw, zh_lines, zh_font, 1920, 0, 58, (22, 22, 22, 255), stroke_width=1, stroke_fill=(255, 255, 255, 150))
         if en_lines:
             y += 2
             for line in en_lines:
@@ -2592,17 +3008,22 @@ class StickmanGenerator:
                 continue
             subject_key = str(subject.get("key") or "")
             if subject_key.startswith("scene_image_") and asset and asset.get("scene_image_path") and os.path.exists(str(asset.get("scene_image_path"))):
-                overlay_path = Path(str(asset.get("scene_image_path")))
+                source_overlay_path = Path(str(asset.get("scene_image_path")))
+                overlay_path = asset_dir / f"scene_overlay_{index}.png"
+                normalize_scene_overlay_image(str(source_overlay_path), str(overlay_path))
             else:
                 overlay_path = asset_dir / f"fg_{index}.png"
                 self._create_foreground_asset(str(overlay_path), subject, palette)
             event_start = max(float(event.get("start", 0.0)), 0.0)
             if scene.get("viral_hook_package") and subject_key.startswith("scene_image_"):
                 event_start = max(event_start, self._hook_package_title_end(duration) + 0.05)
+            overlay_end = float(duration)
+            if not subject_key.startswith("scene_image_"):
+                overlay_end = min(float(duration), max(event_start + max(float(event.get("duration", 0.4)), 0.25) + 1.0, event_start + 0.45))
             overlays.append({
                 "path": str(overlay_path),
                 "start": event_start,
-                "end": min(float(duration), max(event_start + max(float(event.get("duration", 0.4)), 0.25) + 1.0, event_start + 0.45)),
+                "end": overlay_end,
                 "x_ratio": float(event.get("x_ratio", 0.58)),
                 "y_ratio": float(event.get("y_ratio", 0.42)),
                 "animation": str(event.get("animation") or "fade_in"),
@@ -2639,13 +3060,15 @@ class StickmanGenerator:
                     "fade_out": 0.18 if scene.get("viral_intro_scene") else 0.14,
                 })
             if title_path and os.path.exists(title_path):
+                title_start = 0.06 if scene.get("viral_intro_scene") else 0.12
+                title_end = duration if scene.get("viral_intro_scene") else self._hook_package_title_end(duration)
                 overlays.append({
                     "path": title_path,
-                    "start": 0.12,
-                    "end": self._hook_package_title_end(duration),
+                    "start": title_start,
+                    "end": title_end,
                     "animation": "center_bounce",
                     "fade_in": 0.08,
-                    "fade_out": 0.14,
+                    "fade_out": 0.08 if scene.get("viral_intro_scene") else 0.14,
                 })
         if outro:
             image_path = str(outro.get("image_path") or "")
@@ -2839,32 +3262,38 @@ class StickmanGenerator:
                     await communicate.save(save_path)
                 asyncio_run(_run_edge())
                 audio = AudioSegment.from_file(save_path)
-                return self._export_tts_audio(audio, save_path)
+                return self._export_tts_audio(audio, save_path, provider=provider, voice=voice)
             except Exception:
                 provider = "dashscope_cosyvoice"
                 voice = self._normalize_tts_voice(provider, voice)
 
         if provider == "dashscope_cosyvoice":
-            try:
-                if voice.startswith("cosyvoice-v3.5-plus-"):
-                    model = "cosyvoice-v3.5-plus"
-                else:
-                    model = "cosyvoice-v3-flash"
-                synthesizer = SpeechSynthesizer(model=model, voice=voice)
-                audio_bytes = synthesizer.call(text)
-                with open(save_path, 'wb') as file:
-                    file.write(audio_bytes)
-                audio = AudioSegment.from_file(save_path)
-                if not self._audio_has_signal(audio):
-                    raise RuntimeError("CosyVoice returned silent audio")
-                if rate != "+0%":
-                    factor = 1.0 + (float(rate.strip('%')) / 100.0)
-                    factor = max(0.7, min(1.3, factor))
-                    audio = audio._spawn(audio.raw_data, overrides={"frame_rate": int(audio.frame_rate * factor)}).set_frame_rate(audio.frame_rate)
-                return self._export_tts_audio(audio, save_path)
-            except Exception:
-                provider = "dashscope_sambert"
-                voice = "sambert-zhiming-v1"
+            errors = []
+            for model in self._resolve_cosyvoice_models(voice):
+                try:
+                    logger.warning("Trying CosyVoice model provider=%s voice=%s model=%s", provider, voice, model)
+                    synthesizer = SpeechSynthesizer(model=model, voice=voice)
+                    audio_bytes = synthesizer.call(text)
+                    if not audio_bytes:
+                        raise RuntimeError("CosyVoice 未返回音频数据")
+                    with open(save_path, 'wb') as file:
+                        file.write(audio_bytes)
+                    audio = AudioSegment.from_file(save_path)
+                    if not self._audio_has_signal(audio):
+                        raise RuntimeError("CosyVoice returned silent audio")
+                    if rate != "+0%":
+                        factor = 1.0 + (float(rate.strip('%')) / 100.0)
+                        factor = max(0.7, min(1.3, factor))
+                        audio = audio._spawn(audio.raw_data, overrides={"frame_rate": int(audio.frame_rate * factor)}).set_frame_rate(audio.frame_rate)
+                    if errors:
+                        logger.warning("CosyVoice fallback succeeded provider=%s voice=%s model=%s previous_errors=%s", provider, voice, model, " | ".join(errors))
+                    return self._export_tts_audio(audio, save_path, provider=provider, voice=voice)
+                except Exception as exc:
+                    self._raise_if_tts_quota_exhausted(exc)
+                    errors.append(f"{model}: {str(exc)[:160]}")
+                    logger.warning("CosyVoice model failed provider=%s voice=%s model=%s error=%s", provider, voice, model, str(exc)[:500])
+                    continue
+            raise RuntimeError(f"所选音色生成失败: provider={provider}, voice={voice}, errors={' | '.join(errors)}")
 
         if provider == "edge_tts":
             try:
@@ -2875,7 +3304,7 @@ class StickmanGenerator:
                     await communicate.save(save_path)
                 asyncio_run(_run_edge_fallback())
                 audio = AudioSegment.from_file(save_path)
-                return self._export_tts_audio(audio, save_path)
+                return self._export_tts_audio(audio, save_path, provider=provider, voice=voice)
             except Exception:
                 provider = "dashscope_qwen"
                 voice = "Cherry"
@@ -2895,8 +3324,9 @@ class StickmanGenerator:
                     factor = 1.0 + (float(rate.strip('%')) / 100.0)
                     factor = max(0.7, min(1.3, factor))
                     audio = audio._spawn(audio.raw_data, overrides={"frame_rate": int(audio.frame_rate * factor)}).set_frame_rate(audio.frame_rate)
-                return self._export_tts_audio(audio, save_path)
-            except Exception:
+                return self._export_tts_audio(audio, save_path, provider=provider, voice=voice)
+            except Exception as exc:
+                self._raise_if_tts_quota_exhausted(exc)
                 provider = "dashscope_qwen"
                 voice = "Cherry"
 
@@ -2936,12 +3366,26 @@ class StickmanGenerator:
             audio = AudioSegment.from_file(save_path)
             if not self._audio_has_signal(audio):
                 raise RuntimeError('Generic TTS returned silent audio')
-            return self._export_tts_audio(audio, save_path)
-        except Exception:
-            duration = max(2.0, min(len(text) * 0.22, 10.0))
-            silence = AudioSegment.silent(duration=int(duration * 1000))
-            silence.export(save_path, format="mp3")
-            return duration
+            return self._export_tts_audio(audio, save_path, provider=provider, voice=voice)
+        except Exception as exc:
+            raise RuntimeError(self._summarize_tts_error(exc)) from exc
+
+    def _raise_if_tts_quota_exhausted(self, error: Exception):
+        text = str(error)
+        if "AllocationQuota.FreeTierOnly" in text or "free tier" in text.lower() or "quota" in text.lower():
+            raise RuntimeError("当前语音配音额度已用尽，配音失败，请稍后重试") from error
+
+    def _summarize_tts_error(self, error: Exception):
+        text = str(error)
+        if "AllocationQuota.FreeTierOnly" in text or "free tier" in text.lower() or "quota" in text.lower():
+            return "当前语音配音额度已用尽，配音失败，请稍后重试"
+        if "403" in text:
+            return "当前语音配音服务无权限或额度不足，配音失败"
+        if "401" in text:
+            return "当前语音配音服务鉴权失败，配音失败"
+        if "timeout" in text.lower():
+            return "当前语音配音服务超时，配音失败，请稍后重试"
+        return f"语音配音失败: {text[:160]}"
 
     def _normalize_tts_voice(self, provider: str, voice: str):
         if provider == "dashscope_cosyvoice":
@@ -2963,6 +3407,17 @@ class StickmanGenerator:
             return voice if voice and not voice.startswith("zh-CN-") else "Cherry"
         return voice
 
+    def _resolve_cosyvoice_models(self, voice: str):
+        preferred = "cosyvoice-v3.5-plus" if voice.startswith("cosyvoice-v3.5-plus-") else "cosyvoice-v3-flash"
+        ordered = []
+        seen = set()
+        for candidate in [preferred, *self.tts_fallback_models]:
+            model = str(candidate or "").strip()
+            if model and model not in seen:
+                ordered.append(model)
+                seen.add(model)
+        return ordered or ["cosyvoice-v3.5-plus"]
+
     def _extract_audio_payload(self, result: dict):
         output = result.get("output") or {}
         if output.get("audio_url"):
@@ -2981,8 +3436,55 @@ class StickmanGenerator:
     def _audio_has_signal(self, audio: AudioSegment):
         return bool(len(audio)) and int(audio.rms or 0) > 0
 
-    def _export_tts_audio(self, audio: AudioSegment, save_path: str, preroll_ms: int = 120):
-        final_audio = AudioSegment.silent(duration=max(preroll_ms, 0)) + audio
+    def _tts_export_preroll_ms(self):
+        return 40
+
+    def _tts_concat_lead_ms(self):
+        return 60
+
+    def _tts_concat_pause_ms(self, is_last: bool):
+        return 180 if is_last else 140
+
+    def _postprocess_tts_audio(self, audio: AudioSegment, provider: str, voice: str):
+        processed = audio.set_channels(1)
+        voice_key = str(voice or "").strip()
+        cloned_voice = provider == "dashscope_cosyvoice" and voice_key.startswith("cosyvoice-v3.5-plus-")
+
+        # Clone voices often sound stiff at sentence edges; trim the clicky boundary
+        # and add a slightly softer fade-in/fade-out to smooth transitions.
+        if cloned_voice and len(processed) > 120:
+            processed = processed[20:max(20, len(processed) - 28)]
+            processed = processed.fade_in(26).fade_out(42)
+        try:
+            if cloned_voice:
+                processed = processed.high_pass_filter(110).low_pass_filter(7200)
+                processed = compress_dynamic_range(processed, threshold=-24.0, ratio=3.2, attack=5, release=70)
+            else:
+                processed = processed.high_pass_filter(80).low_pass_filter(8000)
+                processed = compress_dynamic_range(processed, threshold=-22.0, ratio=2.4, attack=6, release=80)
+        except Exception:
+            pass
+
+        try:
+            ranges = detect_nonsilent(processed, min_silence_len=220, silence_thresh=-43 if cloned_voice else -45)
+            if ranges:
+                start = max(ranges[0][0] - 25, 0)
+                end = min(ranges[-1][1] + 45, len(processed))
+                processed = processed[start:end]
+        except Exception:
+            pass
+
+        try:
+            processed = processed.normalize()
+        except Exception:
+            pass
+        return processed.set_frame_rate(24000)
+
+    def _export_tts_audio(self, audio: AudioSegment, save_path: str, preroll_ms: int | None = None, provider: str = "", voice: str = ""):
+        processed = self._postprocess_tts_audio(audio, provider, voice)
+        if preroll_ms is None:
+            preroll_ms = self._tts_export_preroll_ms()
+        final_audio = AudioSegment.silent(duration=max(preroll_ms, 0)) + processed
         final_audio.export(save_path, format="mp3")
         return max(len(final_audio) / 1000.0, 1.0)
 
@@ -3155,8 +3657,12 @@ class StickmanGenerator:
 
     def _build_timeline(self, audio_segments):
         timeline = []
-        for _, duration in audio_segments:
-            timeline.append({"video_duration": round(max(float(duration or 0.0), 0.3), 2)})
+        segment_count = len(audio_segments or [])
+        for index, (_, duration) in enumerate(audio_segments, start=1):
+            lead_padding = self._tts_concat_lead_ms() / 1000.0
+            pause_padding = self._tts_concat_pause_ms(index >= segment_count) / 1000.0
+            padded_duration = float(duration or 0.0) + lead_padding + pause_padding
+            timeline.append({"video_duration": round(max(padded_duration, 0.75), 3)})
         return timeline
 
     def _duration_bounds_from_scene(self, scene: dict):
@@ -3181,9 +3687,9 @@ class StickmanGenerator:
         if not timeline:
             return timeline
         total_video_duration = sum(item["video_duration"] for item in timeline)
-        required_duration = total_audio_duration + 0.02
-        if total_video_duration < required_duration:
-            timeline[-1]["video_duration"] = round(timeline[-1]["video_duration"] + (required_duration - total_video_duration), 2)
+        delta = round(float(total_audio_duration) - float(total_video_duration), 3)
+        if abs(delta) >= 0.001:
+            timeline[-1]["video_duration"] = round(max(0.3, float(timeline[-1]["video_duration"]) + delta), 3)
         return timeline
 
     def _attach_scene_timing_metadata(self, storyboards: list[dict], timeline: list[dict], audio_segments=None):
@@ -3194,6 +3700,8 @@ class StickmanGenerator:
             audio_duration = 0.0
             if audio_segments and index < len(audio_segments):
                 audio_duration = float(audio_segments[index][1] or 0.0)
+            scene["audio_lead"] = round(self._tts_concat_lead_ms() / 1000.0, 3)
+            scene["audio_pause"] = round(self._tts_concat_pause_ms(index >= len(storyboards) - 1) / 1000.0, 3)
             scene["scene_duration"] = round(scene_duration, 2)
             scene["audio_duration"] = round(audio_duration, 2)
             scene["start_time"] = round(elapsed, 2)
@@ -3297,8 +3805,11 @@ class StickmanGenerator:
 
     def _concat_audio(self, audio_segments, output_path: str):
         combined = AudioSegment.empty()
-        for audio_path, _ in audio_segments:
+        total = len(audio_segments or [])
+        for index, (audio_path, _) in enumerate(audio_segments, start=1):
+            combined += AudioSegment.silent(duration=self._tts_concat_lead_ms())
             combined += AudioSegment.from_file(audio_path)
+            combined += AudioSegment.silent(duration=self._tts_concat_pause_ms(index >= total))
         combined.export(output_path, format="mp3")
 
     def _concat_video_clips(self, clip_paths, timeline, storyboards, output_path: str):

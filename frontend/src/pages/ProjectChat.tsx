@@ -43,7 +43,7 @@ export default function ProjectChat() {
   const [autoFormat, setAutoFormat] = useState(true)
   const [formatting, setFormatting] = useState(false)
   const [chatStyles, setChatStyles] = useState<ChatStyle[]>([])
-  const [selectedStyle, setSelectedStyle] = useState<string>('conservative')
+  const [selectedStyle, setSelectedStyle] = useState<string>('classic')
   const abortControllerRef = useRef<AbortController | null>(null)
   const selectedStyleInfo = chatStyles.find((style) => style.code === selectedStyle)
 
@@ -216,6 +216,9 @@ export default function ProjectChat() {
               })
               setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 10)
             } else if (parsed.type === 'final' || parsed.type === 'done') {
+              if (parsed.final_script) {
+                setProject(prev => prev ? { ...prev, final_script: parsed.final_script } : prev)
+              }
               await fetchProject()
               await fetchConversations()
               setAiThinking(false)
@@ -486,7 +489,7 @@ export default function ProjectChat() {
             block
             className="btn-gradient"
           >
-            开始生成视频
+            生成脚本和视频
           </Button>
         ) : project?.manim_code ? (
           <Button
