@@ -98,6 +98,9 @@ export default function StickmanStudio() {
     .filter(Boolean)
     .join('\n')
     .trim()
+  const hasEnglishSubtitles = storyboards.some((scene) =>
+    (scene.subtitle_lines || []).some((line) => String(line.english || '').trim())
+  )
   const needsStoryboardSync = !!normalizedCurrentScript && normalizedStoryboardScript !== normalizedCurrentScript
   const canReprocessStoryboards = !!normalizedCurrentScript && (normalizedCurrentScript !== normalizedProcessedScript || needsStoryboardSync)
   const resolvedBackgroundPreviewUrl = backgroundPreviewUrl || resolveBackgroundUrl(project?.background_image_path)
@@ -571,7 +574,8 @@ export default function StickmanStudio() {
                     <Alert type="info" message="这一步只做分段拆分" description="你输入的原文会被原样保留，只按长度和停顿拆成更适合分镜与字幕的短段，处理后会直接回写到上方文案区。" />
                     <Space wrap>
                       <Button type="primary" onClick={handleProcessStoryboards} loading={isLoadingAction('processStoryboards')} disabled={!finalScript.trim()}>处理当前文案</Button>
-                      <Button onClick={handleGenerateEnglishSubtitles} loading={isLoadingAction('generateEnglishSubtitles')} disabled={!storyboards.length}>生成英文字幕（可选）</Button>
+                      <Button onClick={handleGenerateEnglishSubtitles} loading={isLoadingAction('generateEnglishSubtitles')} disabled={!storyboards.length}>{hasEnglishSubtitles ? '重新生成英文字幕' : '生成英文字幕（可选）'}</Button>
+                      <Tag color={hasEnglishSubtitles ? 'blue' : 'default'}>{hasEnglishSubtitles ? '英文字幕已生成' : '未生成英文字幕'}</Tag>
                       <Tag color={storyboards.length ? 'green' : 'default'}>{storyboards.length ? `已生成 ${storyboards.length} 幕分镜` : '尚未生成分镜'}</Tag>
                     </Space>
                   </>
@@ -580,7 +584,8 @@ export default function StickmanStudio() {
                     <Alert type="success" message="当前文案与分镜已一致" description="如果文案区内容没有变化，可以直接继续后面的开头图和背景步骤；只要文案和当前分镜不一致，系统会再次要求重建分镜。" />
                     <Space wrap>
                       <Tag color="green">已可直接进入下一步</Tag>
-                      <Button onClick={handleGenerateEnglishSubtitles} loading={isLoadingAction('generateEnglishSubtitles')} disabled={!storyboards.length}>生成英文字幕（可选）</Button>
+                      <Button onClick={handleGenerateEnglishSubtitles} loading={isLoadingAction('generateEnglishSubtitles')} disabled={!storyboards.length}>{hasEnglishSubtitles ? '重新生成英文字幕' : '生成英文字幕（可选）'}</Button>
+                      <Tag color={hasEnglishSubtitles ? 'blue' : 'default'}>{hasEnglishSubtitles ? '英文字幕已生成' : '未生成英文字幕'}</Tag>
                     </Space>
                   </>
                 )}
