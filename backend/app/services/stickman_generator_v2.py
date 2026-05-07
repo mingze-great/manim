@@ -1010,7 +1010,7 @@ class StickmanGenerator:
             scene["foreground_events"] = self._foreground_events_for_scene(scene, index)
             scene["subtitle_lines"] = [{
                 "text": narration,
-                "english": self._sanitize_english_subtitle(self._translate_subtitle_to_english(narration)),
+                "english": "",
             }]
             scene["emphasis_beats"] = self._emphasis_beats_for_scene(scene)
             storyboards.append(scene)
