@@ -68,6 +68,10 @@ export default function StickmanStudio() {
   const [composeMessage, setComposeMessage] = useState('')
   const [isComposing, setIsComposing] = useState(false)
   const [activeComposeTaskId, setActiveComposeTaskId] = useState<number | null>(null)
+  const [processStoryboardProgress, setProcessStoryboardProgress] = useState(0)
+  const [processStoryboardMessage, setProcessStoryboardMessage] = useState('')
+  const [englishSubtitleProgress, setEnglishSubtitleProgress] = useState(0)
+  const [englishSubtitleMessage, setEnglishSubtitleMessage] = useState('')
   const composeAbortRef = useRef<AbortController | null>(null)
   const scriptSaveTimerRef = useRef<number | null>(null)
   const suppressScriptAutosaveRef = useRef(false)
@@ -200,13 +204,19 @@ export default function StickmanStudio() {
     }
     setLoadingFlag('processStoryboards', true)
     try {
+      setProcessStoryboardProgress(10)
+      setProcessStoryboardMessage('正在保存当前文案...')
       suppressScriptAutosaveRef.current = true
       if (scriptSaveTimerRef.current) {
         window.clearTimeout(scriptSaveTimerRef.current)
         scriptSaveTimerRef.current = null
       }
       await projectApi.useCustomScript(Number(id), finalScript, false)
+      setProcessStoryboardProgress(45)
+      setProcessStoryboardMessage('正在拆分分镜...')
       await projectApi.generateStickmanScript(Number(id))
+      setProcessStoryboardProgress(80)
+      setProcessStoryboardMessage('正在刷新最新结果...')
       const refreshed = await projectApi.get(Number(id))
       const refreshedProject = refreshed.data
       const refreshedStoryboards = JSON.parse(refreshedProject.storyboard_json || '[]')
@@ -218,13 +228,20 @@ export default function StickmanStudio() {
       setProject((prev) => prev ? { ...prev, ...refreshedProject, final_script: processedScript } as Project : refreshedProject)
       setFinalScript(processedScript || refreshedProject.final_script || '')
       setLastProcessedScript(processedScript || refreshedProject.final_script || '')
+      setProcessStoryboardProgress(100)
+      setProcessStoryboardMessage('文案分镜处理完成')
       message.success('文案分镜处理完成')
     } catch (error: any) {
+      setProcessStoryboardMessage(error.response?.data?.detail || '文案分镜处理失败')
       message.error(error.response?.data?.detail || '文案分镜处理失败')
     } finally {
       window.setTimeout(() => {
         suppressScriptAutosaveRef.current = false
       }, 0)
+      window.setTimeout(() => {
+        setProcessStoryboardProgress(0)
+        setProcessStoryboardMessage('')
+      }, 1200)
       setLoadingFlag('processStoryboards', false)
     }
   }
@@ -253,12 +270,23 @@ export default function StickmanStudio() {
   const handleGenerateEnglishSubtitles = async () => {
     setLoadingFlag('generateEnglishSubtitles', true)
     try {
+      setEnglishSubtitleProgress(15)
+      setEnglishSubtitleMessage('正在生成英文字幕...')
       const { data } = await projectApi.generateStickmanEnglishSubtitles(Number(id))
+      setEnglishSubtitleProgress(80)
+      setEnglishSubtitleMessage('正在刷新字幕结果...')
       applyProjectSnapshot(data)
+      setEnglishSubtitleProgress(100)
+      setEnglishSubtitleMessage('英文字幕已生成')
       message.success('英文字幕已生成')
     } catch (error: any) {
+      setEnglishSubtitleMessage(error.response?.data?.detail || '英文字幕生成失败')
       message.error(error.response?.data?.detail || '英文字幕生成失败')
     } finally {
+      window.setTimeout(() => {
+        setEnglishSubtitleProgress(0)
+        setEnglishSubtitleMessage('')
+      }, 1200)
       setLoadingFlag('generateEnglishSubtitles', false)
     }
   }
@@ -578,6 +606,10 @@ export default function StickmanStudio() {
                       <Tag color={hasEnglishSubtitles ? 'blue' : 'default'}>{hasEnglishSubtitles ? '英文字幕已生成' : '未生成英文字幕'}</Tag>
                       <Tag color={storyboards.length ? 'green' : 'default'}>{storyboards.length ? `已生成 ${storyboards.length} 幕分镜` : '尚未生成分镜'}</Tag>
                     </Space>
+                    {!!processStoryboardProgress && <Progress percent={processStoryboardProgress} status={processStoryboardProgress >= 100 ? 'success' : 'active'} />}
+                    {!!processStoryboardMessage && <div>{processStoryboardMessage}</div>}
+                    {!!englishSubtitleProgress && <Progress percent={englishSubtitleProgress} status={englishSubtitleProgress >= 100 ? 'success' : 'active'} strokeColor="#1677ff" />}
+                    {!!englishSubtitleMessage && <div>{englishSubtitleMessage}</div>}
                   </>
                 ) : (
                   <>
@@ -587,6 +619,8 @@ export default function StickmanStudio() {
                       <Button onClick={handleGenerateEnglishSubtitles} loading={isLoadingAction('generateEnglishSubtitles')} disabled={!storyboards.length}>{hasEnglishSubtitles ? '重新生成英文字幕' : '生成英文字幕（可选）'}</Button>
                       <Tag color={hasEnglishSubtitles ? 'blue' : 'default'}>{hasEnglishSubtitles ? '英文字幕已生成' : '未生成英文字幕'}</Tag>
                     </Space>
+                    {!!englishSubtitleProgress && <Progress percent={englishSubtitleProgress} status={englishSubtitleProgress >= 100 ? 'success' : 'active'} strokeColor="#1677ff" />}
+                    {!!englishSubtitleMessage && <div>{englishSubtitleMessage}</div>}
                   </>
                 )}
               </Space>
