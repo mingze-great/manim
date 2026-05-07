@@ -130,6 +130,8 @@ def _prepare_code_generation_context(db: Session, project: Project, template_id:
 
 settings = get_settings()
 
+ORPHANED_TASK_TIMEOUT_SECONDS = 20
+
 RENDER_SEMAPHORE = asyncio.Semaphore(4)
 CURRENT_RENDERS = 0
 OLD_SERVER_SEMAPHORE = asyncio.Semaphore(2)
@@ -211,6 +213,34 @@ def _task_message(task: Task) -> str:
         if lines:
             return lines[-1]
     return f"任务{task.status}"
+
+
+def _mark_task_failed(db: Session, task: Task, message: str):
+    task.status = "failed"
+    task.error_message = message
+    task.completed_at = task.completed_at or task.created_at
+    if task.log:
+        task.log = task.log + f"{message}\n"
+    else:
+        task.log = f"{message}\n"
+    db.commit()
+    db.refresh(task)
+    return task
+
+
+def _reconcile_orphaned_task(db: Session, task: Task | None):
+    if not task:
+        return task
+    if task.status not in ["pending", "processing"]:
+        return task
+    if task.celery_task_id:
+        return task
+    if not task.created_at:
+        return task
+    age = time.time() - task.created_at.timestamp()
+    if age < ORPHANED_TASK_TIMEOUT_SECONDS:
+        return task
+    return _mark_task_failed(db, task, "任务未成功进入队列，请重新发起")
 
 
 @router.post("/internal/update-video")
@@ -1294,15 +1324,18 @@ async def render_video_async(
     db.commit()
     db.refresh(task)
     
-    celery_result = render_video_celery.delay(
-        task.id,
-        project_id,
-        None,
-        None
-    )
-    
-    task.celery_task_id = celery_result.id
-    db.commit()
+    try:
+        celery_result = render_video_celery.delay(
+            task.id,
+            project_id,
+            None,
+            None
+        )
+        task.celery_task_id = celery_result.id
+        db.commit()
+    except Exception as exc:
+        _mark_task_failed(db, task, f"任务入队失败: {exc}")
+        raise HTTPException(status_code=500, detail="视频任务入队失败，请稍后重试") from exc
     
     return {
         "task_id": task.id,
@@ -1323,6 +1356,7 @@ def get_latest_render_task(
         Task.task_type.in_(["video_render", "manim_render"])
     ).order_by(Task.created_at.desc()).first()
 
+    task = _reconcile_orphaned_task(db, task)
     if not task:
         return {
             "task_id": None,
@@ -1400,15 +1434,18 @@ async def generate_code_async(
     db.refresh(task)
     
     # 提交 Celery 任务
-    celery_result = generate_code_celery.delay(
-        task.id,
-        project_id,
-        template_id,
-        model
-    )
-    
-    task.celery_task_id = celery_result.id
-    db.commit()
+    try:
+        celery_result = generate_code_celery.delay(
+            task.id,
+            project_id,
+            template_id,
+            model
+        )
+        task.celery_task_id = celery_result.id
+        db.commit()
+    except Exception as exc:
+        _mark_task_failed(db, task, f"任务入队失败: {exc}")
+        raise HTTPException(status_code=500, detail="脚本任务入队失败，请稍后重试") from exc
     
     return {
         "task_id": task.id,
@@ -1430,6 +1467,7 @@ def get_latest_code_task(
         Task.task_type == "code_generation"
     ).order_by(Task.created_at.desc()).first()
     
+    task = _reconcile_orphaned_task(db, task)
     if not task:
         return {
             "task_id": None,
@@ -1460,6 +1498,7 @@ def get_background_task(
         Task.user_id == current_user.id
     ).first()
     
+    task = _reconcile_orphaned_task(db, task)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
