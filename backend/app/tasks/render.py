@@ -20,6 +20,8 @@ from app.services.manim import ManimService
 settings = get_settings()
 
 RENDER_TOTAL_TIMEOUT = 240
+CODE_GENERATION_ASYNC_TIMEOUT = 300
+CODE_GENERATION_TOTAL_TIMEOUT = 420
 MIN_VALID_VIDEO_DURATION = 2.0
 MIN_VALID_VIDEO_SIZE = 200 * 1024
 
@@ -192,7 +194,7 @@ def run_async_code_gen(script_val, template_id, code_ref_val, reference_code=Non
         result = loop.run_until_complete(
             asyncio.wait_for(
                 manim_service.generate_code(script_val, template_id, code_ref_val, model=model, reference_code=reference_code),
-                timeout=120
+                timeout=CODE_GENERATION_ASYNC_TIMEOUT
             )
         )
         db.close()
@@ -269,7 +271,7 @@ def render_video_task(task_id: int, project_id: int, template_id: int = None, cu
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(run_async_code_gen, script_val, template_code, code_ref_val, reference_code, None)
                 try:
-                    manim_code = future.result(timeout=180)
+                    manim_code = future.result(timeout=CODE_GENERATION_TOTAL_TIMEOUT)
                 except concurrent.futures.TimeoutError:
                     update_task_progress(task_id, 20, "failed", error_message="Script generation timeout", log="脚本生成超时！\n")
                     raise RuntimeError("Code generation timeout")
@@ -496,12 +498,15 @@ def generate_code_task(task_id: int, project_id: int, template_id: int = None, m
                 
                 # 等待完成，更新进度
                 progress = 30
+                start_time = time.time()
                 while not future.done():
                     time.sleep(2)
+                    if time.time() - start_time > CODE_GENERATION_TOTAL_TIMEOUT:
+                        raise concurrent.futures.TimeoutError()
                     progress = min(progress + 5, 80)
                     update_task_progress(task_id, progress, "processing", log="脚本生成中...\n")
                 
-                result = future.result(timeout=180)
+                result = future.result(timeout=CODE_GENERATION_TOTAL_TIMEOUT)
             
             if result:
                 # 更新项目的 manim_code
