@@ -107,7 +107,8 @@ export default function StickmanStudio() {
   )
   const needsStoryboardSync = !!normalizedCurrentScript && normalizedStoryboardScript !== normalizedCurrentScript
   const canReprocessStoryboards = !!normalizedCurrentScript && (normalizedCurrentScript !== normalizedProcessedScript || needsStoryboardSync)
-  const hasEnglishSubtitles = hasEnglishSubtitleContent && !canReprocessStoryboards
+  const hasEnglishSubtitles = hasEnglishSubtitleContent
+  const englishSubtitlesStale = hasEnglishSubtitleContent && canReprocessStoryboards
   const resolvedBackgroundPreviewUrl = backgroundPreviewUrl || resolveBackgroundUrl(project?.background_image_path)
   const hasUploadedBackground = Boolean(project?.background_image_path) && parsedFlags.background_image_source === 'upload'
 
@@ -260,6 +261,9 @@ export default function StickmanStudio() {
       }
       const { data } = await projectApi.updateStickmanStoryboards(Number(id), { storyboards, final_script: finalScript })
       applyProjectSnapshot(data)
+      setProject((prev) => prev ? { ...prev, ...data } as Project : data)
+      setFinalScript(finalScript || data.final_script || '')
+      setLastProcessedScript(finalScript || data.final_script || '')
       message.success('分镜已保存')
     } catch (error: any) {
       message.error(error.response?.data?.detail || '保存分镜失败')
@@ -271,12 +275,32 @@ export default function StickmanStudio() {
   const handleGenerateEnglishSubtitles = async () => {
     setLoadingFlag('generateEnglishSubtitles', true)
     try {
+      if (!storyboards.length) {
+        message.warning('请先生成并确认分镜')
+        return
+      }
       setEnglishSubtitleProgress(15)
+      setEnglishSubtitleMessage(canReprocessStoryboards ? '正在同步最新文案分镜...' : '正在保存当前分镜...')
+
+      if (canReprocessStoryboards) {
+        await syncLatestScriptForOutput()
+      } else {
+        const saved = await projectApi.updateStickmanStoryboards(Number(id), { storyboards, final_script: finalScript })
+        applyProjectSnapshot(saved.data)
+        setProject((prev) => prev ? { ...prev, ...saved.data } as Project : saved.data)
+        const savedScript = (saved.data.final_script || finalScript || '').trim()
+        setFinalScript(savedScript)
+        setLastProcessedScript(savedScript)
+      }
+
+      setEnglishSubtitleProgress(40)
       setEnglishSubtitleMessage('正在生成英文字幕...')
       const { data } = await projectApi.generateStickmanEnglishSubtitles(Number(id))
       setEnglishSubtitleProgress(80)
       setEnglishSubtitleMessage('正在刷新字幕结果...')
       applyProjectSnapshot(data)
+      setProject((prev) => prev ? { ...prev, ...data } as Project : data)
+      setLastProcessedScript((data.final_script || finalScript || '').trim())
       setEnglishSubtitleProgress(100)
       setEnglishSubtitleMessage('英文字幕已生成')
       message.success('英文字幕已生成')
@@ -311,11 +335,13 @@ export default function StickmanStudio() {
       if (storyboards.length && nextLines.length === storyboards.length) {
         const syncedStoryboards = storyboards.map((scene, index) => {
           const text = nextLines[index] || ''
+          const existingSubtitleLines = scene.subtitle_lines || []
+          const preservedEnglish = existingSubtitleLines.find((item) => String(item?.text || '').trim() === text)?.english
           return {
             ...scene,
             narration: text,
             scene_narration: text,
-            subtitle_lines: [{ text }],
+            subtitle_lines: [{ text, ...(preservedEnglish ? { english: preservedEnglish } : {}) }],
           }
         })
         const { data } = await projectApi.updateStickmanStoryboards(Number(id), {
@@ -604,7 +630,9 @@ export default function StickmanStudio() {
                     <Space wrap>
                       <Button type="primary" onClick={handleProcessStoryboards} loading={isLoadingAction('processStoryboards')} disabled={!finalScript.trim()}>处理当前文案</Button>
                       <Button onClick={handleGenerateEnglishSubtitles} loading={isLoadingAction('generateEnglishSubtitles')} disabled={!storyboards.length}>{hasEnglishSubtitles ? '重新生成英文字幕' : '生成英文字幕（可选）'}</Button>
-                      <Tag color={hasEnglishSubtitles ? 'blue' : 'default'}>{hasEnglishSubtitles ? '英文字幕已生成' : '未生成英文字幕'}</Tag>
+                      <Tag color={englishSubtitlesStale ? 'orange' : (hasEnglishSubtitles ? 'blue' : 'default')}>
+                        {englishSubtitlesStale ? '英文字幕待更新' : (hasEnglishSubtitles ? '英文字幕已生成' : '未生成英文字幕')}
+                      </Tag>
                       <Tag color={storyboards.length ? 'green' : 'default'}>{storyboards.length ? `已生成 ${storyboards.length} 幕分镜` : '尚未生成分镜'}</Tag>
                     </Space>
                     {!!processStoryboardProgress && <Progress percent={processStoryboardProgress} status={processStoryboardProgress >= 100 ? 'success' : 'active'} />}
@@ -618,7 +646,9 @@ export default function StickmanStudio() {
                     <Space wrap>
                       <Tag color="green">已可直接进入下一步</Tag>
                       <Button onClick={handleGenerateEnglishSubtitles} loading={isLoadingAction('generateEnglishSubtitles')} disabled={!storyboards.length}>{hasEnglishSubtitles ? '重新生成英文字幕' : '生成英文字幕（可选）'}</Button>
-                      <Tag color={hasEnglishSubtitles ? 'blue' : 'default'}>{hasEnglishSubtitles ? '英文字幕已生成' : '未生成英文字幕'}</Tag>
+                      <Tag color={englishSubtitlesStale ? 'orange' : (hasEnglishSubtitles ? 'blue' : 'default')}>
+                        {englishSubtitlesStale ? '英文字幕待更新' : (hasEnglishSubtitles ? '英文字幕已生成' : '未生成英文字幕')}
+                      </Tag>
                     </Space>
                     {!!englishSubtitleProgress && <Progress percent={englishSubtitleProgress} status={englishSubtitleProgress >= 100 ? 'success' : 'active'} strokeColor="#1677ff" />}
                     {!!englishSubtitleMessage && <div>{englishSubtitleMessage}</div>}

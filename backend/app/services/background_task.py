@@ -172,6 +172,7 @@ class BackgroundTaskManager:
                 db.commit()
             
             manim_service = ManimService(db)
+            project_title = str(project.title or "").strip() or str(project.theme or "").strip()
             code = await manim_service.generate_code_with_progress(
                 script=project.final_script,
                 template_prompt=template_prompt,
@@ -184,15 +185,7 @@ class BackgroundTaskManager:
             bg_task.message = "脚本检查中..."
             db.commit()
             
-            fixed_code, warnings = manim_service.validate_code(code)
-            
-            if project.theme:
-                import re
-                fixed_code = re.sub(
-                    r'INTRO_TITLE\s*=\s*"[^"]*"',
-                    f'INTRO_TITLE = "{project.theme}"',
-                    fixed_code
-                )
+            fixed_code, warnings = manim_service.validate_code(code, project_title)
             
             project.manim_code = fixed_code
             project.status = "code_generated"

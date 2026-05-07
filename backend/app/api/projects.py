@@ -253,7 +253,7 @@ def _normalize_project_video_url(project: Project):
 
 
 def _project_background_title(project: Project):
-    return str(project.theme or project.title or "").strip() or "主题内容"
+    return str(project.title or project.theme or "").strip() or "主题内容"
 
 
 def _sync_template_background(project: Project, db: Session, flags: dict, force_template: bool = False):
@@ -315,6 +315,37 @@ def _clear_storyboard_english_subtitles(storyboards: list) -> tuple[list, bool]:
         next_scene["subtitle_lines"] = next_lines
         cleaned_storyboards.append(next_scene)
     return cleaned_storyboards, changed
+
+
+def _preserve_matching_storyboard_english_subtitles(existing_storyboards: list, incoming_storyboards: list) -> list:
+    merged_storyboards = []
+    existing_scenes = list(existing_storyboards or [])
+    for index, scene in enumerate(incoming_storyboards or []):
+        next_scene = dict(scene or {})
+        existing_scene = dict(existing_scenes[index] or {}) if index < len(existing_scenes) else {}
+        existing_lines = list(existing_scene.get("subtitle_lines") or [])
+        existing_english_by_text: dict[str, str] = {}
+        for item in existing_lines:
+            text = str((item or {}).get("text") or "").strip()
+            english = str((item or {}).get("english") or "").strip()
+            if text and english and text not in existing_english_by_text:
+                existing_english_by_text[text] = english
+
+        next_lines = []
+        for item in list(next_scene.get("subtitle_lines") or []):
+            next_item = dict(item or {})
+            text = str(next_item.get("text") or "").strip()
+            if text:
+                next_item["text"] = text
+                preserved_english = existing_english_by_text.get(text, "")
+                current_english = str(next_item.get("english") or "").strip()
+                next_item["english"] = current_english or preserved_english
+            else:
+                next_item.pop("english", None)
+            next_lines.append(next_item)
+        next_scene["subtitle_lines"] = next_lines
+        merged_storyboards.append(next_scene)
+    return merged_storyboards
 
 
 def _invalidate_stickman_english_subtitles(project: Project):
@@ -696,8 +727,9 @@ def update_stickman_storyboards(
     final_script = payload.get("final_script")
     if not isinstance(storyboards, list) or not storyboards:
         raise HTTPException(status_code=400, detail="storyboards 不能为空")
-    cleaned_storyboards, _ = _clear_storyboard_english_subtitles(storyboards)
-    project.storyboard_json = json.dumps(cleaned_storyboards, ensure_ascii=False)
+    existing_storyboards = json.loads(project.storyboard_json or "[]")
+    merged_storyboards = _preserve_matching_storyboard_english_subtitles(existing_storyboards, storyboards)
+    project.storyboard_json = json.dumps(merged_storyboards, ensure_ascii=False)
     if isinstance(final_script, str):
         project.final_script = final_script
     _invalidate_stickman_visual_outputs(project)

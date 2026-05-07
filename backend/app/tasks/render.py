@@ -185,7 +185,7 @@ def pick_valid_rendered_video(temp_dir: str):
     return valid[0] if valid else None
 
 
-def run_async_code_gen(script_val, template_id, code_ref_val, reference_code=None, model=None):
+def run_async_code_gen(script_val, template_code, video_title=None, reference_code=None, model=None):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
@@ -193,7 +193,7 @@ def run_async_code_gen(script_val, template_id, code_ref_val, reference_code=Non
         manim_service = ManimService(db)
         result = loop.run_until_complete(
             asyncio.wait_for(
-                manim_service.generate_code(script_val, template_id, code_ref_val, model=model, reference_code=reference_code),
+                manim_service.generate_code(script_val, template_code=template_code, video_title=video_title, model=model, reference_code=reference_code),
                 timeout=CODE_GENERATION_ASYNC_TIMEOUT
             )
         )
@@ -256,7 +256,7 @@ def render_video_task(task_id: int, project_id: int, template_id: int = None, cu
             update_task_progress(task_id, 10, "processing", log="正在生成 Manim 代码...\n")
             
             script_val = str(project.theme) if _is_math_project(project) else (str(project.final_script) if project.final_script is not None else "")
-            code_ref_val = str(project.custom_code) if project.custom_code is not None else ""
+            project_title = str(project.title or "").strip() or str(project.theme or "").strip()
             
             # 获取模板的参考代码
             reference_code = None
@@ -269,7 +269,7 @@ def render_video_task(task_id: int, project_id: int, template_id: int = None, cu
                     reference_code = _resolve_math_reference_code(template) if _is_math_project(project) else template.reference_code
             
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(run_async_code_gen, script_val, template_code, code_ref_val, reference_code, None)
+                future = executor.submit(run_async_code_gen, script_val, template_code, project_title, reference_code, None)
                 try:
                     manim_code = future.result(timeout=CODE_GENERATION_TOTAL_TIMEOUT)
                 except concurrent.futures.TimeoutError:
@@ -475,6 +475,7 @@ def generate_code_task(task_id: int, project_id: int, template_id: int = None, m
             update_task_progress(task_id, 10, "processing", log="准备生成脚本...\n")
             
             script_val = str(project.theme) if _is_math_project(project) else (str(project.final_script) if project.final_script is not None else "")
+            project_title = str(project.title or "").strip() or str(project.theme or "").strip()
             
             # 获取模板代码
             template_code = None
@@ -494,7 +495,7 @@ def generate_code_task(task_id: int, project_id: int, template_id: int = None, m
             
             # 使用线程池执行异步代码生成
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(run_async_code_gen, script_val, template_code, None, reference_code, model)
+                future = executor.submit(run_async_code_gen, script_val, template_code, project_title, reference_code, model)
                 
                 # 等待完成，更新进度
                 progress = 30

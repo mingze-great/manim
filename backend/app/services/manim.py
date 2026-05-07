@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 from app.utils.llm_factory import LLMFactory
+import json
 
 
 def detect_language(text: str) -> str:
@@ -256,13 +257,35 @@ class ManimService:
     def __init__(self, db: Session):
         self.db = db
         self.client = LLMFactory.get_client()
+
+    def _normalize_video_title(self, video_title: str | None) -> str:
+        return str(video_title or "").strip()
+
+    def enforce_intro_title(self, code: str, video_title: str | None) -> str:
+        import re
+
+        normalized_title = self._normalize_video_title(video_title)
+        if not code or not normalized_title:
+            return code
+
+        quoted_title = json.dumps(normalized_title, ensure_ascii=False)
+        if re.search(r'INTRO_TITLE\s*=\s*["\"]', code):
+            return re.sub(r'INTRO_TITLE\s*=\s*(["\"]).*?\1', f'INTRO_TITLE = {quoted_title}', code, count=1)
+
+        lines = code.splitlines()
+        insert_at = 0
+        for index, line in enumerate(lines):
+            if line.startswith("from manim import") or line.startswith("import manim"):
+                insert_at = index + 1
+        lines.insert(insert_at, f"INTRO_TITLE = {quoted_title}")
+        return "\n".join(lines)
     
     def generate_code_sync(self, script: str) -> str:
         """同步版本的代码生成"""
         import asyncio
         return asyncio.run(self.generate_code(script))
     
-    async def generate_code(self, script: str, template_code: str = None, video_title: str = None, model: str = None, reference_code: str = None, retry_callback=None) -> tuple:
+    async def generate_code(self, script: str, template_code: str = None, video_title: str = None, model: str = None, reference_code: str = None, retry_callback=None, **_ignored) -> tuple:
         language = detect_language(script)
         
         # 数学可视化参考代码模式（优先级最高）
@@ -408,6 +431,7 @@ Requirements:
             code = content.strip()
         
         code = self.fix_manim_compatibility(code)
+        code = self.enforce_intro_title(code, video_title)
         
         import ast
         max_auto_fix = 2
@@ -421,6 +445,7 @@ Requirements:
                 print(f"[ManimService] 脚本语法检查失败(第{fix_attempt+1}次): {e.msg} 行{e.lineno}")
                 if fix_attempt == 0:
                     code, _ = self.validate_code(code)
+                    code = self.enforce_intro_title(code, video_title)
                     try:
                         ast.parse(code)
                         auto_fixed = True
@@ -435,9 +460,11 @@ Requirements:
                     try:
                         code = await self._ai_fix_syntax(code, str(e), script, system_prompt)
                         code = self.fix_manim_compatibility(code)
+                        code = self.enforce_intro_title(code, video_title)
                     except Exception as fix_err:
                         print(f"[ManimService] AI修复也失败: {fix_err}")
         
+        code = self.enforce_intro_title(code, video_title)
         return code
     
     def fix_manim_compatibility(self, code: str) -> str:
@@ -490,7 +517,7 @@ Requirements:
         
         return code
     
-    def validate_code(self, code: str) -> tuple:
+    def validate_code(self, code: str, video_title: str | None = None) -> tuple:
         """验证并修复代码，返回 (fixed_code, warnings)"""
         import re
         import ast
@@ -500,6 +527,7 @@ Requirements:
             return code, warnings
         
         code = code.strip()
+        code = self.enforce_intro_title(code, video_title)
         
         # 提取代码块
         if "```python" in code:
@@ -530,6 +558,7 @@ Requirements:
         
         # 调用兼容性修复
         code = self.fix_manim_compatibility(code)
+        code = self.enforce_intro_title(code, video_title)
         
         # 语法验证
         try:
@@ -544,6 +573,7 @@ Requirements:
             except:
                 warnings.append("无法自动修复语法错误，请检查代码")
         
+        code = self.enforce_intro_title(code, video_title)
         return code, warnings
     
     def _fix_common_syntax_errors(self, code: str) -> str:

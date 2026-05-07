@@ -389,6 +389,7 @@ class ChatService:
                 manim_service = ManimService(self.db)
                 generated_code = await manim_service.generate_code(
                     project_final_script, 
+                    video_title=str(project.title or "").strip() or str(project.theme or "").strip(),
                     user_id=project.user_id if project else None
                 )
                 
@@ -470,6 +471,12 @@ class ChatService:
                 print(f"[DEBUG] Failed to update token usage: {e}")
             
             print(f"[DEBUG] Stream finished, content length: {len(content)}")
+            should_save_script = bool(content.strip()) and not is_code_request and not is_fix_request
+            if should_save_script:
+                proj = self.db.query(Project).filter(Project.id == project_id).first()
+                if proj:
+                    proj.final_script = content
+                    self.db.commit()
             
             # 检测是否包含代码 - 修复正则表达式，匹配各种代码块格式
             extracted_code = None
@@ -495,11 +502,7 @@ class ChatService:
                 "### 1" in content
             )
             
-            if is_first_response or has_structured_content:
-                proj = self.db.query(Project).filter(Project.id == project_id).first()
-                if proj:
-                    proj.final_script = content
-                    self.db.commit()
+            if is_first_response or has_structured_content or should_save_script:
                 result = {
                     "type": "done",
                     "content": content,
@@ -523,7 +526,7 @@ class ChatService:
                     "### 1" in content
                 )
                 
-                if is_final or has_structured_content:
+                if is_final or has_structured_content or should_save_script:
                     proj = self.db.query(Project).filter(Project.id == project_id).first()
                     if proj:
                         proj.final_script = content
@@ -532,7 +535,7 @@ class ChatService:
                     "type": "done",
                     "content": content,
                     "is_final": is_final,
-                    "final_script": content if (is_final or has_structured_content) else project_final_script
+                    "final_script": content if (is_final or has_structured_content or should_save_script) else project_final_script
                 }
                 if extracted_code:
                     result["code_updated"] = True

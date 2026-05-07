@@ -61,7 +61,8 @@ export default function AdminUsers() {
   const [permissionDraft, setPermissionDraft] = useState<Record<string, any>>({})
   const [permissionLoading, setPermissionLoading] = useState(false)
   const [batchPermissionModalVisible, setBatchPermissionModalVisible] = useState(false)
-  const [batchPermissionApply, setBatchPermissionApply] = useState<Record<string, boolean>>({ visual: false, stickman: false, explainer: false, article: false })
+  const [batchPermissionApply, setBatchPermissionApply] = useState<Record<string, boolean>>({ visual: false, stickman_legacy: false, stickman_v2: false, explainer: false, article: false })
+  const selectableUserKeys = useMemo(() => users.filter((user) => !user.is_admin).map((user) => user.id), [users])
 
   const getVisualLimitValue = (user?: User | null) => {
     const visualLimit = user?.module_permissions?.visual?.daily_limit
@@ -71,7 +72,8 @@ export default function AdminUsers() {
 
   const defaultPermissions = (user?: User | null) => user?.module_permissions || {
     visual: { enabled: true, daily_limit: getVisualLimitValue(user), used_today: 0, period: 'daily' },
-    stickman: { enabled: false, daily_limit: 30, used_today: 0, period: 'monthly' },
+    stickman_legacy: { enabled: false, daily_limit: 30, used_today: 0, period: 'monthly' },
+    stickman_v2: { enabled: false, daily_limit: 30, used_today: 0, period: 'monthly' },
     explainer: { enabled: false, daily_limit: 30, used_today: 0, period: 'monthly' },
     article: { enabled: false, daily_limit: 45, used_today: 0, period: 'monthly' },
   }
@@ -79,31 +81,36 @@ export default function AdminUsers() {
   const permissionTemplates: Record<string, Record<string, any>> = {
     article_only: {
       visual: { enabled: false, daily_limit: 0, period: 'daily' },
-      stickman: { enabled: false, daily_limit: 0, period: 'monthly' },
+      stickman_legacy: { enabled: false, daily_limit: 0, period: 'monthly' },
+      stickman_v2: { enabled: false, daily_limit: 0, period: 'monthly' },
       explainer: { enabled: false, daily_limit: 0, period: 'monthly' },
       article: { enabled: true, daily_limit: 45, period: 'monthly' },
     },
     video_only: {
       visual: { enabled: true, daily_limit: 5, period: 'daily' },
-      stickman: { enabled: true, daily_limit: 30, period: 'monthly' },
+      stickman_legacy: { enabled: true, daily_limit: 30, period: 'monthly' },
+      stickman_v2: { enabled: true, daily_limit: 30, period: 'monthly' },
       explainer: { enabled: true, daily_limit: 30, period: 'monthly' },
       article: { enabled: false, daily_limit: 0, period: 'monthly' },
     },
     all_enabled: {
       visual: { enabled: true, daily_limit: 8, period: 'daily' },
-      stickman: { enabled: true, daily_limit: 30, period: 'monthly' },
+      stickman_legacy: { enabled: true, daily_limit: 30, period: 'monthly' },
+      stickman_v2: { enabled: true, daily_limit: 30, period: 'monthly' },
       explainer: { enabled: true, daily_limit: 30, period: 'monthly' },
       article: { enabled: true, daily_limit: 45, period: 'monthly' },
     },
     trial: {
       visual: { enabled: true, daily_limit: 2, period: 'daily' },
-      stickman: { enabled: true, daily_limit: 2, period: 'monthly' },
+      stickman_legacy: { enabled: true, daily_limit: 2, period: 'monthly' },
+      stickman_v2: { enabled: true, daily_limit: 2, period: 'monthly' },
       explainer: { enabled: true, daily_limit: 2, period: 'monthly' },
       article: { enabled: true, daily_limit: 2, period: 'monthly' },
     },
     enterprise: {
       visual: { enabled: true, daily_limit: 50, period: 'daily' },
-      stickman: { enabled: true, daily_limit: 30, period: 'monthly' },
+      stickman_legacy: { enabled: true, daily_limit: 30, period: 'monthly' },
+      stickman_v2: { enabled: true, daily_limit: 30, period: 'monthly' },
       explainer: { enabled: true, daily_limit: 30, period: 'monthly' },
       article: { enabled: true, daily_limit: 45, period: 'monthly' },
     },
@@ -132,6 +139,10 @@ export default function AdminUsers() {
   useEffect(() => {
     fetchUsers()
   }, [])
+
+  useEffect(() => {
+    setSelectedRowKeys((prev) => prev.filter((key) => selectableUserKeys.includes(key)))
+  }, [selectableUserKeys])
 
   const handleResetPassword = async () => {
     if (!selectedUser || !newPassword) return
@@ -285,17 +296,19 @@ export default function AdminUsers() {
     }
   }
 
-  const getPermissionTag = (record: User, moduleKey: 'visual' | 'stickman' | 'explainer' | 'article') => {
+  const getPermissionTag = (record: User, moduleKey: 'visual' | 'stickman_legacy' | 'stickman_v2' | 'explainer' | 'article') => {
     const permission: any = defaultPermissions(record)[moduleKey]
     const labelMap = {
       visual: '思维可视化',
-      stickman: '火柴人',
+      stickman_legacy: '标准讲解',
+      stickman_v2: '增强讲解',
       explainer: '讲解视频',
       article: '公众号',
     }
     const colorMap = {
       visual: 'green',
-      stickman: 'orange',
+      stickman_legacy: 'orange',
+      stickman_v2: 'gold',
       explainer: 'blue',
       article: 'purple',
     } as const
@@ -521,7 +534,8 @@ export default function AdminUsers() {
           </div>
           <Space size={[4, 6]} wrap>
             {getPermissionTag(record, 'visual')}
-            {getPermissionTag(record, 'stickman')}
+            {getPermissionTag(record, 'stickman_legacy')}
+            {getPermissionTag(record, 'stickman_v2')}
             {getPermissionTag(record, 'explainer')}
             {getPermissionTag(record, 'article')}
           </Space>
@@ -619,12 +633,22 @@ export default function AdminUsers() {
             </Button>
           </Col>
           <Col>
+            <Space>
+              <Button onClick={() => setSelectedRowKeys(selectableUserKeys)} disabled={!selectableUserKeys.length}>
+                全选普通用户
+              </Button>
+              <Button onClick={() => setSelectedRowKeys([])} disabled={!selectedRowKeys.length}>
+                清空选择
+              </Button>
+            </Space>
+          </Col>
+          <Col>
           <Button
               icon={<TeamOutlined />}
               disabled={!selectedRowKeys.length}
               onClick={() => {
                 setPermissionDraft(defaultPermissions(null))
-                setBatchPermissionApply({ visual: false, stickman: false, explainer: false, article: false })
+                setBatchPermissionApply({ visual: false, stickman_legacy: false, stickman_v2: false, explainer: false, article: false })
                 setBatchPermissionModalVisible(true)
               }}
             >
@@ -691,7 +715,8 @@ export default function AdminUsers() {
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {getPermissionTag(record, 'visual')}
-                  {getPermissionTag(record, 'stickman')}
+                  {getPermissionTag(record, 'stickman_legacy')}
+                  {getPermissionTag(record, 'stickman_v2')}
                   {getPermissionTag(record, 'explainer')}
                   {getPermissionTag(record, 'article')}
                 </div>
@@ -707,7 +732,23 @@ export default function AdminUsers() {
             columns={columns}
             dataSource={users}
             rowKey="id"
-            rowSelection={{ selectedRowKeys, onChange: (keys) => setSelectedRowKeys(keys as number[]) }}
+            rowSelection={{
+              selectedRowKeys,
+              onChange: (keys) => setSelectedRowKeys((keys as number[]).filter((key) => selectableUserKeys.includes(key))),
+              getCheckboxProps: (record) => ({ disabled: !!record.is_admin }),
+              selections: [
+                {
+                  key: 'select-all-normal-users',
+                  text: '全选普通用户',
+                  onSelect: () => setSelectedRowKeys(selectableUserKeys),
+                },
+                {
+                  key: 'clear-all',
+                  text: '清空选择',
+                  onSelect: () => setSelectedRowKeys([]),
+                },
+              ],
+            }}
             loading={loading}
             pagination={{ 
               pageSize: 10, 
@@ -761,7 +802,7 @@ export default function AdminUsers() {
                 <Descriptions.Item label="模块权限">
                   <Space wrap>
                     {Object.entries(selectedUser.module_permissions || {}).map(([moduleKey, permission]) => {
-                      const labels: Record<string, string> = { visual: '思维可视化', stickman: '视频讲解', explainer: '讲解型视频', article: '公众号文章' }
+                       const labels: Record<string, string> = { visual: '思维可视化', stickman_legacy: '标准讲解', stickman_v2: '增强讲解', explainer: '讲解型视频', article: '公众号文章' }
                       return (
                         <Tag key={moduleKey} color={permission.enabled ? 'green' : 'default'}>
                           {labels[moduleKey] || moduleKey}: {permission.enabled ? `${permission.used_today || 0}/${permission.daily_limit}` : '关闭'}
@@ -995,8 +1036,8 @@ export default function AdminUsers() {
           </Space>
         </div>
         <div className="mb-3 text-gray-500 text-sm">管理员账号默认无限制，批量设置时将自动跳过管理员。</div>
-        {['visual', 'stickman', 'explainer', 'article'].map((moduleKey) => {
-          const labels: Record<string, string> = { visual: '思维可视化', stickman: '视频讲解', explainer: '讲解型视频', article: '公众号文章' }
+        {['visual', 'stickman_legacy', 'stickman_v2', 'explainer', 'article'].map((moduleKey) => {
+          const labels: Record<string, string> = { visual: '思维可视化', stickman_legacy: '标准讲解', stickman_v2: '增强讲解', explainer: '讲解型视频', article: '公众号文章' }
           const current: any = permissionDraft[moduleKey] || { enabled: false, daily_limit: 0, used_today: 0, period: moduleKey === 'visual' ? 'daily' : 'monthly' }
           const period = current.period || (moduleKey === 'visual' ? 'daily' : 'monthly')
           return (
@@ -1043,9 +1084,9 @@ export default function AdminUsers() {
           </Space>
         </div>
         <div className="mb-3 text-gray-500 text-sm">批量设置时会自动排除管理员账号，仅作用于普通用户。仅修改本次勾选的模块，未勾选模块保持不变。</div>
-        {['visual', 'stickman', 'explainer', 'article'].map((moduleKey) => {
-          const labels: Record<string, string> = { visual: '思维可视化', stickman: '视频讲解', explainer: '讲解型视频', article: '公众号文章' }
-          const current: any = permissionDraft[moduleKey] || { enabled: true, daily_limit: moduleKey === 'article' ? 45 : moduleKey === 'stickman' || moduleKey === 'explainer' ? 30 : 5, period: moduleKey === 'visual' ? 'daily' : 'monthly' }
+        {['visual', 'stickman_legacy', 'stickman_v2', 'explainer', 'article'].map((moduleKey) => {
+          const labels: Record<string, string> = { visual: '思维可视化', stickman_legacy: '标准讲解', stickman_v2: '增强讲解', explainer: '讲解型视频', article: '公众号文章' }
+          const current: any = permissionDraft[moduleKey] || { enabled: true, daily_limit: moduleKey === 'article' ? 45 : moduleKey === 'explainer' || moduleKey === 'stickman_legacy' || moduleKey === 'stickman_v2' ? 30 : 5, period: moduleKey === 'visual' ? 'daily' : 'monthly' }
           const period = current.period || (moduleKey === 'visual' ? 'daily' : 'monthly')
           const applyThisModule = !!batchPermissionApply[moduleKey]
           return (

@@ -399,7 +399,7 @@ async def generate_code_stream(
                 manim_service.generate_code(
                     input_content, 
                     template_code,
-                    video_title=project_local.theme,
+                    video_title=str(project_local.title or "").strip() or str(project_local.theme or "").strip(),
                     model=model,
                     reference_code=reference_code or None,
                 )

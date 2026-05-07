@@ -28,8 +28,11 @@ class UserLogin(BaseModel):
     password: str
 
 
-class UserResponse(UserBase):
+class UserResponse(BaseModel):
     id: int
+    username: str
+    email: str
+    phone: Optional[str] = None
     is_active: bool
     is_admin: bool = False
     frontend_version: str = "legacy"
