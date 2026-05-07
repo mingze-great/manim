@@ -20,10 +20,23 @@
 ## 当前快照
 
 - 当前 3002 对应分支：`feature/stickman-v2-viral-hook-optimization-acceptance`
-- 当前已部署提交：`d1b55e24` `fix: shorten storyboard and subtitle splitting`
-- 说明：这版仅收紧了 `backend/app/services/stickman_generator_v2.py` 的分镜/字幕切分，保留去尾标点逻辑
-- 最近一次远端备份：`/opt/manim-v2/backup_20260506_231958`
-- 如需复现当前 3002，请直接拉取上述分支并切到该提交
+- 当前已部署提交：`9d2458c8` `fix: add missing v2 asset and viral voice services`
+- 关键说明：
+  - `2b714c21` 引入“最终文案多行时，每行锁成一个分镜”
+  - `9d2458c8` 在其基础上补齐运行依赖，才是当前 3002 可完整运行的基准提交
+- 当前 3002 关键行为：
+  - 最终文案区多行文本优先按“每行一个分镜”处理
+  - 对话默认风格仍为 `classic`
+- 最近一次新版清理后同步基准：`/opt/manim-v2` -> `9d2458c8`
+- 最近一次远端备份：`/opt/manim_backups/backup_20260507_*.tar.gz` 与目录内 `backup_*`
+- 当前服务器新版目录保留的非代码脏数据仅包括：
+  - `.env.development`
+  - `.env.example`
+  - `.env.production`
+  - `frontend/tsconfig.tsbuildinfo`
+  - `backend/uploads/`
+  - `backup_20260429_225716/`
+- 如需复现当前 3002，请直接拉取上述分支并切到 `9d2458c8`
 
 ## 本地前置检查
 
