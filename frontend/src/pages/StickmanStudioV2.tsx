@@ -258,6 +258,34 @@ export default function StickmanStudio() {
         window.clearTimeout(scriptSaveTimerRef.current)
         scriptSaveTimerRef.current = null
       }
+      const nextLines = finalScript
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+
+      if (storyboards.length && nextLines.length === storyboards.length) {
+        const syncedStoryboards = storyboards.map((scene, index) => {
+          const text = nextLines[index] || ''
+          return {
+            ...scene,
+            narration: text,
+            scene_narration: text,
+            subtitle_lines: [{ text }],
+          }
+        })
+        const { data } = await projectApi.updateStickmanStoryboards(Number(id), {
+          storyboards: syncedStoryboards,
+          final_script: finalScript,
+        })
+        const nextImageAssets = JSON.parse(data.image_assets_json || '[]')
+        const syncedScript = nextLines.join('\n')
+        applyProjectSnapshot(data)
+        setProject((prev) => prev ? { ...prev, ...data, final_script: syncedScript } as Project : data)
+        setFinalScript(syncedScript)
+        setLastProcessedScript(syncedScript)
+        return { storyboards: syncedStoryboards, imageAssets: nextImageAssets }
+      }
+
       await projectApi.useCustomScript(Number(id), finalScript, false)
       const { data } = await projectApi.generateStickmanScript(Number(id))
       const nextStoryboards = JSON.parse(data.storyboard_json || '[]')

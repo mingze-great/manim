@@ -907,6 +907,17 @@ class StickmanGenerator:
         if not raw.strip():
             return []
 
+        explicit_lines = [
+            self._normalize_storyboard_fragment(line)
+            for line in raw.splitlines()
+            if self._normalize_storyboard_fragment(line)
+        ]
+        if len(explicit_lines) >= 2:
+            average_length = sum(len(line) for line in explicit_lines) / len(explicit_lines)
+            short_line_count = sum(1 for line in explicit_lines if len(line) <= 24)
+            if average_length <= 22 and short_line_count / len(explicit_lines) >= 0.8:
+                return explicit_lines
+
         def split_long_chunk(chunk: str, max_chars: int = 16) -> list[str]:
             clean_chunk = self._normalize_storyboard_fragment(chunk)
             if not clean_chunk:
