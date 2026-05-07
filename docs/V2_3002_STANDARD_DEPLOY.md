@@ -20,14 +20,15 @@
 ## 当前快照
 
 - 当前 3002 对应分支：`feature/stickman-v2-viral-hook-optimization-acceptance`
-- 当前已部署提交：`9d2458c8` `fix: add missing v2 asset and viral voice services`
+- 当前已部署提交：`ef0b0bdf` `feat: restore latest enhanced explainer workflow`
 - 关键说明：
   - `2b714c21` 引入“最终文案多行时，每行锁成一个分镜”
-  - `9d2458c8` 在其基础上补齐运行依赖，才是当前 3002 可完整运行的基准提交
+  - `9d2458c8` 在其基础上补齐运行依赖，形成可运行基准
+  - `ef0b0bdf` 继续恢复最新增强讲解独立流前后端，是当前 3002 最新可复现基准
 - 当前 3002 关键行为：
   - 最终文案区多行文本优先按“每行一个分镜”处理
   - 对话默认风格仍为 `classic`
-- 最近一次新版清理后同步基准：`/opt/manim-v2` -> `9d2458c8`
+- 最近一次新版清理后同步基准：`/opt/manim-v2` -> `ef0b0bdf`
 - 最近一次远端备份：`/opt/manim_backups/backup_20260507_*.tar.gz` 与目录内 `backup_*`
 - 当前服务器新版目录保留的非代码脏数据仅包括：
   - `.env.development`
@@ -35,8 +36,14 @@
   - `.env.production`
   - `frontend/tsconfig.tsbuildinfo`
   - `backend/uploads/`
-  - `backup_20260429_225716/`
-- 如需复现当前 3002，请直接拉取上述分支并切到 `9d2458c8`
+- 如需复现当前 3002，请直接拉取上述分支并切到 `ef0b0bdf`
+
+## 磁盘与队列
+
+- 2026-05-07 已处理生产服务器磁盘满问题
+- 根因：`/opt/manim_backups`、历史 snapshot/backups 过大，导致根分区曾达到 `100%`
+- 影响：Redis 出现 `MISCONF`，Celery worker 无法写入队列，进而影响思维可视化等异步任务
+- 当前结果：根分区已恢复到可用空间，Redis/worker 已恢复正常
 
 ## 本地前置检查
 
