@@ -300,6 +300,30 @@ def _invalidate_explainer_visual_outputs(project: Project):
     project.error_message = None
 
 
+def _clear_storyboard_english_subtitles(storyboards: list) -> tuple[list, bool]:
+    cleaned_storyboards = []
+    changed = False
+    for scene in storyboards or []:
+        next_scene = dict(scene or {})
+        next_lines = []
+        for item in list(next_scene.get("subtitle_lines") or []):
+            next_item = dict(item or {})
+            if str(next_item.get("english") or "").strip():
+                changed = True
+            next_item.pop("english", None)
+            next_lines.append(next_item)
+        next_scene["subtitle_lines"] = next_lines
+        cleaned_storyboards.append(next_scene)
+    return cleaned_storyboards, changed
+
+
+def _invalidate_stickman_english_subtitles(project: Project):
+    storyboards = json.loads(project.storyboard_json or "[]")
+    cleaned_storyboards, changed = _clear_storyboard_english_subtitles(storyboards)
+    if changed:
+        project.storyboard_json = json.dumps(cleaned_storyboards, ensure_ascii=False)
+
+
 def _stickman_visual_settings_changed(project: Project, data: dict) -> bool:
     if "background_image_path" in data:
         next_background = str(data.get("background_image_path") or "").strip()
@@ -585,6 +609,8 @@ def update_project(
 
     if invalidate_stickman_visuals:
         _invalidate_stickman_visual_outputs(project)
+    if project.module_type == "stickman" and "final_script" in data:
+        _invalidate_stickman_english_subtitles(project)
     if invalidate_explainer_visuals:
         _invalidate_explainer_visual_outputs(project)
     
@@ -648,7 +674,8 @@ def generate_stickman_script(
         else:
             script_data = generator.generate_script_data(str(project.theme), int(project.storyboard_count or 3), opening_template_key=str(generation_flags.get("opening_template_key") or "hook_question"))
         project.final_script = project_final_script or script_data.get("script")
-    project.storyboard_json = json.dumps(script_data.get("storyboards") or [], ensure_ascii=False)
+    cleaned_storyboards, _ = _clear_storyboard_english_subtitles(script_data.get("storyboards") or [])
+    project.storyboard_json = json.dumps(cleaned_storyboards, ensure_ascii=False)
     _invalidate_stickman_visual_outputs(project)
     project.status = "draft"
     project.error_message = None
@@ -669,7 +696,8 @@ def update_stickman_storyboards(
     final_script = payload.get("final_script")
     if not isinstance(storyboards, list) or not storyboards:
         raise HTTPException(status_code=400, detail="storyboards 不能为空")
-    project.storyboard_json = json.dumps(storyboards, ensure_ascii=False)
+    cleaned_storyboards, _ = _clear_storyboard_english_subtitles(storyboards)
+    project.storyboard_json = json.dumps(cleaned_storyboards, ensure_ascii=False)
     if isinstance(final_script, str):
         project.final_script = final_script
     _invalidate_stickman_visual_outputs(project)
@@ -921,7 +949,7 @@ def generate_explainer_storyboard(
         visual_style_key,
         target_duration,
     )
-    project.title = str(result.get("title") or project.title)
+    project.title = str(project.title or "").strip() or str(project.theme or "").strip()
     project.final_script = result.get("script")
     project.storyboard_json = json.dumps(result.get("storyboards") or [], ensure_ascii=False)
     project.generation_flags = json.dumps({**generation_flags, **(result.get("generation_flags") or {})}, ensure_ascii=False)
@@ -1672,7 +1700,7 @@ async def regenerate_code(
     manim_code = await manim_service.generate_code(
         project.final_script,
         template_code=template_code,
-        video_title=project.theme
+        video_title=str(project.title or "").strip() or str(project.theme or "").strip()
     )
     
     project.manim_code = manim_code
@@ -1834,6 +1862,7 @@ async def use_custom_script(
     project.final_script = final_script
     project.status = "chatting_completed"
     if str(project.module_type or "") == "stickman":
+        _invalidate_stickman_english_subtitles(project)
         _invalidate_stickman_visual_outputs(project)
     if str(project.module_type or "") == "explainer":
         _invalidate_explainer_visual_outputs(project)

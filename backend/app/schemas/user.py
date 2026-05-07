@@ -84,6 +84,11 @@ class UserStats(BaseModel):
     failed_tasks: int
 
 
+class UserListResponse(BaseModel):
+    users: list[UserResponse]
+    total: int
+
+
 class AuditLogResponse(BaseModel):
     id: int
     user_id: Optional[int]

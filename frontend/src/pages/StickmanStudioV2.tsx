@@ -102,11 +102,12 @@ export default function StickmanStudio() {
     .filter(Boolean)
     .join('\n')
     .trim()
-  const hasEnglishSubtitles = storyboards.some((scene) =>
+  const hasEnglishSubtitleContent = storyboards.some((scene) =>
     (scene.subtitle_lines || []).some((line) => String(line.english || '').trim())
   )
   const needsStoryboardSync = !!normalizedCurrentScript && normalizedStoryboardScript !== normalizedCurrentScript
   const canReprocessStoryboards = !!normalizedCurrentScript && (normalizedCurrentScript !== normalizedProcessedScript || needsStoryboardSync)
+  const hasEnglishSubtitles = hasEnglishSubtitleContent && !canReprocessStoryboards
   const resolvedBackgroundPreviewUrl = backgroundPreviewUrl || resolveBackgroundUrl(project?.background_image_path)
   const hasUploadedBackground = Boolean(project?.background_image_path) && parsedFlags.background_image_source === 'upload'
 

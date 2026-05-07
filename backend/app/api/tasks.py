@@ -1123,7 +1123,7 @@ async def generate_explainer_video_stream(
             video_path = result["video_path"]
             video_filename = os.path.basename(video_path)
             video_url = f"/api/videos/{video_filename}"
-            project_local.title = result.get("title") or project_local.title
+            project_local.title = str(project_local.title or "").strip() or str(project_local.theme or "").strip()
             project_local.final_script = result.get("script")
             project_local.storyboard_json = json.dumps(result.get("storyboards") or [], ensure_ascii=False)
             project_local.image_assets_json = json.dumps(result.get("image_assets") or [], ensure_ascii=False)

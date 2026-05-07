@@ -18,7 +18,7 @@ from app.models.subscription import Order, Subscription
 from app.models.favorite_topic import FavoriteTopic
 from app.models.user_module_permission import UserModulePermission
 from app.schemas.article import ArticleCategoryCreate, ArticleCategoryUpdate
-from app.schemas.user import UserResponse, UserUpdate, UserStats, AuditLogResponse, SystemStats, UserDetail, ProjectStatus, RecentProject, TaskLog, TokenUsageItem, TokenUsageResponse
+from app.schemas.user import UserResponse, UserUpdate, UserStats, UserListResponse, AuditLogResponse, SystemStats, UserDetail, ProjectStatus, RecentProject, TaskLog, TokenUsageItem, TokenUsageResponse
 from app.api.auth import get_current_user, get_current_admin_user
 from app.config import get_settings
 import psutil
@@ -211,7 +211,7 @@ async def delete_article_category(
     return {"message": "删除成功"}
 
 
-@router.get("/users", response_model=List[UserResponse])
+@router.get("/users", response_model=UserListResponse)
 async def list_users(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
@@ -228,8 +228,9 @@ async def list_users(
             (User.phone.contains(search))
         )
     
+    total = query.count()
     users = query.order_by(User.created_at.desc()).offset(skip).limit(limit).all()
-    return users
+    return {"users": users, "total": total}
 
 
 @router.get("/users/count")
