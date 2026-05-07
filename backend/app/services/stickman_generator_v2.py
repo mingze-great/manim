@@ -746,6 +746,68 @@ class StickmanGenerator:
         self.subtitle_translation_cache[text] = english
         return english
 
+    def _translate_subtitles_to_english_batch(self, texts: list[str]) -> dict[str, str]:
+        normalized_texts = []
+        seen = set()
+        for raw in texts or []:
+            text = str(raw or "").strip()
+            if not text or text in seen:
+                continue
+            seen.add(text)
+            normalized_texts.append(text)
+
+        if not normalized_texts:
+            return {}
+
+        cached_only = {}
+        uncached = []
+        for text in normalized_texts:
+            cached = self.subtitle_translation_cache.get(text)
+            if cached is not None:
+                cached_only[text] = cached
+            else:
+                uncached.append(text)
+
+        translated = dict(cached_only)
+        if not uncached:
+            return translated
+
+        try:
+            payload = json.dumps(uncached, ensure_ascii=False)
+            response = self._chat_completion(
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "Translate each Chinese subtitle into concise natural English. "
+                            "Return a JSON array of English strings in the exact same order. "
+                            "Do not add explanations."
+                        ),
+                    },
+                    {"role": "user", "content": payload},
+                ],
+                temperature=0.1,
+                max_tokens=max(120, min(1200, len(uncached) * 50)),
+            )
+            content = str(response.choices[0].message.content or "").strip()
+            match = re.search(r"\[[\s\S]*\]", content)
+            parsed = json.loads(match.group(0) if match else content)
+            if isinstance(parsed, list):
+                for text, english in zip(uncached, parsed):
+                    cleaned = self._sanitize_english_subtitle(str(english or "").strip())
+                    if not cleaned:
+                        cleaned = self._fallback_translate_subtitle(text)
+                    translated[text] = cleaned
+                    self.subtitle_translation_cache[text] = cleaned
+        except Exception:
+            for text in uncached:
+                translated[text] = self._translate_subtitle_to_english(text)
+
+        for text in uncached:
+            if text not in translated:
+                translated[text] = self._translate_subtitle_to_english(text)
+        return translated
+
     def _split_sentences(self, text: str) -> list[str]:
         parts = [item.strip() for item in re.split(r'(?<=[。！？!?])\s*', text or '') if item.strip()]
         return parts or ([text.strip()] if text and text.strip() else [])

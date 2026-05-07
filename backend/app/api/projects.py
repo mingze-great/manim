@@ -691,6 +691,7 @@ def generate_stickman_english_subtitles(
 
     generator = _build_stickman_generator(project)
     updated_storyboards = []
+    pending_texts = []
     for scene in storyboards:
         clone = dict(scene)
         subtitle_lines = list(clone.get("subtitle_lines") or [])
@@ -703,20 +704,30 @@ def generate_stickman_english_subtitles(
             text = str((item or {}).get("text") or "").strip()
             if not text:
                 continue
-            english = generator._sanitize_english_subtitle(
-                str((item or {}).get("english") or "").strip()
-            )
-            if not english:
-                english = generator._sanitize_english_subtitle(
-                    generator._translate_subtitle_to_english(text)
-                )
             next_item = dict(item or {})
             next_item["text"] = text
-            next_item["english"] = english
+            next_item["english"] = generator._sanitize_english_subtitle(
+                str((item or {}).get("english") or "").strip()
+            )
+            if not next_item["english"]:
+                pending_texts.append(text)
             next_lines.append(next_item)
 
         clone["subtitle_lines"] = next_lines
         updated_storyboards.append(clone)
+
+    translated_map = generator._translate_subtitles_to_english_batch(pending_texts)
+    for scene in updated_storyboards:
+        next_lines = []
+        for item in scene.get("subtitle_lines") or []:
+            text = str((item or {}).get("text") or "").strip()
+            english = generator._sanitize_english_subtitle(str((item or {}).get("english") or "").strip())
+            if not english and text:
+                english = translated_map.get(text, "")
+            next_item = dict(item or {})
+            next_item["english"] = english
+            next_lines.append(next_item)
+        scene["subtitle_lines"] = next_lines
 
     project.storyboard_json = json.dumps(updated_storyboards, ensure_ascii=False)
     db.commit()
