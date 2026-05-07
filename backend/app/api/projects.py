@@ -636,7 +636,7 @@ def generate_stickman_script(
             project_final_script,
             include_intro_scene=bool(generation_flags.get("opening_intro_enabled", False)),
         )
-        project.final_script = project_final_script
+        project.final_script = script_data.get("script") or project_final_script
     else:
         if str(getattr(project, 'stickman_variant', 'legacy') or 'legacy') == 'v2':
             script_data = generator.generate_script_data(
