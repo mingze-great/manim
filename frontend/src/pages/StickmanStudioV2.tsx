@@ -189,13 +189,15 @@ export default function StickmanStudio() {
       await projectApi.useCustomScript(Number(id), finalScript, false)
       const { data } = await projectApi.generateStickmanScript(Number(id))
       const nextStoryboards = JSON.parse(data.storyboard_json || '[]')
-      const processedScript = nextStoryboards
+      const fallbackProcessedScript = nextStoryboards
         .map((scene: Storyboard) => String((scene as any).scene_narration || scene.narration || '').trim())
         .filter(Boolean)
         .join('\n')
+      const processedScript = (data.final_script || fallbackProcessedScript || '').trim()
       applyProjectSnapshot(data)
-      setFinalScript(processedScript || data.final_script || '')
-      setLastProcessedScript(processedScript || data.final_script || '')
+      setProject((prev) => prev ? { ...prev, final_script: processedScript } as Project : prev)
+      setFinalScript(processedScript)
+      setLastProcessedScript(processedScript)
       message.success('文案分镜处理完成')
     } catch (error: any) {
       message.error(error.response?.data?.detail || '文案分镜处理失败')
@@ -235,9 +237,11 @@ export default function StickmanStudio() {
       const { data } = await projectApi.generateStickmanScript(Number(id))
       const nextStoryboards = JSON.parse(data.storyboard_json || '[]')
       const nextImageAssets = JSON.parse(data.image_assets_json || '[]')
+      const syncedScript = (data.final_script || finalScript).trim()
       applyProjectSnapshot(data)
-      setProject((prev) => prev ? { ...prev, final_script: finalScript } as Project : prev)
-      setLastProcessedScript(finalScript)
+      setProject((prev) => prev ? { ...prev, final_script: syncedScript } as Project : prev)
+      setFinalScript(syncedScript)
+      setLastProcessedScript(syncedScript)
       return { storyboards: nextStoryboards, imageAssets: nextImageAssets }
     } finally {
       setLoadingFlag('syncLatestScript', false)
