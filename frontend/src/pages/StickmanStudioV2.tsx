@@ -203,19 +203,18 @@ export default function StickmanStudio() {
         scriptSaveTimerRef.current = null
       }
       await projectApi.useCustomScript(Number(id), finalScript, false)
-      const { data } = await projectApi.generateStickmanScript(Number(id))
-      const nextStoryboards = JSON.parse(data.storyboard_json || '[]')
-      const fallbackProcessedScript = nextStoryboards
+      await projectApi.generateStickmanScript(Number(id))
+      const refreshed = await projectApi.get(Number(id))
+      const refreshedProject = refreshed.data
+      const refreshedStoryboards = JSON.parse(refreshedProject.storyboard_json || '[]')
+      const processedScript = refreshedStoryboards
         .map((scene: Storyboard) => String((scene as any).scene_narration || scene.narration || '').trim())
         .filter(Boolean)
         .join('\n')
-      const refreshed = await projectApi.get(Number(id))
-      const refreshedProject = refreshed.data
-      const processedScript = (refreshedProject.final_script || data.final_script || fallbackProcessedScript || '').trim()
       applyProjectSnapshot(refreshedProject)
-      setProject(refreshedProject)
-      setFinalScript(processedScript)
-      setLastProcessedScript(processedScript)
+      setProject((prev) => prev ? { ...prev, ...refreshedProject, final_script: processedScript } as Project : refreshedProject)
+      setFinalScript(processedScript || refreshedProject.final_script || '')
+      setLastProcessedScript(processedScript || refreshedProject.final_script || '')
       message.success('文案分镜处理完成')
     } catch (error: any) {
       message.error(error.response?.data?.detail || '文案分镜处理失败')
@@ -265,11 +264,15 @@ export default function StickmanStudio() {
       const nextImageAssets = JSON.parse(data.image_assets_json || '[]')
       const refreshed = await projectApi.get(Number(id))
       const refreshedProject = refreshed.data
-      const syncedScript = (refreshedProject.final_script || data.final_script || finalScript).trim()
+      const refreshedStoryboards = JSON.parse(refreshedProject.storyboard_json || '[]')
+      const syncedScript = refreshedStoryboards
+        .map((scene: Storyboard) => String((scene as any).scene_narration || scene.narration || '').trim())
+        .filter(Boolean)
+        .join('\n')
       applyProjectSnapshot(refreshedProject)
-      setProject(refreshedProject)
-      setFinalScript(syncedScript)
-      setLastProcessedScript(syncedScript)
+      setProject((prev) => prev ? { ...prev, ...refreshedProject, final_script: syncedScript } as Project : refreshedProject)
+      setFinalScript(syncedScript || refreshedProject.final_script || finalScript)
+      setLastProcessedScript(syncedScript || refreshedProject.final_script || finalScript)
       return { storyboards: nextStoryboards, imageAssets: nextImageAssets }
     } finally {
       window.setTimeout(() => {
