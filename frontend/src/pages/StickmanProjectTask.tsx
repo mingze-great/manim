@@ -172,9 +172,9 @@ export default function StickmanProjectTask() {
     setDownloading(true)
     try {
       const token = useAuthStore.getState().token
-      const fullUrl = resolveBackendUrl(videoUrl)
-      const response = await fetch(fullUrl, {
+      const response = await fetch(projectApi.getVideoDownloadUrl(Number(id)), {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
+        redirect: 'follow',
       })
       if (!response.ok) throw new Error('下载失败')
       const blob = await response.blob()
@@ -211,8 +211,8 @@ export default function StickmanProjectTask() {
         <div className="space-y-6">
           <Alert
             type="info"
-            message="标准讲解任务流"
-            description="当前流程直接根据主题与分镜数生成脚本、图片、配音并合成视频，不进入聊天打磨。"
+            message="标准讲解生成中"
+            description="当前会根据已填写内容依次生成脚本、画面、配音和视频。"
           />
 
           {(() => {

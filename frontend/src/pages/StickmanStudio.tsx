@@ -77,6 +77,17 @@ export default function StickmanStudio() {
   }, [project?.generation_flags])
 
   const openingTemplate = String(parsedFlags.opening_template_key || 'hook_question')
+  const safeVoiceOptions = useMemo(
+    () => (voiceLibrary || [])
+      .map((item) => ({
+        label: String(item?.label || item?.value || '').trim(),
+        value: String(item?.value || '').trim(),
+        provider: String(item?.provider || 'dashscope_cosyvoice').trim(),
+        preview_url: typeof item?.preview_url === 'string' ? item.preview_url : undefined,
+      }))
+      .filter((item) => item.label && item.value),
+    [voiceLibrary],
+  )
 
   const loadProject = async () => {
     const { data } = await projectApi.get(Number(id))
@@ -288,24 +299,13 @@ export default function StickmanStudio() {
     }
   }
 
-  const handlePreviewVoice = async () => {
-    if (!project) return
-    try {
-      const { data } = await projectApi.previewStickmanVoice({
-        text: '你好，这是当前视频讲解项目的配音试听。',
-        tts_provider: project.tts_provider,
-        tts_voice: project.tts_voice,
-        tts_rate: project.tts_rate,
-      })
-      const url = URL.createObjectURL(data as any)
-      setPreviewAudioUrl((prev) => {
-        if (prev) URL.revokeObjectURL(prev)
-        return url
-      })
-      message.success('试听音频已生成')
-    } catch (error: any) {
-      message.error(error.response?.data?.detail || '生成试听失败')
+  const handlePreviewVoice = () => {
+    const selectedVoice = safeVoiceOptions.find((item) => item.value === project?.tts_voice)
+    if (!selectedVoice?.preview_url) {
+      message.warning('当前音色还没有可用试听样本')
+      return
     }
+    setPreviewAudioUrl(resolveBackendUrl(selectedVoice.preview_url))
   }
 
   const handleUpdateVoiceConfig = async (patch: Partial<Project>) => {
@@ -501,8 +501,11 @@ export default function StickmanStudio() {
                 <Space direction="vertical" style={{ width: '100%' }}>
                   <Select
                     value={project?.tts_voice}
-                    onChange={(value) => handleUpdateVoiceConfig({ tts_voice: value, tts_provider: 'dashscope_cosyvoice' })}
-                    options={voiceLibrary}
+                    onChange={(value) => {
+                      const selectedVoice = safeVoiceOptions.find((item) => item.value === value)
+                      handleUpdateVoiceConfig({ tts_voice: value, tts_provider: selectedVoice?.provider || 'dashscope_cosyvoice' })
+                    }}
+                    options={safeVoiceOptions}
                     style={{ width: '100%' }}
                   />
                   <Select

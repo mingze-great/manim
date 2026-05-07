@@ -67,6 +67,9 @@
 .main-menu {
   border: none !important;
   padding: 12px 8px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .main-menu .ant-menu-item {
@@ -87,10 +90,8 @@
 }
 
 .sider-footer {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  position: static;
+  flex-shrink: 0;
   padding: 16px;
   border-top: 1px solid #e5e7eb;
   background: #fff;
@@ -264,6 +265,8 @@
 .admin-sider .ant-layout-sider-children {
   display: flex;
   flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .admin-menu.ant-menu-dark {

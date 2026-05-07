@@ -4,7 +4,7 @@ import type { MenuProps } from 'antd'
 import {
   DashboardOutlined, UserOutlined, LogoutOutlined, SafetyOutlined,
   TeamOutlined, FileTextOutlined, SettingOutlined, 
-  MenuOutlined, SwapOutlined, HomeOutlined, CodeOutlined, BarChartOutlined, ThunderboltOutlined, EditOutlined, MessageOutlined
+  MenuOutlined, SwapOutlined, HomeOutlined, CodeOutlined, BarChartOutlined, ThunderboltOutlined, EditOutlined, MessageOutlined, VideoCameraOutlined
 } from '@ant-design/icons'
 import { useAuthStore } from '@/stores/authStore'
 import { clearAuthArtifacts, syncCrossSiteLogout } from '@/utils/authSync'
@@ -34,6 +34,7 @@ export default function AdminLayout() {
     { key: '/admin/templates', icon: <CodeOutlined />, label: '脚本模板' },
     { key: '/admin/chat-styles', icon: <MessageOutlined />, label: '对话风格' },
     { key: '/admin/article-categories', icon: <EditOutlined />, label: '公众号配置' },
+    { key: '/admin/video-settings', icon: <VideoCameraOutlined />, label: '视频管理' },
     { key: '/admin/module-stats', icon: <BarChartOutlined />, label: '模块看板' },
     { key: '/admin/logs', icon: <FileTextOutlined />, label: '操作日志' },
     { type: 'divider' as const },
@@ -147,10 +148,7 @@ export default function AdminLayout() {
           onClick={({ key }) => handleMenuClick(key)}
         />
         <div className="px-4 pb-4 pt-2">
-          <Button icon={<DashboardOutlined />} block type="primary" ghost onClick={() => handleMenuClick('/admin')}>
-            回到后台管理
-          </Button>
-          <Button icon={<HomeOutlined />} block className="mt-2" onClick={() => handleMenuClick('/')}>
+          <Button icon={<HomeOutlined />} block onClick={() => handleMenuClick('/')}>
             返回首页
           </Button>
         </div>

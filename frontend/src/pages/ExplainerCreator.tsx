@@ -85,7 +85,7 @@ export default function ExplainerCreator() {
           <Alert
             type="success"
             message="目标：抖音爆款讲解视频"
-            description="系统会优先生成强钩子开头、短句字幕、快节奏分镜和更强的观点表达，最终时长会跟随文案和配音自动收敛。"
+            description="系统会优先生成更抓人的开头、短句字幕和更鲜明的观点表达，最终时长会跟随文案和配音自动收敛。"
           />
 
           <Card className="stickman-panel" bordered={false}>
@@ -103,7 +103,7 @@ export default function ExplainerCreator() {
 • 你以为自己在休息，其实是在慢性消耗
 • 如果一个人突然不联系你了，真相可能只有这3种`}
                     />
-                    <Alert type="info" message="推荐做法" description="尽量直接粘贴完整文案。系统会按文案节奏自动拆成 3-10 幕，并根据内容估算整体时长。" />
+                    <Alert type="info" message="推荐做法" description="尽量直接粘贴完整文案。系统会按内容自动拆成 3-10 幕，并根据文案长度估算整体时长。" />
                   </Space>
                 </Card>
 
@@ -116,7 +116,7 @@ export default function ExplainerCreator() {
                       { title: '先粘贴文案', description: '先把内容说清楚，不必一开始就压得太短。' },
                       { title: '生成开头与分镜', description: '先看前 3 秒是否抓人，再继续。' },
                       { title: '生成图片', description: '确认风格、文案和每幕画面一致。' },
-                      { title: '合成成片', description: '最后检查旁白、字幕和画面节奏。' },
+                      { title: '合成成片', description: '最后检查旁白、字幕和画面效果。' },
                     ]}
                   />
                 </Card>

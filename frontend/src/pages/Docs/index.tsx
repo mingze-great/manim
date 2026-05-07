@@ -193,8 +193,8 @@ export default function Docs() {
               <Paragraph type="secondary">适合对视觉控制更高、希望有更多风格与包装选项的用户。</Paragraph>
               <ul style={{ paddingLeft: 20, color: '#4b5563', lineHeight: 1.8 }}>
                 <li>支持更强的风格控制</li>
-                <li>支持固定背景和更多包装能力</li>
-                <li>适合反复打磨成片节奏</li>
+                <li>支持上传背景图和更多画面包装</li>
+                <li>适合反复打磨成片效果</li>
               </ul>
             </Card>
           </Col>
@@ -214,7 +214,7 @@ export default function Docs() {
           ))}
         </div>
         <img src="/help/workflow-explainer-studio.svg" alt="讲解型视频详情页工作台" style={{ ...screenshotStyle, marginTop: 18 }} />
-        <Alert type="warning" showIcon message="新手建议" description="第一次使用讲解型视频时，建议先选 4-6 幕。这样更容易快速检查开头钩子、文案节奏和画面一致性。" style={{ marginTop: 18 }} />
+        <Alert type="warning" showIcon message="新手建议" description="第一次使用讲解型视频时，建议先选 4-6 幕。这样更容易快速检查开头效果、文案是否顺口，以及画面是否一致。" style={{ marginTop: 18 }} />
       </Card>
 
       <Card style={{ ...sectionCardStyle, marginBottom: 24 }}>

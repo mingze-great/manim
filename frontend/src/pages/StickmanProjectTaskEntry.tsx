@@ -30,7 +30,7 @@ export default function StickmanProjectTaskEntry() {
     return (
       <>
         <div className="max-w-5xl mx-auto px-6 pt-6">
-          <Alert type="success" message="当前为增强讲解任务流" description="这里展示增强讲解生成/合成任务，不影响标准讲解任务流。" />
+          <Alert type="success" message="当前为增强讲解生成页面" description="这里显示增强讲解的生成进度和结果，你也可以随时返回继续编辑。" />
         </div>
         <StickmanProjectTaskV2 />
       </>
@@ -40,7 +40,7 @@ export default function StickmanProjectTaskEntry() {
   return (
     <>
       <div className="max-w-5xl mx-auto px-6 pt-6">
-        <Alert type="info" message="当前为标准讲解任务流" description="这里保留稳定的视频讲解任务流，便于与增强讲解并存使用。" />
+        <Alert type="info" message="当前为标准讲解生成页面" description="这里显示标准讲解的生成进度和结果。" />
       </div>
       <StickmanProjectTaskLegacy />
     </>

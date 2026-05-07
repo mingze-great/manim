@@ -128,8 +128,9 @@ export default function ExplainerTask() {
     setDownloading(true)
     try {
       const token = useAuthStore.getState().token
-      const response = await fetch(resolveBackendUrl(videoUrl), {
+      const response = await fetch(projectApi.getVideoDownloadUrl(Number(id)), {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
+        redirect: 'follow',
       })
       if (!response.ok) throw new Error('下载失败')
       const blob = await response.blob()
@@ -155,8 +156,8 @@ export default function ExplainerTask() {
     <div className="creator-page">
       <div className="creator-hero creator-hero-sunrise">
         <div className="hero-content">
-          <h1 className="hero-title">讲解型视频任务流</h1>
-          <p className="hero-subtitle">统一展示当前生成阶段、日志和最终视频，便于复查开头钩子与整体节奏。</p>
+          <h1 className="hero-title">讲解型视频生成页面</h1>
+          <p className="hero-subtitle">这里可以查看当前生成进度、结果视频，并在需要时返回继续编辑。</p>
         </div>
       </div>
 
@@ -167,7 +168,7 @@ export default function ExplainerTask() {
           <Button onClick={() => navigate('/creator/explainer')}>新建讲解视频</Button>
         </div>
 
-        <Alert type="success" message="讲解型视频任务流" description="当前流程会优先生成钩子开头、快节奏分镜和抖音风格讲解成片。" className="mb-4" />
+        <Alert type="success" message="讲解型视频生成中" description="当前会按已确认内容依次生成分镜、画面和视频。" className="mb-4" />
         <Card className="stickman-panel" bordered={false} title={project?.title || '讲解型视频任务'}>
         <div className="space-y-6">
           <Descriptions bordered column={1} size="small">

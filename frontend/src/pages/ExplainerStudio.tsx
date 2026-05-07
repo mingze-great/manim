@@ -219,7 +219,7 @@ export default function ExplainerStudio() {
       <div className="creator-hero creator-hero-sunrise">
         <div className="hero-content">
           <h1 className="hero-title">讲解型视频分步工作台</h1>
-          <p className="hero-subtitle">先把开头和节奏调顺，再生成图片，最后合成并复看前 3 秒效果。</p>
+          <p className="hero-subtitle">先把开头和内容顺一遍，再生成图片，最后合成并复看前 3 秒效果。</p>
         </div>
       </div>
 
@@ -229,7 +229,7 @@ export default function ExplainerStudio() {
           <Button onClick={() => navigate(`/project/${id}/task`)}>去任务页</Button>
         </div>
 
-        <Alert type="success" message="讲解型视频分步工作台" description="风格、节奏和分镜都在这里统一调整，页面样式也与系统创作台保持一致。" />
+        <Alert type="success" message="讲解型视频分步工作台" description="风格、分镜和画面都在这里统一调整，页面样式也与系统创作台保持一致。" />
         <Card className="stickman-panel" bordered={false} title={project?.title || '讲解型视频工作台'} extra={<Tag color="blue">抖音爆款导向</Tag>}>
         <div className="workflow-shell">
           <div className="workflow-main">

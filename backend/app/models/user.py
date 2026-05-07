@@ -46,7 +46,8 @@ class User(Base):
     def get_default_module_permissions(self):
         return {
             "visual": {"enabled": True, "daily_limit": self.daily_video_limit or 10, "used_today": 0, "last_reset_date": None, "period": "daily"},
-            "stickman": {"enabled": True, "daily_limit": 2, "used_today": 0, "last_reset_date": None, "period": "monthly"},
+            "stickman_legacy": {"enabled": True, "daily_limit": 2, "used_today": 0, "last_reset_date": None, "period": "monthly"},
+            "stickman_v2": {"enabled": True, "daily_limit": 2, "used_today": 0, "last_reset_date": None, "period": "monthly"},
             "explainer": {"enabled": True, "daily_limit": 2, "used_today": 0, "last_reset_date": None, "period": "monthly"},
             "article": {"enabled": True, "daily_limit": 2, "used_today": 0, "last_reset_date": None, "period": "monthly"},
         }
@@ -55,7 +56,8 @@ class User(Base):
         if self.is_admin:
             return {
                 "visual": {"enabled": True, "daily_limit": -1, "used_today": 0, "last_reset_date": None, "period": "daily"},
-                "stickman": {"enabled": True, "daily_limit": -1, "used_today": 0, "last_reset_date": None, "period": "monthly"},
+                "stickman_legacy": {"enabled": True, "daily_limit": -1, "used_today": 0, "last_reset_date": None, "period": "monthly"},
+                "stickman_v2": {"enabled": True, "daily_limit": -1, "used_today": 0, "last_reset_date": None, "period": "monthly"},
                 "explainer": {"enabled": True, "daily_limit": -1, "used_today": 0, "last_reset_date": None, "period": "monthly"},
                 "article": {"enabled": True, "daily_limit": -1, "used_today": 0, "last_reset_date": None, "period": "monthly"},
             }
@@ -64,6 +66,12 @@ class User(Base):
             try:
                 stored = json.loads(self.module_permissions_json)
                 if isinstance(stored, dict):
+                    legacy_stickman = stored.get("stickman") if isinstance(stored.get("stickman"), dict) else None
+                    if legacy_stickman:
+                        if not isinstance(stored.get("stickman_legacy"), dict):
+                            stored["stickman_legacy"] = dict(legacy_stickman)
+                        if not isinstance(stored.get("stickman_v2"), dict):
+                            stored["stickman_v2"] = dict(legacy_stickman)
                     for key, value in stored.items():
                         if key in permissions and isinstance(value, dict):
                             permissions[key].update(value)
@@ -113,7 +121,7 @@ class User(Base):
     def get_module_permission(self, module_key: str):
         permissions = self.get_module_permissions()
         permission = permissions.get(module_key, {"enabled": False, "daily_limit": 0, "used_today": 0, "last_reset_date": None, "period": "daily"})
-        period = permission.get("period") or ("monthly" if module_key in {"stickman", "explainer", "article"} else "daily")
+        period = permission.get("period") or ("monthly" if module_key in {"stickman_legacy", "stickman_v2", "explainer", "article"} else "daily")
         current_marker = datetime.utcnow().strftime('%Y-%m') if period == 'monthly' else datetime.utcnow().date().isoformat()
         if permission.get("last_reset_date") != current_marker:
             permission["used_today"] = 0
@@ -143,7 +151,7 @@ class User(Base):
             return
         permissions = self.get_module_permissions()
         permission = permissions.get(module_key, {"enabled": True, "daily_limit": 0, "used_today": 0, "last_reset_date": None, "period": "daily"})
-        period = permission.get("period") or ("monthly" if module_key in {"stickman", "explainer", "article"} else "daily")
+        period = permission.get("period") or ("monthly" if module_key in {"stickman_legacy", "stickman_v2", "explainer", "article"} else "daily")
         marker = datetime.utcnow().strftime('%Y-%m') if period == 'monthly' else datetime.utcnow().date().isoformat()
         if permission.get("last_reset_date") != marker:
             permission["used_today"] = 0
@@ -188,7 +196,7 @@ class User(Base):
         ).all()
         
         result = {}
-        module_keys = ["visual", "stickman", "explainer", "article"]
+        module_keys = ["visual", "stickman_legacy", "stickman_v2", "explainer", "article"]
         for key in module_keys:
             record = None
             for r in records:

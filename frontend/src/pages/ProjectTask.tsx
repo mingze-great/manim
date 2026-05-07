@@ -3,7 +3,7 @@ import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { Card, Progress, Button, Space, message, Spin, Tabs, Select } from 'antd'
 import { DownloadOutlined, PlayCircleOutlined, PlaySquareOutlined, CloudUploadOutlined } from '@ant-design/icons'
 import { projectApi, Task, Project } from '@/services/project'
-import { getAppBase, resolveBackendUrl } from '@/services/api'
+import { resolveBackendUrl } from '@/services/api'
 import { useAuthStore } from '@/stores/authStore'
 import { motion } from 'framer-motion'
 import ExplainerTask from './ExplainerTask'
@@ -402,14 +402,14 @@ export default function ProjectTask() {
     setDownloadingVideo(true)
     
     try {
-      const API_BASE = getAppBase()
       const token = useAuthStore.getState().token
-      const fullUrl = videoUrl.startsWith('http') ? videoUrl : `${API_BASE}${videoUrl}`
+      const fullUrl = projectApi.getVideoDownloadUrl(Number(id))
       
       message.loading({ content: '准备下载...', key: 'download', duration: 0 })
       
       const response = await fetch(fullUrl, {
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+        redirect: 'follow',
       })
       
       if (!response.ok) {

@@ -13,6 +13,13 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
   const LEGACY_APP_URL = (import.meta.env.VITE_LEGACY_APP_URL as string | undefined) || `${window.location.protocol}//${window.location.hostname}`
   const legacyEntryUrl = buildLegacyEntryUrl(LEGACY_APP_URL)
+  const shouldRedirectToLegacy = (() => {
+    try {
+      return new URL(LEGACY_APP_URL, window.location.origin).origin !== window.location.origin
+    } catch {
+      return false
+    }
+  })()
 
   useEffect(() => {
     if (!_hasHydrated || !token || !user) return
@@ -20,7 +27,7 @@ export default function Login() {
       navigate('/admin', { replace: true })
       return
     }
-    if ((user.frontend_version || 'legacy') === 'legacy' && LEGACY_APP_URL) {
+    if ((user.frontend_version || 'legacy') === 'legacy' && LEGACY_APP_URL && shouldRedirectToLegacy) {
       window.location.replace(legacyEntryUrl)
       return
     }
@@ -57,7 +64,7 @@ export default function Login() {
       message.success('登录成功')
       if (userData.is_admin) {
         navigate('/admin', { replace: true })
-      } else if ((userData.frontend_version || 'legacy') === 'legacy' && LEGACY_APP_URL) {
+      } else if ((userData.frontend_version || 'legacy') === 'legacy' && LEGACY_APP_URL && shouldRedirectToLegacy) {
         window.location.replace(legacyEntryUrl)
       } else {
         navigate('/', { replace: true })

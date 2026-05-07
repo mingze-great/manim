@@ -128,7 +128,7 @@ class StickmanGenerator:
             })
         return {
             "title": topic,
-            "script": "\n".join(sentences),
+            "script": str(script_text or "").strip(),
             "storyboards": storyboards,
         }
 
@@ -189,6 +189,7 @@ class StickmanGenerator:
         style_reference_image_path: str | None = None,
         style_reference_notes: str | None = None,
         opening_template_key: str | None = None,
+        source_script: str | None = None,
     ):
         self._require_config()
         storyboard_count = max(2, min(int(storyboard_count or 3), 20))
@@ -198,8 +199,12 @@ class StickmanGenerator:
                 progress_callback(progress, message)
 
         report(5, "开始生成视频讲解")
-        script_data = self.generate_script_data(topic, storyboard_count, opening_template_key=opening_template_key)
-        report(20, "脚本生成完成")
+        if str(source_script or "").strip():
+            script_data = self.build_storyboards_from_script_text(topic, str(source_script or ""))
+            report(20, "文案拆分完成")
+        else:
+            script_data = self.generate_script_data(topic, storyboard_count, opening_template_key=opening_template_key)
+            report(20, "脚本生成完成")
 
         with tempfile.TemporaryDirectory(prefix="stickman_") as temp_dir:
             image_dir = Path(temp_dir) / "images"
@@ -280,6 +285,7 @@ class StickmanGenerator:
         tts_provider: str | None = None,
         tts_voice: str | None = None,
         tts_rate: str | None = None,
+        source_script: str | None = None,
     ):
         def report(progress: int, message: str):
             if progress_callback:
@@ -290,7 +296,7 @@ class StickmanGenerator:
         if not image_assets:
             raise RuntimeError("请先生成并确认图片")
 
-        report(5, "开始基于已确认素材合成视频")
+        report(5, "开始基于已确认内容合成视频")
         with tempfile.TemporaryDirectory(prefix="stickman_compose_") as temp_dir:
             audio_dir = Path(temp_dir) / "audio"
             clip_dir = Path(temp_dir) / "clips"
@@ -303,7 +309,7 @@ class StickmanGenerator:
                 if not image_path or not os.path.exists(image_path):
                     raise RuntimeError(f"第 {index} 张分镜图片不存在，请重新生成图片")
                 image_paths.append(str(image_path))
-            report(20, "图片素材检查完成")
+            report(20, "图片检查完成")
 
             if voice_source in {"upload", "record"} and voice_file_path:
                 audio_track = str(Path(temp_dir) / "user_voice.mp3")
@@ -343,7 +349,7 @@ class StickmanGenerator:
             report(100, "视频讲解合成完成")
             return {
                 "title": topic,
-                "script": "\n".join(scene.get("narration", "") for scene in storyboards),
+                "script": str(source_script or "").strip() or "\n".join(scene.get("narration", "") for scene in storyboards),
                 "storyboards": storyboards,
                 "image_assets": image_assets,
                 "generation_flags": {"composed_from_assets": True},
@@ -793,7 +799,8 @@ class StickmanGenerator:
                     audio = audio._spawn(audio.raw_data, overrides={"frame_rate": int(audio.frame_rate * factor)}).set_frame_rate(audio.frame_rate)
                     audio.export(save_path, format="mp3")
                 return max(len(audio) / 1000.0, 1.0)
-            except Exception:
+            except Exception as exc:
+                self._raise_if_tts_quota_exhausted(exc)
                 provider = "dashscope_qwen"
                 voice = "Cherry"
 
@@ -814,7 +821,8 @@ class StickmanGenerator:
                 else:
                     audio.export(save_path, format='mp3')
                 return max(len(audio) / 1000.0, 1.0)
-            except Exception:
+            except Exception as exc:
+                self._raise_if_tts_quota_exhausted(exc)
                 provider = "dashscope_qwen"
                 voice = "Cherry"
 
@@ -853,11 +861,25 @@ class StickmanGenerator:
 
             audio = AudioSegment.from_file(save_path)
             return max(len(audio) / 1000.0, 1.0)
-        except Exception:
-            duration = max(2.0, min(len(text) * 0.22, 10.0))
-            silence = AudioSegment.silent(duration=int(duration * 1000))
-            silence.export(save_path, format="mp3")
-            return duration
+        except Exception as exc:
+            raise RuntimeError(self._summarize_tts_error(exc)) from exc
+
+    def _raise_if_tts_quota_exhausted(self, error: Exception):
+        text = str(error)
+        if "AllocationQuota.FreeTierOnly" in text or "free tier" in text.lower() or "quota" in text.lower():
+            raise RuntimeError("当前语音配音额度已用尽，配音失败，请稍后重试") from error
+
+    def _summarize_tts_error(self, error: Exception):
+        text = str(error)
+        if "AllocationQuota.FreeTierOnly" in text or "free tier" in text.lower() or "quota" in text.lower():
+            return "当前语音配音额度已用尽，配音失败，请稍后重试"
+        if "403" in text:
+            return "当前语音配音服务无权限或额度不足，配音失败"
+        if "401" in text:
+            return "当前语音配音服务鉴权失败，配音失败"
+        if "timeout" in text.lower():
+            return "当前语音配音服务超时，配音失败，请稍后重试"
+        return f"语音配音失败: {text[:160]}"
 
     def _normalize_tts_voice(self, provider: str, voice: str):
         if provider == "dashscope_cosyvoice":

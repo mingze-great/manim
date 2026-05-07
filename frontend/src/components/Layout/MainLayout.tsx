@@ -136,6 +136,11 @@ export default function MainLayout() {
           onClick={({ key }) => handleMenuClick(key)}
         />
         <div className="px-4 pb-4 pt-2">
+          {user?.is_admin && (
+            <Button icon={<SafetyOutlined />} type="primary" ghost block className="mb-2" onClick={() => handleMenuClick('/admin')}>
+              回到后台管理
+            </Button>
+          )}
           <Button icon={<HomeOutlined />} block onClick={() => handleMenuClick('/')}>
             返回首页
           </Button>
