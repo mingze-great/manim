@@ -907,6 +907,14 @@ class StickmanGenerator:
         if not raw.strip():
             return []
 
+        explicit_lines = [
+            self._normalize_storyboard_fragment(line)
+            for line in raw.splitlines()
+            if self._normalize_storyboard_fragment(line)
+        ]
+        if len(explicit_lines) >= 2:
+            return explicit_lines
+
         def split_long_chunk(chunk: str, max_chars: int = 16) -> list[str]:
             clean_chunk = self._normalize_storyboard_fragment(chunk)
             if not clean_chunk:
