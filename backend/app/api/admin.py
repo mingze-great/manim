@@ -1,6 +1,9 @@
 from typing import Optional, List
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, File
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 import json
@@ -19,11 +22,42 @@ from app.schemas.user import UserResponse, UserUpdate, UserStats, AuditLogRespon
 from app.api.auth import get_current_user, get_current_admin_user
 from app.config import get_settings
 import psutil
+from app.services.stickman_v2_assets import (
+    save_background_templates,
+    save_opening_styles,
+    save_scene_style_libraries,
+    save_asset_upload,
+    save_scene_style_library_package,
+    list_opening_styles,
+    list_background_templates,
+    list_scene_style_libraries,
+    find_asset_file,
+)
+
+
+def _with_image_urls(items: list[dict], kind: str):
+    if kind == "opening_styles":
+        key = "sample_image_path"
+        url_key = "sample_image_url"
+    elif kind == "background_templates":
+        key = "background_image_path"
+        url_key = "background_image_url"
+    else:
+        key = "cover_image_path"
+        url_key = "cover_image_url"
+    payload = []
+    for item in items:
+        clone = dict(item)
+        image_path = str(clone.get(key) or "").strip()
+        explicit_url = str(clone.get(url_key) or "").strip()
+        clone["image_url"] = f"/api/admin/stickman-v2/assets/{kind}/{Path(image_path).name}" if image_path else (explicit_url or None)
+        payload.append(clone)
+    return payload
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 settings = get_settings()
 
-MODULE_KEYS = ["visual", "stickman", "explainer", "article"]
+MODULE_KEYS = ["visual", "stickman_legacy", "stickman_v2", "explainer", "article"]
 
 
 def _normalize_module_permissions(payload: dict, user: User) -> dict:
@@ -354,7 +388,8 @@ async def get_user_detail(
     permissions = user.get_module_permissions()
     module_usage = {
         "visual": permissions.get("visual", {}),
-        "stickman": permissions.get("stickman", {}),
+        "stickman_legacy": permissions.get("stickman_legacy", {}),
+        "stickman_v2": permissions.get("stickman_v2", {}),
         "explainer": permissions.get("explainer", {}),
         "article": permissions.get("article", {}),
     }
@@ -1258,3 +1293,139 @@ async def set_system_config(
     db.commit()
     
     return {"message": "配置保存成功"}
+
+
+@router.get("/stickman-v2/opening-styles")
+async def get_stickman_v2_opening_styles(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+): 
+    return {"styles": _with_image_urls(list_opening_styles(db), "opening_styles")}
+
+
+@router.post("/stickman-v2/opening-styles")
+async def set_stickman_v2_opening_styles(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    styles = payload.get("styles") or []
+    return {"styles": _with_image_urls(save_opening_styles(db, styles), "opening_styles")}
+
+
+@router.post("/stickman-v2/opening-styles/{style_key}/sample-image")
+async def upload_stickman_v2_opening_style_image(
+    style_key: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    styles = list_opening_styles(db)
+    index = next((i for i, item in enumerate(styles) if item.get("key") == style_key), -1)
+    if index < 0:
+        raise HTTPException(status_code=404, detail="风格不存在")
+    try:
+        upload = await save_asset_upload(file, kind="opening_styles", item_key=style_key)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    styles[index]["sample_image_path"] = upload["path"]
+    styles[index]["sample_image_url"] = upload.get("image_url") or ""
+    save_opening_styles(db, styles)
+    return {"message": "样例图已上传", "image_url": f"/api/admin/stickman-v2/assets/opening_styles/{Path(upload['path']).name}"}
+
+
+@router.get("/stickman-v2/background-templates")
+async def get_stickman_v2_background_templates(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+): 
+    return {"templates": _with_image_urls(list_background_templates(db), "background_templates")}
+
+
+@router.post("/stickman-v2/background-templates")
+async def set_stickman_v2_background_templates(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    templates = payload.get("templates") or []
+    return {"templates": _with_image_urls(save_background_templates(db, templates), "background_templates")}
+
+
+@router.post("/stickman-v2/background-templates/{template_key}/image")
+async def upload_stickman_v2_background_template_image(
+    template_key: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    templates = list_background_templates(db)
+    index = next((i for i, item in enumerate(templates) if item.get("key") == template_key), -1)
+    if index < 0:
+        raise HTTPException(status_code=404, detail="背景模板不存在")
+    try:
+        upload = await save_asset_upload(file, kind="background_templates", item_key=template_key)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    templates[index]["background_image_path"] = upload["path"]
+    templates[index]["background_image_url"] = upload.get("image_url") or ""
+    save_background_templates(db, templates)
+    return {"message": "背景图已上传", "image_url": f"/api/admin/stickman-v2/assets/background_templates/{Path(upload['path']).name}"}
+
+
+@router.get("/stickman-v2/scene-style-libraries")
+async def get_stickman_v2_scene_style_libraries(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    return {"libraries": _with_image_urls(list_scene_style_libraries(db), "scene_style_libraries")}
+
+
+@router.post("/stickman-v2/scene-style-libraries")
+async def set_stickman_v2_scene_style_libraries(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    libraries = payload.get("libraries") or []
+    return {"libraries": _with_image_urls(save_scene_style_libraries(db, libraries), "scene_style_libraries")}
+
+
+@router.post("/stickman-v2/scene-style-libraries/{library_key}/package")
+async def upload_stickman_v2_scene_style_library_package(
+    library_key: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    libraries = list_scene_style_libraries(db)
+    index = next((i for i, item in enumerate(libraries) if item.get("key") == library_key), -1)
+    if index < 0:
+        raise HTTPException(status_code=404, detail="场景图风格不存在")
+    try:
+        package_info = await save_scene_style_library_package(file, item_key=library_key)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    libraries[index].update(package_info)
+    saved = save_scene_style_libraries(db, libraries)
+    current = next((item for item in saved if item.get("key") == library_key), None) or libraries[index]
+    return {
+        "message": "场景图风格包已上传",
+        "image_url": f"/api/admin/stickman-v2/assets/scene_style_libraries/{Path(current.get('cover_image_path') or '').name}" if current.get("cover_image_path") else (current.get("cover_image_url") or None),
+        "image_count": int(current.get("image_count") or 0),
+        "material_count": int(current.get("material_count") or 0),
+    }
+
+
+@router.get("/stickman-v2/assets/{kind}/{filename}")
+async def get_stickman_v2_admin_asset(
+    kind: str,
+    filename: str,
+    db: Session = Depends(get_db),
+):
+    if kind not in {"opening_styles", "background_templates", "scene_style_libraries"}:
+        raise HTTPException(status_code=404, detail="资源不存在")
+    asset_path = find_asset_file(db, kind, filename)
+    if not asset_path or not asset_path.exists():
+        raise HTTPException(status_code=404, detail="资源不存在")
+    return FileResponse(asset_path)

@@ -94,6 +94,40 @@ export interface StickmanVoiceOption {
   preview_url?: string
 }
 
+export interface StickmanV2OpeningStyle {
+  key: string
+  name: string
+  description?: string
+  prompt?: string
+  is_active?: boolean
+  sort_order?: number
+  sample_image_path?: string
+  image_url?: string | null
+}
+
+export interface StickmanV2BackgroundTemplate {
+  key: string
+  name: string
+  description?: string
+  is_active?: boolean
+  sort_order?: number
+  background_image_path?: string
+  image_url?: string | null
+}
+
+export interface StickmanV2SceneStyleLibrary {
+  key: string
+  name: string
+  description?: string
+  is_active?: boolean
+  is_visible?: boolean
+  sort_order?: number
+  cover_image_path?: string
+  image_url?: string | null
+  image_count?: number
+  material_count?: number
+}
+
 export interface PendingResponse {
   status: 'no_message' | 'pending' | 'completed' | 'error'
   response?: Conversation
@@ -104,6 +138,8 @@ export interface PendingResponse {
 export const projectApi = {
   list: () => api.get<Project[]>('/projects'),
   get: (id: number) => api.get<Project>(`/projects/${id}`),
+  getVideoDownloadUrl: (id: number) => buildApiPath(`/projects/${id}/video-download`),
+  renderTemplateBackground: (id: number) => api.post<Project>(`/projects/${id}/render-template-background`),
   create: (data: { title: string; theme: string; category?: string; module_type?: 'manim' | 'stickman' | 'explainer'; stickman_variant?: 'legacy' | 'v2'; storyboard_count?: number; aspect_ratio?: string; generation_mode?: 'one_click' | 'step_by_step'; voice_source?: 'ai' | 'upload' | 'record'; tts_provider?: string; tts_voice?: string; tts_rate?: string }) => api.post<Project>('/projects', data),
   update: (id: number, data: Partial<Project>) => api.put<Project>(`/projects/${id}`, data),
   uploadVoiceReference: (id: number, file: File, source: 'upload' | 'record') => {
@@ -137,6 +173,7 @@ export const projectApi = {
     })
   },
   generateStickmanPreviewImage: (id: number, regenerate: boolean = false) => api.post<Project>(`/projects/${id}/stickman/preview-image`, { regenerate }),
+  getStickmanV2Config: () => api.get<{ opening_styles: StickmanV2OpeningStyle[]; background_templates: StickmanV2BackgroundTemplate[]; scene_style_libraries: StickmanV2SceneStyleLibrary[] }>(`/projects/stickman/v2-config`),
   getStickmanVoiceLibrary: () => api.get<{ voices: StickmanVoiceOption[] }>(`/projects/stickman/voice-library`),
   previewStickmanVoice: (data: { text?: string; tts_provider?: string; tts_voice?: string; tts_rate?: string }) =>
     api.post<Blob>(`/projects/stickman/preview-voice`, data, { responseType: 'blob' as any }),
@@ -148,7 +185,7 @@ export const projectApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
   },
-  generateStickmanScript: (id: number) => api.post<Project>(`/projects/${id}/stickman/script`),
+  generateStickmanScript: (id: number) => api.post<Project>(`/projects/${id}/stickman/script`, undefined, { timeout: 180000 }),
   updateStickmanStoryboards: (id: number, data: { storyboards: any[]; final_script?: string }) => api.put<Project>(`/projects/${id}/stickman/storyboards`, data),
   generateStickmanImages: (id: number) => api.post<Project>(`/projects/${id}/stickman/images`),
   regenerateStickmanImage: (id: number, sceneIndex: number, data?: { prompt?: string }) => api.post<Project>(`/projects/${id}/stickman/images/${sceneIndex}/regenerate`, data || {}),
@@ -222,7 +259,8 @@ export const projectApi = {
   useCustomScript: (projectId: number, script: string, autoFormat: boolean = true) =>
     api.post<{ message: string; final_script: string; formatted: boolean }>(
       `/projects/${projectId}/use-custom-script`,
-      { script, auto_format: autoFormat }
+      { script, auto_format: autoFormat },
+      { timeout: 180000 }
     ),
   getChatStyles: () =>
     api.get<ChatStyle[]>('/chat-styles/'),

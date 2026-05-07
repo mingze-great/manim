@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Alert, Button, Card, Divider, Input, InputNumber, Select, Tag, Typography, Upload, message } from 'antd'
-import { ArrowLeftOutlined, AudioOutlined, BulbOutlined, UploadOutlined, VideoCameraOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, AudioOutlined, BulbOutlined, PlayCircleOutlined, UploadOutlined, VideoCameraOutlined } from '@ant-design/icons'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
 import { projectApi, StickmanVoiceOption } from '@/services/project'
+import { resolveBackendUrl } from '@/services/api'
 import TopicCategorySelector from './Creator/components/TopicCategorySelector'
 import TopicExamples from './Creator/components/TopicExamples'
 import AudioRecorder from './Creator/components/AudioRecorder'
@@ -39,6 +40,7 @@ function normalizeVoiceOptions(input: unknown): StickmanVoiceOption[] {
       provider: typeof item?.provider === 'string' && item.provider ? item.provider : 'dashscope_cosyvoice',
       gender: typeof item?.gender === 'string' ? item.gender : undefined,
       style: typeof item?.style === 'string' ? item.style : undefined,
+      preview_url: typeof item?.preview_url === 'string' ? item.preview_url : undefined,
     }))
     .filter((item) => item.value)
 
@@ -61,7 +63,7 @@ export default function StickmanCreator() {
   const [ttsRate, setTtsRate] = useState('+0%')
   const [voiceLibrary, setVoiceLibrary] = useState<StickmanVoiceOption[]>(defaultStickmanVoiceOptions)
   const [customVoiceLabel, setCustomVoiceLabel] = useState('')
-  const [generationMode, setGenerationMode] = useState<GenerationMode>('one_click')
+  const [generationMode, setGenerationMode] = useState<GenerationMode>('step_by_step')
   const [audioFile, setAudioFile] = useState<File | null>(null)
   const [audioPreviewUrl, setAudioPreviewUrl] = useState<string | null>(null)
   const [styleImageFile, setStyleImageFile] = useState<File | null>(null)
@@ -69,17 +71,19 @@ export default function StickmanCreator() {
   const [styleNotes, setStyleNotes] = useState('')
   const [backgroundImageFile, setBackgroundImageFile] = useState<File | null>(null)
   const [backgroundImagePreviewUrl, setBackgroundImagePreviewUrl] = useState<string | null>(null)
+  const [voicePreviewUrl, setVoicePreviewUrl] = useState<string | null>(null)
 
   const permissions = user?.module_permissions || {}
   const stickmanEnabled = user?.is_admin || permissions.stickman?.enabled !== false
   const stickmanStoryboardMax = user?.is_admin ? 20 : 6
   const safeVoiceOptions = useMemo(() => normalizeVoiceOptions(voiceLibrary), [voiceLibrary])
+  const selectedVoiceOption = useMemo(() => safeVoiceOptions.find((item) => item.value === ttsVoice) || null, [safeVoiceOptions, ttsVoice])
 
   useEffect(() => {
     const loadVoices = async () => {
       try {
-        const { data } = await projectApi.getStickmanVoiceLibrary()
-        setVoiceLibrary(normalizeVoiceOptions(data.voices))
+        const { data: voiceData } = await projectApi.getStickmanVoiceLibrary()
+        setVoiceLibrary(normalizeVoiceOptions(voiceData.voices))
       } catch {
         setVoiceLibrary(defaultStickmanVoiceOptions)
       }
@@ -93,6 +97,10 @@ export default function StickmanCreator() {
       setTtsVoice(safeVoiceOptions[0].value)
     }
   }, [safeVoiceOptions, ttsVoice])
+
+  useEffect(() => {
+    setVoicePreviewUrl(selectedVoiceOption?.preview_url ? resolveBackendUrl(selectedVoiceOption.preview_url) : null)
+  }, [selectedVoiceOption])
 
   useEffect(() => () => {
     if (audioPreviewUrl) URL.revokeObjectURL(audioPreviewUrl)
@@ -164,7 +172,7 @@ export default function StickmanCreator() {
       message.warning('请输入完整文案')
       return
     }
-    if (voiceSource !== 'ai' && !audioFile) {
+    if (stickmanVariant !== 'v2' && voiceSource !== 'ai' && !audioFile) {
       message.warning('请先录音或上传音频文件')
       return
     }
@@ -180,16 +188,16 @@ export default function StickmanCreator() {
         theme: resolvedTheme,
         module_type: 'stickman',
         stickman_variant: stickmanVariant,
-        storyboard_count: storyboardCount,
+        storyboard_count: stickmanVariant === 'v2' ? 3 : storyboardCount,
         aspect_ratio: '16:9',
-        generation_mode: generationMode,
-        voice_source: voiceSource,
+        generation_mode: stickmanVariant === 'v2' ? 'step_by_step' : generationMode,
+        voice_source: stickmanVariant === 'v2' ? 'ai' : voiceSource,
         tts_provider: selectedVoice?.provider || 'dashscope_cosyvoice',
         tts_voice: ttsVoice,
         tts_rate: ttsRate,
       })
 
-      if (audioFile && voiceSource !== 'ai') {
+      if (audioFile && voiceSource !== 'ai' && stickmanVariant !== 'v2') {
         await projectApi.uploadVoiceReference(data.id, audioFile, voiceSource)
       }
       if (backgroundImageFile) {
@@ -201,9 +209,8 @@ export default function StickmanCreator() {
       if (scriptMode === 'custom') {
         await projectApi.useCustomScript(data.id, customScript, false)
       }
-
       message.success('创建成功')
-      navigate(generationMode === 'step_by_step' ? `/project/${data.id}/stickman` : `/project/${data.id}/task`)
+      navigate(`/project/${data.id}/stickman`)
     } catch (error: any) {
       const detail = error.response?.data?.detail || error.message || '创建失败'
       message.error(detail)
@@ -214,8 +221,8 @@ export default function StickmanCreator() {
 
   const title = stickmanVariant === 'v2' ? '增强讲解' : '标准讲解'
   const description = stickmanVariant === 'v2'
-    ? '你正在配置增强讲解项目。创建完成后会直接进入增强讲解任务流或分步创作页。'
-    : '你正在配置标准讲解项目。创建完成后会进入标准讲解对应流程。'
+    ? '你正在配置增强讲解项目。创建完成后可以直接开始生成，也可以继续分步编辑。'
+    : '你正在配置标准讲解项目。创建完成后可以直接开始生成。'
 
   return (
     <div className="creator-page">
@@ -313,8 +320,8 @@ export default function StickmanCreator() {
                   )}
                 </div>
 
-                <div className="audio-source-box">
-                  <Typography.Text strong>配音素材</Typography.Text>
+                {stickmanVariant !== 'v2' && <div className="audio-source-box">
+                  <Typography.Text strong>配音方式</Typography.Text>
                   <Typography.Text type="secondary">AI 配音最省事；如果你想保留自己的声音，可以录音或上传音频文件。</Typography.Text>
                   {voiceSource === 'record' && <div style={{ marginTop: 12 }}><AudioRecorder value={audioFile} onChange={updateAudioFile} /></div>}
                   {voiceSource === 'upload' && (
@@ -352,12 +359,12 @@ export default function StickmanCreator() {
                       <Alert style={{ marginTop: 12 }} type="info" showIcon message="新上线模块，默认支持试用 2 次；如需长期使用请联系管理员开通。公众号约 0.6-1.5 元/篇，视频讲解按分镜计费。" />
                     </>
                   )}
-                </div>
+                </div>}
 
-                <div className="stickman-upload-grid">
+                {stickmanVariant !== 'v2' && <div className="stickman-upload-grid">
                   <div className="audio-source-box" style={{ marginTop: 0 }}>
                     <Typography.Text strong>背景图</Typography.Text>
-                    <Typography.Text type="secondary">默认使用固定背景。你也可以上传新的背景图，替换整条视频的底图。</Typography.Text>
+                    <Typography.Text type="secondary">你可以直接选择后台配置好的背景模板；如果想单独覆盖，也可以自己上传一张背景图。</Typography.Text>
                     <Upload beforeUpload={(file) => { updateBackgroundImageFile(file); return false }} onRemove={() => { updateBackgroundImageFile(null) }} maxCount={1} accept=".png,.jpg,.jpeg,.webp" style={{ marginTop: 8 }}>
                       <Button icon={<UploadOutlined />}>上传背景图</Button>
                     </Upload>
@@ -373,7 +380,7 @@ export default function StickmanCreator() {
                     <Input.TextArea rows={2} value={styleNotes} onChange={(e) => setStyleNotes(e.target.value)} placeholder="补充风格说明，例如：极简线稿、暖色调、治愈感" style={{ marginTop: 8 }} />
                     {styleImagePreviewUrl && <img src={styleImagePreviewUrl} alt="style-preview" className="stickman-preview-image" />}
                   </div>
-                </div>
+                </div>}
               </div>
 
               <div className="stickman-side-stack stickman-side-sticky">
@@ -385,11 +392,11 @@ export default function StickmanCreator() {
                   </div>
 
                   <div className="stickman-compact-grid">
-                    <div className="stickman-side-section">
+                    {stickmanVariant !== 'v2' && <div className="stickman-side-section">
                       <label className="stickman-label">分镜数量</label>
                       <InputNumber min={2} max={stickmanStoryboardMax} value={storyboardCount} onChange={(value) => setStoryboardCount(value || 3)} style={{ width: '100%' }} />
-                    </div>
-                    <div className="stickman-side-section">
+                    </div>}
+                    {stickmanVariant !== 'v2' && <div className="stickman-side-section">
                       <label className="stickman-label">生成方式</label>
                       <Select
                         value={generationMode}
@@ -400,10 +407,10 @@ export default function StickmanCreator() {
                         ]}
                         style={{ width: '100%' }}
                       />
-                    </div>
+                    </div>}
                   </div>
 
-                  <div className="stickman-side-section" style={{ marginTop: 12 }}>
+                  {stickmanVariant !== 'v2' && <div className="stickman-side-section" style={{ marginTop: 12 }}>
                     <label className="stickman-label">配音来源</label>
                     <Select
                       value={voiceSource}
@@ -440,12 +447,23 @@ export default function StickmanCreator() {
                         </div>
                       </div>
                     )}
-                  </div>
+
+                    {voiceSource === 'ai' && (
+                      <div className="audio-source-box" style={{ marginTop: 12 }}>
+                        <Typography.Text strong>音色试听</Typography.Text>
+                        <Typography.Text type="secondary">这里直接播放已准备好的音色样本，不会每次都重新生成试听。</Typography.Text>
+                        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginTop: 10 }}>
+                          <Button icon={<PlayCircleOutlined />} disabled={!voicePreviewUrl} onClick={() => setVoicePreviewUrl(selectedVoiceOption?.preview_url ? resolveBackendUrl(selectedVoiceOption.preview_url) : null)}>试听当前音色</Button>
+                          {voicePreviewUrl ? <audio controls src={voicePreviewUrl} /> : <Typography.Text type="secondary">当前音色还没有可用试听样本</Typography.Text>}
+                        </div>
+                      </div>
+                    )}
+                  </div>}
 
                   <div className="stickman-tips">
-                    <p>{stickmanVariant === 'v2' ? '增强讲解会进入专属工作流，不再回到通用首页配置。' : '标准讲解会保持原有制作逻辑，但入口与创建页已独立。'}</p>
-                    <p>{scriptMode === 'custom' ? '当前会优先使用你输入的完整文案，再自动拆成大的部分和小分镜。' : '当前会根据主题自动生成完整文案、再拆成大的部分和小分镜。'}</p>
-                    <p>支持 AI 配音、浏览器录音和音频文件上传。</p>
+                    <p>{stickmanVariant === 'v2' ? '增强讲解创建完成后直接进入分步创作，首页不再重复放配置项。' : '标准讲解创建完成后可以直接开始生成。'}</p>
+                    <p>{scriptMode === 'custom' ? '当前会完整保留你输入的文案内容，只按原文拆分成分镜，不会改写文字。' : '当前会先生成完整文案，再继续拆分成分镜。'}</p>
+                    <p>{stickmanVariant === 'v2' ? '配音方式、背景和场景图风格都放到分步创作里继续设置。' : '支持 AI 配音、浏览器录音和音频文件上传。'}</p>
                   </div>
 
                   <div className="stickman-create-actions">
@@ -456,7 +474,7 @@ export default function StickmanCreator() {
                       loading={loading}
                       size="large"
                       block
-                      disabled={!stickmanTopic.trim()}
+                      disabled={scriptMode === 'ai' ? !stickmanTopic.trim() : !customScript.trim()}
                       className="btn-gradient-warm"
                     >
                       创建并进入任务

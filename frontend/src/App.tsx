@@ -32,6 +32,7 @@ import AdminTokenUsage from './pages/admin/AdminTokenUsage'
 import AdminArticleCategories from './pages/admin/AdminArticleCategories'
 import AdminModuleStats from './pages/admin/AdminModuleStats'
 import AdminChatStyles from './pages/admin/AdminChatStyles'
+import AdminVideoSettings from './pages/admin/AdminVideoSettings'
 import { useState, useEffect, useRef } from 'react'
 import { buildLegacyEntryUrl } from './utils/authSync'
 
@@ -53,6 +54,13 @@ function AppContent() {
   const LEGACY_APP_URL = (import.meta.env.VITE_LEGACY_APP_URL as string | undefined) || `${window.location.protocol}//${window.location.hostname}`
   const authRequestRef = useRef(0)
   const legacyEntryUrl = buildLegacyEntryUrl(LEGACY_APP_URL)
+  const shouldRedirectToLegacy = (() => {
+    try {
+      return new URL(LEGACY_APP_URL, window.location.origin).origin !== window.location.origin
+    } catch {
+      return false
+    }
+  })()
 
   useEffect(() => {
     if (!_hasHydrated) return
@@ -68,7 +76,7 @@ function AppContent() {
           }
           login(token, data)
 
-          if (!data.is_admin && (data.frontend_version || 'legacy') === 'legacy' && LEGACY_APP_URL) {
+          if (!data.is_admin && (data.frontend_version || 'legacy') === 'legacy' && LEGACY_APP_URL && shouldRedirectToLegacy) {
             window.location.href = legacyEntryUrl
             return
           }
@@ -95,7 +103,7 @@ function AppContent() {
         }
         login(token, data)
 
-        if (!data.is_admin && (data.frontend_version || 'legacy') === 'legacy' && LEGACY_APP_URL) {
+        if (!data.is_admin && (data.frontend_version || 'legacy') === 'legacy' && LEGACY_APP_URL && shouldRedirectToLegacy) {
           window.location.href = legacyEntryUrl
           return
         }
@@ -109,7 +117,7 @@ function AppContent() {
     }, 30000)
 
     return () => clearInterval(intervalId)
-  }, [token, _hasHydrated, logout, login, LEGACY_APP_URL, legacyEntryUrl])
+  }, [token, _hasHydrated, logout, login, LEGACY_APP_URL, legacyEntryUrl, shouldRedirectToLegacy])
 
   if (!_hasHydrated || (validating && token)) {
     return (
@@ -152,6 +160,7 @@ function AppContent() {
         <Route path="/admin/templates" element={<AdminTemplates />} />
         <Route path="/admin/chat-styles" element={<AdminChatStyles />} />
         <Route path="/admin/article-categories" element={<AdminArticleCategories />} />
+        <Route path="/admin/video-settings" element={<AdminVideoSettings />} />
         <Route path="/admin/module-stats" element={<AdminModuleStats />} />
         <Route path="/admin/statistics" element={<AdminStatistics />} />
         <Route path="/admin/token-usage" element={<AdminTokenUsage />} />

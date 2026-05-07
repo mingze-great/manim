@@ -23,8 +23,8 @@ from app.services.manim import ManimService
 from app.services.stickman_generator import StickmanGenerator as StickmanGeneratorLegacy
 from app.services.stickman_generator_v2 import StickmanGenerator as StickmanGeneratorV2
 from app.services.explainer_generator import ExplainerGenerator
+from app.services.stickman_v2_assets import resolve_generation_assets
 from app.config import get_settings
-from app.utils.cos_storage import cos_storage
 from app.tasks.celery_tasks import render_video_celery, generate_code_celery, generate_chat_celery
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
@@ -42,6 +42,34 @@ def _stickman_variant_label(project: Project | None = None):
 
 def _build_explainer_generator():
     return ExplainerGenerator()
+
+
+def _project_permission_module_key(project: Project | None) -> str:
+    if not project:
+        return 'visual'
+    module_type = str(getattr(project, 'module_type', 'manim') or 'manim')
+    if module_type == 'stickman':
+        return 'stickman_v2' if str(getattr(project, 'stickman_variant', 'legacy') or 'legacy') == 'v2' else 'stickman_legacy'
+    if module_type in {'explainer', 'article', 'visual'}:
+        return module_type
+    if module_type in {'manim', 'math'}:
+        return 'visual'
+    return module_type
+
+
+def _resolve_stickman_generation_inputs(project: Project, generation_flags: dict, db: Session):
+    resolved = resolve_generation_assets(
+        db,
+        generation_flags,
+        str(project.background_image_path) if getattr(project, "background_image_path", None) else None,
+        str(project.style_reference_image_path) if getattr(project, "style_reference_image_path", None) else None,
+        str(project.style_reference_notes) if getattr(project, "style_reference_notes", None) else None,
+    )
+    if resolved.get("opening_style_name"):
+        generation_flags["opening_style_name"] = resolved["opening_style_name"]
+    if resolved.get("background_template_name"):
+        generation_flags["background_template_name"] = resolved["background_template_name"]
+    return resolved
 
 
 def _project_query_for_user(db: Session, current_user: User):
@@ -590,19 +618,6 @@ async def render_video_stream(
                             
                             video_url = f"/api/videos/{video_filename}"
                             
-                            if cos_storage.enabled:
-                                success, cos_key, cos_url = cos_storage.upload_file(
-                                    local_video_path, 
-                                    project_id, 
-                                    0
-                                )
-                                if success and cos_url:
-                                    video_url = cos_url
-                                    try:
-                                        os.remove(local_video_path)
-                                    except:
-                                        pass
-                            
                             project_local.status = "completed"
                             project_local.video_url = video_url
                             project_local.error_message = None
@@ -719,6 +734,7 @@ async def generate_stickman_video_stream(
                 generation_flags = json.loads(project_local.generation_flags or "{}")
             except Exception:
                 generation_flags = {}
+            resolved_inputs = _resolve_stickman_generation_inputs(project_local, generation_flags, db_session)
             if str(getattr(project_local, 'stickman_variant', 'legacy') or 'legacy') == 'v2':
                 generation_task = asyncio.create_task(asyncio.to_thread(
                     lambda: generator.generate(
@@ -731,11 +747,12 @@ async def generate_stickman_video_stream(
                         str(project_local.tts_provider or "edge_tts"),
                         str(project_local.tts_voice or "zh-CN-XiaoxiaoNeural"),
                         str(project_local.tts_rate or "+0%"),
-                        str(project_local.background_image_path) if getattr(project_local, 'background_image_path', None) else None,
-                        str(project_local.style_reference_image_path) if project_local.style_reference_image_path else None,
-                        str(project_local.style_reference_notes) if project_local.style_reference_notes else None,
+                        resolved_inputs.get("background_image_path"),
+                        resolved_inputs.get("style_reference_image_path"),
+                        resolved_inputs.get("style_reference_notes"),
                         opening_template_key=str(generation_flags.get("opening_template_key") or "hook_question"),
                         generation_flags=generation_flags,
+                        source_script=str(project_local.final_script or ""),
                     )
                 ))
             else:
@@ -750,10 +767,11 @@ async def generate_stickman_video_stream(
                         str(project_local.tts_provider or "edge_tts"),
                         str(project_local.tts_voice or "zh-CN-XiaoxiaoNeural"),
                         str(project_local.tts_rate or "+0%"),
-                        str(project_local.background_image_path) if getattr(project_local, 'background_image_path', None) else None,
-                        str(project_local.style_reference_image_path) if project_local.style_reference_image_path else None,
-                        str(project_local.style_reference_notes) if project_local.style_reference_notes else None,
+                        resolved_inputs.get("background_image_path"),
+                        resolved_inputs.get("style_reference_image_path"),
+                        resolved_inputs.get("style_reference_notes"),
                         opening_template_key=str(generation_flags.get("opening_template_key") or "hook_question"),
+                        source_script=str(project_local.final_script or ""),
                     )
                 ))
 
@@ -776,15 +794,6 @@ async def generate_stickman_video_stream(
             video_filename = os.path.basename(video_path)
             video_url = f"/api/videos/{video_filename}"
 
-            if cos_storage.enabled and os.path.exists(video_path):
-                success, _, cos_url = cos_storage.upload_file(video_path, project_id, task.id)
-                if success and cos_url:
-                    video_url = cos_url
-                    try:
-                        os.remove(video_path)
-                    except OSError:
-                        pass
-
             project_local.final_script = result.get("script")
             project_local.storyboard_json = json.dumps(result.get("storyboards") or [], ensure_ascii=False)
             project_local.image_assets_json = json.dumps(result.get("image_assets") or [], ensure_ascii=False)
@@ -795,7 +804,7 @@ async def generate_stickman_video_stream(
             try:
                 user_local = db_session.query(User).filter(User.id == current_user_id).first()
                 if user_local:
-                    user_local.increment_module_usage("stickman")
+                    user_local.increment_module_usage(_project_permission_module_key(project_local))
             except Exception:
                 pass
 
@@ -907,6 +916,7 @@ async def compose_stickman_video_stream(
                 generation_flags = json.loads(project_local.generation_flags or "{}")
             except Exception:
                 generation_flags = {}
+            _resolve_stickman_generation_inputs(project_local, generation_flags, db_session)
             if str(getattr(project_local, 'stickman_variant', 'legacy') or 'legacy') == 'v2':
                 generation_task = asyncio.create_task(asyncio.to_thread(
                     generator.compose_from_assets,
@@ -920,6 +930,7 @@ async def compose_stickman_video_stream(
                     str(project_local.tts_voice or "zh-CN-XiaoxiaoNeural"),
                     str(project_local.tts_rate or "+0%"),
                     generation_flags,
+                    str(project_local.final_script or ""),
                 ))
             else:
                 generation_task = asyncio.create_task(asyncio.to_thread(
@@ -933,6 +944,7 @@ async def compose_stickman_video_stream(
                     str(project_local.tts_provider or "edge_tts"),
                     str(project_local.tts_voice or "zh-CN-XiaoxiaoNeural"),
                     str(project_local.tts_rate or "+0%"),
+                    str(project_local.final_script or ""),
                 ))
 
             while True:
@@ -953,22 +965,13 @@ async def compose_stickman_video_stream(
             video_filename = os.path.basename(video_path)
             video_url = f"/api/videos/{video_filename}"
 
-            if cos_storage.enabled and os.path.exists(video_path):
-                success, _, cos_url = cos_storage.upload_file(video_path, project_id, task.id)
-                if success and cos_url:
-                    video_url = cos_url
-                    try:
-                        os.remove(video_path)
-                    except OSError:
-                        pass
-
             project_local.video_url = video_url
             project_local.status = "completed"
             project_local.error_message = None
             try:
                 user_local = db_session.query(User).filter(User.id == current_user_id).first()
                 if user_local:
-                    user_local.increment_module_usage("stickman")
+                    user_local.increment_module_usage(_project_permission_module_key(project_local))
             except Exception:
                 pass
             task_local.progress = 100
@@ -1090,14 +1093,6 @@ async def generate_explainer_video_stream(
             video_path = result["video_path"]
             video_filename = os.path.basename(video_path)
             video_url = f"/api/videos/{video_filename}"
-            if cos_storage.enabled and os.path.exists(video_path):
-                success, _, cos_url = cos_storage.upload_file(video_path, project_id, task.id)
-                if success and cos_url:
-                    video_url = cos_url
-                    try:
-                        os.remove(video_path)
-                    except OSError:
-                        pass
             project_local.title = result.get("title") or project_local.title
             project_local.final_script = result.get("script")
             project_local.storyboard_json = json.dumps(result.get("storyboards") or [], ensure_ascii=False)
@@ -1109,7 +1104,7 @@ async def generate_explainer_video_stream(
             try:
                 user_local = db_session.query(User).filter(User.id == current_user_id).first()
                 if user_local and not getattr(project_local, 'quota_consumed', False):
-                    user_local.increment_module_usage("explainer")
+                    user_local.increment_module_usage(_project_permission_module_key(project_local))
                     project_local.quota_consumed = True
             except Exception:
                 pass
@@ -1225,14 +1220,6 @@ async def compose_explainer_video_stream(
             video_path = result["video_path"]
             video_filename = os.path.basename(video_path)
             video_url = f"/api/videos/{video_filename}"
-            if cos_storage.enabled and os.path.exists(video_path):
-                success, _, cos_url = cos_storage.upload_file(video_path, project_id, task.id)
-                if success and cos_url:
-                    video_url = cos_url
-                    try:
-                        os.remove(video_path)
-                    except OSError:
-                        pass
             project_local.storyboard_json = json.dumps(result.get("storyboards") or storyboards, ensure_ascii=False)
             project_local.video_url = video_url
             project_local.status = "completed"
@@ -1581,7 +1568,11 @@ async def cancel_task(
             celery_app.control.revoke(task.celery_task_id, terminate=True)
         except Exception as e:
             print(f"Failed to revoke Celery task: {e}")
-    
+
+    cancel_event = ACTIVE_TASK_CANCEL_EVENTS.get(task.id)
+    if cancel_event:
+        cancel_event.set()
+
     # 更新任务状态
     task.status = "cancelled"
     task.error_message = "User cancelled"

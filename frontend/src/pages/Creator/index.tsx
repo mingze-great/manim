@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Alert, Button, Input, message, Divider, Card, Segmented, Select } from 'antd'
+import { Alert, Button, Input, message, Divider, Card, Segmented, Select, Modal } from 'antd'
 import { RocketOutlined, BulbOutlined, VideoCameraOutlined, HighlightOutlined, FileTextOutlined } from '@ant-design/icons'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
@@ -14,6 +14,8 @@ const { TextArea } = Input
 
 type ModuleType = 'manim' | 'math' | 'stickman' | 'article'
 
+const CREATOR_UPDATE_NOTICE_KEY = 'creator_update_notice_20260428_v1'
+
 export default function Creator() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -27,6 +29,7 @@ export default function Creator() {
   const [articleCategory, setArticleCategory] = useState('生活')
   const [articleCategories, setArticleCategories] = useState<ArticleCategory[]>([])
   const [selectedArticleCategory, setSelectedArticleCategory] = useState<ArticleCategory | null>(null)
+  const [updateNoticeVisible, setUpdateNoticeVisible] = useState(false)
 
   const permissions = user?.module_permissions || {}
   const stickmanEnabled = user?.is_admin || permissions.stickman?.enabled !== false
@@ -131,8 +134,47 @@ export default function Creator() {
     }
   }, [navigate, searchParams])
 
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(CREATOR_UPDATE_NOTICE_KEY) === 'read') {
+        return
+      }
+    } catch {
+      // Ignore local storage access failures and still show once.
+    }
+    setUpdateNoticeVisible(true)
+  }, [])
+
+  const handleMarkUpdateNoticeRead = () => {
+    try {
+      window.localStorage.setItem(CREATOR_UPDATE_NOTICE_KEY, 'read')
+    } catch {
+      // Ignore local storage access failures.
+    }
+    setUpdateNoticeVisible(false)
+  }
+
   return (
     <div className="creator-page">
+      <Modal
+        title="新版功能上线"
+        open={updateNoticeVisible}
+        closable={false}
+        maskClosable={false}
+        footer={[
+          <Button key="read" type="primary" onClick={handleMarkUpdateNoticeRead}>
+            标记已读
+          </Button>,
+        ]}
+      >
+        <div style={{ lineHeight: 1.9 }}>
+          <div>- 新增新版心理讲解类视频，创作流程更清晰</div>
+          <div>- 新增数学可视化视频，支持更丰富的教学表达</div>
+          <div>- 模板预览体验优化，查看效果更直观</div>
+          <div>- 新增对话风格支持，生成内容更贴合你的表达习惯</div>
+        </div>
+      </Modal>
+
       <div className="creator-hero creator-hero-sunrise">
         <div className="hero-content">
           <h1 className="hero-title">

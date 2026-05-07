@@ -172,9 +172,9 @@ export default function StickmanProjectTask() {
     setDownloading(true)
     try {
       const token = useAuthStore.getState().token
-      const fullUrl = resolveBackendUrl(videoUrl)
-      const response = await fetch(fullUrl, {
+      const response = await fetch(projectApi.getVideoDownloadUrl(Number(id)), {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
+        redirect: 'follow',
       })
       if (!response.ok) throw new Error('下载失败')
       const blob = await response.blob()
@@ -206,8 +206,8 @@ export default function StickmanProjectTask() {
     <div className="max-w-5xl mx-auto p-6">
       <Alert
         type="success"
-        message="增强讲解任务流"
-        description="当前项目走增强讲解生成/合成链路，固定背景、素材匹配和字幕节奏能力只在这条链路内演进。"
+        message="增强讲解生成中"
+        description="当前项目会按已确认内容依次生成画面、配音和视频；如需调整，可返回分步创作页继续编辑。"
         className="mb-4"
       />
       <Card
@@ -217,8 +217,8 @@ export default function StickmanProjectTask() {
         <div className="space-y-6">
           <Alert
             type="info"
-            message="优化版一键任务流"
-            description="当前流程会优先走优化版素材匹配、固定背景和短视频节奏链路；如需逐镜调整，可切到分步创作页继续编辑。"
+            message="一键生成"
+            description="当前会按已保存内容直接生成完整视频；如需逐镜调整，可切到分步创作页继续编辑。"
           />
 
           {(() => {
@@ -241,7 +241,7 @@ export default function StickmanProjectTask() {
 
             <Descriptions bordered column={1} size="small">
               <Descriptions.Item label="生成模块">视频讲解</Descriptions.Item>
-              <Descriptions.Item label="版本链路">
+              <Descriptions.Item label="生成版本">
                 <Tag color="success">optimized v2</Tag>
               </Descriptions.Item>
               <Descriptions.Item label="视频主题">{project?.theme}</Descriptions.Item>
