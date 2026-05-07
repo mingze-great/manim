@@ -23,7 +23,7 @@ type Storyboard = {
   background_prompt?: string
   foreground_subjects?: Array<{ key: string; kind: string; label: string }>
   foreground_events?: Array<{ target: string; animation: string; start: number; duration: number; x_ratio?: number; y_ratio?: number }>
-  subtitle_lines?: Array<{ text: string; start?: number; end?: number }>
+  subtitle_lines?: Array<{ text: string; english?: string; start?: number; end?: number }>
   scene_style_profile?: string
 }
 
@@ -244,6 +244,19 @@ export default function StickmanStudio() {
       message.error(error.response?.data?.detail || '保存分镜失败')
     } finally {
       setLoadingFlag('saveStoryboards', false)
+    }
+  }
+
+  const handleGenerateEnglishSubtitles = async () => {
+    setLoadingFlag('generateEnglishSubtitles', true)
+    try {
+      const { data } = await projectApi.generateStickmanEnglishSubtitles(Number(id))
+      applyProjectSnapshot(data)
+      message.success('英文字幕已生成')
+    } catch (error: any) {
+      message.error(error.response?.data?.detail || '英文字幕生成失败')
+    } finally {
+      setLoadingFlag('generateEnglishSubtitles', false)
     }
   }
 
@@ -558,13 +571,17 @@ export default function StickmanStudio() {
                     <Alert type="info" message="这一步只做分段拆分" description="你输入的原文会被原样保留，只按长度和停顿拆成更适合分镜与字幕的短段，处理后会直接回写到上方文案区。" />
                     <Space wrap>
                       <Button type="primary" onClick={handleProcessStoryboards} loading={isLoadingAction('processStoryboards')} disabled={!finalScript.trim()}>处理当前文案</Button>
+                      <Button onClick={handleGenerateEnglishSubtitles} loading={isLoadingAction('generateEnglishSubtitles')} disabled={!storyboards.length}>生成英文字幕（可选）</Button>
                       <Tag color={storyboards.length ? 'green' : 'default'}>{storyboards.length ? `已生成 ${storyboards.length} 幕分镜` : '尚未生成分镜'}</Tag>
                     </Space>
                   </>
                 ) : (
                   <>
                     <Alert type="success" message="当前文案与分镜已一致" description="如果文案区内容没有变化，可以直接继续后面的开头图和背景步骤；只要文案和当前分镜不一致，系统会再次要求重建分镜。" />
-                    <Tag color="green">已可直接进入下一步</Tag>
+                    <Space wrap>
+                      <Tag color="green">已可直接进入下一步</Tag>
+                      <Button onClick={handleGenerateEnglishSubtitles} loading={isLoadingAction('generateEnglishSubtitles')} disabled={!storyboards.length}>生成英文字幕（可选）</Button>
+                    </Space>
                   </>
                 )}
               </Space>

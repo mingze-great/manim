@@ -678,6 +678,52 @@ def update_stickman_storyboards(
     return project
 
 
+@router.post("/{project_id}/stickman/english-subtitles", response_model=ProjectResponse)
+def generate_stickman_english_subtitles(
+    project_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)]
+):
+    project = _get_stickman_project(db, current_user, project_id)
+    storyboards = json.loads(project.storyboard_json or "[]")
+    if not storyboards:
+        raise HTTPException(status_code=400, detail="请先生成并确认分镜")
+
+    generator = _build_stickman_generator(project)
+    updated_storyboards = []
+    for scene in storyboards:
+        clone = dict(scene)
+        subtitle_lines = list(clone.get("subtitle_lines") or [])
+        narration_text = str(clone.get("scene_narration") or clone.get("narration") or "").strip()
+        if not subtitle_lines and narration_text:
+            subtitle_lines = [{"text": narration_text}]
+
+        next_lines = []
+        for item in subtitle_lines:
+            text = str((item or {}).get("text") or "").strip()
+            if not text:
+                continue
+            english = generator._sanitize_english_subtitle(
+                str((item or {}).get("english") or "").strip()
+            )
+            if not english:
+                english = generator._sanitize_english_subtitle(
+                    generator._translate_subtitle_to_english(text)
+                )
+            next_item = dict(item or {})
+            next_item["text"] = text
+            next_item["english"] = english
+            next_lines.append(next_item)
+
+        clone["subtitle_lines"] = next_lines
+        updated_storyboards.append(clone)
+
+    project.storyboard_json = json.dumps(updated_storyboards, ensure_ascii=False)
+    db.commit()
+    db.refresh(project)
+    return project
+
+
 @router.post("/{project_id}/stickman/images", response_model=ProjectResponse)
 def generate_stickman_images(
     project_id: int,

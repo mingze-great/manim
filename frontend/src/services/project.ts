@@ -186,6 +186,7 @@ export const projectApi = {
     })
   },
   generateStickmanScript: (id: number) => api.post<Project>(`/projects/${id}/stickman/script`, undefined, { timeout: 600000 }),
+  generateStickmanEnglishSubtitles: (id: number) => api.post<Project>(`/projects/${id}/stickman/english-subtitles`),
   updateStickmanStoryboards: (id: number, data: { storyboards: any[]; final_script?: string }) => api.put<Project>(`/projects/${id}/stickman/storyboards`, data),
   generateStickmanImages: (id: number) => api.post<Project>(`/projects/${id}/stickman/images`),
   regenerateStickmanImage: (id: number, sceneIndex: number, data?: { prompt?: string }) => api.post<Project>(`/projects/${id}/stickman/images/${sceneIndex}/regenerate`, data || {}),
