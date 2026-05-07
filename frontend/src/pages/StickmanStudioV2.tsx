@@ -69,6 +69,8 @@ export default function StickmanStudio() {
   const [isComposing, setIsComposing] = useState(false)
   const [activeComposeTaskId, setActiveComposeTaskId] = useState<number | null>(null)
   const composeAbortRef = useRef<AbortController | null>(null)
+  const scriptSaveTimerRef = useRef<number | null>(null)
+  const suppressScriptAutosaveRef = useRef(false)
 
   const parsedFlags = useMemo(() => {
     try {
@@ -152,8 +154,12 @@ export default function StickmanStudio() {
 
   useEffect(() => {
     if (!project?.id) return
+    if (suppressScriptAutosaveRef.current) return
     if (finalScript === (project.final_script || '')) return
-    const timer = window.setTimeout(async () => {
+    if (scriptSaveTimerRef.current) {
+      window.clearTimeout(scriptSaveTimerRef.current)
+    }
+    scriptSaveTimerRef.current = window.setTimeout(async () => {
       try {
         const { data } = await projectApi.update(project.id, { final_script: finalScript } as Partial<Project>)
         setProject((prev) => prev ? { ...prev, final_script: data.final_script } : prev)
@@ -161,7 +167,12 @@ export default function StickmanStudio() {
         // Ignore background autosave failures and let explicit actions retry.
       }
     }, 700)
-    return () => window.clearTimeout(timer)
+    return () => {
+      if (scriptSaveTimerRef.current) {
+        window.clearTimeout(scriptSaveTimerRef.current)
+        scriptSaveTimerRef.current = null
+      }
+    }
   }, [finalScript, project?.final_script, project?.id])
 
   const handleGenerateScript = async () => {
@@ -186,6 +197,11 @@ export default function StickmanStudio() {
     }
     setLoadingFlag('processStoryboards', true)
     try {
+      suppressScriptAutosaveRef.current = true
+      if (scriptSaveTimerRef.current) {
+        window.clearTimeout(scriptSaveTimerRef.current)
+        scriptSaveTimerRef.current = null
+      }
       await projectApi.useCustomScript(Number(id), finalScript, false)
       const { data } = await projectApi.generateStickmanScript(Number(id))
       const nextStoryboards = JSON.parse(data.storyboard_json || '[]')
@@ -204,6 +220,9 @@ export default function StickmanStudio() {
     } catch (error: any) {
       message.error(error.response?.data?.detail || '文案分镜处理失败')
     } finally {
+      window.setTimeout(() => {
+        suppressScriptAutosaveRef.current = false
+      }, 0)
       setLoadingFlag('processStoryboards', false)
     }
   }
@@ -235,6 +254,11 @@ export default function StickmanStudio() {
     }
     setLoadingFlag('syncLatestScript', true)
     try {
+      suppressScriptAutosaveRef.current = true
+      if (scriptSaveTimerRef.current) {
+        window.clearTimeout(scriptSaveTimerRef.current)
+        scriptSaveTimerRef.current = null
+      }
       await projectApi.useCustomScript(Number(id), finalScript, false)
       const { data } = await projectApi.generateStickmanScript(Number(id))
       const nextStoryboards = JSON.parse(data.storyboard_json || '[]')
@@ -248,6 +272,9 @@ export default function StickmanStudio() {
       setLastProcessedScript(syncedScript)
       return { storyboards: nextStoryboards, imageAssets: nextImageAssets }
     } finally {
+      window.setTimeout(() => {
+        suppressScriptAutosaveRef.current = false
+      }, 0)
       setLoadingFlag('syncLatestScript', false)
     }
   }
