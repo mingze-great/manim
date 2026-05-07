@@ -20,15 +20,20 @@
 ## 当前快照
 
 - 当前 3002 对应分支：`feature/stickman-v2-viral-hook-optimization-acceptance`
-- 当前已部署提交：`ef0b0bdf` `feat: restore latest enhanced explainer workflow`
+- 当前可复现 3002 的远程基准提交：`105c9739` `feat: add progress feedback for storyboard actions`
 - 关键说明：
   - `2b714c21` 引入“最终文案多行时，每行锁成一个分镜”
   - `9d2458c8` 在其基础上补齐运行依赖，形成可运行基准
-  - `ef0b0bdf` 继续恢复最新增强讲解独立流前后端，是当前 3002 最新可复现基准
+  - `ef0b0bdf` 恢复最新增强讲解独立流前后端
+  - `2d02dfc6` 增加“可选英文字幕”能力，当前 3002 后端源码停在这版
+  - `2267ee1f`、`105c9739` 为当前 3002 前端新增的英文字幕状态与进度反馈
 - 当前 3002 关键行为：
   - 最终文案区多行文本优先按“每行一个分镜”处理
   - 对话默认风格仍为 `classic`
-- 最近一次新版清理后同步基准：`/opt/manim-v2` -> `ef0b0bdf`
+- 当前 3002 实际运行态说明：
+  - 服务器 git HEAD：`2d02dfc6`
+  - 服务器前端 dist：来自 `105c9739` 构建产物
+  - 因 `105c9739` 仅包含前端改动，使用 `105c9739` 全量部署可复现当前 3002 运行效果
 - 最近一次远端备份：`/opt/manim_backups/backup_20260507_*.tar.gz` 与目录内 `backup_*`
 - 当前服务器新版目录保留的非代码脏数据仅包括：
   - `.env.development`
@@ -36,7 +41,7 @@
   - `.env.production`
   - `frontend/tsconfig.tsbuildinfo`
   - `backend/uploads/`
-- 如需复现当前 3002，请直接拉取上述分支并切到 `ef0b0bdf`
+- 如需在新环境复现当前 3002，请直接拉取上述分支并切到 `105c9739`，然后按本文档执行完整前后端部署
 
 ## 磁盘与队列
 
