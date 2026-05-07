@@ -10,6 +10,10 @@
 
 - 复现分支：`repro/3002-105c9739`
 - 复现提交：`105c9739`
+- 开发分支：`feature/stickman-v2-viral-hook-optimization-acceptance`
+- 说明：
+  - 要稳定复现当前 `3002`，只拉 `repro/3002-105c9739`
+  - `feature/stickman-v2-viral-hook-optimization-acceptance` 用于继续开发和记录文档，不作为当前 `3002` 的唯一复现基准
 - 已验证环境：
   - `3003`
   - 目录：`/opt/manim-v2-3003-snapshot`
