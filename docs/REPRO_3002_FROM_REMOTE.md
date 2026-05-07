@@ -8,11 +8,15 @@
 
 ## 基准
 
-- 复现分支：`repro/3002-105c9739`
-- 复现提交：`105c9739`
+- 当前已发布复现分支：`repro/3002-105c9739`
+- 当前已发布复现提交：`105c9739`
 - 开发分支：`feature/stickman-v2-viral-hook-optimization-acceptance`
+- 当前本地冻结的完整 3002 发布快照：`12fbd6a6` `fix: align acceptance deploy with local media flow`
+- 目标 repro 分支名：`repro/3002-12fbd6a6`
 - 说明：
-  - 要稳定复现当前 `3002`，只拉 `repro/3002-105c9739`
+  - 远端当前能直接拉取的稳定基线，仍然是 `repro/3002-105c9739`
+  - `12fbd6a6` 已在本地通过后端编译与前端构建校验，准备作为新的 repro 分支推送
+  - 受 GitHub 网络波动影响，`repro/3002-12fbd6a6` 目前还未推送成功
   - `feature/stickman-v2-viral-hook-optimization-acceptance` 用于继续开发和记录文档，不作为当前 `3002` 的唯一复现基准
 
 ## 为什么单独建 Repro 分支
@@ -87,7 +91,8 @@ curl -I http://127.0.0.1:3010/
 2. 本地验证通过后，先提交并推到远程开发分支。
 3. 部署到 `3002` 验证。
 4. 如果新版本稳定，**再新建一个新的 repro 分支**，例如：
-   - `repro/3002-<new-sha>`
+   - `repro/3002-12fbd6a6`
+   - 或后续新的 `repro/3002-<new-sha>`
 5. 更新本文件和 `V2_3002_STANDARD_DEPLOY.md`，把新的 repro 分支写进去。
 
 这样做的好处：
@@ -113,6 +118,14 @@ curl -I http://127.0.0.1:3010/
 ```bash
 git fetch origin repro/3002-105c9739
 git checkout -B repro/3002-105c9739 FETCH_HEAD
+git reset --hard FETCH_HEAD
+```
+
+如果新的 repro 分支已经发布，则把上述分支名替换为对应版本，例如：
+
+```bash
+git fetch origin repro/3002-12fbd6a6
+git checkout -B repro/3002-12fbd6a6 FETCH_HEAD
 git reset --hard FETCH_HEAD
 ```
 
@@ -196,6 +209,32 @@ git rev-parse --abbrev-ref HEAD
 - 增强讲解独立工作流
 - 文案分镜处理进度反馈
 - 英文字幕状态提示
+
+## 下一条候选基线
+
+待推送的新基线 `12fbd6a6` 额外包含：
+
+- 增强讲解英文字幕会先同步最新文案分镜，再生成英文字幕，避免第一次合成后丢字幕
+- 思维可视化标题生成链路统一优先使用用户输入标题
+- 后台用户列表接口与历史邮箱数据兼容
+- 本地文件下载、标准讲解音色试听、模块权限拆分与当前 3002 运行态保持一致
+
+## GitHub 不稳定时的备用方案
+
+如果 `git push` 或 `git fetch` 暂时失败，但又需要先在 `3003` 复现 `3002`：
+
+- 本地先冻结当前提交并记录 SHA
+- 使用 `git bundle` 或 `tar.gz` 把这次冻结快照上传到服务器
+- 在服务器临时目录解出源码或构建产物
+- 再覆盖 `/opt/manim-v2-3003-snapshot` 的 `backend/app` 和 `frontend/dist`
+- 本次 `3003` 已按该方案落地：
+- 冻结提交：`12fbd6a6e2b1efeea9398421b8205e05af367f32`
+- bundle：`/opt/manim_backups/deploy_tmp/repro_3002_12fbd6a6.bundle`
+- 服务器源码快照：`/opt/manim_backups/releases/manim-v2-3003-12fbd6a6`
+- 运行目录：`/opt/manim-v2-3003-snapshot`
+- 验证结果：`http://127.0.0.1:8003/health` healthy，`http://127.0.0.1:3003/` 返回 `200 OK`
+
+这不是“正式远端 repro 分支”替代品，但可以在 GitHub 网络恢复前，先保证 `3003` 与 `3002` 的运行效果一致
 
 ## 不包含后续实验改动
 
