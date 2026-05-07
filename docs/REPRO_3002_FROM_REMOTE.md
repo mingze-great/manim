@@ -15,8 +15,8 @@
 - 目标 repro 分支名：`repro/3002-12fbd6a6`
 - 说明：
   - 远端当前能直接拉取的稳定基线，仍然是 `repro/3002-105c9739`
-  - `12fbd6a6` 已在本地通过后端编译与前端构建校验，准备作为新的 repro 分支推送
-  - 受 GitHub 网络波动影响，`repro/3002-12fbd6a6` 目前还未推送成功
+  - `12fbd6a6` 已在本地通过后端编译与前端构建校验，并已推送为新的 repro 分支 `repro/3002-12fbd6a6`
+  - 服务器到 GitHub 的直接拉取仍有 TLS 波动，因此 `3003` 本次先使用 bundle 方式完成同版本落地
   - `feature/stickman-v2-viral-hook-optimization-acceptance` 用于继续开发和记录文档，不作为当前 `3002` 的唯一复现基准
 
 ## 为什么单独建 Repro 分支
@@ -121,7 +121,7 @@ git checkout -B repro/3002-105c9739 FETCH_HEAD
 git reset --hard FETCH_HEAD
 ```
 
-如果新的 repro 分支已经发布，则把上述分支名替换为对应版本，例如：
+当前最新运行态对应分支为：
 
 ```bash
 git fetch origin repro/3002-12fbd6a6
@@ -212,7 +212,7 @@ git rev-parse --abbrev-ref HEAD
 
 ## 下一条候选基线
 
-待推送的新基线 `12fbd6a6` 额外包含：
+当前最新已发布基线 `12fbd6a6` 额外包含：
 
 - 增强讲解英文字幕会先同步最新文案分镜，再生成英文字幕，避免第一次合成后丢字幕
 - 思维可视化标题生成链路统一优先使用用户输入标题

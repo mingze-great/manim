@@ -41,10 +41,12 @@
 - 当前推进状态：
   - `12fbd6a6` 已在本地通过 `python -m py_compile backend/app/api/admin.py backend/app/api/projects.py backend/app/api/tasks.py backend/app/config.py backend/app/models/user.py backend/app/schemas/user.py backend/app/services/background_task.py backend/app/services/chat.py backend/app/services/manim.py backend/app/services/stickman_generator.py backend/app/tasks/render.py backend/app/utils/cos_storage.py`
   - `12fbd6a6` 已在本地通过 `frontend/npm run build`
-  - `git ls-remote origin HEAD` 已恢复可读，但 `git push` 仍因 GitHub 网络波动失败，远端 repro 分支尚未正式发布
+  - `feature/stickman-v2-viral-hook-optimization-acceptance` 已推送到远端最新提交 `0920d24e`
+  - `repro/3002-12fbd6a6` 已成功发布到 GitHub，指向冻结运行态提交 `12fbd6a6`
   - `3003` 已使用 `12fbd6a6` 对应部署包完成复现，运行目录仍为 `/opt/manim-v2-3003-snapshot`
   - `3003` 本次整站备份：`/opt/manim_backups/manim-v2-3003-snapshot_20260507_235051.tar.gz`
   - `3003` 本次源码快照留档：`/opt/manim_backups/releases/manim-v2-3003-12fbd6a6`
+  - 服务器到 GitHub 的直接 `git clone/fetch` 仍有 TLS 波动，所以本次 `3003` 先通过 bundle + tar 包完成落地
 - 最近一次远端备份：`/opt/manim_backups/backup_20260507_*.tar.gz` 与目录内 `backup_*`
 - 当前服务器新版目录保留的非代码脏数据仅包括：
   - `.env.development`
