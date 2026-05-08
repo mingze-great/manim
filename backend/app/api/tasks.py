@@ -26,6 +26,7 @@ from app.services.explainer_generator import ExplainerGenerator
 from app.services.stickman_v2_assets import resolve_generation_assets
 from app.config import get_settings
 from app.tasks.celery_tasks import render_video_celery, generate_code_celery, generate_chat_celery
+from app.utils.title_utils import normalize_project_title
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -399,7 +400,7 @@ async def generate_code_stream(
                 manim_service.generate_code(
                     input_content, 
                     template_code,
-                    video_title=str(project_local.title or "").strip() or str(project_local.theme or "").strip(),
+                    video_title=normalize_project_title(project_local.title) or normalize_project_title(project_local.theme),
                     model=model,
                     reference_code=reference_code or None,
                 )
@@ -1123,7 +1124,7 @@ async def generate_explainer_video_stream(
             video_path = result["video_path"]
             video_filename = os.path.basename(video_path)
             video_url = f"/api/videos/{video_filename}"
-            project_local.title = str(project_local.title or "").strip() or str(project_local.theme or "").strip()
+            project_local.title = normalize_project_title(project_local.title) or normalize_project_title(project_local.theme)
             project_local.final_script = result.get("script")
             project_local.storyboard_json = json.dumps(result.get("storyboards") or [], ensure_ascii=False)
             project_local.image_assets_json = json.dumps(result.get("image_assets") or [], ensure_ascii=False)

@@ -184,7 +184,7 @@ export default function StickmanCreator() {
     setLoading(true)
     try {
       const { data } = await projectApi.create({
-        title: `视频讲解-${resolvedTheme}`,
+        title: resolvedTheme,
         theme: resolvedTheme,
         module_type: 'stickman',
         stickman_variant: stickmanVariant,

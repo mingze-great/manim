@@ -16,6 +16,7 @@ from app.models.project import Project
 from app.models.user import User
 from app.models.template import Template
 from app.services.manim import ManimService
+from app.utils.title_utils import normalize_project_title
 
 
 SHARED_TEMPLATE_EXAMPLES_DIR = pathlib.Path("/opt/manim/shared/videos/template_examples")
@@ -172,7 +173,7 @@ class BackgroundTaskManager:
                 db.commit()
             
             manim_service = ManimService(db)
-            project_title = str(project.title or "").strip() or str(project.theme or "").strip()
+            project_title = normalize_project_title(project.title) or normalize_project_title(project.theme)
             code = await manim_service.generate_code_with_progress(
                 script=project.final_script,
                 template_prompt=template_prompt,

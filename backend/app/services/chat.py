@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.models.project import Conversation, Project
 from app.models.video_topic_category import VideoTopicCategory
 from app.utils.llm_factory import LLMFactory
+from app.utils.title_utils import normalize_project_title
 
 
 def detect_language(text: str) -> str:
@@ -389,7 +390,7 @@ class ChatService:
                 manim_service = ManimService(self.db)
                 generated_code = await manim_service.generate_code(
                     project_final_script, 
-                    video_title=str(project.title or "").strip() or str(project.theme or "").strip(),
+                    video_title=normalize_project_title(project.title) or normalize_project_title(project.theme),
                     user_id=project.user_id if project else None
                 )
                 

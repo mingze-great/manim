@@ -253,7 +253,15 @@ def _normalize_project_video_url(project: Project):
 
 
 def _project_background_title(project: Project):
-    return str(project.title or project.theme or "").strip() or "主题内容"
+    return _normalize_project_title(project.title or project.theme or "") or "主题内容"
+
+
+def _normalize_project_title(title: str | None) -> str:
+    normalized = str(title or "").strip()
+    for prefix in ("视频创作-", "视频讲解-", "数学可视化-"):
+        if normalized.startswith(prefix):
+            normalized = normalized[len(prefix):].strip()
+    return normalized
 
 
 def _sync_template_background(project: Project, db: Session, flags: dict, force_template: bool = False):
@@ -499,7 +507,7 @@ def create_project(
     
     new_project = Project(
         user_id=current_user.id,
-        title=project.title,
+        title=_normalize_project_title(project.title) or _normalize_project_title(project.theme),
         theme=project.theme,
         category=project.category,
         module_type=project.module_type,
@@ -627,7 +635,10 @@ def update_project(
     invalidate_explainer_visuals = project.module_type == "explainer" and _explainer_visual_settings_changed(project, data)
 
     for key, value in data.items():
-        setattr(project, key, value)
+        if key == "title" and isinstance(value, str):
+            setattr(project, key, _normalize_project_title(value))
+        else:
+            setattr(project, key, value)
 
     if project.module_type in {"stickman", "explainer"} and any(key in data for key in {"generation_flags", "theme", "title"}):
         flags, background_changed = _sync_template_background(project, db, _load_generation_flags(project.generation_flags))
@@ -981,7 +992,7 @@ def generate_explainer_storyboard(
         visual_style_key,
         target_duration,
     )
-    project.title = str(project.title or "").strip() or str(project.theme or "").strip()
+    project.title = _normalize_project_title(project.title) or _normalize_project_title(project.theme)
     project.final_script = result.get("script")
     project.storyboard_json = json.dumps(result.get("storyboards") or [], ensure_ascii=False)
     project.generation_flags = json.dumps({**generation_flags, **(result.get("generation_flags") or {})}, ensure_ascii=False)
@@ -1004,7 +1015,7 @@ def update_explainer_storyboard(
     if not isinstance(storyboards, list) or not storyboards:
         raise HTTPException(status_code=400, detail="storyboards 不能为空")
     if isinstance(payload.get("title"), str) and payload.get("title").strip():
-        project.title = payload.get("title").strip()
+        project.title = _normalize_project_title(payload.get("title"))
     if isinstance(payload.get("final_script"), str):
         project.final_script = payload.get("final_script")
     if isinstance(payload.get("generation_flags"), dict):
@@ -1732,7 +1743,7 @@ async def regenerate_code(
     manim_code = await manim_service.generate_code(
         project.final_script,
         template_code=template_code,
-        video_title=str(project.title or "").strip() or str(project.theme or "").strip()
+        video_title=_normalize_project_title(project.title) or _normalize_project_title(project.theme)
     )
     
     project.manim_code = manim_code

@@ -16,6 +16,7 @@ from app.database import SessionLocal
 from app.models.project import Project
 from app.models.task import Task
 from app.services.manim import ManimService
+from app.utils.title_utils import normalize_project_title
 
 settings = get_settings()
 
@@ -256,7 +257,7 @@ def render_video_task(task_id: int, project_id: int, template_id: int = None, cu
             update_task_progress(task_id, 10, "processing", log="正在生成 Manim 代码...\n")
             
             script_val = str(project.theme) if _is_math_project(project) else (str(project.final_script) if project.final_script is not None else "")
-            project_title = str(project.title or "").strip() or str(project.theme or "").strip()
+            project_title = normalize_project_title(project.title) or normalize_project_title(project.theme)
             
             # 获取模板的参考代码
             reference_code = None
@@ -475,7 +476,7 @@ def generate_code_task(task_id: int, project_id: int, template_id: int = None, m
             update_task_progress(task_id, 10, "processing", log="准备生成脚本...\n")
             
             script_val = str(project.theme) if _is_math_project(project) else (str(project.final_script) if project.final_script is not None else "")
-            project_title = str(project.title or "").strip() or str(project.theme or "").strip()
+            project_title = normalize_project_title(project.title) or normalize_project_title(project.theme)
             
             # 获取模板代码
             template_code = None

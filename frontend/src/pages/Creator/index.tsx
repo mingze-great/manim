@@ -76,7 +76,7 @@ export default function Creator() {
 
   const handleTopicSelect = async (topic: string) => {
     await handleCreateProject({
-      title: `视频创作-${topic}`,
+      title: topic,
       theme: topic,
       category: selectedCategory?.name,
       module_type: 'manim',
@@ -92,7 +92,7 @@ export default function Creator() {
     setLoading(true)
     try {
       const { data } = await projectApi.create({
-        title: `数学可视化-${mathTopic.trim()}`,
+        title: mathTopic.trim(),
         theme: mathTopic.trim(),
         category: 'math',
         module_type: 'manim',
