@@ -9,13 +9,13 @@
 ## 基准
 
 - 当前已发布复现分支：`repro/3002-12fbd6a6`
-- 当前已发布复现提交：`12fbd6a6`
+- 当前已发布复现提交：`de917c50`
 - 开发分支：`feature/stickman-v2-viral-hook-optimization-acceptance`
-- 当前本地冻结的完整 3002 发布快照：`12fbd6a6` `fix: align acceptance deploy with local media flow`
+- 当前本地冻结的完整 3002 发布快照：`de917c50` `fix: remove generated title prefixes`
 - 目标 repro 分支名：`repro/3002-12fbd6a6`
 - 说明：
   - 远端当前能直接拉取的稳定基线，已经更新为 `repro/3002-12fbd6a6`
-  - `12fbd6a6` 已在本地通过后端编译与前端构建校验，并已推送为新的 repro 分支 `repro/3002-12fbd6a6`
+  - `de917c50` 已在本地通过后端编译与前端构建校验，并已推送为新的 repro 分支 `repro/3002-12fbd6a6`
   - 服务器到 GitHub 的直接拉取仍有 TLS 波动，因此 `3003` 本次先使用 bundle 方式完成同版本落地
   - `feature/stickman-v2-viral-hook-optimization-acceptance` 用于继续开发和记录文档，不作为当前 `3002` 的唯一复现基准
 
@@ -80,7 +80,7 @@ curl -I http://127.0.0.1:3010/
 预期：
 
 - 分支：`repro/3002-12fbd6a6`
-- 提交：`12fbd6a6`
+- 提交：`de917c50`
 
 ## 后续要在当前 3002 基础上继续优化时怎么做
 
@@ -204,7 +204,7 @@ git rev-parse --abbrev-ref HEAD
 
 ## 当前最新基线
 
-当前最新已发布基线 `12fbd6a6` 额外包含：
+当前最新已发布基线 `de917c50` 额外包含：
 
 - 增强讲解英文字幕会先同步最新文案分镜，再生成英文字幕，避免第一次合成后丢字幕
 - 思维可视化标题生成链路统一优先使用用户输入标题

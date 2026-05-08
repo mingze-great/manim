@@ -20,8 +20,8 @@
 ## 当前快照
 
 - 当前 3002 对应分支：`feature/stickman-v2-viral-hook-optimization-acceptance`
-- 当前已发布的远程复现基线：`repro/3002-12fbd6a6` @ `12fbd6a6` `fix: align acceptance deploy with local media flow`
-- 当前本地冻结的完整 3002 发布快照：`12fbd6a6` `fix: align acceptance deploy with local media flow`
+- 当前已发布的远程复现基线：`repro/3002-12fbd6a6` @ `de917c50` `fix: remove generated title prefixes`
+- 当前本地冻结的完整 3002 发布快照：`de917c50` `fix: remove generated title prefixes`
 - 目标 repro 分支名：`repro/3002-12fbd6a6`
 - 关键说明：
   - `2b714c21` 引入“最终文案多行时，每行锁成一个分镜”
@@ -30,22 +30,22 @@
   - `2d02dfc6` 增加“可选英文字幕”能力，当前 3002 后端源码停在这版
   - `2267ee1f`、`105c9739` 为当前 3002 前端新增的英文字幕状态与进度反馈
   - `c0e7a83c` 修正增强讲解英文字幕同步时序、后台用户列表兼容与标题强约束
-  - `12fbd6a6` 补齐本地媒体链路、权限拆分、下载与标准讲解音色试听等当前运行态改动
+  - `de917c50` 修复项目标题前缀污染，确保思维可视化标题使用用户输入原文
 - 当前 3002 关键行为：
   - 最终文案区多行文本优先按“每行一个分镜”处理
   - 对话默认风格仍为 `classic`
 - 当前 3002 实际运行态说明：
   - 服务器目录：`/opt/manim-v2`
-  - 当前线上运行效果对应的本地冻结快照：`12fbd6a6`
+  - 当前线上运行效果对应的本地冻结快照：`de917c50`
   - 该快照已在本地通过后端编译与前端构建校验，并已通过 tar 直传方式部署到 `3002`
 - 当前推进状态：
-  - `12fbd6a6` 已在本地通过 `python -m py_compile backend/app/api/admin.py backend/app/api/projects.py backend/app/api/tasks.py backend/app/config.py backend/app/models/user.py backend/app/schemas/user.py backend/app/services/background_task.py backend/app/services/chat.py backend/app/services/manim.py backend/app/services/stickman_generator.py backend/app/tasks/render.py backend/app/utils/cos_storage.py`
-  - `12fbd6a6` 已在本地通过 `frontend/npm run build`
-  - `feature/stickman-v2-viral-hook-optimization-acceptance` 已推送到远端最新提交 `f9ee4155`
-  - `repro/3002-12fbd6a6` 已成功发布到 GitHub，指向冻结运行态提交 `12fbd6a6`
-  - `3003` 已使用 `12fbd6a6` 对应部署包完成复现，运行目录仍为 `/opt/manim-v2-3003-snapshot`
+  - `de917c50` 已在本地通过 `python -m py_compile backend/app/api/admin.py backend/app/api/projects.py backend/app/api/tasks.py backend/app/config.py backend/app/models/user.py backend/app/schemas/user.py backend/app/services/background_task.py backend/app/services/chat.py backend/app/services/manim.py backend/app/services/stickman_generator.py backend/app/tasks/render.py backend/app/utils/cos_storage.py backend/app/utils/title_utils.py`
+  - `de917c50` 已在本地通过 `frontend/npm run build`
+  - `feature/stickman-v2-viral-hook-optimization-acceptance` 已推送到远端最新提交 `de917c50`
+  - `repro/3002-12fbd6a6` 已成功发布到 GitHub，当前指向冻结运行态提交 `de917c50`
+  - `3003` 已使用 `de917c50` 对应部署包完成复现，运行目录仍为 `/opt/manim-v2-3003-snapshot`
   - `3003` 本次整站备份：`/opt/manim_backups/manim-v2-3003-snapshot_20260507_235051.tar.gz`
-  - `3003` 本次源码快照留档：`/opt/manim_backups/releases/manim-v2-3003-12fbd6a6`
+  - `3003` 本次源码快照留档：`/opt/manim_backups/releases/manim-v2-3003-de917c50`
   - 服务器到 GitHub 的直接 `git clone/fetch` 仍有 TLS 波动，所以本次 `3003` 先通过 bundle + tar 包完成落地
 - 最近一次远端备份：`/opt/manim_backups/backup_20260507_*.tar.gz` 与目录内 `backup_*`
 - 当前服务器新版目录保留的非代码脏数据仅包括：

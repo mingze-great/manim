@@ -12,7 +12,7 @@
 如果要基于当前 `3002` 最新版继续开发，统一使用下面这组基线：
 
 - 远程稳定分支：`repro/3002-12fbd6a6`
-- 冻结稳定提交：`12fbd6a6e2b1efeea9398421b8205e05af367f32`
+- 冻结稳定提交：`de917c50066bd502ed9cc9097251a7fd3ba07b28`
 - 说明：这是当前 `3002` 对应的稳定快照，也是 `3003` 已复现对齐的基线
 
 不要直接基于当前本地脏 worktree 继续开发。
@@ -75,7 +75,7 @@ Set-Location -LiteralPath "E:\ai\agent_stickman_v2_3002_clean"
 ```powershell
 git fetch origin repro/3002-12fbd6a6
 git checkout -B repro/3002-12fbd6a6 FETCH_HEAD
-git reset --hard 12fbd6a6e2b1efeea9398421b8205e05af367f32
+git reset --hard de917c50066bd502ed9cc9097251a7fd3ba07b28
 ```
 
 ### 4. 基于该基线创建新的开发分支
@@ -103,7 +103,7 @@ git status -sb
 预期：
 
 - 当前分支是你刚创建的新开发分支
-- `git rev-parse HEAD` 输出：`12fbd6a6e2b1efeea9398421b8205e05af367f32`
+- `git rev-parse HEAD` 输出：`de917c50066bd502ed9cc9097251a7fd3ba07b28`
 - 工作区是干净的
 
 ## Linux / 服务器侧干净工作区重建步骤
@@ -117,7 +117,7 @@ git clone git@github.com:mingze-great/manim.git /opt/manim-v2-dev-from-3002
 cd /opt/manim-v2-dev-from-3002
 git fetch origin repro/3002-12fbd6a6
 git checkout -B repro/3002-12fbd6a6 FETCH_HEAD
-git reset --hard 12fbd6a6e2b1efeea9398421b8205e05af367f32
+git reset --hard de917c50066bd502ed9cc9097251a7fd3ba07b28
 git checkout -B feature/next-acceptance-iteration-on-3002-base
 git rev-parse --abbrev-ref HEAD
 git rev-parse HEAD
@@ -133,7 +133,7 @@ git status -sb
 
 固定基线：
 - 远程分支：repro/3002-12fbd6a6
-- 固定提交：12fbd6a6e2b1efeea9398421b8205e05af367f32
+- 固定提交：de917c50066bd502ed9cc9097251a7fd3ba07b28
 
 执行要求：
 1. 新建干净目录克隆仓库。
@@ -149,7 +149,7 @@ git status -sb
 最推荐的实际起点是：
 
 - 基线：`repro/3002-12fbd6a6`
-- 提交：`12fbd6a6e2b1efeea9398421b8205e05af367f32`
+- 提交：`de917c50066bd502ed9cc9097251a7fd3ba07b28`
 - 新分支：你自己的 `feature/*-on-3002-base`
 
 不要用下面这些作为“当前 3002 稳定开发起点”：
