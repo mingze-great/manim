@@ -8,13 +8,13 @@
 
 ## 基准
 
-- 当前已发布复现分支：`repro/3002-105c9739`
-- 当前已发布复现提交：`105c9739`
+- 当前已发布复现分支：`repro/3002-12fbd6a6`
+- 当前已发布复现提交：`12fbd6a6`
 - 开发分支：`feature/stickman-v2-viral-hook-optimization-acceptance`
 - 当前本地冻结的完整 3002 发布快照：`12fbd6a6` `fix: align acceptance deploy with local media flow`
 - 目标 repro 分支名：`repro/3002-12fbd6a6`
 - 说明：
-  - 远端当前能直接拉取的稳定基线，仍然是 `repro/3002-105c9739`
+  - 远端当前能直接拉取的稳定基线，已经更新为 `repro/3002-12fbd6a6`
   - `12fbd6a6` 已在本地通过后端编译与前端构建校验，并已推送为新的 repro 分支 `repro/3002-12fbd6a6`
   - 服务器到 GitHub 的直接拉取仍有 TLS 波动，因此 `3003` 本次先使用 bundle 方式完成同版本落地
   - `feature/stickman-v2-viral-hook-optimization-acceptance` 用于继续开发和记录文档，不作为当前 `3002` 的唯一复现基准
@@ -23,7 +23,7 @@
 
 - `3002` 线上状态需要一个“冻结快照”，保证任何时候都能按同一个分支和提交复现。
 - 开发分支会继续前进，包含未完全验证的新改动；如果直接拿开发分支复现，后面很容易出现“同名分支、不同效果”。
-- `repro/3002-105c9739` 的作用就是把“当时线上稳定版本”单独钉住：
+- `repro/3002-12fbd6a6` 的作用就是把“当前线上稳定版本”单独钉住：
   - 方便新机器复现
   - 方便回滚
   - 方便和后续优化版本做对比
@@ -37,8 +37,8 @@
 ```bash
 git clone <repo-url> /opt/manim-v2-copy
 cd /opt/manim-v2-copy
-git fetch origin repro/3002-105c9739
-git checkout -B repro/3002-105c9739 FETCH_HEAD
+git fetch origin repro/3002-12fbd6a6
+git checkout -B repro/3002-12fbd6a6 FETCH_HEAD
 git reset --hard FETCH_HEAD
 ```
 
@@ -79,8 +79,8 @@ curl -I http://127.0.0.1:3010/
 
 预期：
 
-- 分支：`repro/3002-105c9739`
-- 提交：`105c9739`
+- 分支：`repro/3002-12fbd6a6`
+- 提交：`12fbd6a6`
 
 ## 后续要在当前 3002 基础上继续优化时怎么做
 
@@ -116,14 +116,6 @@ curl -I http://127.0.0.1:3010/
 ### 1. 拉取远程分支
 
 ```bash
-git fetch origin repro/3002-105c9739
-git checkout -B repro/3002-105c9739 FETCH_HEAD
-git reset --hard FETCH_HEAD
-```
-
-当前最新运行态对应分支为：
-
-```bash
 git fetch origin repro/3002-12fbd6a6
 git checkout -B repro/3002-12fbd6a6 FETCH_HEAD
 git reset --hard FETCH_HEAD
@@ -132,9 +124,9 @@ git reset --hard FETCH_HEAD
 如果本地已经有该分支：
 
 ```bash
-git fetch origin repro/3002-105c9739
-git checkout repro/3002-105c9739
-git reset --hard origin/repro/3002-105c9739
+git fetch origin repro/3002-12fbd6a6
+git checkout repro/3002-12fbd6a6
+git reset --hard origin/repro/3002-12fbd6a6
 ```
 
 ### 2. 后端校验
@@ -198,8 +190,8 @@ git rev-parse --abbrev-ref HEAD
 
 - 健康检查返回 `status=healthy`
 - 前端返回 `200 OK`
-- git 分支是 `repro/3002-105c9739`
-- git 提交是 `105c9739`
+- git 分支是 `repro/3002-12fbd6a6`
+- git 提交是 `12fbd6a6`
 
 ## 当前包含能力
 
@@ -210,7 +202,7 @@ git rev-parse --abbrev-ref HEAD
 - 文案分镜处理进度反馈
 - 英文字幕状态提示
 
-## 下一条候选基线
+## 当前最新基线
 
 当前最新已发布基线 `12fbd6a6` 额外包含：
 

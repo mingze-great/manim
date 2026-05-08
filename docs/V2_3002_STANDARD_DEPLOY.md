@@ -20,7 +20,7 @@
 ## 当前快照
 
 - 当前 3002 对应分支：`feature/stickman-v2-viral-hook-optimization-acceptance`
-- 当前已发布的远程复现基线：`repro/3002-105c9739` @ `105c9739` `feat: add progress feedback for storyboard actions`
+- 当前已发布的远程复现基线：`repro/3002-12fbd6a6` @ `12fbd6a6` `fix: align acceptance deploy with local media flow`
 - 当前本地冻结的完整 3002 发布快照：`12fbd6a6` `fix: align acceptance deploy with local media flow`
 - 目标 repro 分支名：`repro/3002-12fbd6a6`
 - 关键说明：
@@ -41,7 +41,7 @@
 - 当前推进状态：
   - `12fbd6a6` 已在本地通过 `python -m py_compile backend/app/api/admin.py backend/app/api/projects.py backend/app/api/tasks.py backend/app/config.py backend/app/models/user.py backend/app/schemas/user.py backend/app/services/background_task.py backend/app/services/chat.py backend/app/services/manim.py backend/app/services/stickman_generator.py backend/app/tasks/render.py backend/app/utils/cos_storage.py`
   - `12fbd6a6` 已在本地通过 `frontend/npm run build`
-  - `feature/stickman-v2-viral-hook-optimization-acceptance` 已推送到远端最新提交 `0920d24e`
+  - `feature/stickman-v2-viral-hook-optimization-acceptance` 已推送到远端最新提交 `f9ee4155`
   - `repro/3002-12fbd6a6` 已成功发布到 GitHub，指向冻结运行态提交 `12fbd6a6`
   - `3003` 已使用 `12fbd6a6` 对应部署包完成复现，运行目录仍为 `/opt/manim-v2-3003-snapshot`
   - `3003` 本次整站备份：`/opt/manim_backups/manim-v2-3003-snapshot_20260507_235051.tar.gz`
@@ -54,7 +54,7 @@
   - `.env.production`
   - `frontend/tsconfig.tsbuildinfo`
   - `backend/uploads/`
-- 如需严格复现“当前 3002 最新运行态”，优先使用 `12fbd6a6` 对应源码与构建产物；待 GitHub 恢复后再发布 `repro/3002-12fbd6a6`
+- 如需严格复现“当前 3002 最新运行态”，直接拉取 `repro/3002-12fbd6a6`；如服务器侧 GitHub TLS 暂时不稳定，再按本文档备用方案使用 bundle 或 tar 包落地
 
 ## 磁盘与队列
 
