@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 from app.utils.llm_factory import LLMFactory
 import json
+from pathlib import Path
 
 
 def detect_language(text: str) -> str:
@@ -261,6 +262,46 @@ class ManimService:
     def _normalize_video_title(self, video_title: str | None) -> str:
         return str(video_title or "").strip()
 
+    def inject_background_image(self, code: str, background_image_path: str | None) -> str:
+        import re
+
+        raw_path = str(background_image_path or "").strip()
+        if not code or not raw_path:
+            return code
+
+        background_path = Path(raw_path)
+        if not background_path.exists():
+            return code
+
+        normalized_path = background_path.resolve().as_posix()
+        quoted_path = json.dumps(normalized_path, ensure_ascii=False)
+
+        if "_mm_background = ImageMobject(" in code:
+            return re.sub(
+                r'_mm_background\s*=\s*ImageMobject\((["\']).*?\1\)',
+                f"_mm_background = ImageMobject({quoted_path})",
+                code,
+                count=1,
+            )
+
+        scene_match = re.search(r'(def\s+construct\s*\(self\)\s*:\s*\n)', code)
+        if not scene_match:
+            return code
+
+        insert_at = scene_match.end()
+        snippet = (
+            "        _mm_background = ImageMobject("
+            f"{quoted_path}"
+            ")\n"
+            "        _mm_background.set_z_index(-100)\n"
+            "        _mm_background.move_to(ORIGIN)\n"
+            "        _mm_background.set(width=config.frame_width)\n"
+            "        if _mm_background.height < config.frame_height:\n"
+            "            _mm_background.set(height=config.frame_height)\n"
+            "        self.add(_mm_background)\n"
+        )
+        return code[:insert_at] + snippet + code[insert_at:]
+
     def enforce_intro_title(self, code: str, video_title: str | None) -> str:
         import re
 
@@ -285,7 +326,7 @@ class ManimService:
         import asyncio
         return asyncio.run(self.generate_code(script))
     
-    async def generate_code(self, script: str, template_code: str = None, video_title: str = None, model: str = None, reference_code: str = None, retry_callback=None, **_ignored) -> tuple:
+    async def generate_code(self, script: str, template_code: str = None, video_title: str = None, model: str = None, reference_code: str = None, retry_callback=None, background_image_path: str = None, **_ignored) -> tuple:
         language = detect_language(script)
         
         # 数学可视化参考代码模式（优先级最高）
@@ -432,6 +473,7 @@ Requirements:
         
         code = self.fix_manim_compatibility(code)
         code = self.enforce_intro_title(code, video_title)
+        code = self.inject_background_image(code, background_image_path)
         
         import ast
         max_auto_fix = 2
@@ -444,8 +486,9 @@ Requirements:
             except SyntaxError as e:
                 print(f"[ManimService] 脚本语法检查失败(第{fix_attempt+1}次): {e.msg} 行{e.lineno}")
                 if fix_attempt == 0:
-                    code, _ = self.validate_code(code)
+                    code, _ = self.validate_code(code, video_title=video_title)
                     code = self.enforce_intro_title(code, video_title)
+                    code = self.inject_background_image(code, background_image_path)
                     try:
                         ast.parse(code)
                         auto_fixed = True
@@ -461,10 +504,12 @@ Requirements:
                         code = await self._ai_fix_syntax(code, str(e), script, system_prompt)
                         code = self.fix_manim_compatibility(code)
                         code = self.enforce_intro_title(code, video_title)
+                        code = self.inject_background_image(code, background_image_path)
                     except Exception as fix_err:
                         print(f"[ManimService] AI修复也失败: {fix_err}")
         
         code = self.enforce_intro_title(code, video_title)
+        code = self.inject_background_image(code, background_image_path)
         return code
     
     def fix_manim_compatibility(self, code: str) -> str:

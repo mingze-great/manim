@@ -72,11 +72,46 @@ def _resolve_stickman_generation_inputs(project: Project, generation_flags: dict
     return resolved
 
 
+def _resolve_explainer_generation_inputs(project: Project, generation_flags: dict, db: Session):
+    resolved = resolve_generation_assets(
+        db,
+        generation_flags,
+        str(project.background_image_path) if getattr(project, "background_image_path", None) else None,
+        str(project.style_reference_image_path) if getattr(project, "style_reference_image_path", None) else None,
+        str(project.style_reference_notes) if getattr(project, "style_reference_notes", None) else None,
+    )
+    if resolved.get("background_template_name"):
+        generation_flags["background_template_name"] = resolved["background_template_name"]
+    if resolved.get("scene_style_library"):
+        generation_flags["scene_style_library"] = resolved["scene_style_library"]
+    else:
+        generation_flags.pop("scene_style_library", None)
+    if resolved.get("scene_style_library_name"):
+        generation_flags["scene_style_library_name"] = resolved["scene_style_library_name"]
+    else:
+        generation_flags.pop("scene_style_library_name", None)
+    return resolved
+
+
 def _project_query_for_user(db: Session, current_user: User):
     query = db.query(Project)
     if not current_user.is_admin:
         query = query.filter(Project.user_id == current_user.id)
     return query
+
+
+def _prepare_manim_code_for_render(db: Session, project: Project) -> str:
+    manim_code = str(project.manim_code or "").strip()
+    if not manim_code:
+        return ""
+    manim_service = ManimService(db)
+    return manim_service.inject_background_image(
+        manim_service.enforce_intro_title(
+            manim_service.fix_manim_compatibility(manim_code),
+            str(project.title or "").strip() or str(project.theme or "").strip(),
+        ),
+        str(project.background_image_path) if getattr(project, "background_image_path", None) else None,
+    )
 
 
 def _is_math_project(project: Project | None) -> bool:
@@ -402,6 +437,7 @@ async def generate_code_stream(
                     video_title=str(project_local.title or "").strip() or str(project_local.theme or "").strip(),
                     model=model,
                     reference_code=reference_code or None,
+                    background_image_path=str(project_local.background_image_path) if getattr(project_local, "background_image_path", None) else None,
                 )
             )
             
@@ -473,7 +509,7 @@ async def render_video_stream(
             yield f"data: {json.dumps({'type': 'error', 'content': '系统繁忙，请稍后再试'})}\n\n"
         return StreamingResponse(error_gen(), media_type="text/event-stream")
     
-    manim_code_str = str(project.manim_code) if project.manim_code else ""
+    manim_code_str = _prepare_manim_code_for_render(db, project)
     if not manim_code_str:
         async def error_gen():
             yield f"data: {json.dumps({'type': 'error', 'content': '请先生成脚本内容'})}\n\n"
@@ -1088,6 +1124,7 @@ async def generate_explainer_video_stream(
             except Exception:
                 generation_flags = {}
             generator = _build_explainer_generator()
+            resolved_inputs = _resolve_explainer_generation_inputs(project_local, generation_flags, db_session)
             generation_task = asyncio.create_task(asyncio.to_thread(
                 lambda: generator.generate(
                     str(project_local.theme),
@@ -1099,12 +1136,13 @@ async def generate_explainer_video_stream(
                     str(project_local.tts_provider or "dashscope_cosyvoice"),
                     str(project_local.tts_voice or "longshuo_v3"),
                     str(project_local.tts_rate or "+0%"),
-                    str(project_local.background_image_path) if getattr(project_local, 'background_image_path', None) else None,
-                    str(project_local.style_reference_image_path) if project_local.style_reference_image_path else None,
-                    str(project_local.style_reference_notes) if project_local.style_reference_notes else None,
+                    resolved_inputs.get("background_image_path"),
+                    resolved_inputs.get("style_reference_image_path"),
+                    resolved_inputs.get("style_reference_notes"),
                     opening_hook_mode=str(generation_flags.get("opening_hook_mode") or "hook_question"),
                     visual_style_key=str(generation_flags.get("visual_style_key") or "deep_blue_emotional"),
                     target_duration=int(generation_flags.get("target_duration") or 0) or None,
+                    generation_flags=generation_flags,
                 )
             ))
             while True:

@@ -72,13 +72,16 @@ class ExplainerGenerator:
         opening_hook_mode: str | None = None,
         visual_style_key: str | None = None,
         target_duration: int | None = None,
+        generation_flags: Optional[dict] = None,
     ):
         def report(progress: int, message: str):
             if progress_callback:
                 progress_callback(progress, message)
 
         report(5, "开始生成讲解型视频")
+        incoming_flags = dict(generation_flags or {})
         script_bundle = self.generate_storyboard_data(source_text, storyboard_count, opening_hook_mode, visual_style_key, target_duration)
+        script_bundle["generation_flags"] = {**incoming_flags, **script_bundle["generation_flags"]}
         report(20, "脚本生成完成")
         engine_storyboards = self._to_engine_storyboards(script_bundle["storyboards"], script_bundle["title"], {**script_bundle["generation_flags"], "aspect_ratio": aspect_ratio})
         effective_background_path = background_image_path or self._ensure_default_background(script_bundle["title"], script_bundle["generation_flags"])
@@ -91,6 +94,7 @@ class ExplainerGenerator:
                 effective_background_path,
                 style_reference_image_path,
                 style_reference_notes,
+                script_bundle["generation_flags"],
             )
             result = self._compose_engine_without_section_panels(
                 script_bundle["title"],
@@ -139,6 +143,7 @@ class ExplainerGenerator:
             effective_background_path,
             style_reference_image_path,
             style_reference_notes,
+            generation_flags,
         )
         synced_storyboards = self._sync_storyboards_with_assets(storyboards, assets)
         merged_flags = {**(generation_flags or {}), **flags, "module_type": "explainer"}
@@ -590,12 +595,24 @@ class ExplainerGenerator:
             return "讲解型视频"
         return cleaned.split("\n")[0][:24]
 
-    def _generate_engine_images(self, storyboards, aspect_ratio, project_id=None, progress_callback=None, background_image_path=None, style_reference_image_path=None, style_reference_notes=None):
+    def _generate_engine_images(self, storyboards, aspect_ratio, project_id=None, progress_callback=None, background_image_path=None, style_reference_image_path=None, style_reference_notes=None, generation_flags=None):
         original_enabled = getattr(self.engine, "material_library_enabled", False)
         original_library = getattr(self.engine, "material_library", [])
         try:
-            self.engine.material_library_enabled = False
-            self.engine.material_library = []
+            active_flags = dict(generation_flags or {})
+            selected_scene_style = active_flags.get("scene_style_library") if isinstance(active_flags, dict) else None
+            override_library = []
+            if isinstance(selected_scene_style, dict):
+                override_library = self.engine._load_material_library_from_paths(
+                    str(selected_scene_style.get("material_json_path") or ""),
+                    str(selected_scene_style.get("package_dir") or ""),
+                )
+            if override_library:
+                self.engine.material_library_enabled = True
+                self.engine.material_library = override_library
+            else:
+                self.engine.material_library_enabled = False
+                self.engine.material_library = []
             assets, flags = self.engine.generate_images(
                 storyboards,
                 aspect_ratio,
@@ -604,6 +621,7 @@ class ExplainerGenerator:
                 background_image_path,
                 style_reference_image_path,
                 style_reference_notes,
+                generation_flags=active_flags,
             )
             normalized_assets = []
             ai_scene_count = 0

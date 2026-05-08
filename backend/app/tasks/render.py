@@ -185,7 +185,7 @@ def pick_valid_rendered_video(temp_dir: str):
     return valid[0] if valid else None
 
 
-def run_async_code_gen(script_val, template_code, video_title=None, reference_code=None, model=None):
+def run_async_code_gen(script_val, template_code, video_title=None, reference_code=None, model=None, background_image_path=None):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
@@ -193,7 +193,14 @@ def run_async_code_gen(script_val, template_code, video_title=None, reference_co
         manim_service = ManimService(db)
         result = loop.run_until_complete(
             asyncio.wait_for(
-                manim_service.generate_code(script_val, template_code=template_code, video_title=video_title, model=model, reference_code=reference_code),
+                manim_service.generate_code(
+                    script_val,
+                    template_code=template_code,
+                    video_title=video_title,
+                    model=model,
+                    reference_code=reference_code,
+                    background_image_path=background_image_path,
+                ),
                 timeout=CODE_GENERATION_ASYNC_TIMEOUT
             )
         )
@@ -232,6 +239,9 @@ def render_video_task(task_id: int, project_id: int, template_id: int = None, cu
             update_task_progress(task_id, 0, "failed", error_message="Project not found")
             raise RuntimeError("Project not found")
 
+        manim_service = ManimService(db)
+        project_title = str(project.title or "").strip() or str(project.theme or "").strip()
+
         def fail_render(error_message: str, log_message: str, progress: int = 80):
             project.status = "failed"
             project.error_message = error_message
@@ -256,7 +266,6 @@ def render_video_task(task_id: int, project_id: int, template_id: int = None, cu
             update_task_progress(task_id, 10, "processing", log="正在生成 Manim 代码...\n")
             
             script_val = str(project.theme) if _is_math_project(project) else (str(project.final_script) if project.final_script is not None else "")
-            project_title = str(project.title or "").strip() or str(project.theme or "").strip()
             
             # 获取模板的参考代码
             reference_code = None
@@ -269,7 +278,15 @@ def render_video_task(task_id: int, project_id: int, template_id: int = None, cu
                     reference_code = _resolve_math_reference_code(template) if _is_math_project(project) else template.reference_code
             
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(run_async_code_gen, script_val, template_code, project_title, reference_code, None)
+                future = executor.submit(
+                    run_async_code_gen,
+                    script_val,
+                    template_code,
+                    project_title,
+                    reference_code,
+                    None,
+                    str(project.background_image_path) if getattr(project, "background_image_path", None) else None,
+                )
                 try:
                     manim_code = future.result(timeout=CODE_GENERATION_TOTAL_TIMEOUT)
                 except concurrent.futures.TimeoutError:
@@ -293,7 +310,13 @@ def render_video_task(task_id: int, project_id: int, template_id: int = None, cu
                 if match:
                     scene_name = match.group(1)
             
-            code_content = manim_code or f"""from manim import *
+            code_content = manim_service.inject_background_image(
+                manim_service.enforce_intro_title(
+                    manim_service.fix_manim_compatibility(manim_code),
+                    project_title,
+                ),
+                str(project.background_image_path) if getattr(project, "background_image_path", None) else None,
+            ) if manim_code else f"""from manim import *
 
 class {scene_name}(Scene):
     def construct(self):
@@ -495,7 +518,15 @@ def generate_code_task(task_id: int, project_id: int, template_id: int = None, m
             
             # 使用线程池执行异步代码生成
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(run_async_code_gen, script_val, template_code, project_title, reference_code, model)
+                future = executor.submit(
+                    run_async_code_gen,
+                    script_val,
+                    template_code,
+                    project_title,
+                    reference_code,
+                    model,
+                    str(project.background_image_path) if getattr(project, "background_image_path", None) else None,
+                )
                 
                 # 等待完成，更新进度
                 progress = 30

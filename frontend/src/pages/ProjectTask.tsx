@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
-import { Card, Progress, Button, Space, message, Spin, Tabs, Select } from 'antd'
-import { DownloadOutlined, PlayCircleOutlined, PlaySquareOutlined, CloudUploadOutlined } from '@ant-design/icons'
+import { Card, Progress, Button, Space, message, Spin, Tabs, Select, Upload } from 'antd'
+import { DownloadOutlined, PlayCircleOutlined, PlaySquareOutlined, CloudUploadOutlined, UploadOutlined } from '@ant-design/icons'
 import { projectApi, Task, Project } from '@/services/project'
 import { resolveBackendUrl } from '@/services/api'
 import { useAuthStore } from '@/stores/authStore'
@@ -53,6 +53,7 @@ export default function ProjectTask() {
   const [terminalLog, setTerminalLog] = useState('')
   const [showTerminal, setShowTerminal] = useState(false)
   const [renderError, setRenderError] = useState<string | null>(null)
+  const [uploadingBackground, setUploadingBackground] = useState(false)
   const [selectedModel, setSelectedModel] = useState<string>('')
   const [availableModels, setAvailableModels] = useState<string[]>([])
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null)
@@ -229,6 +230,20 @@ export default function ProjectTask() {
       message.error(error.response?.data?.detail || error.message || '生成失败')
       setGeneratingCode(false)
     }
+  }
+
+  const handleUploadBackgroundImage = async (file: File) => {
+    setUploadingBackground(true)
+    try {
+      const { data } = await projectApi.uploadBackgroundImage(Number(id), file)
+      setProject(data)
+      message.success('背景图已上传，后续生成脚本和渲染会自动使用')
+    } catch (error: any) {
+      message.error(error.response?.data?.detail || error.message || '上传背景图失败')
+    } finally {
+      setUploadingBackground(false)
+    }
+    return false
   }
 
   const handleGenerateVideo = async () => {
@@ -565,6 +580,27 @@ export default function ProjectTask() {
                     onChange={setSelectedTemplateId}
                     category={isMathProject(project) ? 'math' : 'thinking'}
                   />
+
+                  {!isMathProject(project) && (
+                    <div className="mt-4 p-4 rounded-xl border border-gray-200 bg-gray-50">
+                      <div className="text-sm font-medium text-gray-700 mb-2">可选背景图</div>
+                      <div className="text-xs text-gray-500 mb-3">
+                        上传后会在当前模板基础上自动铺设背景图，生成脚本和后续渲染都会直接使用。
+                      </div>
+                      <Space direction="vertical" style={{ width: '100%' }}>
+                        <Upload beforeUpload={handleUploadBackgroundImage} showUploadList={false} accept=".png,.jpg,.jpeg,.webp">
+                          <Button icon={<UploadOutlined />} loading={uploadingBackground}>上传背景图</Button>
+                        </Upload>
+                        {project?.background_image_path && (
+                          <img
+                            src={resolveBackendUrl(`/api/background-images/${project.background_image_path.split(/[\\\\/]/).pop()}`)}
+                            alt="background-preview"
+                            style={{ width: '100%', maxWidth: 360, borderRadius: 12, border: '1px solid #e5e7eb' }}
+                          />
+                        )}
+                      </Space>
+                    </div>
+                  )}
 
                 </div>
 

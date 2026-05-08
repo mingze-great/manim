@@ -168,12 +168,44 @@ def _resolve_stickman_generation_inputs(db: Session, project: Project):
     return generation_flags, resolved
 
 
+def _resolve_explainer_generation_inputs(db: Session, project: Project):
+    try:
+        generation_flags = json.loads(project.generation_flags or "{}")
+    except Exception:
+        generation_flags = {}
+    resolved = resolve_generation_assets(
+        db,
+        generation_flags,
+        str(project.background_image_path) if project.background_image_path else None,
+        str(project.style_reference_image_path) if project.style_reference_image_path else None,
+        str(project.style_reference_notes) if project.style_reference_notes else None,
+    )
+    if resolved.get("background_template_name"):
+        generation_flags["background_template_name"] = resolved["background_template_name"]
+    if resolved.get("scene_style_library"):
+        generation_flags["scene_style_library"] = resolved["scene_style_library"]
+    else:
+        generation_flags.pop("scene_style_library", None)
+    if resolved.get("scene_style_library_name"):
+        generation_flags["scene_style_library_name"] = resolved["scene_style_library_name"]
+    else:
+        generation_flags.pop("scene_style_library_name", None)
+    return generation_flags, resolved
+
+
 def _load_generation_flags(raw_value: str | None) -> dict:
     try:
         value = json.loads(raw_value or "{}")
     except Exception:
         value = {}
     return value if isinstance(value, dict) else {}
+
+
+def _strip_resolved_generation_assets(flags: dict | None) -> dict:
+    next_flags = dict(flags or {})
+    for key in {"scene_style_library", "scene_style_library_name"}:
+        next_flags.pop(key, None)
+    return next_flags
 
 
 def _background_source(flags: dict) -> str:
@@ -369,6 +401,7 @@ def _stickman_visual_settings_changed(project: Project, data: dict) -> bool:
             "opening_intro_enabled",
             "opening_style_key",
             "opening_template_key",
+            "scene_style_library_key",
         }
         for key in watched_keys:
             if current_flags.get(key) != next_flags.get(key):
@@ -383,6 +416,19 @@ def _explainer_visual_settings_changed(project: Project, data: dict) -> bool:
             next_value = str(data.get(key) or "").strip()
             current_value = str(getattr(project, key, None) or "").strip()
             if next_value != current_value:
+                return True
+    if "generation_flags" in data:
+        current_flags = _load_generation_flags(project.generation_flags)
+        next_flags = _load_generation_flags(data.get("generation_flags"))
+        watched_keys = {
+            "background_template_key",
+            "scene_style_library_key",
+            "opening_hook_mode",
+            "visual_style_key",
+            "target_duration",
+        }
+        for key in watched_keys:
+            if current_flags.get(key) != next_flags.get(key):
                 return True
     return False
 
@@ -515,6 +561,8 @@ def create_project(
     )
     if project.module_type == "stickman" and project.stickman_variant == "v2":
         new_project.generation_flags = json.dumps({}, ensure_ascii=False)
+    elif project.module_type == "explainer":
+        new_project.generation_flags = json.dumps({}, ensure_ascii=False)
     db.add(new_project)
     db.commit()
     db.refresh(new_project)
@@ -622,6 +670,12 @@ def update_project(
             data["storyboard_count"] = max(3, min(int(data["storyboard_count"]), 10))
     else:
         data = project_update.model_dump(exclude_unset=True)
+
+    if "generation_flags" in data:
+        data["generation_flags"] = json.dumps(
+            _strip_resolved_generation_assets(_load_generation_flags(data.get("generation_flags"))),
+            ensure_ascii=False,
+        )
     
     invalidate_stickman_visuals = project.module_type == "stickman" and _stickman_visual_settings_changed(project, data)
     invalidate_explainer_visuals = project.module_type == "explainer" and _explainer_visual_settings_changed(project, data)
@@ -1012,7 +1066,10 @@ def update_explainer_storyboard(
             old_flags = json.loads(project.generation_flags or "{}")
         except Exception:
             old_flags = {}
-        project.generation_flags = json.dumps({**old_flags, **payload.get("generation_flags")}, ensure_ascii=False)
+        project.generation_flags = json.dumps(
+            _strip_resolved_generation_assets({**old_flags, **payload.get("generation_flags")}),
+            ensure_ascii=False,
+        )
     project.storyboard_json = json.dumps(storyboards, ensure_ascii=False)
     _invalidate_explainer_visual_outputs(project)
     db.commit()
@@ -1035,9 +1092,9 @@ def generate_explainer_images(
         if not allowed:
             raise HTTPException(status_code=403, detail=reason or '系统繁忙，请稍后再试')
     try:
-        generation_flags = json.loads(project.generation_flags or "{}")
+        generation_flags, resolved_inputs = _resolve_explainer_generation_inputs(db, project)
     except Exception:
-        generation_flags = {}
+        generation_flags, resolved_inputs = {}, {}
     generator = _build_explainer_generator()
     synced_storyboards, assets, flags = generator.generate_images(
         str(project.theme),
@@ -1045,9 +1102,9 @@ def generate_explainer_images(
         str(project.aspect_ratio or "16:9"),
         project_id,
         None,
-        str(project.background_image_path) if project.background_image_path else None,
-        str(project.style_reference_image_path) if project.style_reference_image_path else None,
-        str(project.style_reference_notes) if project.style_reference_notes else None,
+        resolved_inputs.get("background_image_path"),
+        resolved_inputs.get("style_reference_image_path"),
+        resolved_inputs.get("style_reference_notes"),
         generation_flags,
     )
     project.storyboard_json = json.dumps(synced_storyboards, ensure_ascii=False)
@@ -1075,9 +1132,9 @@ def regenerate_explainer_image(
     if not (0 <= scene_index < len(storyboards)):
         raise HTTPException(status_code=404, detail="分镜不存在")
     try:
-        generation_flags = json.loads(project.generation_flags or "{}")
+        generation_flags, resolved_inputs = _resolve_explainer_generation_inputs(db, project)
     except Exception:
-        generation_flags = {}
+        generation_flags, resolved_inputs = {}, {}
     generator = _build_explainer_generator()
     updated_scene, asset, used_fallback = generator.regenerate_single_image(
         str(project.theme),
@@ -1086,9 +1143,9 @@ def regenerate_explainer_image(
         str(project.aspect_ratio or "16:9"),
         project_id,
         payload.get("prompt") if isinstance(payload.get("prompt"), str) else None,
-        str(project.background_image_path) if project.background_image_path else None,
-        str(project.style_reference_image_path) if project.style_reference_image_path else None,
-        str(project.style_reference_notes) if project.style_reference_notes else None,
+        resolved_inputs.get("background_image_path"),
+        resolved_inputs.get("style_reference_image_path"),
+        resolved_inputs.get("style_reference_notes"),
         generation_flags,
     )
     storyboards[scene_index] = updated_scene
@@ -1306,8 +1363,8 @@ async def upload_background_image(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    if project.module_type not in {"stickman", "explainer"}:
-        raise HTTPException(status_code=400, detail="Only stickman or explainer projects support background image")
+    if project.module_type not in {"manim", "stickman", "explainer"}:
+        raise HTTPException(status_code=400, detail="Only manim, stickman or explainer projects support background image")
 
     suffix = Path(file.filename or "background.png").suffix.lower()
     if suffix not in {".png", ".jpg", ".jpeg", ".webp"}:

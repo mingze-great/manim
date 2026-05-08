@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Alert, Button, Card, Input, InputNumber, Select, Space, Steps, Tag, message } from 'antd'
 import { ArrowLeftOutlined, NotificationOutlined, RocketOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
@@ -16,12 +16,31 @@ export default function ExplainerCreator() {
   const [storyboardCount, setStoryboardCount] = useState(6)
   const [openingHookMode, setOpeningHookMode] = useState('hook_question')
   const [visualStyleKey, setVisualStyleKey] = useState('deep_blue_emotional')
+  const [sceneStyleLibraries, setSceneStyleLibraries] = useState<Array<{ key: string; name: string; material_count?: number; image_count?: number }>>([])
+  const [sceneStyleLibraryKey, setSceneStyleLibraryKey] = useState<string | undefined>(undefined)
   const [ttsVoice, setTtsVoice] = useState('longanhuan')
   const [ttsRate, setTtsRate] = useState('+0%')
   const [generationMode, setGenerationMode] = useState<'one_click' | 'step_by_step'>('step_by_step')
 
   const permissions = user?.module_permissions || {}
   const explainerEnabled = user?.is_admin || permissions.explainer?.enabled !== false
+
+  useEffect(() => {
+    const run = async () => {
+      try {
+        const { data } = await projectApi.getStickmanV2Config()
+        setSceneStyleLibraries((data.scene_style_libraries || []).map((item) => ({
+          key: item.key,
+          name: item.name,
+          material_count: item.material_count,
+          image_count: item.image_count,
+        })))
+      } catch {
+        setSceneStyleLibraries([])
+      }
+    }
+    run()
+  }, [])
 
   const handleCreate = async () => {
     if (!explainerEnabled) {
@@ -53,6 +72,7 @@ export default function ExplainerCreator() {
           visual_style_key: visualStyleKey,
           scene_count: storyboardCount,
           subtitle_mode: 'short_punch',
+          scene_style_library_key: sceneStyleLibraryKey || undefined,
         }),
       } as any)
       message.success('讲解型视频项目已创建')
@@ -129,6 +149,21 @@ export default function ExplainerCreator() {
                     <div className="aspect-pill">16:9 横屏</div>
                     <Tag color="blue">讲解型视频</Tag>
                   </div>
+                  <div className="stickman-side-section">
+                    <label className="stickman-label">素材库</label>
+                    <Select
+                      allowClear
+                      value={sceneStyleLibraryKey}
+                      onChange={(value) => setSceneStyleLibraryKey(value)}
+                      style={{ width: '100%' }}
+                      placeholder="不选则继续使用默认生成"
+                      options={sceneStyleLibraries.map((item) => ({
+                        label: `${item.name}${item.material_count ? ` (${item.material_count}条)` : item.image_count ? ` (${item.image_count}图)` : ''}`,
+                        value: item.key,
+                      }))}
+                    />
+                  </div>
+
                   <div className="stickman-compact-grid">
                     <div className="stickman-side-section">
                       <label className="stickman-label">开头钩子</label>

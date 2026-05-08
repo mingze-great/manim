@@ -128,6 +128,23 @@ export interface StickmanV2SceneStyleLibrary {
   material_count?: number
 }
 
+export interface CreateProjectPayload {
+  title: string
+  theme: string
+  category?: string
+  module_type?: 'manim' | 'stickman' | 'explainer'
+  stickman_variant?: 'legacy' | 'v2'
+  storyboard_count?: number
+  aspect_ratio?: string
+  generation_mode?: 'one_click' | 'step_by_step'
+  voice_source?: 'ai' | 'upload' | 'record'
+  tts_provider?: string
+  tts_voice?: string
+  tts_rate?: string
+  background_image_path?: string
+  target_duration?: number
+}
+
 export interface PendingResponse {
   status: 'no_message' | 'pending' | 'completed' | 'error'
   response?: Conversation
@@ -140,7 +157,7 @@ export const projectApi = {
   get: (id: number) => api.get<Project>(`/projects/${id}`),
   getVideoDownloadUrl: (id: number) => buildApiPath(`/projects/${id}/video-download`),
   renderTemplateBackground: (id: number) => api.post<Project>(`/projects/${id}/render-template-background`),
-  create: (data: { title: string; theme: string; category?: string; module_type?: 'manim' | 'stickman' | 'explainer'; stickman_variant?: 'legacy' | 'v2'; storyboard_count?: number; aspect_ratio?: string; generation_mode?: 'one_click' | 'step_by_step'; voice_source?: 'ai' | 'upload' | 'record'; tts_provider?: string; tts_voice?: string; tts_rate?: string }) => api.post<Project>('/projects', data),
+  create: (data: CreateProjectPayload) => api.post<Project>('/projects', data),
   update: (id: number, data: Partial<Project>) => api.put<Project>(`/projects/${id}`, data),
   uploadVoiceReference: (id: number, file: File, source: 'upload' | 'record') => {
     const formData = new FormData()

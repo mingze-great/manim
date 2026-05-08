@@ -29,6 +29,7 @@ export default function ExplainerStudio() {
   const [styleNotes, setStyleNotes] = useState('')
   const [composeProgress, setComposeProgress] = useState(0)
   const [composeMessage, setComposeMessage] = useState('')
+  const [sceneStyleLibraries, setSceneStyleLibraries] = useState<Array<{ key: string; name: string; material_count?: number; image_count?: number }>>([])
 
   const flags = useMemo(() => {
     try {
@@ -56,10 +57,25 @@ export default function ExplainerStudio() {
     }
   }
 
+  const loadSceneStyleLibraries = async () => {
+    try {
+      const { data } = await projectApi.getStickmanV2Config()
+      setSceneStyleLibraries((data.scene_style_libraries || []).map((item) => ({
+        key: item.key,
+        name: item.name,
+        material_count: item.material_count,
+        image_count: item.image_count,
+      })))
+    } catch {
+      setSceneStyleLibraries([])
+    }
+  }
+
   useEffect(() => {
     const run = async () => {
       try {
         await loadProject()
+        await loadSceneStyleLibraries()
       } catch {
         message.error('加载讲解型视频工作台失败')
       } finally {
@@ -68,6 +84,16 @@ export default function ExplainerStudio() {
     }
     run()
   }, [id])
+
+  const updateGenerationFlags = async (patch: Record<string, any>) => {
+    const next = { ...flags, ...patch }
+    Object.keys(next).forEach((key) => {
+      if (next[key] === undefined) delete next[key]
+    })
+    const { data } = await projectApi.update(Number(id), { generation_flags: JSON.stringify(next) } as any)
+    setProject(data)
+    return data
+  }
 
   const updateScene = (index: number, patch: Partial<Storyboard>) => {
     setStoryboards((prev) => prev.map((item, i) => i === index ? { ...item, ...patch } : item))
@@ -271,17 +297,25 @@ export default function ExplainerStudio() {
               <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="视频标题 / 开头标题" />
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <Select value={flags.opening_hook_mode || 'hook_question'} onChange={async (value) => {
-                  const next = { ...flags, opening_hook_mode: value }
-                  const { data } = await projectApi.update(Number(id), { generation_flags: JSON.stringify(next) } as any)
-                  setProject(data)
+                  await updateGenerationFlags({ opening_hook_mode: value })
                 }} options={[{ label: '反问钩子', value: 'hook_question' }, { label: '数字爆点', value: 'big_number' }]} />
                 <Select value={flags.visual_style_key || 'deep_blue_emotional'} onChange={async (value) => {
-                  const next = { ...flags, visual_style_key: value }
-                  const { data } = await projectApi.update(Number(id), { generation_flags: JSON.stringify(next) } as any)
-                  setProject(data)
+                  await updateGenerationFlags({ visual_style_key: value })
                 }} options={[{ label: '深蓝情绪线稿', value: 'deep_blue_emotional' }, { label: '观点冷峻线稿', value: 'opinion_editorial' }, { label: '治愈成长线稿', value: 'growth_soft_glow' }]} />
                 <InputNumber disabled value={Number(flags.target_duration || 0)} addonAfter="秒" style={{ width: '100%' }} />
               </div>
+              <Select
+                allowClear
+                value={flags.scene_style_library_key || undefined}
+                onChange={async (value) => {
+                  await updateGenerationFlags({ scene_style_library_key: value || undefined })
+                }}
+                placeholder="选择素材库，不选则使用默认生成"
+                options={sceneStyleLibraries.map((item) => ({
+                  label: `${item.name}${item.material_count ? ` (${item.material_count}条)` : item.image_count ? ` (${item.image_count}图)` : ''}`,
+                  value: item.key,
+                }))}
+              />
               <Button type="primary" icon={<RocketOutlined />} onClick={handleGenerateStoryboard} loading={saving}>生成开头与分镜</Button>
             </Space>
           </Card>
