@@ -71,7 +71,7 @@ export default function ProjectTask() {
   const renderStartTimeRef = useRef<number>(0)
   const lastOutputTimeRef = useRef<number>(0)
   const renderTimeoutRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const CLIENT_RENDER_TIMEOUT = 330000
+  const CLIENT_RENDER_TIMEOUT = 930000
   const renderTask = task && ['video_render', 'manim_render'].includes(task.task_type) ? task : null
 
   const hasRenderedVideo = Boolean(project?.video_url)
@@ -416,7 +416,7 @@ export default function ProjectTask() {
     
     try {
       const token = useAuthStore.getState().token
-      const fullUrl = projectApi.getVideoDownloadUrl(Number(id))
+      const fullUrl = resolveBackendUrl(projectApi.getVideoDownloadUrl(Number(id), videoUrl))
       
       message.loading({ content: '准备下载...', key: 'download', duration: 0 })
       

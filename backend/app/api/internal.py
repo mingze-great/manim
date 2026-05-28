@@ -13,6 +13,7 @@ import sys
 
 from app.config import get_settings
 from app.utils.cos_storage import cos_storage
+from app.utils.manim_scene import extract_scene_name
 
 router = APIRouter(prefix="/internal", tags=["internal"])
 settings = get_settings()
@@ -56,12 +57,7 @@ async def internal_render(
         async with RENDER_SEMAPHORE:
             try:
                 with tempfile.TemporaryDirectory() as temp_dir:
-                    scene_name = "SceneName"
-                    
-                    if request.manim_code:
-                        match = re.search(r'class\s+(\w+)\s*\(Scene\)', request.manim_code)
-                        if match:
-                            scene_name = match.group(1)
+                    scene_name = extract_scene_name(request.manim_code)
                     
                     code_content = request.manim_code
                     

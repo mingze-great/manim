@@ -6,7 +6,7 @@ export interface Project {
   title: string
   theme: string
   category: string | null
-  module_type: 'manim' | 'stickman'
+  module_type: 'manim' | 'stickman' | 'math' | 'explainer'
   storyboard_count: number
   aspect_ratio: string
   generation_mode: 'one_click' | 'step_by_step'
@@ -88,7 +88,7 @@ export interface PendingResponse {
 export const projectApi = {
   list: () => api.get<Project[]>('/projects'),
   get: (id: number) => api.get<Project>(`/projects/${id}`),
-  create: (data: { title: string; theme: string; category?: string; module_type?: 'manim' | 'stickman'; storyboard_count?: number; aspect_ratio?: string; generation_mode?: 'one_click' | 'step_by_step'; voice_source?: 'ai' | 'upload' | 'record'; tts_provider?: string; tts_voice?: string; tts_rate?: string }) => api.post<Project>('/projects', data),
+  create: (data: { title: string; theme: string; category?: string; module_type?: 'manim' | 'stickman' | 'math' | 'explainer'; storyboard_count?: number; aspect_ratio?: string; generation_mode?: 'one_click' | 'step_by_step'; voice_source?: 'ai' | 'upload' | 'record'; tts_provider?: string; tts_voice?: string; tts_rate?: string }) => api.post<Project>('/projects', data),
   update: (id: number, data: Partial<Project>) => api.put<Project>(`/projects/${id}`, data),
   uploadVoiceReference: (id: number, file: File, source: 'upload' | 'record') => {
     const formData = new FormData()
@@ -143,10 +143,19 @@ export const projectApi = {
     ),
   fixCodeStream: (projectId: number) =>
     `/api/tasks/${projectId}/fix-code-stream`,
-  generateCodeAsync: (projectId: number, templateId?: number) =>
-    api.post<{ task_id: number; status: string; message: string }>(
-      `/tasks/${projectId}/generate-code-async${templateId ? `?template_id=${templateId}` : ''}`
-    ),
+  generateVideoStream: (projectId: number) =>
+    `/api/tasks/${projectId}/render`,
+  getVideoDownloadUrl: (_projectId: number, videoUrl: string) =>
+    videoUrl.startsWith('http') ? videoUrl : videoUrl,
+  generateCodeAsync: (projectId: number, templateId?: number, model?: string) => {
+    const params = new URLSearchParams()
+    if (templateId) params.set('template_id', String(templateId))
+    if (model) params.set('model', model)
+    const query = params.toString()
+    return api.post<{ task_id: number; status: string; message: string }>(
+      `/tasks/${projectId}/generate-code-async${query ? `?${query}` : ''}`
+    )
+  },
   getBackgroundTask: (taskId: number) =>
     api.get<BackgroundTask>(`/tasks/background/${taskId}`),
   getLatestCodeTask: (projectId: number) =>

@@ -29,6 +29,7 @@ from app.services.chat import ChatService
 from app.services.manim import ManimService
 from app.services.stickman_generator import StickmanGenerator
 from app.services.audio_enhancement import enhance_voice_audio
+from app.utils.manim_scene import force_intro_title
 
 
 MODULE_LABELS = {
@@ -816,10 +817,11 @@ async def regenerate_code(
     manim_code = await manim_service.generate_code(
         project.final_script,
         template_code=template_code,
-        video_title=project.theme
+        video_title=project.title
     )
     
-    project.manim_code = manim_code
+    fixed_code, _ = manim_service.validate_code(manim_code)
+    project.manim_code = force_intro_title(fixed_code, project.title)
     project.status = "chatting"
     db.commit()
     

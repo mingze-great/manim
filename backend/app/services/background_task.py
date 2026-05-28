@@ -16,6 +16,7 @@ from app.models.project import Project
 from app.models.user import User
 from app.models.template import Template
 from app.services.manim import ManimService
+from app.utils.manim_scene import extract_scene_name, force_intro_title
 
 
 def get_manim_python_path() -> str:
@@ -155,13 +156,7 @@ class BackgroundTaskManager:
             
             fixed_code, warnings = manim_service.validate_code(code)
             
-            if project.theme:
-                import re
-                fixed_code = re.sub(
-                    r'INTRO_TITLE\s*=\s*"[^"]*"',
-                    f'INTRO_TITLE = "{project.theme}"',
-                    fixed_code
-                )
+            fixed_code = force_intro_title(fixed_code, project.title)
             
             project.manim_code = fixed_code
             project.status = "code_generated"
@@ -227,8 +222,7 @@ class BackgroundTaskManager:
                 raise ValueError("模板代码为空")
             
             # 动态获取 Scene 类名
-            scene_match = re.search(r'class\s+(\w+)\s*\(\s*Scene\s*\)', code)
-            scene_name = scene_match.group(1) if scene_match else "SceneName"
+            scene_name = extract_scene_name(code)
             
             # 创建临时目录
             temp_dir = tempfile.mkdtemp(prefix=f"template_{template_id}_")

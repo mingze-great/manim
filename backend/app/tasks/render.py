@@ -16,11 +16,12 @@ from app.database import SessionLocal
 from app.models.project import Project
 from app.models.task import Task
 from app.services.manim import ManimService
+from app.utils.manim_scene import extract_scene_name
 
 settings = get_settings()
 
-RENDER_TOTAL_TIMEOUT = 300
-RENDER_NO_OUTPUT_TIMEOUT = 60
+RENDER_TOTAL_TIMEOUT = 900
+RENDER_NO_OUTPUT_TIMEOUT = 180
 
 try:
     import redis
@@ -136,11 +137,7 @@ def render_video_task(task_id: int, project_id: int, template_id: int = None, cu
         update_task_progress(task_id, 25, "processing", log="准备渲染...\n")
         
         with tempfile.TemporaryDirectory() as temp_dir:
-            scene_name = "Scene"
-            if manim_code:
-                match = re.search(r'class\s+(\w+)\s*\(Scene\)', manim_code)
-                if match:
-                    scene_name = match.group(1)
+            scene_name = extract_scene_name(manim_code, default="Scene")
             
             code_content = manim_code or f"""from manim import *
 

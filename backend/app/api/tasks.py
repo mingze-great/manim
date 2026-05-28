@@ -23,7 +23,9 @@ from app.services.manim import ManimService
 from app.services.stickman_generator import StickmanGenerator
 from app.config import get_settings
 from app.utils.cos_storage import cos_storage
+from app.utils.manim_scene import extract_scene_name, force_intro_title
 from app.tasks.celery_tasks import render_video_celery
+from app.services.background_task import task_manager
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 settings = get_settings()
@@ -32,8 +34,8 @@ RENDER_SEMAPHORE = asyncio.Semaphore(4)
 CURRENT_RENDERS = 0
 OLD_SERVER_SEMAPHORE = asyncio.Semaphore(2)
 MAX_TOTAL_RENDERS = 6
-RENDER_TOTAL_TIMEOUT = 300
-RENDER_NO_OUTPUT_TIMEOUT = 60
+RENDER_TOTAL_TIMEOUT = 900
+RENDER_NO_OUTPUT_TIMEOUT = 180
 
 
 @router.post("/internal/update-video")
@@ -186,7 +188,7 @@ async def generate_code_stream(
                 manim_service.generate_code(
                     project_local.final_script, 
                     template_code,
-                    video_title=project_local.theme,
+                    video_title=project_local.title,
                     model=model
                 )
             )
@@ -206,6 +208,7 @@ async def generate_code_stream(
             yield f"data: {json.dumps({'step': 'generate', 'progress': 70, 'message': '脚本生成完成，正在验证...'})}\n\n"
             
             fixed_code, warnings = manim_service.validate_code(manim_code)
+            fixed_code = force_intro_title(fixed_code, project_local.title)
             
             yield f"data: {json.dumps({'step': 'validate', 'progress': 80, 'message': '脚本验证中...'})}\n\n"
             await asyncio.sleep(0.1)
@@ -296,12 +299,7 @@ async def render_video_stream(
                     return
                 
                 with tempfile.TemporaryDirectory() as temp_dir:
-                    scene_name = "SceneName"
-                    
-                    if manim_code_str:
-                        match = re.search(r'class\s+(\w+)\s*\(Scene\)', manim_code_str)
-                        if match:
-                            scene_name = match.group(1)
+                    scene_name = extract_scene_name(manim_code_str)
                     
                     code_content = manim_code_str
                     
@@ -809,6 +807,86 @@ def get_project_task(
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     return task
+
+
+@router.post("/{project_id}/generate-code-async")
+async def generate_code_async(
+    project_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+    template_id: Optional[int] = Query(None),
+    model: Optional[str] = Query(None),
+):
+    project = db.query(Project).filter(
+        Project.id == project_id,
+        Project.user_id == current_user.id
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if not project.final_script:
+        raise HTTPException(status_code=400, detail="请先完成内容对话")
+
+    bg_task = task_manager.create_task(
+        db,
+        "generate_code",
+        project_id,
+        current_user.id,
+        {"template_id": template_id, "model": model},
+    )
+    task_manager.start_task(bg_task.id)
+    return {
+        "task_id": bg_task.id,
+        "status": bg_task.status,
+        "message": "后台生成任务已启动",
+    }
+
+
+@router.get("/background/{task_id}")
+def get_background_task(
+    task_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    bg_task = task_manager.get_task_status(db, task_id)
+    if not bg_task or bg_task.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return {
+        "task_id": bg_task.id,
+        "task_type": bg_task.task_type,
+        "status": bg_task.status,
+        "progress": bg_task.progress or 0,
+        "message": bg_task.message,
+        "error": bg_task.error,
+        "code": bg_task.result,
+        "created_at": bg_task.created_at,
+        "started_at": bg_task.started_at,
+        "completed_at": bg_task.completed_at,
+    }
+
+
+@router.get("/{project_id}/latest-code-task")
+def get_latest_code_task(
+    project_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    project = db.query(Project).filter(
+        Project.id == project_id,
+        Project.user_id == current_user.id
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    bg_task = task_manager.get_project_latest_task(db, project_id, "generate_code")
+    if not bg_task:
+        return {"task_id": None, "status": None, "progress": 0, "message": None, "error": None}
+    return {
+        "task_id": bg_task.id,
+        "status": bg_task.status,
+        "progress": bg_task.progress or 0,
+        "message": bg_task.message,
+        "error": bg_task.error,
+    }
 
 
 @router.post("/{project_id}/render-async")
