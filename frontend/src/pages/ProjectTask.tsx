@@ -1,22 +1,47 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
-import { Card, Progress, Button, Space, message, Spin, Tabs, Select, Modal } from 'antd'
-import { DownloadOutlined, PlayCircleOutlined, PlaySquareOutlined, CloudUploadOutlined, EyeOutlined } from '@ant-design/icons'
+import { Card, Progress, Button, Space, message, Spin, Tabs, Select } from 'antd'
+import { DownloadOutlined, PlayCircleOutlined, PlaySquareOutlined, CloudUploadOutlined } from '@ant-design/icons'
 import { projectApi, Task, Project } from '@/services/project'
-import { templateApi, Template } from '@/services/template'
+import { resolveBackendUrl } from '@/services/api'
 import { useAuthStore } from '@/stores/authStore'
 import { motion } from 'framer-motion'
-import StickmanProjectTask from './StickmanProjectTask'
+import ExplainerTask from './ExplainerTask'
+import StickmanProjectTaskEntry from './StickmanProjectTaskEntry'
+import TemplateShowcase from '@/components/TemplateShowcase'
+import { useIsMobile } from '@/hooks/useIsMobile'
+
+const DISABLED_MODELS = new Set([
+  'qwen3-coder-next',
+  'deepseek-v3.1',
+  'deepseek-v3.2',
+  'qwen3.5-plus',
+  'deepseek/deepseek-v3.2',
+])
 
 const statusMap: Record<string, { text: string; color: string }> = {
+  not_started: { text: '未开始', color: '#8c8c8c' },
   pending: { text: '等待中', color: '#faad14' },
   processing: { text: '处理中', color: '#0066FF' },
-  code_generated: { text: '脚本就绪', color: '#00CCFF' },
+  code_generated: { text: '准备就绪', color: '#00CCFF' },
   completed: { text: '已完成', color: '#52c41a' },
   failed: { text: '失败', color: '#ff4d4f' },
+  cancelled: { text: '已取消', color: '#8c8c8c' },
+}
+
+function isMathProjectCategory(category?: string | null) {
+  if (!category) return false
+  const raw = String(category).toLowerCase()
+  return raw === 'math' || raw === '数学可视化'
+}
+
+function isMathProject(project?: Project | null) {
+  if (!project) return false
+  return project.module_type === 'math' || isMathProjectCategory(project.category)
 }
 
 export default function ProjectTask() {
+  const isMobile = useIsMobile()
   const { id } = useParams<{ id: string }>()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
@@ -38,87 +63,121 @@ export default function ProjectTask() {
   const [renderError, setRenderError] = useState<string | null>(null)
   const [selectedModel, setSelectedModel] = useState<string>('')
   const [availableModels, setAvailableModels] = useState<string[]>([])
-  const [templates, setTemplates] = useState<Template[]>([])
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null)
-  const [videoPreviewVisible, setVideoPreviewVisible] = useState(false)
-  const [previewVideoUrl, setPreviewVideoUrl] = useState<string>('')
   const terminalRef = useRef<HTMLDivElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const readerRef = useRef<ReadableStreamDefaultReader | null>(null)
+  const codePollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const renderStartTimeRef = useRef<number>(0)
   const lastOutputTimeRef = useRef<number>(0)
   const renderTimeoutRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const CLIENT_RENDER_TIMEOUT = 330000
+  const renderTask = task && ['video_render', 'manim_render'].includes(task.task_type) ? task : null
+
+  const hasRenderedVideo = Boolean(project?.video_url)
+  const renderStatus = hasRenderedVideo
+    ? 'completed'
+    : renderTask?.status || project?.status || (generatingVideo ? 'processing' : 'not_started')
 
   const fetchProject = async () => {
+    setLoading(true)
     try {
       const { data } = await projectApi.get(Number(id))
       setProject(data)
+      setSelectedTemplateId((prev) => prev ?? data.template_id ?? null)
       if (data.manim_code) {
         setGeneratedCode(data.manim_code)
       }
     } catch (error: any) {
       message.error('获取项目失败: ' + (error.message || error.toString()))
-    }
-  }
-
-  const fetchTask = async () => {
-    try {
-      if (!project?.id) return
-      const tasksRes = await projectApi.getTask(project.id)
-      setTask(tasksRes.data)
-    } catch (error: any) {
-      if (error.response?.status !== 404) {
-        console.error('获取任务失败:', error)
-      }
     } finally {
       setLoading(false)
     }
   }
 
-  const fetchTemplates = async () => {
-    try {
-      const { data } = await templateApi.list()
-      const allTemplates = [...data.system_templates, ...data.user_templates]
-      const activeTemplates = allTemplates.filter(t => t.is_active !== false)
-      setTemplates(activeTemplates)
-      if (activeTemplates.length > 0 && !selectedTemplateId) {
-        setSelectedTemplateId(activeTemplates[0].id)
-      }
-    } catch (error) {
-      console.error('获取模板失败:', error)
-    }
-  }
-  
   const fetchAvailableModels = async () => {
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
-      const response = await fetch(`${API_BASE}/api/tasks/available-models`)
+      const token = useAuthStore.getState().token
+      const response = await fetch(resolveBackendUrl('/api/tasks/available-models'), {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      })
       if (response.ok) {
         const data = await response.json()
-        setAvailableModels(data.models || [])
-        if (data.default_code_model && !selectedModel) {
-          setSelectedModel(data.default_code_model)
+        const models = (data.models || []).filter((model: string) => !DISABLED_MODELS.has(model))
+        setAvailableModels(models)
+        if (!selectedModel) {
+          if (data.default_code_model && !DISABLED_MODELS.has(data.default_code_model)) {
+            setSelectedModel(data.default_code_model)
+          } else if (models.length > 0) {
+            setSelectedModel(models[0])
+          }
         }
+      } else {
+        console.error('获取模型列表失败:', response.status)
       }
     } catch (error) {
       console.error('获取模型列表失败:', error)
     }
   }
 
-useEffect(() => {
+  useEffect(() => {
     if (id) {
       fetchProject()
-      fetchTemplates()
       fetchAvailableModels()
     }
   }, [id])
 
   useEffect(() => {
-    if (project) {
-      fetchTask()
+    if (project?.video_url) {
+      setRenderError(null)
+      setVideoProgress(100)
+      setVideoMessage('渲染完成！')
     }
-  }, [project])
+  }, [project?.video_url])
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setInterval> | null = null
+
+    const pollLatestCodeTask = async () => {
+      if (!id) return
+      try {
+        const { data } = await projectApi.getLatestCodeTask(Number(id))
+        if (data?.task_id && data.status && ['pending', 'processing'].includes(data.status)) {
+          setGeneratingCode(true)
+          setCodeProgress(data.progress || 0)
+          setCodeMessage(data.message || '后台生成中...')
+
+          timer = setInterval(async () => {
+            try {
+              const { data: taskData } = await projectApi.getBackgroundTask(data.task_id as number)
+              setCodeProgress(taskData.progress || 0)
+              setCodeMessage(taskData.message || '后台生成中...')
+
+              if (taskData.status === 'completed') {
+                setGeneratingCode(false)
+                setCodeProgress(100)
+                setCodeMessage('生成完成！')
+                await fetchProject()
+                clearInterval(timer!)
+              } else if (taskData.status === 'failed' || taskData.status === 'cancelled') {
+                setGeneratingCode(false)
+                message.error(taskData.error || '生成失败')
+                clearInterval(timer!)
+              }
+            } catch (e) {
+              clearInterval(timer!)
+            }
+          }, 3000)
+        }
+      } catch (e) {}
+    }
+
+    pollLatestCodeTask()
+
+    return () => {
+      if (timer) clearInterval(timer)
+    }
+  }, [id])
 
   useEffect(() => {
     if (project && searchParams.get('autoGenerate') === 'true') {
@@ -132,101 +191,62 @@ useEffect(() => {
   }, [project, generatedCode])
 
   const handleGenerateCode = async () => {
+    if (isMathProject(project) && !selectedTemplateId) {
+      message.warning('请选择一个数学参考模板后再生成')
+      return
+    }
+
     setGeneratingCode(true)
     setCodeProgress(0)
-    setCodeMessage('正在开始生成...')
+    setCodeMessage('正在提交后台任务...')
     setGeneratedCode('')
 
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
-      const token = (useAuthStore.getState().token) || ''
-      let streamUrl = `${API_BASE}/api/tasks/${id}/generate-code`
-      if (selectedTemplateId) {
-        streamUrl += `?template_id=${selectedTemplateId}`
-        if (selectedModel) {
-          streamUrl += `&model=${selectedModel}`
-        }
-      } else if (selectedModel) {
-        streamUrl += `?model=${selectedModel}`
-      }
-      let headers: any = {
-        'Content-Type': 'application/json'
-      }
-      if (token) headers['Authorization'] = `Bearer ${token}`
+      const { data } = await projectApi.generateCodeAsync(
+        Number(id),
+        selectedTemplateId || undefined,
+        selectedModel || undefined,
+      )
+      const taskId = data.task_id
+      message.success('已开始后台生成，可关闭页面')
 
-      let response = await fetch(streamUrl, {
-        headers
-      })
+      if (codePollingRef.current) clearInterval(codePollingRef.current)
 
-      if (response.status === 401) {
-        message.error('未通过身份验证，请重新登录后再试')
-        setLoading(false)
-        return
-      }
-
-      if (!response.ok) {
-        const err = await response.text()
-        throw new Error(err || '请求失败')
-      }
-
-      const reader = response.body?.getReader()
-      const decoder = new TextDecoder()
-
-      if (!reader) {
-        throw new Error('无法读取响应')
-      }
-
-      let buffer = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        buffer += decoder.decode(value, { stream: true })
-        
-        const parts = buffer.split('data: ')
-        buffer = parts.pop() || ''
-
-        for (const part of parts) {
-          const trimmed = part.trim()
-          if (!trimmed) continue
-          
-          try {
-            const data = JSON.parse(trimmed)
-            setCodeProgress(data.progress || 0)
-            setCodeMessage(data.message || '')
-            
-            if (data.code) {
-              setGeneratedCode(data.code)
-            }
-            
-            if (data.step === 'error') {
-              message.error(data.message)
-            }
-          } catch (e) {}
-        }
-      }
-
-      if (buffer.trim()) {
+      const pollTimer = setInterval(async () => {
         try {
-          const data = JSON.parse(buffer.trim())
-          if (data.code) setGeneratedCode(data.code)
-        } catch (e) {}
-      }
+          const { data: taskData } = await projectApi.getBackgroundTask(taskId)
+          setCodeProgress(taskData.progress || 0)
+          setCodeMessage(taskData.message || '后台生成中...')
 
-      message.success('脚本生成完成！')
-      await fetchProject()
+          if (taskData.status === 'completed') {
+            clearInterval(pollTimer)
+            setGeneratingCode(false)
+            setCodeProgress(100)
+            setCodeMessage('生成完成！')
+            await fetchProject()
+            message.success('生成完成！')
+          } else if (taskData.status === 'failed' || taskData.status === 'cancelled') {
+            clearInterval(pollTimer)
+            setGeneratingCode(false)
+            message.error(taskData.error || '生成失败')
+          }
+        } catch (error: any) {
+          clearInterval(pollTimer)
+          setGeneratingCode(false)
+          message.error(error.message || '获取任务进度失败')
+        }
+      }, 3000)
+      codePollingRef.current = pollTimer
     } catch (error: any) {
-      console.error('生成脚本失败:', error)
-      message.error(error.message || '生成失败')
-    } finally {
+      console.error('生成失败:', error)
+      message.error(error.response?.data?.detail || error.message || '生成失败')
       setGeneratingCode(false)
     }
   }
 
   const handleGenerateVideo = async () => {
     if (!generatedCode) {
-      message.warning('请先生成脚本')
+      message.warning('请先生成内容')
       return
     }
     
@@ -252,117 +272,108 @@ useEffect(() => {
     abortControllerRef.current = new AbortController()
     renderStartTimeRef.current = Date.now()
     lastOutputTimeRef.current = Date.now()
-    
-    const checkTimeout = () => {
-      const now = Date.now()
-      const elapsed = now - renderStartTimeRef.current
-      const noOutputElapsed = now - lastOutputTimeRef.current
-      
-      if (elapsed > CLIENT_RENDER_TIMEOUT) {
-        setRenderError(`渲染超时（超过${Math.floor(CLIENT_RENDER_TIMEOUT / 60000)}分钟）`)
-        setTerminalLog(prev => prev + `\n⚠️ 客户端检测：渲染超时，正在终止...\n`)
-        abortControllerRef.current?.abort()
-        return true
-      }
-      
-      if (noOutputElapsed > 120000) {
-        setTerminalLog(prev => prev + `\n⚠️ 警告：${Math.floor(noOutputElapsed / 1000)}秒无输出\n`)
-      }
-      
-      return false
-    }
-    
-    renderTimeoutRef.current = setInterval(checkTimeout, 10000)
-    
+
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
       const token = useAuthStore.getState().token
-      const streamUrl = `${API_BASE}/api/tasks/${id}/render`
-      
+      const streamUrl = projectApi.generateVideoStream(Number(id))
+
+      const checkTimeout = () => {
+        const now = Date.now()
+        const elapsed = now - renderStartTimeRef.current
+        const noOutputElapsed = now - lastOutputTimeRef.current
+
+        if (elapsed > CLIENT_RENDER_TIMEOUT) {
+          setRenderError(`渲染超时（超过${Math.floor(CLIENT_RENDER_TIMEOUT / 60000)}分钟）`)
+          setTerminalLog(prev => prev + `\n⚠️ 客户端检测：渲染超时，正在终止...\n`)
+          abortControllerRef.current?.abort()
+          return true
+        }
+
+        if (noOutputElapsed > 120000) {
+          setTerminalLog(prev => prev + `\n⚠️ 警告：${Math.floor(noOutputElapsed / 1000)}秒无输出\n`)
+        }
+
+        return false
+      }
+
+      renderTimeoutRef.current = setInterval(checkTimeout, 10000)
       setTerminalLog(prev => prev + `⏱️ 渲染开始时间: ${new Date().toLocaleTimeString()}\n`)
-      setTerminalLog(prev => prev + `🛡️ 超时保护: 服务器${300}秒, 客户端${Math.floor(CLIENT_RENDER_TIMEOUT / 60000)}分钟\n\n`)
-      
+
       const response = await fetch(streamUrl, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        signal: abortControllerRef.current.signal
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        signal: abortControllerRef.current.signal,
       })
-      
+
       if (response.status === 401) {
         message.error('登录已过期，请重新登录')
         setGeneratingVideo(false)
         setTerminalLog(prev => prev + '\n❌ 登录已过期，请重新登录\n')
         return
       }
-      
+
       if (!response.ok) {
         throw new Error(`请求失败 (${response.status})`)
       }
-      
+
       const reader = response.body?.getReader()
       const decoder = new TextDecoder()
-      
+
       if (!reader) {
         throw new Error('无法读取服务器响应')
       }
-      
+
       readerRef.current = reader
-      
       let buffer = ''
-      
+
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
-        
+
         buffer += decoder.decode(value, { stream: true })
-        
         const lines = buffer.split('\n')
         buffer = lines.pop() || ''
-        
+
         for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6)
-            try {
-              const parsed = JSON.parse(data)
-              
-              if (parsed.type === 'error') {
-                lastOutputTimeRef.current = Date.now()
-                setTerminalLog(prev => prev + `\n❌ ${parsed.content}\n`)
-                setRenderError(parsed.content)
-                message.error(parsed.content)
-              } else if (parsed.type === 'success') {
-                lastOutputTimeRef.current = Date.now()
-                const elapsed = Math.floor((Date.now() - renderStartTimeRef.current) / 1000)
-                setTerminalLog(prev => prev + `\n✅ ${parsed.content} (总耗时: ${elapsed}秒)\n`)
-                setVideoProgress(100)
-                setVideoMessage('渲染完成！')
-                if (parsed.video_url) {
-                  setProject(prev => prev ? { ...prev, video_url: parsed.video_url, status: 'completed' } : null)
-                }
-                message.success('视频渲染完成！')
-              } else if (parsed.type === 'info' || parsed.type === 'output') {
-                lastOutputTimeRef.current = Date.now()
-                setTerminalLog(prev => prev + parsed.content + '\n')
-                const content = parsed.content.toLowerCase()
-                if (content.includes('animation') || content.includes('rendering')) {
-                  setVideoProgress(prev => Math.min(prev + 2, 90))
-                  setVideoMessage('正在渲染动画...')
-                } else if (content.includes('combining') || content.includes('writing')) {
-                  setVideoProgress(prev => Math.min(prev + 3, 95))
-                  setVideoMessage('正在合成视频...')
-                } else if (content.includes('file')) {
-                  setVideoProgress(15)
-                  setVideoMessage('准备渲染环境...')
-                }
+          if (!line.startsWith('data: ')) continue
+          const raw = line.slice(6)
+          try {
+            const parsed = JSON.parse(raw)
+            if (parsed.type === 'error') {
+              lastOutputTimeRef.current = Date.now()
+              setTerminalLog(prev => prev + `\n❌ ${parsed.content}\n`)
+              setRenderError(parsed.content)
+              message.error(parsed.content)
+            } else if (parsed.type === 'success') {
+              lastOutputTimeRef.current = Date.now()
+              const elapsed = Math.floor((Date.now() - renderStartTimeRef.current) / 1000)
+              setTerminalLog(prev => prev + `\n✅ ${parsed.content} (总耗时: ${elapsed}秒)\n`)
+              setVideoProgress(100)
+              setVideoMessage('渲染完成！')
+              if (parsed.video_url) {
+                setProject(prev => prev ? { ...prev, video_url: parsed.video_url, status: 'completed' } : null)
               }
-              
-              setTimeout(() => {
-                terminalRef.current?.scrollTo({ top: terminalRef.current.scrollHeight, behavior: 'smooth' })
-              }, 50)
-            } catch (e) {
-              console.error('Parse error:', e)
+              message.success('视频渲染完成！')
+            } else if (parsed.type === 'info' || parsed.type === 'output') {
+              lastOutputTimeRef.current = Date.now()
+              setTerminalLog(prev => prev + `${parsed.content}\n`)
+              const content = String(parsed.content || '').toLowerCase()
+              if (content.includes('animation') || content.includes('rendering') || content.includes('开始渲染')) {
+                setVideoProgress(prev => Math.min(Math.max(prev, 45) + 2, 90))
+                setVideoMessage('正在渲染动画...')
+              } else if (content.includes('combining') || content.includes('writing') || content.includes('合成') || content.includes('保存')) {
+                setVideoProgress(prev => Math.min(Math.max(prev, 85) + 3, 95))
+                setVideoMessage('正在合成视频...')
+              } else if (content.includes('file') || content.includes('内容已保存') || content.includes('脚本已保存') || content.includes('manim 命令')) {
+                setVideoProgress(prev => Math.max(prev, 20))
+                setVideoMessage('准备渲染环境...')
+              }
             }
+
+            setTimeout(() => {
+              terminalRef.current?.scrollTo({ top: terminalRef.current.scrollHeight, behavior: 'smooth' })
+            }, 50)
+          } catch (e) {
+            console.error('Parse error:', e)
           }
         }
       }
@@ -384,12 +395,12 @@ useEffect(() => {
         clearInterval(renderTimeoutRef.current)
         renderTimeoutRef.current = null
       }
-      setGeneratingVideo(false)
       await fetchProject()
+      setGeneratingVideo(false)
     }
   }
 
-  const handleCancelRender = () => {
+  const handleCancelRender = async () => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
       setTerminalLog(prev => prev + '\n⚠️ 用户取消渲染\n')
@@ -404,14 +415,14 @@ useEffect(() => {
     setDownloadingVideo(true)
     
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
       const token = useAuthStore.getState().token
-      const fullUrl = videoUrl.startsWith('http') ? videoUrl : `${API_BASE}${videoUrl}`
+      const fullUrl = projectApi.getVideoDownloadUrl(Number(id))
       
       message.loading({ content: '准备下载...', key: 'download', duration: 0 })
       
       const response = await fetch(fullUrl, {
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+        redirect: 'follow',
       })
       
       if (!response.ok) {
@@ -469,7 +480,11 @@ useEffect(() => {
   }
 
   if (project?.module_type === 'stickman') {
-    return <StickmanProjectTask />
+    return <StickmanProjectTaskEntry />
+  }
+
+  if (project?.module_type === 'explainer') {
+    return <ExplainerTask />
   }
 
   return (
@@ -483,9 +498,9 @@ useEffect(() => {
           title={
             <Space>
               <span className="text-lg font-bold">{project?.title}</span>
-              {task && (
-                <span style={{ color: statusMap[task.status]?.color }}>
-                  ({statusMap[task.status]?.text})
+              {project?.status && statusMap[project.status] && (
+                <span style={{ color: statusMap[project.status]?.color }}>
+                  ({statusMap[project.status]?.text})
                 </span>
               )}
             </Space>
@@ -497,7 +512,7 @@ useEffect(() => {
           }
         >
           <Tabs activeKey={activeTab} onChange={setActiveTab}>
-            <Tabs.TabPane tab={<span><PlaySquareOutlined /> 脚本生成</span>} key="code">
+            <Tabs.TabPane tab={<span><PlaySquareOutlined /> 内容生成</span>} key="code">
               <div className="space-y-4">
                 {/* 进度显示 */}
                 {generatingCode && (
@@ -521,88 +536,58 @@ useEffect(() => {
                   </motion.div>
                 )}
 
-                {/* 模板和模型选择 */}
                 <div className="mb-4">
-                  <div className="flex items-center gap-3 flex-wrap mb-2">
-                    <div>
-                      <label className="block text-sm text-gray-500 mb-1">视频风格模板</label>
-                      <Select
-                        style={{ width: 200 }}
-                        placeholder="默认风格"
-                        allowClear
-                        value={selectedTemplateId}
-                        onChange={setSelectedTemplateId}
-                        options={templates.map(t => ({
-                          label: t.name,
-                          value: t.id
-                        }))}
-                      />
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm text-gray-500 mb-1">
-                        AI 模型
-                        <span className="text-xs text-green-500 ml-2">推荐首次使用 DeepSeek V3.2</span>
-                      </label>
-                      <Select
-                        placeholder="默认 DeepSeek V3.2"
-                        style={{ width: 200 }}
-                        value={selectedModel}
-                        onChange={setSelectedModel}
-                        allowClear
-                      >
-                        {availableModels.map(m => (
-                          <Select.Option key={m} value={m}>
-                            {m === 'deepseek-v3.2' ? 'DeepSeek V3.2（推荐）' : 
-                             m === 'qwen3-coder-next' ? 'Qwen3 Coder（备用）' :
-                             m === 'deepseek-v3.1' ? 'DeepSeek V3.1' :
-                             m === 'qwen3.5-plus' ? 'Qwen3.5 Plus' : m}
-                          </Select.Option>
-                        ))}
-                      </Select>
-                    </div>
-                    
-                    {selectedTemplateId && templates.find(t => t.id === selectedTemplateId)?.example_video_url && (
-                      <Button
-                        icon={<EyeOutlined />}
-                        onClick={() => {
-                          const template = templates.find(t => t.id === selectedTemplateId)
-                          if (template?.example_video_url) {
-                            const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
-                            setPreviewVideoUrl(template.example_video_url.startsWith('http') 
-                              ? template.example_video_url 
-                              : `${API_BASE}${template.example_video_url}`)
-                            setVideoPreviewVisible(true)
-                          }
-                        }}
-                        style={{ marginTop: '22px' }}
-                      >
-                        预览示例
-                      </Button>
-                    )}
+                  <div className="mb-4">
+                    <label className="block text-sm text-gray-500 mb-1">
+                      AI 模型
+                      <span className="text-xs text-green-500 ml-2">推荐 DeepSeek V3.2</span>
+                    </label>
+                    <Select
+                      placeholder="默认 DeepSeek V3.2"
+                      style={{ width: isMobile ? '100%' : 220 }}
+                      value={selectedModel}
+                      onChange={setSelectedModel}
+                      allowClear
+                    >
+                      {availableModels.map(m => (
+                        <Select.Option key={m} value={m}>
+                          {m === 'deepseek-v4-pro' ? 'DeepSeek V4 Pro??????' : m}
+                        </Select.Option>
+                      ))}
+                    </Select>
                   </div>
-                  
-                  {/* 提示文字 */}
-                  <div className="text-xs text-gray-400 space-y-1">
-                    <p>• 视频风格模板：选择后生成的脚本会按模板风格渲染，不选则使用默认风格</p>
-                    <p>• AI 模型：推荐首次使用 DeepSeek V3.2，出错时自动切换到 Qwen3 Coder</p>
-                    {selectedTemplateId && templates.find(t => t.id === selectedTemplateId)?.description && (
-                      <p className="text-blue-500">• {templates.find(t => t.id === selectedTemplateId)?.description}</p>
+
+                  <label className="block text-sm text-gray-500 mb-2">
+                    {isMathProject(project) ? '选择数学参考模板' : '选择模板风格'}
+                    {project?.category && (
+                      <span className="ml-2 text-xs text-blue-500">
+                        ({isMathProject(project) ? '数学参考' : '思维可视化'}模板)
+                      </span>
                     )}
-                  </div>
+                  </label>
+                  {isMathProject(project) && (
+                    <div className="mb-2 text-xs text-gray-500">
+                      系统将参考该模板的完整代码风格生成当前数学主题。
+                    </div>
+                  )}
+                  <TemplateShowcase
+                    value={selectedTemplateId}
+                    onChange={setSelectedTemplateId}
+                    category={isMathProject(project) ? 'math' : 'thinking'}
+                  />
+
                 </div>
 
-                {/* 生成脚本按钮 */}
+                {/* 生成内容按钮 */}
                 <div className="flex gap-3">
-                  <Button 
-                    type="primary" 
-                    icon={<PlaySquareOutlined />}
+                  <Button
+                    type="primary"
                     onClick={handleGenerateCode}
                     loading={generatingCode}
                     size="large"
                     className="btn-gradient"
                   >
-                    {generatedCode ? '重新生成脚本' : '生成脚本'}
+                    {generatedCode ? '重新生成' : '开始生成'}
                   </Button>
                   {generatedCode && (
                     <Button 
@@ -619,7 +604,7 @@ useEffect(() => {
 
                 {generatedCode && (
                   <div className="text-green-600 text-sm">
-                    ✓ 脚本生成完成，点击"前往渲染"开始制作视频
+                    ✓ 生成完成，点击"前往渲染"开始制作视频
                   </div>
                 )}
               </div>
@@ -650,7 +635,7 @@ useEffect(() => {
                 )}
 
                 {/* 任务状态 */}
-                {(task || generatingVideo || project?.video_url) ? (
+                {(renderTask || generatingVideo || project?.video_url) ? (
                   <motion.div 
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
@@ -661,22 +646,22 @@ useEffect(() => {
                       <span 
                         className="status-badge"
                         style={{ 
-                          backgroundColor: `${statusMap[task?.status || (generatingVideo ? 'processing' : 'completed')]?.color}20`,
-                          color: statusMap[task?.status || (generatingVideo ? 'processing' : 'completed')]?.color 
+                          backgroundColor: `${statusMap[renderStatus]?.color}20`,
+                          color: statusMap[renderStatus]?.color 
                         }}
                       >
-                        {statusMap[task?.status || (generatingVideo ? 'processing' : 'completed')]?.text}
+                        {statusMap[renderStatus]?.text}
                       </span>
                     </div>
                     <Progress 
-                      percent={task?.progress || videoProgress} 
-                      status={task?.status === 'failed' || renderError ? 'exception' : task?.status === 'completed' || project?.video_url ? 'success' : 'active'}
+                      percent={hasRenderedVideo ? 100 : (renderTask?.progress || videoProgress)} 
+                      status={hasRenderedVideo ? 'success' : renderTask?.status === 'failed' || renderError ? 'exception' : 'active'}
                       strokeColor={{
                         '0%': '#0066FF',
                         '100%': '#00CCFF',
                       }}
                     />
-                    {renderError && (
+                    {renderError && !hasRenderedVideo && (
                       <div className="text-red-500 mt-3 text-sm bg-red-50 dark:bg-red-900/20 p-3 rounded-lg">
                         错误: {renderError}
                       </div>
@@ -711,9 +696,9 @@ useEffect(() => {
                 {/* 渲染失败时的返回按钮 */}
                 {renderError && (
                   <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200">
-                    <p className="text-red-600 mb-3">渲染失败，建议返回脚本生成页面，更换 AI 模型重新生成脚本后再试。</p>
+                    <p className="text-red-600 mb-3">渲染失败，建议返回内容生成页面，更换 AI 模型重新生成后再试。</p>
                     <Button type="primary" onClick={() => setActiveTab('code')}>
-                      返回脚本生成
+                      返回内容生成
                     </Button>
                   </div>
                 )}
@@ -729,7 +714,7 @@ useEffect(() => {
                     size="large"
                     className="btn-gradient"
                   >
-                    {task?.status === 'completed' ? '重新渲染' : '开始渲染视频'}
+                  {hasRenderedVideo ? '重新渲染' : '开始渲染视频'}
                   </Button>
                   
                   {generatingVideo && (
@@ -765,7 +750,7 @@ useEffect(() => {
                     className="mt-6"
                   >
                     <video
-                      src={project.video_url.startsWith('http') ? project.video_url : `${import.meta.env.VITE_API_BASE_URL || ''}${project.video_url}`}
+                      src={resolveBackendUrl(project.video_url)}
                       controls
                       className="w-full rounded-xl shadow-lg"
                       style={{ maxHeight: '60vh' }}
@@ -780,33 +765,6 @@ useEffect(() => {
         </Card>
       </motion.div>
       </div>
-      
-      <TemplateVideoPreviewModal 
-        visible={videoPreviewVisible} 
-        videoUrl={previewVideoUrl} 
-        onClose={() => setVideoPreviewVisible(false)} 
-      />
     </>
-  )
-}
-
-
-function TemplateVideoPreviewModal({ visible, videoUrl, onClose }: { visible: boolean; videoUrl: string; onClose: () => void }) {
-  return (
-    <Modal
-      title="模板示例视频"
-      open={visible}
-      onCancel={onClose}
-      footer={null}
-      width={800}
-      centered
-    >
-      <video
-        src={videoUrl}
-        controls
-        className="w-full rounded-lg"
-        autoPlay
-      />
-    </Modal>
   )
 }
