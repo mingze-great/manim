@@ -26,22 +26,25 @@ def get_templates(
     
     user_is_admin = bool(current_user_obj.is_admin)
     current_user_id = current_user_obj.id
+    template_filters = [Template.is_active.is_(True)]
+    if category:
+        template_filters.append(Template.category == category)
     
     if user_is_admin:
         system_query_result = db.query(Template).filter(
-            Template.is_active.is_(True),
+            *template_filters,
             Template.is_system.is_(True)
-        ).offset(skip).limit(limit).all()
+        ).order_by(Template.created_at.desc(), Template.id.desc()).offset(skip).limit(limit).all()
         
         user_query_result = db.query(Template).filter(
-            Template.is_active.is_(True),
+            *template_filters,
             Template.is_system.is_(False)
-        ).offset(skip).limit(limit).all()
+        ).order_by(Template.created_at.desc(), Template.id.desc()).offset(skip).limit(limit).all()
     else:
         all_visible = db.query(Template).filter(
-            Template.is_active.is_(True),
+            *template_filters,
             Template.is_visible.is_(True)
-        ).offset(skip).limit(limit).all()
+        ).order_by(Template.created_at.desc(), Template.id.desc()).offset(skip).limit(limit).all()
         
         system_query_result = [t for t in all_visible if t.is_system]
         user_query_result = [t for t in all_visible if not t.is_system]

@@ -56,7 +56,7 @@ tar -czf "E:\ai\agent_stickman_v2_viral_hook_acceptance\tmp\deploy_frontend_dist
 ### 3. 远端整站备份
 
 ```powershell
-python "E:\ai\agent_stickman_v2_viral_hook_acceptance\scripts\remote_exec.py" 152.136.218.74 "mkdir -p /opt/manim_backups/deploy_tmp && tar -czf /opt/manim_backups/manim-v2_$TS.tar.gz -C /opt manim-v2" --user root --password 010421 --timeout 1200 --retries 3 --retry-delay 8
+python "E:\ai\agent_stickman_v2_viral_hook_acceptance\scripts\remote_exec.py" 152.136.218.74 "mkdir -p /opt/manim_backups/deploy_tmp && tar -czf /opt/manim_backups/manim-v2_$TS.tar.gz -C /opt manim-v2" --user root --password 010421 --timeout 1200
 ```
 
 ### 4. 上传 tar 包
@@ -64,13 +64,13 @@ python "E:\ai\agent_stickman_v2_viral_hook_acceptance\scripts\remote_exec.py" 15
 后端：
 
 ```powershell
-python "E:\ai\agent_stickman_v2_viral_hook_acceptance\scripts\upload_file_remote.py" 152.136.218.74 "E:\ai\agent_stickman_v2_viral_hook_acceptance\tmp\deploy_backend_app_$TS.tar.gz" /opt/manim_backups/deploy_tmp/deploy_backend_app_$TS.tar.gz --user root --password 010421 --mkdirs --retries 5 --retry-delay 8
+python "E:\ai\agent_stickman_v2_viral_hook_acceptance\scripts\upload_file_remote.py" 152.136.218.74 "E:\ai\agent_stickman_v2_viral_hook_acceptance\tmp\deploy_backend_app_$TS.tar.gz" /opt/manim_backups/deploy_tmp/deploy_backend_app_$TS.tar.gz --user root --password 010421
 ```
 
 前端：
 
 ```powershell
-python "E:\ai\agent_stickman_v2_viral_hook_acceptance\scripts\upload_file_remote.py" 152.136.218.74 "E:\ai\agent_stickman_v2_viral_hook_acceptance\tmp\deploy_frontend_dist_$TS.tar.gz" /opt/manim_backups/deploy_tmp/deploy_frontend_dist_$TS.tar.gz --user root --password 010421 --mkdirs --retries 5 --retry-delay 8
+python "E:\ai\agent_stickman_v2_viral_hook_acceptance\scripts\upload_file_remote.py" 152.136.218.74 "E:\ai\agent_stickman_v2_viral_hook_acceptance\tmp\deploy_frontend_dist_$TS.tar.gz" /opt/manim_backups/deploy_tmp/deploy_frontend_dist_$TS.tar.gz --user root --password 010421
 ```
 
 ### 5. 远端覆盖脚本
@@ -110,13 +110,13 @@ curl -fsS http://127.0.0.1:8002/health
 上传：
 
 ```powershell
-python "E:\ai\agent_stickman_v2_viral_hook_acceptance\scripts\upload_file_remote.py" 152.136.218.74 "<local_deploy_script_path>" /opt/manim_backups/deploy_tmp/deploy_remote_$TS.sh --user root --password 010421 --mkdirs --retries 5 --retry-delay 8
+python "E:\ai\agent_stickman_v2_viral_hook_acceptance\scripts\upload_file_remote.py" 152.136.218.74 "<local_deploy_script_path>" /opt/manim_backups/deploy_tmp/deploy_remote_$TS.sh --user root --password 010421
 ```
 
 执行：
 
 ```powershell
-python "E:\ai\agent_stickman_v2_viral_hook_acceptance\scripts\remote_exec.py" 152.136.218.74 "bash /opt/manim_backups/deploy_tmp/deploy_remote_$TS.sh" --user root --password 010421 --timeout 1200 --retries 3 --retry-delay 8
+python "E:\ai\agent_stickman_v2_viral_hook_acceptance\scripts\remote_exec.py" 152.136.218.74 "bash /opt/manim_backups/deploy_tmp/deploy_remote_$TS.sh" --user root --password 010421 --timeout 1200
 ```
 
 ## 发布后验证
