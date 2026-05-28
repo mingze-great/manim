@@ -540,10 +540,10 @@ export default function ProjectTask() {
                   <div className="mb-4">
                     <label className="block text-sm text-gray-500 mb-1">
                       AI 模型
-                      <span className="text-xs text-green-500 ml-2">推荐 DeepSeek V3.2</span>
+                      <span className="text-xs text-green-500 ml-2">推荐 DeepSeek V4 Pro</span>
                     </label>
                     <Select
-                      placeholder="默认 DeepSeek V3.2"
+                      placeholder="默认 DeepSeek V4 Pro"
                       style={{ width: isMobile ? '100%' : 220 }}
                       value={selectedModel}
                       onChange={setSelectedModel}
