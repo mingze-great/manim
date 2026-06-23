@@ -122,6 +122,7 @@ class Settings(BaseSettings):
     STICKMAN_TTS_API_KEY: str = ""
     STICKMAN_TTS_BASE_URL: str = "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
     STICKMAN_TTS_MODEL: str = "cosyvoice-v3.5-plus"
+    STICKMAN_TTS_FALLBACK_MODELS: str = "cosyvoice-v3.5-flash,cosyvoice-v3-plus"
     STICKMAN_TTS_PROVIDER: str = "dashscope_cosyvoice"
     STICKMAN_TTS_VOICE: str = "longshuo_v3"
     STICKMAN_TTS_VOICE_LIBRARY: str = "[{\"label\":\"稳重男声\",\"value\":\"longshuo_v3\",\"provider\":\"dashscope_cosyvoice\",\"gender\":\"male\",\"style\":\"steady\"},{\"label\":\"阳光男声\",\"value\":\"longanyang\",\"provider\":\"dashscope_cosyvoice\",\"gender\":\"male\",\"style\":\"bright\"},{\"label\":\"元气女声\",\"value\":\"longanhuan\",\"provider\":\"dashscope_cosyvoice\",\"gender\":\"female\",\"style\":\"energetic\"},{\"label\":\"理性播报男声\",\"value\":\"sambert-zhiming-v1\",\"provider\":\"dashscope_sambert\",\"gender\":\"male\",\"style\":\"rational\"},{\"label\":\"治愈陪伴女声\",\"value\":\"sambert-zhiya-v1\",\"provider\":\"dashscope_sambert\",\"gender\":\"female\",\"style\":\"healing\"},{\"label\":\"激励主播男声\",\"value\":\"sambert-zhihao-v1\",\"provider\":\"dashscope_sambert\",\"gender\":\"male\",\"style\":\"motivational\"}]"
@@ -129,6 +130,9 @@ class Settings(BaseSettings):
     STICKMAN_MATERIAL_LIBRARY_ENABLED: bool = True
     STICKMAN_MATERIAL_LIBRARY_PATH: str = ""
     STICKMAN_MATERIAL_SOURCE_DIR: str = ""
+    STICKMAN_MATERIAL_LIBRARY_REQUIRED: bool = True
+    STICKMAN_VIRAL_VOICE_DIR: str = ""
+    STICKMAN_VIRAL_VOICE_REGISTRY_PATH: str = ""
     STICKMAN_V2_BACKGROUND_IMAGE_PATH: str = ""
     STICKMAN_V2_FONT_PATHS: str = ""
 

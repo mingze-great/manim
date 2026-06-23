@@ -6,11 +6,12 @@ import re
 
 class UserBase(BaseModel):
     username: str
-    email: EmailStr
+    email: str
     phone: Optional[str] = None
 
 
 class UserCreate(UserBase):
+    email: EmailStr
     password: str = Field(..., min_length=8, max_length=50)
     
     @field_validator('password')

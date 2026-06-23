@@ -434,7 +434,16 @@ async def update_user(
     if user_update.is_active is not None:
         user.is_active = user_update.is_active
     if user_update.is_admin is not None:
-        user.is_admin = user_update.is_admin
+        target_is_admin = bool(user_update.is_admin)
+        if not target_is_admin and user.is_admin:
+            if user.id == current_user.id:
+                raise HTTPException(status_code=400, detail="???????????????????")
+            admin_count = db.query(func.count(User.id)).filter(User.is_admin == True).scalar() or 0
+            if admin_count <= 1:
+                raise HTTPException(status_code=400, detail="???????????????")
+        user.is_admin = target_is_admin
+        if target_is_admin:
+            user.is_approved = True
     if user_update.frontend_version is not None:
         user.frontend_version = _frontend_version_payload(user_update.frontend_version)
     if user_update.module_permissions is not None:

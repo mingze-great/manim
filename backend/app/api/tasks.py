@@ -25,6 +25,7 @@ from app.services.stickman_generator_v2 import StickmanGenerator as StickmanGene
 from app.services.explainer_generator import ExplainerGenerator
 from app.services.stickman_v2_assets import resolve_generation_assets
 from app.config import get_settings
+from app.utils.llm_factory import LLMFactory
 from app.tasks.celery_tasks import render_video_celery, generate_code_celery, generate_chat_celery
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
@@ -130,7 +131,29 @@ def _prepare_code_generation_context(db: Session, project: Project, template_id:
 
 settings = get_settings()
 
-ORPHANED_TASK_TIMEOUT_SECONDS = 20
+
+def _normalize_requested_model(model: str | None) -> str | None:
+    requested = str(model or "").strip()
+    if not requested:
+        return None
+    available = set(LLMFactory.get_available_models())
+    if requested in available:
+        return requested
+    print(f"[tasks] ignore unavailable requested model: {requested}; fallback to default provider model")
+    return None
+
+
+def _normalize_video_title(raw_title: str | None, fallback_theme: str | None = None) -> str | None:
+    title = str(raw_title or fallback_theme or "").strip()
+    if not title:
+        return None
+    for prefix in ("\u89c6\u9891\u521b\u4f5c-", "????-", "??????-"):
+        if title.startswith(prefix):
+            trimmed = title[len(prefix):].strip()
+            if trimmed:
+                return trimmed
+    return title
+
 
 RENDER_SEMAPHORE = asyncio.Semaphore(4)
 CURRENT_RENDERS = 0
@@ -213,34 +236,6 @@ def _task_message(task: Task) -> str:
         if lines:
             return lines[-1]
     return f"任务{task.status}"
-
-
-def _mark_task_failed(db: Session, task: Task, message: str):
-    task.status = "failed"
-    task.error_message = message
-    task.completed_at = task.completed_at or task.created_at
-    if task.log:
-        task.log = task.log + f"{message}\n"
-    else:
-        task.log = f"{message}\n"
-    db.commit()
-    db.refresh(task)
-    return task
-
-
-def _reconcile_orphaned_task(db: Session, task: Task | None):
-    if not task:
-        return task
-    if task.status not in ["pending", "processing"]:
-        return task
-    if task.celery_task_id:
-        return task
-    if not task.created_at:
-        return task
-    age = time.time() - task.created_at.timestamp()
-    if age < ORPHANED_TASK_TIMEOUT_SECONDS:
-        return task
-    return _mark_task_failed(db, task, "任务未成功进入队列，请重新发起")
 
 
 @router.post("/internal/update-video")
@@ -399,7 +394,7 @@ async def generate_code_stream(
                 manim_service.generate_code(
                     input_content, 
                     template_code,
-                    video_title=project_local.theme,
+                    video_title=_normalize_video_title(project_local.title, project_local.theme),
                     model=model,
                     reference_code=reference_code or None,
                 )
@@ -1123,7 +1118,6 @@ async def generate_explainer_video_stream(
             video_path = result["video_path"]
             video_filename = os.path.basename(video_path)
             video_url = f"/api/videos/{video_filename}"
-            project_local.title = result.get("title") or project_local.title
             project_local.final_script = result.get("script")
             project_local.storyboard_json = json.dumps(result.get("storyboards") or [], ensure_ascii=False)
             project_local.image_assets_json = json.dumps(result.get("image_assets") or [], ensure_ascii=False)
@@ -1324,18 +1318,15 @@ async def render_video_async(
     db.commit()
     db.refresh(task)
     
-    try:
-        celery_result = render_video_celery.delay(
-            task.id,
-            project_id,
-            None,
-            None
-        )
-        task.celery_task_id = celery_result.id
-        db.commit()
-    except Exception as exc:
-        _mark_task_failed(db, task, f"任务入队失败: {exc}")
-        raise HTTPException(status_code=500, detail="视频任务入队失败，请稍后重试") from exc
+    celery_result = render_video_celery.delay(
+        task.id,
+        project_id,
+        None,
+        None
+    )
+    
+    task.celery_task_id = celery_result.id
+    db.commit()
     
     return {
         "task_id": task.id,
@@ -1356,7 +1347,6 @@ def get_latest_render_task(
         Task.task_type.in_(["video_render", "manim_render"])
     ).order_by(Task.created_at.desc()).first()
 
-    task = _reconcile_orphaned_task(db, task)
     if not task:
         return {
             "task_id": None,
@@ -1419,6 +1409,7 @@ async def generate_code_async(
 
     _, template = _prepare_code_generation_context(db, project, template_id)
     project.template_id = template.id if template else None
+    model = _normalize_requested_model(model)
     db.commit()
     
     # 创建任务记录
@@ -1434,18 +1425,15 @@ async def generate_code_async(
     db.refresh(task)
     
     # 提交 Celery 任务
-    try:
-        celery_result = generate_code_celery.delay(
-            task.id,
-            project_id,
-            template_id,
-            model
-        )
-        task.celery_task_id = celery_result.id
-        db.commit()
-    except Exception as exc:
-        _mark_task_failed(db, task, f"任务入队失败: {exc}")
-        raise HTTPException(status_code=500, detail="脚本任务入队失败，请稍后重试") from exc
+    celery_result = generate_code_celery.delay(
+        task.id,
+        project_id,
+        template_id,
+        model
+    )
+    
+    task.celery_task_id = celery_result.id
+    db.commit()
     
     return {
         "task_id": task.id,
@@ -1467,7 +1455,6 @@ def get_latest_code_task(
         Task.task_type == "code_generation"
     ).order_by(Task.created_at.desc()).first()
     
-    task = _reconcile_orphaned_task(db, task)
     if not task:
         return {
             "task_id": None,
@@ -1498,7 +1485,6 @@ def get_background_task(
         Task.user_id == current_user.id
     ).first()
     
-    task = _reconcile_orphaned_task(db, task)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     

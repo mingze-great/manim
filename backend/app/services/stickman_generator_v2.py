@@ -903,40 +903,35 @@ class StickmanGenerator:
         return reviewed
 
     def _split_script_for_storyboards(self, text: str) -> list[str]:
-        raw = str(text or "")
-        if not raw.strip():
-            return []
+        raw_blocks = [self._normalize_locked_subtitle_text(line) for line in str(text or "").splitlines() if str(line or "").strip()]
+        if raw_blocks:
+            return [self._normalize_storyboard_fragment(block) for block in raw_blocks if self._normalize_storyboard_fragment(block)]
 
-        explicit_lines = [
-            self._normalize_storyboard_fragment(line)
-            for line in raw.splitlines()
-            if self._normalize_storyboard_fragment(line)
-        ]
-        if len(explicit_lines) >= 2:
-            average_length = sum(len(line) for line in explicit_lines) / len(explicit_lines)
-            short_line_count = sum(1 for line in explicit_lines if len(line) <= 24)
-            if average_length <= 22 and short_line_count / len(explicit_lines) >= 0.8:
-                return explicit_lines
+        source_blocks = [str(text or "").strip()]
 
-        def split_long_chunk(chunk: str, max_chars: int = 16) -> list[str]:
-            clean_chunk = self._normalize_storyboard_fragment(chunk)
-            if not clean_chunk:
-                return []
+        def split_long_chunk(chunk: str, max_chars: int = 18) -> list[str]:
+            clean_chunk = self._normalize_locked_subtitle_text(chunk)
+            enum_items = self._split_enumeration_items(clean_chunk)
+            if len(enum_items) >= 2:
+                return enum_items
             if len(clean_chunk) <= max_chars:
-                return [clean_chunk]
+                normalized = self._normalize_storyboard_fragment(clean_chunk)
+                return [normalized] if normalized else []
             if not re.search(r"[，；：,;:。！？!?]", clean_chunk):
-                return self._semantic_split_long_text(clean_chunk, preferred_max=14, hard_max=16)
+                return self._semantic_split_long_text(clean_chunk, preferred_max=16, hard_max=18)
             pieces = []
             current = ""
+            soft_break_chars = "，；：、,;:"
+            hard_break_chars = "。！？!?"
             for char in clean_chunk:
                 current += char
-                if char in "。！？!?" and len(current) >= 8:
+                if len(current) >= max_chars and char in soft_break_chars:
                     normalized = self._normalize_storyboard_fragment(current)
                     if normalized:
                         pieces.append(normalized)
                     current = ""
                     continue
-                if len(current) >= max_chars and char in "，；：、,;:":
+                if len(current) >= max_chars and char in hard_break_chars:
                     normalized = self._normalize_storyboard_fragment(current)
                     if normalized:
                         pieces.append(normalized)
@@ -945,19 +940,25 @@ class StickmanGenerator:
                 normalized = self._normalize_storyboard_fragment(current)
                 if normalized:
                     pieces.append(normalized)
-            return pieces or ([clean_chunk] if clean_chunk else [])
+            if pieces:
+                return pieces
+            normalized = self._normalize_storyboard_fragment(clean_chunk)
+            return [normalized] if normalized else []
 
-        parts = [item.strip() for item in re.split(r"(?<=[。！？!?；;])\s*", raw) if item.strip()]
         refined = []
-        for part in (parts or [raw.strip()]):
-            clauses = [item.strip() for item in re.split(r"[，；：,;:]\s*", part) if item.strip()]
-            if not clauses:
-                refined.extend(split_long_chunk(part))
-                continue
-            for clause in clauses:
-                refined.extend(split_long_chunk(clause))
+        for block in source_blocks:
+            for sentence in self._split_sentences(block):
+                clauses = [item.strip() for item in re.split(r'[，；：,;:]\s*', sentence) if item.strip()]
+                if not clauses:
+                    clauses = [sentence]
+                if len(clauses) == 1:
+                    refined.extend(split_long_chunk(sentence))
+                    continue
+                for clause in clauses:
+                    refined.extend(split_long_chunk(clause))
+        reviewed = self._review_semantic_segments(refined or ([text.strip()] if text and text.strip() else []), soft_limit=18)
+        return reviewed or ([text.strip()] if text and text.strip() else [])
 
-        return [item for item in refined if item]
     def _expand_storyboards_for_pacing(self, script_data: dict, topic: str):
         storyboards = script_data.get("storyboards") or []
         expanded = []
@@ -1021,7 +1022,7 @@ class StickmanGenerator:
             scene["foreground_events"] = self._foreground_events_for_scene(scene, index)
             scene["subtitle_lines"] = [{
                 "text": narration,
-                "english": "",
+                "english": self._sanitize_english_subtitle(self._translate_subtitle_to_english(narration)),
             }]
             scene["emphasis_beats"] = self._emphasis_beats_for_scene(scene)
             storyboards.append(scene)
@@ -1029,7 +1030,7 @@ class StickmanGenerator:
         storyboards = self._explode_storyboards_for_segments(storyboards, topic, include_intro_scene=include_intro_scene)
         return {
             "title": topic,
-            "script": "\n".join(scene.get("scene_narration") or scene.get("narration") or "" for scene in storyboards),
+            "script": str(script_text or "").strip(),
             "storyboards": storyboards,
             "sections": sections,
         }
@@ -1894,7 +1895,7 @@ class StickmanGenerator:
         text = str(scene.get("scene_narration") or scene.get("narration", "")).strip()
         if not text:
             return []
-        lines = self._subtitle_segments_from_text(text)
+        lines = [text]
         result = []
         for line in lines:
             clean_text = self._strip_terminal_punctuation(line)
@@ -1903,6 +1904,7 @@ class StickmanGenerator:
                 "english": self._sanitize_english_subtitle(self._translate_subtitle_to_english(clean_text)),
             })
         return result
+
     def _emphasis_beats_for_scene(self, scene: dict):
         keywords = [str(item).strip() for item in (scene.get("keywords") or []) if str(item).strip()]
         text = str(scene.get("narration") or "")
@@ -2082,7 +2084,7 @@ class StickmanGenerator:
         for scene in storyboards:
             clone = dict(scene)
             subtitle_lines = list(scene.get("subtitle_lines") or self._subtitle_blueprint_for_scene(scene))
-            full_text = self._normalize_storyboard_fragment(scene.get("scene_narration") or scene.get("narration") or topic)
+            full_text = str(scene.get("scene_narration") or scene.get("narration") or topic).strip()
             if not subtitle_lines and full_text:
                 subtitle_lines = [{"text": full_text, "english": ""}]
             clone["segment_index_within_scene"] = 1
@@ -2352,31 +2354,42 @@ class StickmanGenerator:
         if not raw.strip():
             return []
 
+        if not re.search(r"[，,、。！？!?；;：:]", raw):
+            return self._semantic_split_long_text(raw, preferred_max=16, hard_max=18)
+
         def split_long_clause(clause: str):
-            clause = self._normalize_storyboard_fragment(clause)
+            clause = clause.strip()
             if not clause:
                 return []
-            if len(clause) <= 16:
+            if len(clause) <= 18:
                 return [clause]
             if not re.search(r"[，,、。！？!?；;：:]", clause):
-                return self._semantic_split_long_text(clause, preferred_max=14, hard_max=16)
+                return [clause]
 
             comma_parts = [item.strip() for item in re.split(r"(?<=[，,、])\s*", clause) if item.strip()]
             if len(comma_parts) > 1:
-                return [self._normalize_storyboard_fragment(part) for part in comma_parts if self._normalize_storyboard_fragment(part)]
+                merged = []
+                current = ""
+                for part in comma_parts:
+                    candidate = f"{current}{part}" if current else part
+                    if current and len(candidate) > 18:
+                        merged.append(current)
+                        current = part
+                    else:
+                        current = candidate
+                if current:
+                    merged.append(current)
+                return merged
 
             return [clause]
 
         parts = [item.strip() for item in re.split(r"(?<=[。！？!?；;])\s*", raw) if item.strip()]
         refined = []
         for part in (parts or [raw.strip()]):
-            clauses = [item.strip() for item in re.split(r"[，；：,;:]\s*", part) if item.strip()]
-            if not clauses:
-                refined.extend(split_long_clause(part))
-                continue
-            for clause in clauses:
-                refined.extend(split_long_clause(clause))
-        return [item for item in refined if item]
+            refined.extend(split_long_clause(part))
+        reviewed = self._review_semantic_segments(refined or [raw.strip()], soft_limit=18)
+        return reviewed or [raw.strip()]
+
     def _split_chinese_subtitle_lines(self, text: str):
         cleaned = re.sub(r"\s+", "", str(text or "").strip())
         if not cleaned:

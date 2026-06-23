@@ -6,48 +6,12 @@ import pathlib
 import time
 
 from app.database import get_db
-from app.models.project import Project
 from app.models.user import User
 from app.models.template import Template
 from app.schemas.template import TemplateCreate, TemplateResponse, TemplateListResponse, TemplateUpdate
 from app.api.auth import get_current_user
 
 router = APIRouter(prefix="/templates", tags=["templates"])
-
-
-SHARED_TEMPLATE_EXAMPLES_DIR = pathlib.Path("/opt/manim/shared/videos/template_examples")
-
-
-def _template_example_video_dirs() -> list[pathlib.Path]:
-    backend_root = pathlib.Path(__file__).parent.parent.parent
-    app_root = pathlib.Path(__file__).parent.parent
-    dirs = [
-        SHARED_TEMPLATE_EXAMPLES_DIR,
-        backend_root / "videos" / "template_examples",
-        app_root / "videos" / "template_examples",
-    ]
-    unique_dirs: list[pathlib.Path] = []
-    seen: set[str] = set()
-    for item in dirs:
-        key = str(item.resolve()) if item.exists() else str(item)
-        if key in seen:
-            continue
-        seen.add(key)
-        unique_dirs.append(item)
-    return unique_dirs
-
-
-def _background_task_project_id(db: Session, preferred_user_id: int | None = None) -> int:
-    if preferred_user_id is not None:
-        user_project = db.query(Project).filter(Project.user_id == preferred_user_id).order_by(Project.id.asc()).first()
-        if user_project:
-            return int(user_project.id)
-
-    any_project = db.query(Project).order_by(Project.id.asc()).first()
-    if any_project:
-        return int(any_project.id)
-
-    raise HTTPException(status_code=400, detail="当前没有可用于创建预览任务的项目，请先创建任意项目")
 
 
 @router.get("", response_model=TemplateListResponse)
@@ -62,34 +26,28 @@ def get_templates(
     
     user_is_admin = bool(current_user_obj.is_admin)
     current_user_id = current_user_obj.id
+    template_filters = [Template.is_active.is_(True)]
+    if category:
+        template_filters.append(Template.category == category)
     
     if user_is_admin:
-        system_q = db.query(Template).filter(
-            Template.is_active.is_(True),
+        system_query_result = db.query(Template).filter(
+            *template_filters,
             Template.is_system.is_(True)
-        )
-        user_q = db.query(Template).filter(
-            Template.is_active.is_(True),
+        ).order_by(Template.created_at.desc(), Template.id.desc()).offset(skip).limit(limit).all()
+        
+        user_query_result = db.query(Template).filter(
+            *template_filters,
             Template.is_system.is_(False)
-        )
+        ).order_by(Template.created_at.desc(), Template.id.desc()).offset(skip).limit(limit).all()
     else:
-        system_q = db.query(Template).filter(
-            Template.is_active.is_(True),
-            Template.is_visible.is_(True),
-            Template.is_system.is_(True)
-        )
-        user_q = db.query(Template).filter(
-            Template.is_active.is_(True),
-            Template.is_visible.is_(True),
-            Template.is_system.is_(False)
-        )
-
-    if category:
-        system_q = system_q.filter(Template.category == category)
-        user_q = user_q.filter(Template.category == category)
-
-    system_query_result = system_q.offset(skip).limit(limit).all()
-    user_query_result = user_q.offset(skip).limit(limit).all()
+        all_visible = db.query(Template).filter(
+            *template_filters,
+            Template.is_visible.is_(True)
+        ).order_by(Template.created_at.desc(), Template.id.desc()).offset(skip).limit(limit).all()
+        
+        system_query_result = [t for t in all_visible if t.is_system]
+        user_query_result = [t for t in all_visible if not t.is_system]
     
     system_responses = [TemplateResponse.model_validate(t) for t in system_query_result]
     user_responses = [TemplateResponse.model_validate(t) for t in user_query_result]
@@ -98,25 +56,6 @@ def get_templates(
         system_templates=system_responses,
         user_templates=user_responses
     )
-
-
-@router.get("/active", response_model=list[TemplateResponse])
-def get_active_templates(
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)]
-):
-    query = db.query(Template).filter(
-        Template.is_active.is_(True),
-        Template.is_visible.is_(True)
-    )
-
-    if not bool(current_user.is_admin):
-        query = query.filter(
-            (Template.is_system.is_(True)) | (Template.user_id == current_user.id)
-        )
-
-    templates = query.order_by(Template.usage_count.desc(), Template.created_at.desc()).all()
-    return [TemplateResponse.model_validate(t) for t in templates]
 
 
 @router.get("/{template_id}", response_model=TemplateResponse)
@@ -189,7 +128,6 @@ def create_template(
         description=template.description,
         category=template.category,
         code=template.code,
-        reference_code=template.reference_code,
         thumbnail=template.thumbnail,
         is_system=template_is_system_bool,
         user_id=current_user_id if not template_is_system_bool else None,
@@ -303,30 +241,19 @@ async def upload_example_video(
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
     
-    if not file.filename or pathlib.Path(file.filename).suffix.lower() != '.mp4':
+    if not file.filename or not file.filename.endswith('.mp4'):
         raise HTTPException(status_code=400, detail="Only MP4 files are allowed")
     
-    videos_dirs = _template_example_video_dirs()
-    for videos_dir in videos_dirs:
-        videos_dir.mkdir(parents=True, exist_ok=True)
+    videos_dir = pathlib.Path(__file__).parent.parent.parent / "videos" / "template_examples"
+    videos_dir.mkdir(parents=True, exist_ok=True)
     
     timestamp = int(time.time())
     filename = f"template_{template_id}_{timestamp}.mp4"
-    primary_path = videos_dirs[0] / filename
+    file_path = videos_dir / filename
     
     content = await file.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="上传文件为空")
-    with open(primary_path, 'wb') as f:
+    with open(file_path, 'wb') as f:
         f.write(content)
-
-    for extra_dir in videos_dirs[1:]:
-        extra_path = extra_dir / filename
-        try:
-            with open(extra_path, 'wb') as f:
-                f.write(content)
-        except Exception:
-            pass
     
     video_url = f"/api/videos/template_examples/{filename}"
     template.example_video_url = video_url
@@ -355,13 +282,9 @@ def delete_example_video(
     
     if template.example_video_url:
         filename = template.example_video_url.split('/')[-1]
-        for videos_dir in _template_example_video_dirs():
-            file_path = videos_dir / filename
-            if file_path.exists():
-                try:
-                    os.remove(file_path)
-                except OSError:
-                    pass
+        file_path = pathlib.Path(__file__).parent.parent.parent / "videos" / "template_examples" / filename
+        if file_path.exists():
+            os.remove(file_path)
         
         template.example_video_url = None
         db.commit()
@@ -392,7 +315,7 @@ async def render_template_preview(
     bg_task = task_manager.create_task(
         db=db,
         task_type="render_template_preview",
-        project_id=_background_task_project_id(db, current_user_obj.id),
+        project_id=0,
         user_id=current_user_obj.id,
         input_params={"template_id": template_id}
     )
@@ -434,7 +357,7 @@ async def render_all_template_previews(
         bg_task = task_manager.create_task(
             db=db,
             task_type="render_template_preview",
-            project_id=_background_task_project_id(db, current_user_obj.id),
+            project_id=0,
             user_id=current_user_obj.id,
             input_params={"template_id": template.id}
         )

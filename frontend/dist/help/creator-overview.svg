@@ -1,0 +1,43 @@
+<svg width="1440" height="900" viewBox="0 0 1440 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="1440" height="900" fill="#F3F7FA"/>
+<rect x="0" y="0" width="1440" height="88" fill="#FFFFFF"/>
+<rect x="32" y="20" width="240" height="48" rx="14" fill="#163B54"/>
+<text x="64" y="51" fill="#FFFFFF" font-family="Arial" font-size="24" font-weight="700">帮助中心截图</text>
+<rect x="40" y="120" width="220" height="720" rx="24" fill="#10324A"/>
+<rect x="64" y="170" width="172" height="52" rx="14" fill="#235C77"/>
+<rect x="64" y="240" width="172" height="52" rx="14" fill="#F1A155"/>
+<rect x="64" y="310" width="172" height="52" rx="14" fill="#235C77"/>
+<text x="84" y="203" fill="#FFFFFF" font-family="Arial" font-size="20">开始创作</text>
+<text x="84" y="273" fill="#163B54" font-family="Arial" font-size="20">帮助中心</text>
+<text x="84" y="343" fill="#FFFFFF" font-family="Arial" font-size="20">我的作品</text>
+<rect x="300" y="120" width="1096" height="180" rx="28" fill="url(#paint0_linear)"/>
+<text x="352" y="190" fill="#FFFFFF" font-family="Arial" font-size="42" font-weight="700">开始创作统一入口</text>
+<text x="352" y="236" fill="#EAF6FF" font-family="Arial" font-size="24">先选模块，再进入各自独立创作工作流</text>
+<rect x="300" y="340" width="250" height="220" rx="24" fill="#FFFFFF" stroke="#D8E4EC"/>
+<rect x="580" y="340" width="250" height="220" rx="24" fill="#FFFFFF" stroke="#F1D5B1"/>
+<rect x="860" y="340" width="250" height="220" rx="24" fill="#FFFFFF" stroke="#D8E4EC"/>
+<rect x="1140" y="340" width="250" height="220" rx="24" fill="#FFFFFF" stroke="#D8E4EC"/>
+<circle cx="368" cy="404" r="28" fill="#E6F1F6"/>
+<circle cx="648" cy="404" r="28" fill="#FFF0E3"/>
+<circle cx="928" cy="404" r="28" fill="#E6F1F6"/>
+<circle cx="1208" cy="404" r="28" fill="#E7F7EF"/>
+<text x="336" y="470" fill="#17394F" font-family="Arial" font-size="28" font-weight="700">思维可视化</text>
+<text x="618" y="470" fill="#17394F" font-family="Arial" font-size="28" font-weight="700">视频讲解</text>
+<text x="918" y="470" fill="#17394F" font-family="Arial" font-size="28" font-weight="700">数学可视化</text>
+<text x="1188" y="470" fill="#17394F" font-family="Arial" font-size="28" font-weight="700">公众号文章</text>
+<text x="334" y="510" fill="#667985" font-family="Arial" font-size="20">多轮对话打磨文案</text>
+<text x="616" y="510" fill="#667985" font-family="Arial" font-size="20">标准/增强/讲解型视频</text>
+<text x="916" y="510" fill="#667985" font-family="Arial" font-size="20">公式与图形动画</text>
+<text x="1188" y="510" fill="#667985" font-family="Arial" font-size="20">图文生成与排版</text>
+<rect x="300" y="610" width="1096" height="180" rx="24" fill="#FFFFFF" stroke="#D8E4EC"/>
+<text x="340" y="680" fill="#17394F" font-family="Arial" font-size="30" font-weight="700">教程重点</text>
+<text x="340" y="726" fill="#667985" font-family="Arial" font-size="24">1. 先点左侧“开始创作”</text>
+<text x="340" y="764" fill="#667985" font-family="Arial" font-size="24">2. 按用途选择模块，再进入具体工作台</text>
+<defs>
+<linearGradient id="paint0_linear" x1="300" y1="120" x2="1296" y2="300" gradientUnits="userSpaceOnUse">
+<stop stop-color="#153A52"/>
+<stop offset="0.6" stop-color="#1D5D70"/>
+<stop offset="1" stop-color="#EF9542"/>
+</linearGradient>
+</defs>
+</svg>

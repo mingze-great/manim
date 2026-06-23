@@ -636,7 +636,7 @@ def generate_stickman_script(
             project_final_script,
             include_intro_scene=bool(generation_flags.get("opening_intro_enabled", False)),
         )
-        project.final_script = script_data.get("script") or project_final_script
+        project.final_script = project_final_script
     else:
         if str(getattr(project, 'stickman_variant', 'legacy') or 'legacy') == 'v2':
             script_data = generator.generate_script_data(
@@ -673,52 +673,6 @@ def update_stickman_storyboards(
     if isinstance(final_script, str):
         project.final_script = final_script
     _invalidate_stickman_visual_outputs(project)
-    db.commit()
-    db.refresh(project)
-    return project
-
-
-@router.post("/{project_id}/stickman/english-subtitles", response_model=ProjectResponse)
-def generate_stickman_english_subtitles(
-    project_id: int,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)]
-):
-    project = _get_stickman_project(db, current_user, project_id)
-    storyboards = json.loads(project.storyboard_json or "[]")
-    if not storyboards:
-        raise HTTPException(status_code=400, detail="请先生成并确认分镜")
-
-    generator = _build_stickman_generator(project)
-    updated_storyboards = []
-    for scene in storyboards:
-        clone = dict(scene)
-        subtitle_lines = list(clone.get("subtitle_lines") or [])
-        narration_text = str(clone.get("scene_narration") or clone.get("narration") or "").strip()
-        if not subtitle_lines and narration_text:
-            subtitle_lines = [{"text": narration_text}]
-
-        next_lines = []
-        for item in subtitle_lines:
-            text = str((item or {}).get("text") or "").strip()
-            if not text:
-                continue
-            english = generator._sanitize_english_subtitle(
-                str((item or {}).get("english") or "").strip()
-            )
-            if not english:
-                english = generator._sanitize_english_subtitle(
-                    generator._translate_subtitle_to_english(text)
-                )
-            next_item = dict(item or {})
-            next_item["text"] = text
-            next_item["english"] = english
-            next_lines.append(next_item)
-
-        clone["subtitle_lines"] = next_lines
-        updated_storyboards.append(clone)
-
-    project.storyboard_json = json.dumps(updated_storyboards, ensure_ascii=False)
     db.commit()
     db.refresh(project)
     return project
@@ -910,7 +864,6 @@ def generate_explainer_storyboard(
         visual_style_key,
         target_duration,
     )
-    project.title = str(result.get("title") or project.title)
     project.final_script = result.get("script")
     project.storyboard_json = json.dumps(result.get("storyboards") or [], ensure_ascii=False)
     project.generation_flags = json.dumps({**generation_flags, **(result.get("generation_flags") or {})}, ensure_ascii=False)
@@ -932,8 +885,6 @@ def update_explainer_storyboard(
     storyboards = payload.get("storyboards") or []
     if not isinstance(storyboards, list) or not storyboards:
         raise HTTPException(status_code=400, detail="storyboards 不能为空")
-    if isinstance(payload.get("title"), str) and payload.get("title").strip():
-        project.title = payload.get("title").strip()
     if isinstance(payload.get("final_script"), str):
         project.final_script = payload.get("final_script")
     if isinstance(payload.get("generation_flags"), dict):
@@ -1661,7 +1612,7 @@ async def regenerate_code(
     manim_code = await manim_service.generate_code(
         project.final_script,
         template_code=template_code,
-        video_title=project.theme
+        video_title=str(project.title or project.theme or "").strip() or None
     )
     
     project.manim_code = manim_code

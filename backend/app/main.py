@@ -634,7 +634,7 @@ def download_video(
     return FileResponse(video_path, media_type="video/mp4", filename=safe_filename)
 
 
-@app.get("/api/videos/template_examples/{filename}")
+@app.get("/api/videos/template_examples/{filename:path}")
 def download_template_example_video(filename: str):
     safe_filename = pathlib.Path(filename).name
     
