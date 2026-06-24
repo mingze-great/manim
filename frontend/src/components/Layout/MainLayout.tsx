@@ -3,7 +3,7 @@ import { Layout, Menu, Avatar, Dropdown, Space, Button, Drawer } from 'antd'
 import type { MenuProps } from 'antd'
 import {
   PlusOutlined, HistoryOutlined, UserOutlined,
-  LogoutOutlined, MenuOutlined, BookOutlined, SafetyOutlined, HomeOutlined
+  LogoutOutlined, MenuOutlined, BookOutlined, SafetyOutlined, HomeOutlined, VideoCameraOutlined
 } from '@ant-design/icons'
 import { useAuthStore } from '@/stores/authStore'
 import { clearAuthArtifacts, syncCrossSiteLogout } from '@/utils/authSync'
@@ -26,6 +26,7 @@ export default function MainLayout() {
 
   const menuItems: MenuProps['items'] = [
     { key: '/creator', icon: <PlusOutlined />, label: '开始创作' },
+    { key: '/ai-video/dashboard', icon: <VideoCameraOutlined />, label: 'AI 视频导演' },
     { key: '/history', icon: <HistoryOutlined />, label: '我的作品' },
     { key: '/docs', icon: <BookOutlined />, label: '帮助中心' },
   ]
@@ -64,6 +65,7 @@ export default function MainLayout() {
     const item = menuItems.find(m => m && 'key' in m && m.key === location.pathname)
     if (item && 'label' in item) return item.label as string
     if (location.pathname.startsWith('/creator')) return '创作工作台'
+    if (location.pathname.startsWith('/ai-video')) return 'AI 视频导演工作台'
     if (location.pathname.includes('/explainer')) return '讲解型视频'
     if (location.pathname.startsWith('/article')) return '公众号文章'
     return '思维可视化 视频平台'

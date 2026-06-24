@@ -1,0 +1,69 @@
+import api from './api'
+
+export interface AiVideoJobCreate {
+  title?: string
+  script: string
+  videoType: string
+  style: string
+  aspectRatio: string
+  voiceProvider: string
+  voiceId: string
+  subtitleMode: string
+  brandKitId?: string
+  targetPlatform: string
+}
+
+export interface AiVideoJob {
+  jobId: string
+  id: number
+  projectId: number
+  status: string
+  progress: number
+  stage: string
+  message: string
+  outputUrl: string | null
+  coverUrl: string | null
+  errorMessage: string | null
+  createdAt: string
+  updatedAt: string
+  completedAt: string | null
+}
+
+export interface AiVideoProject {
+  id: number
+  title: string
+  videoType: string
+  aspectRatio: string
+  status: string
+  coverUrl: string | null
+  outputUrl: string | null
+  currentVersionId: number | null
+  createdAt: string
+  updatedAt: string
+  projectJson?: any
+}
+
+export interface AiVideoOverview {
+  stats: {
+    totalProjects: number
+    generating: number
+    completed: number
+    monthlyExports: number
+  }
+  recentProjects: AiVideoProject[]
+  queue: AiVideoJob[]
+}
+
+export const aiVideoApi = {
+  overview: () => api.get<AiVideoOverview>('/ai-video/overview'),
+  templates: () => api.get('/ai-video/templates'),
+  createJob: (payload: AiVideoJobCreate) => api.post<{ jobId: string; projectId: number; status: string }>('/ai-video/jobs', payload),
+  getJob: (jobId: string) => api.get<AiVideoJob>(`/ai-video/jobs/${jobId}`),
+  listProjects: () => api.get<AiVideoProject[]>('/ai-video/projects'),
+  getProject: (id: number) => api.get<AiVideoProject>(`/ai-video/projects/${id}`),
+  planEdit: (id: number, message: string) => api.post<{ editPlan: string[]; canApply: boolean }>(`/ai-video/projects/${id}/edit`, { message, mode: 'plan_then_apply' }),
+  applyEdit: (id: number, editPlan: string[], message?: string) => api.post(`/ai-video/projects/${id}/apply-edit`, { editPlan, message }),
+  versions: (id: number) => api.get(`/ai-video/projects/${id}/versions`),
+  brandKits: () => api.get('/ai-video/brand-kits'),
+  createBrandKit: (payload: { name: string; colors: string[] }) => api.post('/ai-video/brand-kits', payload),
+}

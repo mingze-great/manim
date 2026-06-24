@@ -12,5 +12,6 @@ from .daily_usage import UserDailyUsage
 from .favorite_topic import FavoriteTopic
 from .user_module_permission import UserModulePermission
 from .chat_style import ChatStyle
+from .ai_video import AiVideoAsset, AiVideoBrandKit, AiVideoJob, AiVideoProject, AiVideoVersion
 
-__all__ = ["User", "Project", "Conversation", "Task", "Template", "Order", "Subscription", "DailyStatistics", "BackgroundTask", "VideoTopicCategory", "Article", "ArticleCategory", "UserDailyUsage", "FavoriteTopic", "UserModulePermission", "ChatStyle"]
+__all__ = ["User", "Project", "Conversation", "Task", "Template", "Order", "Subscription", "DailyStatistics", "BackgroundTask", "VideoTopicCategory", "Article", "ArticleCategory", "UserDailyUsage", "FavoriteTopic", "UserModulePermission", "ChatStyle", "AiVideoAsset", "AiVideoBrandKit", "AiVideoJob", "AiVideoProject", "AiVideoVersion"]

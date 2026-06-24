@@ -22,6 +22,16 @@ import ArticleEntry from './pages/Article/Entry'
 import ArticleQuick from './pages/Article/Quick'
 import ArticleStudio from './pages/Article/Studio'
 import ArticleHistory from './pages/Article/History'
+import {
+  AiVideoAssets,
+  AiVideoBrandKit,
+  AiVideoCreate,
+  AiVideoDashboard,
+  AiVideoEditor,
+  AiVideoExports,
+  AiVideoSettings,
+  AiVideoTemplates,
+} from './pages/AiVideo'
 import AdminDashboard from './pages/admin/AdminDashboard'
 import AdminUsers from './pages/admin/AdminUsers'
 import AdminLogs from './pages/admin/AdminLogs'
@@ -148,6 +158,15 @@ function AppContent() {
         <Route path="/article/studio" element={<ArticleStudio />} />
         <Route path="/article/:id" element={<ArticleStudio />} />
         <Route path="/article/history" element={<ArticleHistory />} />
+        <Route path="/ai-video" element={<AiVideoDashboard />} />
+        <Route path="/ai-video/dashboard" element={<AiVideoDashboard />} />
+        <Route path="/ai-video/create" element={<AiVideoCreate />} />
+        <Route path="/ai-video/editor/:id" element={<AiVideoEditor />} />
+        <Route path="/ai-video/templates" element={<AiVideoTemplates />} />
+        <Route path="/ai-video/assets" element={<AiVideoAssets />} />
+        <Route path="/ai-video/brand-kit" element={<AiVideoBrandKit />} />
+        <Route path="/ai-video/exports" element={<AiVideoExports />} />
+        <Route path="/ai-video/settings" element={<AiVideoSettings />} />
         <Route path="/history" element={<History />} />
         <Route path="/profile" element={<Profile />} />
       </Route>
