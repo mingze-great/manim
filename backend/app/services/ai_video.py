@@ -1,7 +1,6 @@
 import json
 import os
 import shutil
-import subprocess
 import threading
 import time
 import urllib.error
@@ -14,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.models.ai_video import AiVideoJob, AiVideoProject, AiVideoVersion
+from app.services.stickman_generator_v2 import StickmanGenerator
 
 
 STAGE_MESSAGES = {
@@ -33,7 +33,13 @@ STAGE_MESSAGES = {
 class AiVideoService:
     def __init__(self) -> None:
         self.storage_root = Path("storage") / "ai-video" / "tasks"
-        self.render_service_url = os.getenv("AI_VIDEO_RENDER_SERVICE_URL", "http://127.0.0.1:8787").rstrip("/")
+        self.render_service_url = os.getenv("AI_VIDEO_RENDER_SERVICE_URL", "http://127.0.0.1:18787").rstrip("/")
+        self.render_audio_root = Path(
+            os.getenv(
+                "AI_VIDEO_RENDER_AUDIO_ROOT",
+                "../video-render-service/remotion-mind-video/public/generated-audio",
+            )
+        )
         self.render_timeout = int(os.getenv("AI_VIDEO_RENDER_TIMEOUT", "600"))
         self._running_jobs: set[int] = set()
         self._lock = threading.Lock()
@@ -123,7 +129,8 @@ class AiVideoService:
             "limits": {
                 "renderConcurrency": 1,
                 "cosyVoiceConcurrency": 1,
-                "fallbackRenderer": "ffmpeg color+aac sample",
+                "fallbackRenderer": None,
+                "cosyVoiceRequired": True,
             },
         }
 
@@ -244,20 +251,27 @@ class AiVideoService:
                     return
                 self._update_job(db, job, stage=stage, status=stage, progress=progress)
                 self._append_log(job.log_path, STAGE_MESSAGES[stage])
+                if stage == "tts_generating":
+                    time.sleep(0.1)
+                    break
                 time.sleep(0.25)
 
             project_json = self._default_project_json(project, payload)
+            audio_scenes = self._generate_cosyvoice_audio(project_json, task_dir, job.log_path, payload)
+            self._update_job(db, job, stage="audio_processing", status="audio_processing", progress=62)
+            self._append_log(job.log_path, STAGE_MESSAGES["audio_processing"])
+            self._update_job(db, job, stage="rendering", status="rendering", progress=82)
+            self._append_log(job.log_path, STAGE_MESSAGES["rendering"])
             (task_dir / "project.json").write_text(json.dumps(project_json, ensure_ascii=False, indent=2), encoding="utf-8")
             (task_dir / "scenes.json").write_text(json.dumps(project_json["scenes"], ensure_ascii=False, indent=2), encoding="utf-8")
             (task_dir / "subtitles" / "subtitles.srt").write_text(self._build_srt(project_json["scenes"]), encoding="utf-8")
             output_path = task_dir / "output" / "video.mp4"
             cover_path = task_dir / "output" / "cover.svg"
-            render_result = self._render_with_external_service(payload, output_path, job.log_path)
+            render_result = self._render_with_external_service(payload, audio_scenes, output_path, job.log_path)
             if not render_result.get("ok"):
-                self._append_log(job.log_path, f"外部渲染服务不可用，使用安全降级样片: {render_result.get('message')}")
-                self._render_placeholder_video(output_path, project.title, project.aspect_ratio)
+                raise RuntimeError(f"Remotion 渲染失败: {render_result.get('message')}")
             project_json["render"] = {
-                "provider": render_result.get("provider", "fallback_ffmpeg"),
+                "provider": render_result.get("provider", "external_remotion_cosyvoice"),
                 "externalService": self.render_service_url,
                 "message": render_result.get("message"),
             }
@@ -303,23 +317,29 @@ class AiVideoService:
 
     def _probe_render_service(self) -> dict[str, Any]:
         try:
-            with urllib.request.urlopen(f"{self.render_service_url}/api/tts/status", timeout=2) as response:
+            with urllib.request.urlopen(f"{self.render_service_url}/api/health", timeout=2) as response:
                 payload = json.loads(response.read().decode("utf-8"))
             return {"available": True, "status": payload}
         except Exception as exc:
             return {"available": False, "message": str(exc)}
 
-    def _render_with_external_service(self, payload: dict[str, Any], output_path: Path, log_path: str | None) -> dict[str, Any]:
+    def _render_with_external_service(
+        self,
+        payload: dict[str, Any],
+        audio_scenes: list[dict[str, Any]],
+        output_path: Path,
+        log_path: str | None,
+    ) -> dict[str, Any]:
         request_payload = {
             "script": payload.get("script") or "",
             "style": payload.get("style") or "aurora",
-            "provider": payload.get("voiceProvider") or "auto",
-            "cosyVoiceSpeaker": payload.get("voiceId") or "中文女",
-            "withBgm": True,
+            "density": 1,
+            "audioScenes": audio_scenes,
+            "bgmSrc": None,
         }
         body = json.dumps(request_payload, ensure_ascii=False).encode("utf-8")
         request = urllib.request.Request(
-            f"{self.render_service_url}/api/render",
+            f"{self.render_service_url}/api/render-project",
             data=body,
             headers={"Content-Type": "application/json"},
             method="POST",
@@ -347,6 +367,73 @@ class AiVideoService:
     def _download_file(self, source_url: str, output_path: Path) -> None:
         with urllib.request.urlopen(source_url, timeout=120) as response:
             output_path.write_bytes(response.read())
+
+    def _generate_cosyvoice_audio(
+        self,
+        project_json: dict[str, Any],
+        task_dir: Path,
+        log_path: str | None,
+        payload: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        render_audio_dir = self.render_audio_root / f"job_{task_dir.name.replace('job_', '')}"
+        render_audio_dir.mkdir(parents=True, exist_ok=True)
+        backend_audio_dir = task_dir / "audio"
+        backend_audio_dir.mkdir(parents=True, exist_ok=True)
+
+        generator = StickmanGenerator()
+        voice = self._resolve_cosyvoice_voice(str(payload.get("voiceId") or project_json.get("voice", {}).get("speaker") or "longanhuan"))
+        audio_scenes: list[dict[str, Any]] = []
+        for index, scene in enumerate(project_json.get("scenes") or []):
+            text = str(scene.get("voiceText") or scene.get("subtitleText") or "").strip()
+            if not text:
+                raise RuntimeError(f"scene_{index + 1} 缺少可配音文本")
+            filename = f"scene-{index + 1:02d}.mp3"
+            backend_audio_path = backend_audio_dir / filename
+            render_audio_path = render_audio_dir / filename
+            self._append_log(log_path, f"CosyVoice 生成配音 scene={index + 1} voice={voice}")
+            seconds = generator._generate_audio(
+                text,
+                str(backend_audio_path),
+                "dashscope_cosyvoice",
+                voice,
+                "+0%",
+            )
+            if seconds <= 0 or not backend_audio_path.exists() or backend_audio_path.stat().st_size <= 0:
+                raise RuntimeError(f"CosyVoice 未生成有效音频 scene={index + 1}")
+            shutil.copyfile(backend_audio_path, render_audio_path)
+            duration_frames = max(75, int(seconds * 30) + 15)
+            scene["duration"] = round(seconds, 2)
+            scene["durationFrames"] = duration_frames
+            scene["audio"] = {
+                "provider": "dashscope_cosyvoice",
+                "voice": voice,
+                "path": str(backend_audio_path),
+                "seconds": seconds,
+            }
+            audio_scenes.append(
+                {
+                    "index": index,
+                    "src": f"generated-audio/{render_audio_dir.name}/{filename}",
+                    "seconds": seconds,
+                    "durationInFrames": duration_frames,
+                    "provider": "dashscope_cosyvoice",
+                }
+            )
+        project_json.setdefault("voice", {})["provider"] = "dashscope_cosyvoice"
+        project_json.setdefault("voice", {})["speaker"] = voice
+        return audio_scenes
+
+    def _resolve_cosyvoice_voice(self, voice: str) -> str:
+        mapping = {
+            "中文女": "longanhuan",
+            "女声": "longanhuan",
+            "元气女声": "longanhuan",
+            "中文男": "longshuo_v3",
+            "男声": "longshuo_v3",
+            "稳重男声": "longshuo_v3",
+            "阳光男声": "longanyang",
+        }
+        return mapping.get(voice.strip(), voice.strip() or "longanhuan")
 
     def _update_job(self, db: Session, job: AiVideoJob, *, stage: str, status: str, progress: int) -> None:
         job.stage = stage
@@ -418,34 +505,6 @@ class AiVideoService:
             )
             cursor = end
         return "\n".join(blocks)
-
-    def _render_placeholder_video(self, output_path: Path, title: str, aspect_ratio: str) -> None:
-        ffmpeg = shutil.which("ffmpeg")
-        size = "1080x1920" if aspect_ratio == "9:16" else "1280x720"
-        if ffmpeg:
-            cmd = [
-                ffmpeg,
-                "-y",
-                "-f",
-                "lavfi",
-                "-i",
-                f"color=c=0f172a:s={size}:d=6",
-                "-f",
-                "lavfi",
-                "-i",
-                "sine=frequency=440:duration=6",
-                "-shortest",
-                "-c:v",
-                "libx264",
-                "-pix_fmt",
-                "yuv420p",
-                "-c:a",
-                "aac",
-                str(output_path),
-            ]
-            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
-            return
-        output_path.write_bytes(b"")
 
     def _build_cover_svg(self, title: str) -> str:
         safe = title.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")

@@ -25,7 +25,20 @@ echo "--- preserve 3003 env/runtime files ---"
 git status --short --branch | head -80
 git log -1 --format='%H%n%h%n%ci%n%D%n%s'
 
+echo "--- setup ai video render service ---"
+cd "${DST}/video-render-service/remotion-mind-video"
+npm install --omit=dev
+node -e "import('@remotion/renderer').then(async ({ensureBrowser}) => { await ensureBrowser({chromeMode: 'headless-shell', logLevel: 'info'}); })"
+cp "${DST}/deploy/manim-v2-3003-ai-video-render.service" /etc/systemd/system/manim-v2-3003-ai-video-render.service
+systemctl daemon-reload
+systemctl enable manim-v2-3003-ai-video-render.service
+systemctl restart manim-v2-3003-ai-video-render.service
+sleep 4
+curl -s --max-time 10 http://127.0.0.1:18787/api/health || true
+echo
+
 echo "--- restart 3003 only ---"
+cd "${DST}"
 systemctl restart manim-v2-3003-backend.service
 systemctl restart manim-v2-3003-worker.service
 systemctl reload nginx
@@ -43,4 +56,4 @@ echo "--- ports ---"
 (ss -ltnp 2>/dev/null || netstat -ltnp 2>/dev/null) | grep -E ':(3002|3003|8002|8003)\b' || true
 
 echo "--- service status ---"
-systemctl is-active manim-v2-3003-backend.service manim-v2-3003-worker.service
+systemctl is-active manim-v2-3003-ai-video-render.service manim-v2-3003-backend.service manim-v2-3003-worker.service
