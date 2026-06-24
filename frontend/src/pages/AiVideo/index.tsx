@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Button, Form, Input, Progress, Select, Space, Tag, message } from 'antd'
+import { Button, Form, Input, Progress, Select, Space, Switch, Tag, message } from 'antd'
 import {
   AppstoreOutlined,
   BgColorsOutlined,
@@ -13,7 +13,7 @@ import {
   VideoCameraOutlined,
 } from '@ant-design/icons'
 import { useNavigate, useParams } from 'react-router-dom'
-import { aiVideoApi, AiVideoJob, AiVideoOverview, AiVideoProject } from '@/services/aiVideo'
+import { aiVideoApi, AiVideoCapability, AiVideoExport, AiVideoJob, AiVideoOverview, AiVideoProject } from '@/services/aiVideo'
 import { resolveBackendUrl } from '@/services/api'
 import './AiVideo.css'
 
@@ -165,6 +165,21 @@ export function AiVideoCreate() {
     }
   }
 
+  const cancelJob = async () => {
+    if (!job) return
+    const { data } = await aiVideoApi.cancelJob(job.jobId)
+    setJob(data)
+    message.info('已取消当前 AI 视频任务')
+  }
+
+  const retryJob = async () => {
+    if (!job) return
+    const { data } = await aiVideoApi.retryJob(job.jobId)
+    const next = await aiVideoApi.getJob(data.jobId)
+    setJob(next.data)
+    message.success('已重新加入生成队列')
+  }
+
   return (
     <Shell>
       <div className="ai-video-grid">
@@ -210,7 +225,17 @@ export function AiVideoCreate() {
               <div className="stage-item" key={label}><span className="stage-dot">{index + 1}</span><strong>{label}</strong></div>
             ))}
           </div>
-          {job && <><Progress percent={job.progress} status="active" /><p>{job.message}</p></>}
+          {job && (
+            <div className="job-control">
+              <Progress percent={job.progress} status={job.status === 'failed' ? 'exception' : job.status === 'cancelled' ? 'normal' : 'active'} />
+              <p>{job.message}</p>
+              {job.errorMessage && <p className="error-text">{job.errorMessage}</p>}
+              <Space wrap>
+                {!['completed', 'failed', 'cancelled'].includes(job.status) && <Button onClick={cancelJob}>取消任务</Button>}
+                {['failed', 'cancelled'].includes(job.status) && <Button type="primary" onClick={retryJob}>重试任务</Button>}
+              </Space>
+            </div>
+          )}
         </section>
       </div>
     </Shell>
@@ -222,11 +247,14 @@ export function AiVideoEditor() {
   const [project, setProject] = useState<AiVideoProject | null>(null)
   const [editText, setEditText] = useState('')
   const [plan, setPlan] = useState<string[]>([])
+  const [versions, setVersions] = useState<any[]>([])
 
   const load = async () => {
     if (!id) return
     const { data } = await aiVideoApi.getProject(Number(id))
     setProject(data)
+    const versionRes = await aiVideoApi.versions(Number(id))
+    setVersions(versionRes.data as any[])
   }
 
   useEffect(() => { load() }, [id])
@@ -246,6 +274,13 @@ export function AiVideoEditor() {
     message.success('已生成新版本')
     setPlan([])
     setEditText('')
+    load()
+  }
+
+  const rollback = async (versionId: number) => {
+    if (!project) return
+    await aiVideoApi.rollbackVersion(project.id, versionId)
+    message.success('已回退到选中版本')
     load()
   }
 
@@ -287,6 +322,18 @@ export function AiVideoEditor() {
             {outputUrl && <Button icon={<CloudDownloadOutlined />} href={outputUrl}>下载 MP4</Button>}
             <div className="waveform">{Array.from({ length: 24 }, (_, i) => <i key={i} />)}</div>
           </div>
+          <h3 style={{ marginTop: 18 }}>版本历史</h3>
+          <div className="version-list">
+            {versions.map(version => (
+              <div className="version-item" key={version.id}>
+                <div>
+                  <strong>Version {version.versionNo}</strong>
+                  <p>{version.changeSummary || '生成版本'}</p>
+                </div>
+                <Button size="small" onClick={() => rollback(version.id)}>回退</Button>
+              </div>
+            ))}
+          </div>
         </section>
       </div>
     </Shell>
@@ -324,13 +371,60 @@ export function AiVideoBrandKit() {
 }
 
 export function AiVideoExports() {
-  const [projects, setProjects] = useState<AiVideoProject[]>([])
-  useEffect(() => { aiVideoApi.listProjects().then(res => setProjects(res.data)) }, [])
-  return <Shell><SimpleCollection title="导出记录" items={projects.filter(p => p.outputUrl).map(p => `${p.title} · ${p.aspectRatio} · ${p.status}`)} /></Shell>
+  const [exports, setExports] = useState<AiVideoExport[]>([])
+  useEffect(() => { aiVideoApi.exports().then(res => setExports(res.data)) }, [])
+  return (
+    <Shell>
+      <div className="ai-video-panel">
+        <h3>导出记录</h3>
+        <div className="project-list">
+          {exports.map(item => (
+            <div className="project-item" key={item.id}>
+              <div className="project-thumb" />
+              <div>
+                <strong>{item.title}</strong>
+                <div><Tag>Version {item.versionNo}</Tag><Tag color={item.status === 'completed' ? 'green' : 'orange'}>{item.status}</Tag></div>
+              </div>
+              {item.outputUrl && <Button icon={<CloudDownloadOutlined />} href={resolveBackendUrl(item.outputUrl)}>下载</Button>}
+            </div>
+          ))}
+          {!exports.length && <p>暂无导出记录。</p>}
+        </div>
+      </div>
+    </Shell>
+  )
 }
 
 export function AiVideoSettings() {
-  return <Shell><SimpleCollection title="模块设置" items={['渲染并发：1', 'CosyVoice 并发：1', '粒子动效：可关闭', '文件目录：storage/ai-video/tasks', '回滚：关闭 /api/ai-video 和 /ai-video 入口']} /></Shell>
+  const [capability, setCapability] = useState<AiVideoCapability | null>(null)
+  const [motionEnabled, setMotionEnabled] = useState(true)
+  useEffect(() => { aiVideoApi.capabilities().then(res => setCapability(res.data)) }, [])
+  return (
+    <Shell>
+      <div className="ai-video-grid">
+        <section className="ai-video-panel span-6">
+          <h3>渲染服务</h3>
+          <div className="status-grid">
+            <div><strong>{capability?.renderService.available ? '可用' : '降级可用'}</strong><span>Remotion / CosyVoice</span></div>
+            <div><strong>{capability?.ffmpeg.available ? '可用' : '不可用'}</strong><span>ffmpeg 安全降级</span></div>
+            <div><strong>{capability?.limits.renderConcurrency || 1}</strong><span>渲染并发</span></div>
+            <div><strong>{capability?.limits.cosyVoiceConcurrency || 1}</strong><span>配音并发</span></div>
+          </div>
+          {capability?.renderService.message && <p className="error-text">{capability.renderService.message}</p>}
+        </section>
+        <section className="ai-video-panel span-6">
+          <h3>隔离与回滚</h3>
+          <div className="stage-list">
+            <div className="stage-item"><span className="stage-dot">1</span><strong>{capability?.isolation.apiNamespace || '/api/ai-video/*'}</strong></div>
+            <div className="stage-item"><span className="stage-dot">2</span><strong>{capability?.isolation.frontendRoutes || '/ai-video/*'}</strong></div>
+            <div className="stage-item"><span className="stage-dot">3</span><strong>{capability?.storageRoot || 'storage/ai-video/tasks'}</strong></div>
+            <div className="stage-item"><span className="stage-dot">4</span><strong>关闭菜单入口和 API 路由即可回滚</strong></div>
+          </div>
+          <div className="setting-row"><span>粒子动效</span><Switch checked={motionEnabled} onChange={setMotionEnabled} /></div>
+        </section>
+      </div>
+    </Shell>
+  )
 }
 
 function SimpleCollection({ title, items }: { title: string; items: string[] }) {

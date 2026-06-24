@@ -105,6 +105,13 @@ def overview(
     }
 
 
+@router.get("/capabilities")
+def capabilities(
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    return service.get_render_capabilities()
+
+
 @router.post("/jobs", response_model=AiVideoJobCreated)
 def create_job(
     payload: AiVideoJobCreate,
@@ -129,6 +136,39 @@ def get_job(
     if not job:
         raise HTTPException(status_code=404, detail="AI video job not found")
     return _job_response(job)
+
+
+@router.post("/jobs/{job_id}/cancel", response_model=AiVideoJobResponse)
+def cancel_job(
+    job_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    numeric_id = int(job_id.replace("job_", ""))
+    query = db.query(AiVideoJob).filter(AiVideoJob.id == numeric_id)
+    if not current_user.is_admin:
+        query = query.filter(AiVideoJob.user_id == current_user.id)
+    job = query.first()
+    if not job:
+        raise HTTPException(status_code=404, detail="AI video job not found")
+    return _job_response(service.cancel_job(db, job))
+
+
+@router.post("/jobs/{job_id}/retry", response_model=AiVideoJobCreated)
+def retry_job(
+    job_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    numeric_id = int(job_id.replace("job_", ""))
+    query = db.query(AiVideoJob).filter(AiVideoJob.id == numeric_id)
+    if not current_user.is_admin:
+        query = query.filter(AiVideoJob.user_id == current_user.id)
+    job = query.first()
+    if not job:
+        raise HTTPException(status_code=404, detail="AI video job not found")
+    retry = service.retry_job(db, job, current_user.id)
+    return AiVideoJobCreated(jobId=f"job_{retry.id}", projectId=retry.project_id, status=retry.status)
 
 
 @router.get("/projects", response_model=list[AiVideoProjectResponse])
@@ -174,6 +214,21 @@ def apply_edit(
     return {"versionId": version.id, "versionNo": version.version_no, "project": _project_response(db, project)}
 
 
+@router.post("/projects/{project_id}/versions/{version_id}/rollback")
+def rollback_version(
+    project_id: int,
+    version_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    project = _require_project(db, project_id, current_user)
+    try:
+        version = service.rollback_project_version(db, project, version_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="AI video version not found")
+    return {"versionId": version.id, "versionNo": version.version_no, "project": _project_response(db, project)}
+
+
 @router.get("/projects/{project_id}/versions")
 def list_versions(
     project_id: int,
@@ -194,6 +249,35 @@ def list_versions(
             "outputUrl": version.output_url,
             "coverUrl": version.cover_url,
             "changeSummary": version.change_summary,
+            "createdAt": version.created_at,
+        }
+        for version in versions
+    ]
+
+
+@router.get("/exports")
+def list_exports(
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    query = db.query(AiVideoVersion).join(AiVideoProject, AiVideoProject.id == AiVideoVersion.project_id)
+    if not current_user.is_admin:
+        query = query.filter(AiVideoProject.user_id == current_user.id)
+    versions = query.order_by(AiVideoVersion.created_at.desc()).limit(100).all()
+    project_ids = {version.project_id for version in versions}
+    projects = {
+        project.id: project
+        for project in db.query(AiVideoProject).filter(AiVideoProject.id.in_(project_ids)).all()
+    } if project_ids else {}
+    return [
+        {
+            "id": version.id,
+            "projectId": version.project_id,
+            "title": projects.get(version.project_id).title if projects.get(version.project_id) else "AI 视频项目",
+            "versionNo": version.version_no,
+            "outputUrl": version.output_url,
+            "coverUrl": version.cover_url,
+            "status": "completed" if version.output_url else "pending",
             "createdAt": version.created_at,
         }
         for version in versions

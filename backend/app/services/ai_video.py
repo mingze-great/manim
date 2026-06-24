@@ -1,8 +1,11 @@
 import json
+import os
 import shutil
 import subprocess
 import threading
 import time
+import urllib.error
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -30,6 +33,10 @@ STAGE_MESSAGES = {
 class AiVideoService:
     def __init__(self) -> None:
         self.storage_root = Path("storage") / "ai-video" / "tasks"
+        self.render_service_url = os.getenv("AI_VIDEO_RENDER_SERVICE_URL", "http://127.0.0.1:8787").rstrip("/")
+        self.render_timeout = int(os.getenv("AI_VIDEO_RENDER_TIMEOUT", "600"))
+        self._running_jobs: set[int] = set()
+        self._lock = threading.Lock()
 
     def create_generation_job(self, db: Session, user_id: int, payload: dict[str, Any]) -> AiVideoJob:
         title = str(payload.get("title") or self._derive_title(str(payload.get("script") or "")))
@@ -60,6 +67,65 @@ class AiVideoService:
         thread = threading.Thread(target=self._run_generation_job, args=(job.id,), daemon=True)
         thread.start()
         return job
+
+    def retry_job(self, db: Session, source_job: AiVideoJob, user_id: int) -> AiVideoJob:
+        payload = json.loads(source_job.input_payload or "{}")
+        project = db.query(AiVideoProject).filter(AiVideoProject.id == source_job.project_id).first()
+        if project:
+            project.status = "pending"
+            project.updated_at = datetime.utcnow()
+        job = AiVideoJob(
+            user_id=user_id,
+            project_id=source_job.project_id,
+            job_type="retry",
+            status="pending",
+            stage="pending",
+            progress=0,
+            input_payload=json.dumps(payload, ensure_ascii=False),
+        )
+        db.add(job)
+        db.commit()
+        db.refresh(job)
+        thread = threading.Thread(target=self._run_generation_job, args=(job.id,), daemon=True)
+        thread.start()
+        return job
+
+    def cancel_job(self, db: Session, job: AiVideoJob) -> AiVideoJob:
+        if job.status in {"completed", "failed", "cancelled"}:
+            return job
+        job.status = "cancelled"
+        job.stage = "cancelled"
+        job.progress = min(job.progress or 0, 99)
+        job.updated_at = datetime.utcnow()
+        project = db.query(AiVideoProject).filter(AiVideoProject.id == job.project_id).first()
+        if project and project.status not in {"completed", "failed"}:
+            project.status = "cancelled"
+            project.updated_at = datetime.utcnow()
+        db.commit()
+        db.refresh(job)
+        return job
+
+    def get_render_capabilities(self) -> dict[str, Any]:
+        ffmpeg_path = shutil.which("ffmpeg")
+        render_service = self._probe_render_service()
+        return {
+            "module": "ai-video",
+            "storageRoot": str(self.storage_root),
+            "renderServiceUrl": self.render_service_url,
+            "renderService": render_service,
+            "ffmpeg": {"available": bool(ffmpeg_path), "path": ffmpeg_path},
+            "isolation": {
+                "apiNamespace": "/api/ai-video/*",
+                "frontendRoutes": "/ai-video/*",
+                "storage": "storage/ai-video/tasks/job_{id}",
+                "mainProcessRendering": False,
+            },
+            "limits": {
+                "renderConcurrency": 1,
+                "cosyVoiceConcurrency": 1,
+                "fallbackRenderer": "ffmpeg color+aac sample",
+            },
+        }
 
     def get_project_json(self, version: AiVideoVersion | None) -> dict[str, Any] | None:
         if not version:
@@ -122,7 +188,27 @@ class AiVideoService:
         db.commit()
         return version
 
+    def rollback_project_version(self, db: Session, project: AiVideoProject, version_id: int) -> AiVideoVersion:
+        version = (
+            db.query(AiVideoVersion)
+            .filter(AiVideoVersion.project_id == project.id, AiVideoVersion.id == version_id)
+            .first()
+        )
+        if not version:
+            raise ValueError("Version not found")
+        project.current_version_id = version.id
+        project.cover_url = version.cover_url
+        project.status = "completed"
+        project.updated_at = datetime.utcnow()
+        db.commit()
+        db.refresh(version)
+        return version
+
     def _run_generation_job(self, job_id: int) -> None:
+        with self._lock:
+            if job_id in self._running_jobs:
+                return
+            self._running_jobs.add(job_id)
         db = SessionLocal()
         try:
             job = db.query(AiVideoJob).filter(AiVideoJob.id == job_id).first()
@@ -140,6 +226,8 @@ class AiVideoService:
             project = db.query(AiVideoProject).filter(AiVideoProject.id == job.project_id).first()
             if not project:
                 return
+            project.status = "rendering"
+            db.commit()
 
             stages = [
                 ("scripting", 12),
@@ -150,6 +238,10 @@ class AiVideoService:
                 ("uploading", 94),
             ]
             for stage, progress in stages:
+                db.refresh(job)
+                if job.status == "cancelled":
+                    self._append_log(job.log_path, STAGE_MESSAGES["cancelled"])
+                    return
                 self._update_job(db, job, stage=stage, status=stage, progress=progress)
                 self._append_log(job.log_path, STAGE_MESSAGES[stage])
                 time.sleep(0.25)
@@ -160,7 +252,16 @@ class AiVideoService:
             (task_dir / "subtitles" / "subtitles.srt").write_text(self._build_srt(project_json["scenes"]), encoding="utf-8")
             output_path = task_dir / "output" / "video.mp4"
             cover_path = task_dir / "output" / "cover.svg"
-            self._render_placeholder_video(output_path, project.title, project.aspect_ratio)
+            render_result = self._render_with_external_service(payload, output_path, job.log_path)
+            if not render_result.get("ok"):
+                self._append_log(job.log_path, f"外部渲染服务不可用，使用安全降级样片: {render_result.get('message')}")
+                self._render_placeholder_video(output_path, project.title, project.aspect_ratio)
+            project_json["render"] = {
+                "provider": render_result.get("provider", "fallback_ffmpeg"),
+                "externalService": self.render_service_url,
+                "message": render_result.get("message"),
+            }
+            (task_dir / "project.json").write_text(json.dumps(project_json, ensure_ascii=False, indent=2), encoding="utf-8")
             cover_path.write_text(self._build_cover_svg(project.title), encoding="utf-8")
 
             output_url = f"/api/ai-video/files/{job.id}/output/video.mp4"
@@ -196,7 +297,56 @@ class AiVideoService:
                 job.updated_at = datetime.utcnow()
                 db.commit()
         finally:
+            with self._lock:
+                self._running_jobs.discard(job_id)
             db.close()
+
+    def _probe_render_service(self) -> dict[str, Any]:
+        try:
+            with urllib.request.urlopen(f"{self.render_service_url}/api/tts/status", timeout=2) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            return {"available": True, "status": payload}
+        except Exception as exc:
+            return {"available": False, "message": str(exc)}
+
+    def _render_with_external_service(self, payload: dict[str, Any], output_path: Path, log_path: str | None) -> dict[str, Any]:
+        request_payload = {
+            "script": payload.get("script") or "",
+            "style": payload.get("style") or "aurora",
+            "provider": payload.get("voiceProvider") or "auto",
+            "cosyVoiceSpeaker": payload.get("voiceId") or "中文女",
+            "withBgm": True,
+        }
+        body = json.dumps(request_payload, ensure_ascii=False).encode("utf-8")
+        request = urllib.request.Request(
+            f"{self.render_service_url}/api/render",
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=self.render_timeout) as response:
+                result = json.loads(response.read().decode("utf-8"))
+            if not result.get("ok") or not result.get("url"):
+                return {"ok": False, "provider": "external_remotion", "message": result.get("message") or "Render failed"}
+            source_url = f"{self.render_service_url}{result['url']}"
+            self._download_file(source_url, output_path)
+            self._append_log(log_path, f"外部 Remotion 渲染完成: {source_url}")
+            return {
+                "ok": True,
+                "provider": "external_remotion_cosyvoice",
+                "message": f"Rendered by {source_url}",
+                "seconds": result.get("seconds"),
+                "audioJobId": result.get("audioJobId"),
+            }
+        except urllib.error.URLError as exc:
+            return {"ok": False, "provider": "external_remotion", "message": str(exc)}
+        except Exception as exc:
+            return {"ok": False, "provider": "external_remotion", "message": str(exc)}
+
+    def _download_file(self, source_url: str, output_path: Path) -> None:
+        with urllib.request.urlopen(source_url, timeout=120) as response:
+            output_path.write_bytes(response.read())
 
     def _update_job(self, db: Session, job: AiVideoJob, *, stage: str, status: str, progress: int) -> None:
         job.stage = stage

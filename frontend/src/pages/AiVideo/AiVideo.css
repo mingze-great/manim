@@ -233,6 +233,79 @@
   gap: 10px;
 }
 
+.job-control {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.error-text {
+  color: #b91c1c;
+  margin: 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.version-list {
+  display: grid;
+  gap: 8px;
+}
+
+.version-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px;
+}
+
+.version-item p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.status-grid > div {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px;
+  background: #f8fafc;
+}
+
+.status-grid strong,
+.status-grid span {
+  display: block;
+}
+
+.status-grid strong {
+  font-size: 18px;
+  color: #0f172a;
+}
+
+.status-grid span {
+  color: #64748b;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.setting-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid #e2e8f0;
+  margin-top: 14px;
+  padding-top: 14px;
+}
+
 .waveform {
   height: 44px;
   display: flex;
@@ -261,7 +334,8 @@
   .ai-video-grid,
   .metric-row,
   .quick-types,
-  .timeline {
+  .timeline,
+  .status-grid {
     grid-template-columns: 1fr;
   }
   .span-3,
