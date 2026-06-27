@@ -223,11 +223,12 @@ export const prepareAudioForStory = async ({
     const base = `scene-${String(scene.index + 1).padStart(2, '0')}`;
     const textPath = path.join(jobDir, `${base}.txt`);
     const outPath = path.join(jobDir, `${base}.wav`);
+    const narrationText = scene.voiceText || scene.body;
     let usedProvider = provider;
     if (provider === 'cosyvoice' || provider === 'auto') {
       try {
         await synthesizeWithCosyVoice({
-          text: scene.body,
+          text: narrationText,
           outPath,
           voice: cosyVoiceSpeaker
         });
@@ -242,7 +243,7 @@ export const prepareAudioForStory = async ({
 
     if (usedProvider === 'sapi') {
       await synthesizeScene({
-        text: scene.body,
+        text: narrationText,
         outPath,
         textPath,
         voice,
@@ -255,7 +256,7 @@ export const prepareAudioForStory = async ({
       index: scene.index,
       src: `generated-audio/${jobId}/${base}.wav`,
       seconds,
-      durationInFrames: Math.max(75, Math.ceil(seconds * story.fps) + 15),
+      durationInFrames: Math.max(54, Math.ceil(seconds * story.fps) + 3),
       provider: usedProvider
     });
   }

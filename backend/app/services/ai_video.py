@@ -309,6 +309,12 @@ class AiVideoService:
             plan.append(f"字幕密度调整为 {patch['subtitleMode']}。")
         if patch.get("sceneType"):
             plan.append(f"将相关分镜画面切换为 {patch['sceneType']}。")
+        if patch.get("openingEffect") == "impact":
+            plan.append("强化首幕开场钩子：高冲击转场、快推镜头、强视觉节奏。")
+        if patch.get("visualIntensity"):
+            plan.append(f"将整体动效强度调整为 {patch['visualIntensity']}。")
+        if patch.get("regenerateScenes"):
+            plan.append("按当前文案和新导演要求重新拆分分镜，而不是沿用旧分镜。")
         if not plan:
             plan = [
                 "理解修改要求并更新 project.json 的结构化导演参数。",
@@ -352,7 +358,10 @@ class AiVideoService:
         db.commit()
 
         payload = self._payload_from_project_json(project_json)
-        payload["draftScenes"] = project_json.get("scenes") or []
+        director = project_json.get("director") if isinstance(project_json.get("director"), dict) else {}
+        payload["editDirective"] = director.get("editDirective") or message or ""
+        if not director.get("regeneratedScenes"):
+            payload["draftScenes"] = project_json.get("scenes") or []
         retry = AiVideoJob(
             user_id=user_id,
             project_id=project.id,
@@ -500,6 +509,8 @@ class AiVideoService:
         tone = str(payload.get("tone") or template.get("tone") or "professional")
         platform = str(payload.get("targetPlatform") or "douyin")
         subtitle_mode = str(payload.get("subtitleMode") or style_preset.get("density") or "keywords")
+        visual_intensity = str(payload.get("visualIntensity") or payload.get("motionIntensity") or self._default_visual_intensity(visual_style, pace))
+        opening_effect = str(payload.get("openingEffect") or self._default_opening_effect(visual_style, pace))
         script = str(payload.get("script") or payload.get("prompt") or project.title)
 
         draft_scenes = payload.get("draftScenes")
@@ -521,6 +532,8 @@ class AiVideoService:
                 "label": style_preset["label"],
                 "palette": style_preset["palette"],
                 "motion": self._motion_for_pace(pace, style_preset),
+                "visualIntensity": visual_intensity,
+                "openingEffect": opening_effect,
                 "subtitleDensity": subtitle_mode,
                 "tone": tone,
             },
@@ -554,6 +567,8 @@ class AiVideoService:
         scene_types = template["sceneTypes"]
         steps = template["steps"]
         scenes: list[dict[str, Any]] = []
+        opening_effect = str(payload.get("openingEffect") or self._default_opening_effect(visual_style, pace))
+        visual_intensity = str(payload.get("visualIntensity") or self._default_visual_intensity(visual_style, pace))
         for index in range(scene_count):
             text = chunks[index] if index < len(chunks) else self._fallback_sentence(index, content_type)
             step = steps[min(index, len(steps) - 1)]
@@ -568,7 +583,7 @@ class AiVideoService:
                     "id": f"scene_{index + 1:02d}",
                     "duration": max(self._scene_duration_for_pace(pace, text), min_scene_seconds),
                     "voiceText": text,
-                    "subtitleText": text[:54],
+                    "subtitleText": self._display_text_for_scene(text, step[0], index),
                     "intent": step[1],
                     "cta": self._cta_for_scene(index, scene_count, content_type),
                     "visual": {
@@ -576,8 +591,10 @@ class AiVideoService:
                         "headline": self._headline_for_scene(step[0], text, index),
                         "nodes": self._keywords_for_text(text, list(step[2])),
                         "layout": visual_style,
-                        "transition": self._transition_for_scene(scene_type, index),
-                        "camera": self._camera_for_style(visual_style, pace),
+                        "transition": "impact" if index == 0 and opening_effect == "impact" else self._transition_for_scene(scene_type, index),
+                        "camera": "impact_zoom" if index == 0 and opening_effect == "impact" else self._camera_for_style(visual_style, pace),
+                        "effect": "opening_impact" if index == 0 and opening_effect == "impact" else "",
+                        "intensity": visual_intensity,
                         "media": media,
                     },
                 }
@@ -678,7 +695,7 @@ class AiVideoService:
                     "id": raw.get("id") or f"scene_{index + 1:02d}",
                     "duration": raw.get("duration") or self._scene_duration_for_pace(pace, text),
                     "voiceText": text,
-                    "subtitleText": raw.get("subtitleText") or text[:54],
+                    "subtitleText": self._display_text_for_scene(raw.get("subtitleText") or text, step[0], index),
                     "intent": raw.get("intent") or step[1],
                     "cta": raw.get("cta") or self._cta_for_scene(index, len(draft_scenes), content_type),
                     "visual": {
@@ -688,6 +705,9 @@ class AiVideoService:
                         "layout": visual.get("layout") or visual_style,
                         "transition": visual.get("transition") or self._transition_for_scene(scene_type, index),
                         "camera": visual.get("camera") or self._camera_for_style(visual_style, pace),
+                        "effect": visual.get("effect") or "",
+                        "intensity": visual.get("intensity") or "high",
+                        "media": visual.get("media") if isinstance(visual.get("media"), dict) else None,
                     },
                 }
             )
@@ -723,10 +743,12 @@ class AiVideoService:
                 raise RuntimeError(f"Open-source CosyVoice returned invalid audio for scene_{index + 1}")
 
             shutil.copyfile(backend_audio_path, render_audio_path)
-            pause_frames = 6 if index < len(project_json.get("scenes") or []) - 1 else 10
+            pause_frames = 2 if index < len(project_json.get("scenes") or []) - 1 else 4
             planned_seconds = float(scene.get("duration") or 0)
-            duration_frames = max(70, int(max(seconds, planned_seconds) * 30) + pause_frames)
-            scene["duration"] = round(max(seconds, planned_seconds), 2)
+            max_hold_after_audio = 0.22 if index < len(project_json.get("scenes") or []) - 1 else 0.36
+            duration_seconds = max(seconds + pause_frames / 30, min(planned_seconds, seconds + max_hold_after_audio))
+            duration_frames = max(54, int(duration_seconds * 30 + 0.999))
+            scene["duration"] = round(duration_seconds, 2)
             scene["durationFrames"] = duration_frames
             scene["audio"] = {
                 "provider": "open_source_cosyvoice",
@@ -861,6 +883,7 @@ class AiVideoService:
             "id": scene.get("id"),
             "voiceText": scene.get("voiceText"),
             "subtitleText": scene.get("subtitleText"),
+            "displayText": scene.get("subtitleText"),
             "title": visual.get("headline") or scene.get("title"),
             "mode": visual.get("type"),
             "keywords": visual.get("nodes") or [],
@@ -897,11 +920,21 @@ class AiVideoService:
     def _apply_edit_to_project_json(self, project_json: dict[str, Any], message: str) -> dict[str, Any]:
         patch = self._parse_edit_intent(message)
         payload = self._payload_from_project_json(project_json)
-        payload.update({k: v for k, v in patch.items() if k in {"contentType", "videoType", "visualStyle", "style", "pace", "tone", "subtitleMode", "sceneCount"}})
+        payload.update({k: v for k, v in patch.items() if k in {"contentType", "videoType", "visualStyle", "style", "pace", "tone", "subtitleMode", "sceneCount", "targetSeconds", "visualIntensity", "openingEffect"}})
+        payload["customPrompt"] = "。".join(
+            part for part in [payload.get("customPrompt") or "", f"用户修改优先级最高：{message.strip()}"] if part
+        )
+        payload["editDirective"] = message.strip()
         payload["script"] = "。".join(scene.get("voiceText", "") for scene in project_json.get("scenes", []) if scene.get("voiceText"))
-        if patch.get("sceneType"):
+        regenerate_scenes = self._should_regenerate_scenes(message, patch)
+        source_scenes = project_json.get("scenes") or []
+        if patch.get("sceneType") and not regenerate_scenes:
             for scene in project_json.get("scenes", []):
                 scene.setdefault("visual", {})["type"] = patch["sceneType"]
+        if regenerate_scenes:
+            payload.pop("draftScenes", None)
+        else:
+            payload["draftScenes"] = source_scenes
         edited = self._default_project_json(
             AiVideoProject(
                 user_id=0,
@@ -909,8 +942,14 @@ class AiVideoService:
                 video_type=payload.get("contentType") or project_json.get("videoType") or "insight",
                 aspect_ratio=project_json.get("aspectRatio") or "16:9",
             ),
-            {**payload, "draftScenes": project_json.get("scenes") or []},
+            payload,
         )
+        edited["prompt"] = project_json.get("prompt") or edited.get("prompt") or ""
+        edited["customPrompt"] = payload.get("customPrompt") or ""
+        edited.setdefault("director", {})["editDirective"] = message.strip()
+        edited.setdefault("director", {})["userPriority"] = "edit_message"
+        edited.setdefault("director", {})["regeneratedScenes"] = regenerate_scenes
+        edited.setdefault("director", {})["appliedPatch"] = patch
         edited.setdefault("editHistory", project_json.get("editHistory", []))
         edited["editHistory"].append({"message": message, "patch": patch, "createdAt": datetime.utcnow().isoformat()})
         return edited
@@ -933,6 +972,9 @@ class AiVideoService:
             "tone": style.get("tone") or "professional",
             "pace": self._pace_from_motion(style.get("motion")),
             "goal": project_json.get("goal") or "",
+            "visualIntensity": style.get("visualIntensity") or self._default_visual_intensity(style.get("theme") or "dark_editorial", self._pace_from_motion(style.get("motion"))),
+            "openingEffect": style.get("openingEffect") or self._default_opening_effect(style.get("theme") or "dark_editorial", self._pace_from_motion(style.get("motion"))),
+            "customPrompt": project_json.get("customPrompt") or "",
         }
 
     def _parse_edit_intent(self, message: str) -> dict[str, Any]:
@@ -969,10 +1011,18 @@ class AiVideoService:
                 patch["visualStyle"] = value
                 patch["style"] = value
                 break
+        if any(word in text for word in ["不要冲击", "别冲击", "别太冲", "柔和", "克制", "少动效", "少点动效", "别太花", "稳一点", "温和"]):
+            patch["openingEffect"] = "soft"
+            patch["visualIntensity"] = "medium"
+        elif any(word in text for word in ["冲击", "抓人", "炸", "更强", "强节奏", "高能", "开场强"]):
+            patch["openingEffect"] = "impact"
+            patch["visualIntensity"] = "high"
         if any(word in text for word in ["快一点", "更快", "快节奏", "紧凑"]):
             patch["pace"] = "fast"
+            patch.setdefault("visualIntensity", "high")
         elif any(word in text for word in ["慢一点", "更慢", "慢节奏", "舒缓"]):
             patch["pace"] = "slow"
+            patch.setdefault("visualIntensity", "medium")
         if any(word in text for word in ["字幕少", "少一点字幕", "极简字幕"]):
             patch["subtitleMode"] = "minimal"
         elif any(word in text for word in ["完整字幕", "字幕全"]):
@@ -995,7 +1045,32 @@ class AiVideoService:
             patch["targetSeconds"] = max(8, min(90, seconds))
             if seconds >= 30 and not patch.get("sceneCount"):
                 patch["sceneCount"] = 5
+        if any(word in text for word in ["重新生成", "重生成", "重新来", "重做", "再生成", "换一版", "重新拆", "重拆", "重新分镜", "不要沿用", "整体改"]):
+            patch["regenerateScenes"] = True
         return patch
+
+    def _should_regenerate_scenes(self, message: str, patch: dict[str, Any]) -> bool:
+        if patch.get("regenerateScenes"):
+            return True
+        text = (message or "").lower()
+        structural_keys = {"contentType", "videoType", "sceneCount", "targetSeconds"}
+        if any(key in patch for key in structural_keys):
+            return True
+        return any(word in text for word in ["重新", "重做", "换一版", "整体", "不要沿用", "重新分镜", "重拆"])
+
+    def _default_opening_effect(self, visual_style: str, pace: str) -> str:
+        if visual_style in {"warm_healing", "lifestyle_magazine", "clean_explainer"} or pace == "slow":
+            return "soft"
+        if visual_style in {"viral_pop", "news_flash", "commerce_boost", "premium_black_gold"} or pace == "fast":
+            return "impact"
+        return "standard"
+
+    def _default_visual_intensity(self, visual_style: str, pace: str) -> str:
+        if visual_style in {"warm_healing", "clean_explainer"} or pace == "slow":
+            return "medium"
+        if visual_style in {"viral_pop", "news_flash", "commerce_boost"} or pace == "fast":
+            return "high"
+        return "medium"
 
     def _normalize_prompt_payload(self, payload: dict[str, Any] | None) -> dict[str, Any]:
         normalized = dict(payload or {})
@@ -1188,9 +1263,34 @@ class AiVideoService:
             return text.rstrip("。！？!")
         return fallback or f"Scene {index + 1}"
 
+    def _display_text_for_scene(self, text: str, fallback: str, index: int) -> str:
+        cleaned = " ".join(str(text or "").replace("\n", " ").split()).strip()
+        if not cleaned:
+            return fallback or f"Scene {index + 1}"
+        cleaned = cleaned.strip(" .,!?:;，。！？；：、")
+        parts = [
+            part.strip(" .,!?:;，。！？；：、")
+            for part in re.split(r"[\s，,。！？!、；;：:]+", cleaned)
+            if part.strip(" .,!?:;，。！？；：、")
+        ]
+        preferred = [part for part in parts if 4 <= len(part) <= 18]
+        if preferred:
+            return preferred[0]
+        source = parts[0] if parts else cleaned
+        if len(source) <= 18:
+            return source
+        return source[:18].rstrip(" .,!?:;，。！？；：、") + "..."
+
     def _keywords_for_text(self, text: str, fallback: list[str]) -> list[str]:
-        words = [word for word in re.split(r"[\s，,。！？!、；;：:]+", text) if len(word) >= 2]
-        unique = list(dict.fromkeys(words))
+        words = [
+            word.strip(" .,!?:;，。！？；：、")
+            for word in re.split(r"[\s，,。！？!、；;：:]+", str(text or ""))
+            if len(word.strip(" .,!?:;，。！？；：、")) >= 2
+        ]
+        compact: list[str] = []
+        for word in words:
+            compact.append(word[:12] if len(word) > 12 else word)
+        unique = list(dict.fromkeys(compact))
         return (unique[:4] or fallback[:4])[:4]
 
     def _cta_for_scene(self, index: int, count: int, content_type: str) -> str:
@@ -1208,7 +1308,13 @@ class AiVideoService:
             return "flash"
         if scene_type in {"timeline", "diagram_flow", "decision_map"}:
             return "wipe"
-        return "cut" if index % 2 else "push"
+        if scene_type in {"data_report", "metric_wall", "trend_line", "data_nodes"}:
+            return "scan"
+        if scene_type in {"compare_split", "contrast_cards", "conflict_map"}:
+            return "split"
+        if scene_type in {"quote_wall", "creator_caption", "big_subtitle"}:
+            return "glitch"
+        return ["push", "prism", "zoom"][index % 3]
 
     def _camera_for_style(self, visual_style: str, pace: str) -> str:
         if visual_style in {"lifestyle_magazine", "warm_healing"}:
@@ -1234,8 +1340,8 @@ class AiVideoService:
         return "medium"
 
     def _scene_duration_for_pace(self, pace: str, text: str) -> int:
-        base = {"fast": 3, "medium": 5, "slow": 7}.get(pace, 5)
-        return max(base, min(12, base + len(text) // 34))
+        base = {"fast": 2, "medium": 3, "slow": 4}.get(pace, 3)
+        return max(base, min(7, base + len(text) // 48))
 
     def _build_srt(self, scenes: list[dict[str, Any]]) -> str:
         blocks: list[str] = []

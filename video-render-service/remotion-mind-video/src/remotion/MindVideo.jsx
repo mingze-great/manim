@@ -2,6 +2,7 @@ import React from 'react';
 import {
   AbsoluteFill,
   Audio,
+  Easing,
   Img,
   interpolate,
   Sequence,
@@ -119,17 +120,141 @@ const KeywordRail = ({scene, palette, local, vertical = false}) => (
   </div>
 );
 
+const MotionTexture = ({scene, palette, local, progress}) => {
+  const scan = interpolate(local, [0, 34], [-18, 118], {extrapolateRight: 'clamp', easing: Easing.bezier(0.16, 1, 0.3, 1)});
+  const pulse = 0.45 + Math.sin(local / 9) * 0.18;
+  const type = scene.transition || scene.mode;
+
+  if (scene.effect === 'opening_impact') {
+    const burst = interpolate(local, [0, 10, 24], [0.92, 0.55, 0], {extrapolateRight: 'clamp'});
+    return (
+      <AbsoluteFill style={{pointerEvents: 'none', opacity: burst, mixBlendMode: 'screen'}}>
+        <div style={{
+          position: 'absolute',
+          inset: -180,
+          background: `conic-gradient(from ${local * 14}deg, ${palette.accent}, transparent 24%, ${palette.accent2}, transparent 62%, #fff)`,
+          transform: `scale(${0.75 + progress * 1.1}) rotate(${local * 1.6}deg)`
+        }} />
+        {[0, 1, 2, 3].map((index) => (
+          <div key={index} style={{
+            position: 'absolute',
+            left: `${12 + index * 22}%`,
+            top: `${14 + index * 12}%`,
+            width: 360,
+            height: 18,
+            background: `linear-gradient(90deg, transparent, ${index % 2 ? palette.accent2 : palette.accent}, transparent)`,
+            transform: `translateX(${local * (18 + index * 5)}px) skewX(-18deg)`
+          }} />
+        ))}
+      </AbsoluteFill>
+    );
+  }
+
+  if (type === 'scan' || scene.mode?.includes('data')) {
+    return (
+      <AbsoluteFill style={{opacity: 0.58, pointerEvents: 'none'}}>
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          backgroundImage: `linear-gradient(${palette.line} 1px, transparent 1px), linear-gradient(90deg, ${palette.line} 1px, transparent 1px)`,
+          backgroundSize: '44px 44px',
+          transform: `translateY(${(local % 44) - 44}px)`
+        }} />
+        <div style={{position: 'absolute', left: 0, right: 0, top: `${scan}%`, height: 96, background: `linear-gradient(180deg, transparent, ${palette.accent2}44, transparent)`, mixBlendMode: 'screen'}} />
+        {Array.from({length: 6}).map((_, index) => (
+          <div key={index} style={{
+            position: 'absolute',
+            right: 82 + index * 54,
+            bottom: 72,
+            width: 28,
+            height: 70 + ((local * (index + 2)) % 170),
+            borderRadius: 6,
+            background: `linear-gradient(180deg, ${palette.accent2}, ${palette.accent})`,
+            opacity: 0.45
+          }} />
+        ))}
+      </AbsoluteFill>
+    );
+  }
+
+  if (type === 'split') {
+    return (
+      <AbsoluteFill style={{pointerEvents: 'none', opacity: 0.5}}>
+        {[0, 1, 2].map((index) => (
+          <div key={index} style={{
+            position: 'absolute',
+            top: 90 + index * 132,
+            left: interpolate(local - index * 5, [0, 24], [-360, 80 + index * 70], {extrapolateRight: 'clamp'}),
+            width: 520,
+            height: 88,
+            transform: 'skewX(-18deg)',
+            background: `linear-gradient(90deg, transparent, ${index % 2 ? palette.accent2 : palette.accent}66, transparent)`
+          }} />
+        ))}
+      </AbsoluteFill>
+    );
+  }
+
+  if (type === 'glitch') {
+    return (
+      <AbsoluteFill style={{pointerEvents: 'none', mixBlendMode: 'screen'}}>
+        {[0, 1, 2, 3, 4].map((index) => {
+          const y = 86 + index * 104 + Math.sin((local + index * 11) / 5) * 10;
+          const x = Math.sin((local + index * 17) / 3) * 28;
+          return <div key={index} style={{position: 'absolute', left: x, top: y, width: '100%', height: 18 + index * 2, background: index % 2 ? palette.accent2 : palette.accent, opacity: 0.16}} />;
+        })}
+      </AbsoluteFill>
+    );
+  }
+
+  return (
+    <AbsoluteFill style={{pointerEvents: 'none', opacity: 0.5}}>
+      <div style={{
+        position: 'absolute',
+        right: 86,
+        top: 116,
+        width: 230,
+        height: 230,
+        borderRadius: '50%',
+        border: `2px solid ${palette.accent}`,
+        transform: `rotate(${progress * 180}deg) scale(${0.9 + pulse * 0.15})`
+      }} />
+      <div style={{
+        position: 'absolute',
+        left: 78,
+        bottom: 82,
+        width: 360,
+        height: 4,
+        background: `linear-gradient(90deg, ${palette.accent}, ${palette.accent2}, transparent)`,
+        boxShadow: `0 0 28px ${palette.accent}`,
+        transform: `scaleX(${0.45 + progress * 0.9})`,
+        transformOrigin: 'left center'
+      }} />
+    </AbsoluteFill>
+  );
+};
+
 const MediaBackdrop = ({scene, palette, local, progress, intensity = 1}) => {
   const src = scene.media?.src;
   const zoom = 1.04 + progress * 0.08 * intensity;
   const drift = Math.sin(local / 34) * 18 * intensity;
   if (!src) {
+    const angle = scene.mode?.includes('timeline') ? 90 : scene.mode?.includes('data') ? 0 : 135;
     return (
-      <AbsoluteFill style={{
-        background:
-          `radial-gradient(circle at ${28 + progress * 40}% 24%, ${palette.accent}33 0, transparent 28%), ` +
-          `linear-gradient(135deg, ${palette.bg}, ${palette.panel})`
-      }} />
+      <AbsoluteFill>
+        <AbsoluteFill style={{
+          background:
+            `linear-gradient(${angle}deg, ${palette.bg}, ${palette.panel}), ` +
+            `radial-gradient(circle at ${28 + progress * 40}% 24%, ${palette.accent}33 0, transparent 28%)`
+        }} />
+        <svg width="1280" height="720" style={{position: 'absolute', inset: 0, opacity: 0.32}}>
+          {Array.from({length: 9}).map((_, index) => {
+            const x = 120 + index * 138 + Math.sin((local + index * 12) / 20) * 22;
+            const y = 110 + ((index * 97) % 470);
+            return <rect key={index} x={x} y={y} width="150" height="38" rx="19" fill="none" stroke={index % 2 ? palette.accent2 : palette.accent} strokeWidth="2" />;
+          })}
+        </svg>
+      </AbsoluteFill>
     );
   }
   return (
@@ -150,22 +275,68 @@ const MediaBackdrop = ({scene, palette, local, progress, intensity = 1}) => {
           `linear-gradient(90deg, ${palette.bg}ee 0%, ${palette.bg}aa 42%, transparent 100%), ` +
           `radial-gradient(circle at 72% 22%, ${palette.accent}44 0, transparent 32%)`
       }} />
+      <div style={{
+        position: 'absolute',
+        inset: 0,
+        background: `linear-gradient(${110 + progress * 30}deg, transparent 0%, ${palette.accent}22 42%, transparent 58%, ${palette.accent2}18 100%)`,
+        mixBlendMode: 'screen',
+        transform: `translateX(${Math.sin(local / 28) * 24}px)`
+      }} />
     </AbsoluteFill>
   );
 };
 
 const TransitionLayer = ({scene, palette, local}) => {
   const {fps} = useVideoConfig();
-  const enter = spring({frame: local, fps, config: {damping: 18, stiffness: 130}});
-  const wipe = interpolate(local, [0, 18], [-100, 110], {extrapolateRight: 'clamp'});
+  const enter = spring({frame: local, fps, config: {damping: 20, stiffness: 145}});
+  const reveal = interpolate(local, [0, 20], [0, 1], {extrapolateRight: 'clamp', easing: Easing.bezier(0.16, 1, 0.3, 1)});
+  const wipe = interpolate(local, [0, 18], [-100, 110], {extrapolateRight: 'clamp', easing: Easing.bezier(0.16, 1, 0.3, 1)});
   if (scene.transition === 'flash') {
-    const opacity = interpolate(local, [0, 5, 14], [0.85, 0.18, 0], {extrapolateRight: 'clamp'});
-    return <AbsoluteFill style={{background: palette.accent2, opacity, mixBlendMode: 'screen'}} />;
+    const opacity = interpolate(local, [0, 5, 16], [0.9, 0.24, 0], {extrapolateRight: 'clamp'});
+    return (
+      <AbsoluteFill style={{opacity, mixBlendMode: 'screen', pointerEvents: 'none'}}>
+        <AbsoluteFill style={{background: palette.accent2}} />
+        <div style={{position: 'absolute', inset: 0, background: `linear-gradient(110deg, transparent 0%, ${palette.accent} 44%, #fff 50%, transparent 58%)`, transform: `translateX(${(reveal - 0.5) * 900}px)`}} />
+      </AbsoluteFill>
+    );
   }
   if (scene.transition === 'wipe') {
-    return <div style={{position: 'absolute', top: 0, bottom: 0, left: `${wipe}%`, width: 220, background: `linear-gradient(90deg, transparent, ${palette.accent}, transparent)`, transform: 'skewX(-12deg)', opacity: 0.78}} />;
+    return <div style={{position: 'absolute', top: 0, bottom: 0, left: `${wipe}%`, width: 260, background: `linear-gradient(90deg, transparent, ${palette.accent}, ${palette.accent2}, transparent)`, transform: 'skewX(-12deg)', opacity: 0.82, mixBlendMode: 'screen'}} />;
   }
-  return <AbsoluteFill style={{opacity: 1 - enter, background: palette.bg, transform: `scale(${1 + (1 - enter) * 0.08})`}} />;
+  if (scene.transition === 'glitch') {
+    const opacity = interpolate(local, [0, 6, 18], [0.85, 0.5, 0], {extrapolateRight: 'clamp'});
+    return (
+      <AbsoluteFill style={{opacity, pointerEvents: 'none', mixBlendMode: 'screen'}}>
+        {[0, 1, 2, 3].map((index) => (
+          <div key={index} style={{position: 'absolute', left: Math.sin(local + index) * 34, top: index * 160, width: '110%', height: 54, background: index % 2 ? palette.accent2 : palette.accent}} />
+        ))}
+      </AbsoluteFill>
+    );
+  }
+  if (scene.transition === 'split') {
+    return (
+      <AbsoluteFill style={{pointerEvents: 'none'}}>
+        <div style={{position: 'absolute', left: 0, top: 0, bottom: 0, width: `${(1 - reveal) * 52}%`, background: palette.bg}} />
+        <div style={{position: 'absolute', right: 0, top: 0, bottom: 0, width: `${(1 - reveal) * 52}%`, background: palette.bg}} />
+        <div style={{position: 'absolute', left: `${50 + reveal * 58}%`, top: 0, bottom: 0, width: 110, background: `linear-gradient(90deg, transparent, ${palette.accent2}, transparent)`, transform: 'skewX(-10deg)', opacity: 0.6}} />
+      </AbsoluteFill>
+    );
+  }
+  if (scene.transition === 'scan') {
+    const opacity = interpolate(local, [0, 14, 28], [0.62, 0.3, 0], {extrapolateRight: 'clamp'});
+    return <AbsoluteFill style={{opacity, background: `repeating-linear-gradient(0deg, ${palette.accent2}00 0px, ${palette.accent2}00 8px, ${palette.accent2}88 10px)`, mixBlendMode: 'screen', pointerEvents: 'none'}} />;
+  }
+  if (scene.transition === 'zoom') {
+    return <AbsoluteFill style={{opacity: 1 - enter, background: palette.bg, transform: `scale(${0.84 + enter * 0.16})`, pointerEvents: 'none'}} />;
+  }
+  if (scene.transition === 'prism') {
+    return (
+      <AbsoluteFill style={{opacity: 1 - reveal, pointerEvents: 'none', mixBlendMode: 'screen'}}>
+        <div style={{position: 'absolute', inset: -180, background: `conic-gradient(from ${local * 8}deg, ${palette.accent}, transparent, ${palette.accent2}, transparent, ${palette.accent3})`, transform: `scale(${1.1 + reveal * 0.25}) rotate(${local * 2}deg)`}} />
+      </AbsoluteFill>
+    );
+  }
+  return <AbsoluteFill style={{opacity: 1 - enter, background: palette.bg, transform: `translateX(${(1 - enter) * -80}px) scale(${1 + (1 - enter) * 0.08})`, pointerEvents: 'none'}} />;
 };
 
 const BigType = ({scene, palette, local, progress}) => {
@@ -370,7 +541,30 @@ const sceneGroups = {
 
 const SceneRenderer = ({story, scene, palette, local, progress}) => {
   const Component = sceneGroups[scene.mode] || BigType;
-  return <Component story={story} scene={scene} palette={palette} local={local} progress={progress} />;
+  const {fps} = useVideoConfig();
+  const enter = spring({frame: local, fps, config: {damping: 24, stiffness: 120}});
+  const exit = interpolate(local, [Math.max(0, scene.duration - 16), scene.duration], [1, 0.9], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp'
+  });
+  const camera = scene.camera || 'cinematic_push';
+  const transforms = {
+    impact_zoom: `scale(${1.18 - enter * 0.15 + progress * 0.035}) rotate(${(1 - enter) * -2.2}deg)`,
+    snap_zoom: `scale(${1.08 - enter * 0.06}) rotate(${(1 - enter) * -1.4}deg)`,
+    scan: `translateY(${Math.sin(local / 18) * 8}px) scale(1.015)`,
+    slow_pan: `scale(1.035) translate(${Math.sin(local / 52) * 18}px, ${Math.cos(local / 60) * 10}px)`,
+    cinematic_push: `scale(${1.03 + progress * 0.035}) translateY(${(1 - enter) * 22}px)`
+  };
+  return (
+    <AbsoluteFill style={{
+      transform: transforms[camera] || transforms.cinematic_push,
+      opacity: exit,
+      filter: camera === 'snap_zoom' || camera === 'impact_zoom' ? `contrast(${1.02 + (1 - enter) * 0.18}) saturate(${1.02 + (1 - enter) * 0.16})` : undefined
+    }}>
+      <Component story={story} scene={scene} palette={palette} local={local} progress={progress} />
+      <MotionTexture scene={scene} palette={palette} local={local} progress={progress} />
+    </AbsoluteFill>
+  );
 };
 
 export const MindVideo = ({

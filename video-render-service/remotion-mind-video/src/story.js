@@ -151,12 +151,26 @@ export const defaultScript = '把一个复杂想法拆成三个画面。第一�
 const sentenceSplit = /(?<=[。？！?!；;])\s*|\n+/g;
 const clean = (value) => String(value || '').replace(/\s+/g, ' ').trim();
 
+const compactDisplayText = (value, fallback = '') => {
+  const text = clean(value).replace(/^[，,。！？!、；;：:\s]+|[，,。！？!、；;：:\s]+$/g, '');
+  if (!text) return clean(fallback);
+  const parts = text
+    .split(/[\s，,。！？!、；;：:]+/g)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const preferred = parts.find((item) => item.length >= 4 && item.length <= 18);
+  const source = preferred || parts[0] || text;
+  return source.length <= 18 ? source : `${source.slice(0, 18).replace(/[，,。！？!、；;：:\s]+$/g, '')}...`;
+};
+
 const getKeywords = (sentence, contentType) => {
   const words = clean(sentence)
     .replace(/[。？！?!；;,.，、：:]/g, ' ')
     .split(/\s+/)
     .filter((word) => word.length >= 2);
-  const scored = [...new Set(words)].sort((a, b) => b.length - a.length).slice(0, 4);
+  const scored = [...new Set(words.map((word) => word.length > 12 ? word.slice(0, 12) : word))]
+    .sort((a, b) => b.length - a.length)
+    .slice(0, 4);
   return scored.length ? scored : (typeKeywords[contentType] ?? ['画面', '节奏', '结论']);
 };
 
@@ -167,11 +181,14 @@ const getDuration = ({audioScene, sentence, density, pace}) => {
 };
 
 const normalizeScene = ({item, index, modes, contentType}) => {
-  const text = clean(item.voiceText || item.subtitleText || item.body || item.text || '');
+  const voiceText = clean(item.voiceText || item.body || item.text || item.subtitleText || '');
+  const displayText = compactDisplayText(item.displayText || item.subtitleText || item.body || item.text || voiceText, voiceText);
   const mode = item.mode || item.sceneType || modes[index % modes.length];
-  const keywords = Array.isArray(item.keywords) && item.keywords.length ? item.keywords : getKeywords(text, contentType);
+  const keywords = Array.isArray(item.keywords) && item.keywords.length ? item.keywords : getKeywords(displayText || voiceText, contentType);
   return {
-    text,
+    text: voiceText,
+    voiceText,
+    displayText,
     title: clean(item.title || item.headline || '') || null,
     mode,
     keywords,
@@ -216,7 +233,10 @@ export const scriptToStory = ({
 
   const scenes = safeSentences.map((sceneInput, index) => {
     const fromBackend = typeof sceneInput === 'object';
-    const sentence = fromBackend ? sceneInput.text : sceneInput;
+    const sentence = fromBackend ? (sceneInput.voiceText || sceneInput.text) : sceneInput;
+    const displayText = fromBackend
+      ? compactDisplayText(sceneInput.displayText || sceneInput.subtitleText || sceneInput.title || sentence, sentence)
+      : sentence;
     const audioScene = audioScenes.find((item) => item.index === index);
     const duration = fromBackend && sceneInput.durationFrames
       ? sceneInput.durationFrames
@@ -226,8 +246,10 @@ export const scriptToStory = ({
       id: `scene-${index + 1}`,
       index,
       title: fromBackend && sceneInput.title ? sceneInput.title : (typeKeywords[contentType]?.[index] ?? `Scene ${index + 1}`),
-      body: sentence,
-      keywords: fromBackend && sceneInput.keywords ? sceneInput.keywords : getKeywords(sentence, contentType),
+      body: displayText,
+      voiceText: sentence,
+      subtitleText: displayText,
+      keywords: fromBackend && sceneInput.keywords ? sceneInput.keywords : getKeywords(displayText, contentType),
       duration,
       audioSrc: audioScene?.src ?? (fromBackend ? sceneInput.audioSrc : null),
       audioSeconds: audioScene?.seconds ?? null,
