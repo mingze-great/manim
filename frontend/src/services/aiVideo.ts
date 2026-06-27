@@ -2,15 +2,24 @@ import api from './api'
 
 export interface AiVideoJobCreate {
   title?: string
+  prompt?: string
   script: string
   videoType: string
+  contentType?: string
   style: string
+  visualStyle?: string
   aspectRatio: string
   voiceProvider: string
   voiceId: string
   subtitleMode: string
   brandKitId?: string
   targetPlatform: string
+  tone?: string
+  pace?: string
+  goal?: string
+  customPrompt?: string
+  sceneCount?: number
+  draftScenes?: any[]
 }
 
 export interface AiVideoJob {
@@ -59,6 +68,7 @@ export interface AiVideoCapability {
   storageRoot: string
   renderServiceUrl: string
   renderService: { available: boolean; status?: any; message?: string }
+  cosyVoiceService?: { available: boolean; status?: any; message?: string }
   ffmpeg: { available: boolean; path?: string | null }
   isolation: Record<string, any>
   limits: Record<string, any>
@@ -79,6 +89,7 @@ export const aiVideoApi = {
   overview: () => api.get<AiVideoOverview>('/ai-video/overview'),
   capabilities: () => api.get<AiVideoCapability>('/ai-video/capabilities'),
   templates: () => api.get('/ai-video/templates'),
+  storyboardDraft: (payload: AiVideoJobCreate) => api.post<{ projectJson: any; scenes: any[]; recommendations: string[] }>('/ai-video/storyboard-draft', payload),
   createJob: (payload: AiVideoJobCreate) => api.post<{ jobId: string; projectId: number; status: string }>('/ai-video/jobs', payload),
   getJob: (jobId: string) => api.get<AiVideoJob>(`/ai-video/jobs/${jobId}`),
   cancelJob: (jobId: string) => api.post<AiVideoJob>(`/ai-video/jobs/${jobId}/cancel`),

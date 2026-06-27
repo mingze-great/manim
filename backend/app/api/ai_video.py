@@ -20,6 +20,8 @@ from app.schemas.ai_video import (
     AiVideoJobCreated,
     AiVideoJobResponse,
     AiVideoProjectResponse,
+    AiVideoStoryboardDraftRequest,
+    AiVideoStoryboardDraftResponse,
 )
 from app.services.ai_video import AiVideoService, STAGE_MESSAGES
 
@@ -106,10 +108,21 @@ def overview(
 
 
 @router.get("/capabilities")
-def capabilities(
+def capabilities(current_user: Annotated[User, Depends(get_current_user)]):
+    return service.get_render_capabilities()
+
+
+@router.get("/templates")
+def templates():
+    return {"templates": service.get_templates(), "styles": service.get_styles()}
+
+
+@router.post("/storyboard-draft", response_model=AiVideoStoryboardDraftResponse)
+def storyboard_draft(
+    payload: AiVideoStoryboardDraftRequest,
     current_user: Annotated[User, Depends(get_current_user)],
 ):
-    return service.get_render_capabilities()
+    return AiVideoStoryboardDraftResponse(**service.build_storyboard_draft(payload.model_dump()))
 
 
 @router.post("/jobs", response_model=AiVideoJobCreated)
@@ -281,17 +294,6 @@ def list_exports(
             "createdAt": version.created_at,
         }
         for version in versions
-    ]
-
-
-@router.get("/templates")
-def templates():
-    return [
-        {"key": "knowledge_visualization", "name": "知识可视化", "duration": "30-60s", "platforms": ["抖音", "视频号"]},
-        {"key": "product_promo", "name": "商品推广", "duration": "20-45s", "platforms": ["小红书", "抖音"]},
-        {"key": "math_tutorial", "name": "数学题教学", "duration": "45-90s", "platforms": ["B站", "课堂"]},
-        {"key": "data_report", "name": "数据报告", "duration": "45-120s", "platforms": ["企业汇报"]},
-        {"key": "saas_demo", "name": "SaaS 演示", "duration": "30-90s", "platforms": ["官网", "销售"]},
     ]
 
 

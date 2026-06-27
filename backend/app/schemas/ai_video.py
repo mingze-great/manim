@@ -5,16 +5,49 @@ from pydantic import BaseModel, Field
 
 
 class AiVideoJobCreate(BaseModel):
-    script: str = Field(..., min_length=2)
+    script: str = Field(default="", min_length=0)
+    prompt: Optional[str] = None
     title: Optional[str] = None
-    videoType: str = "knowledge_visualization"
-    style: str = "futuristic"
+    videoType: str = "insight"
+    contentType: Optional[str] = None
+    style: str = "dark_editorial"
+    visualStyle: Optional[str] = None
     aspectRatio: str = "16:9"
     voiceProvider: str = "cosyvoice"
     voiceId: str = "中文女"
     subtitleMode: str = "keywords"
     brandKitId: Optional[str] = None
     targetPlatform: str = "douyin"
+    tone: Optional[str] = None
+    pace: Optional[str] = None
+    goal: Optional[str] = None
+    customPrompt: Optional[str] = None
+    sceneCount: Optional[int] = Field(default=None, ge=3, le=8)
+    draftScenes: Optional[list[dict[str, Any]]] = None
+
+
+class AiVideoStoryboardDraftRequest(BaseModel):
+    title: Optional[str] = None
+    script: str = Field(default="", min_length=0)
+    prompt: Optional[str] = None
+    videoType: str = "insight"
+    contentType: Optional[str] = None
+    style: str = "dark_editorial"
+    visualStyle: Optional[str] = None
+    aspectRatio: str = "16:9"
+    subtitleMode: str = "keywords"
+    targetPlatform: str = "douyin"
+    tone: Optional[str] = None
+    pace: Optional[str] = None
+    goal: Optional[str] = None
+    customPrompt: Optional[str] = None
+    sceneCount: Optional[int] = Field(default=None, ge=3, le=8)
+
+
+class AiVideoStoryboardDraftResponse(BaseModel):
+    projectJson: dict[str, Any]
+    scenes: list[dict[str, Any]]
+    recommendations: list[str] = Field(default_factory=list)
 
 
 class AiVideoJobCreated(BaseModel):

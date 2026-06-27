@@ -11,20 +11,16 @@ import {checkCosyVoice, ensureAudioDirs, listVoices, prepareAudioForStory} from 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const port = Number(process.env.PORT ?? 18787);
-let bundledEntry = null;
 
 app.use(express.json({limit: '20mb'}));
 app.use('/renders', express.static(path.join(__dirname, 'renders')));
 app.use('/generated-audio', express.static(path.join(__dirname, 'public', 'generated-audio')));
 
 const getBundle = async () => {
-  if (!bundledEntry) {
-    bundledEntry = await bundle({
-      entryPoint: path.join(__dirname, 'src', 'main.jsx'),
-      webpackOverride: (config) => config
-    });
-  }
-  return bundledEntry;
+  return bundle({
+    entryPoint: path.join(__dirname, 'src', 'main.jsx'),
+    webpackOverride: (config) => config
+  });
 };
 
 const renderMindVideo = async ({inputProps, filenamePrefix = 'mindfilm'}) => {
@@ -108,7 +104,13 @@ app.post('/api/render-project', async (req, res) => {
   try {
     const inputProps = {
       script: String(req.body?.script ?? ''),
-      style: String(req.body?.style ?? 'aurora'),
+      style: String(req.body?.style ?? 'dark_editorial'),
+      contentType: String(req.body?.contentType ?? 'insight'),
+      targetPlatform: String(req.body?.targetPlatform ?? 'douyin'),
+      tone: String(req.body?.tone ?? 'professional'),
+      pace: String(req.body?.pace ?? 'medium'),
+      goal: String(req.body?.goal ?? ''),
+      scenes: Array.isArray(req.body?.scenes) ? req.body.scenes : [],
       density: Number(req.body?.density ?? 1),
       audioScenes: Array.isArray(req.body?.audioScenes) ? req.body.audioScenes : [],
       bgmSrc: req.body?.bgmSrc ?? null
@@ -137,7 +139,13 @@ app.post('/api/render', async (req, res) => {
     await ensureAudioDirs();
     const baseProps = {
       script: String(req.body?.script ?? ''),
-      style: String(req.body?.style ?? 'aurora'),
+      style: String(req.body?.style ?? 'dark_editorial'),
+      contentType: String(req.body?.contentType ?? 'insight'),
+      targetPlatform: String(req.body?.targetPlatform ?? 'douyin'),
+      tone: String(req.body?.tone ?? 'professional'),
+      pace: String(req.body?.pace ?? 'medium'),
+      goal: String(req.body?.goal ?? ''),
+      scenes: Array.isArray(req.body?.scenes) ? req.body.scenes : [],
       density: Number(req.body?.density ?? 1)
     };
     const baseStory = scriptToStory(baseProps);
