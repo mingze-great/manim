@@ -1059,18 +1059,10 @@ class AiVideoService:
         return any(word in text for word in ["重新", "重做", "换一版", "整体", "不要沿用", "重新分镜", "重拆"])
 
     def _default_opening_effect(self, visual_style: str, pace: str) -> str:
-        if visual_style in {"warm_healing", "lifestyle_magazine", "clean_explainer"} or pace == "slow":
-            return "soft"
-        if visual_style in {"viral_pop", "news_flash", "commerce_boost", "premium_black_gold"} or pace == "fast":
-            return "impact"
-        return "standard"
+        return "impact"
 
     def _default_visual_intensity(self, visual_style: str, pace: str) -> str:
-        if visual_style in {"warm_healing", "clean_explainer"} or pace == "slow":
-            return "medium"
-        if visual_style in {"viral_pop", "news_flash", "commerce_boost"} or pace == "fast":
-            return "high"
-        return "medium"
+        return "high"
 
     def _normalize_prompt_payload(self, payload: dict[str, Any] | None) -> dict[str, Any]:
         normalized = dict(payload or {})
