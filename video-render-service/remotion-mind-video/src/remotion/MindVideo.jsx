@@ -120,6 +120,14 @@ const KeywordRail = ({scene, palette, local, vertical = false}) => (
   </div>
 );
 
+const SafeVisualImage = ({src, style}) => {
+  if (!src) return null;
+  if (/^https?:\/\//i.test(src)) {
+    return <img src={src} alt="" style={style} crossOrigin="anonymous" referrerPolicy="no-referrer" />;
+  }
+  return <Img src={src} style={style} />;
+};
+
 const EnergyField = ({scene, palette, local, progress}) => {
   const pattern = scene.energyPattern || 'orbit_rings';
   const opacity = scene.intensity === 'medium' ? 0.42 : 0.68;
@@ -204,7 +212,7 @@ const MediaOrb = ({scene, palette, local, progress, size = 360}) => {
       transform: `scale(${0.92 + progress * 0.12}) rotate(${scene.layoutVariant === 'diagonal_split' ? -4 : 0}deg)`
     }}>
       {src ? (
-        <Img src={src} style={{width: '100%', height: '100%', objectFit: 'cover', transform: `scale(${1.08 + progress * 0.12}) translate(${Math.sin(local / 24) * 14}px, ${Math.cos(local / 30) * 10}px)`, filter: 'saturate(1.08) contrast(1.08)'}} />
+        <SafeVisualImage src={src} style={{width: '100%', height: '100%', objectFit: 'cover', transform: `scale(${1.08 + progress * 0.12}) translate(${Math.sin(local / 24) * 14}px, ${Math.cos(local / 30) * 10}px)`, filter: 'saturate(1.08) contrast(1.08)'}} />
       ) : (
         <div style={{width: '100%', height: '100%', background: `radial-gradient(circle at 30% 28%, ${palette.accent2}, transparent 36%), linear-gradient(135deg, ${palette.panel}, ${palette.bg})`}} />
       )}
@@ -372,7 +380,7 @@ const MediaBackdrop = ({scene, palette, local, progress, intensity = 1}) => {
   }
   return (
     <AbsoluteFill>
-      <Img
+      <SafeVisualImage
         src={src}
         style={{
           width: '100%',

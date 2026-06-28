@@ -880,6 +880,14 @@ class AiVideoService:
                 "seconds": result.get("seconds"),
                 "audioJobId": result.get("audioJobId"),
             }
+        except urllib.error.HTTPError as exc:
+            detail = ""
+            try:
+                detail_payload = json.loads(exc.read().decode("utf-8"))
+                detail = str(detail_payload.get("message") or detail_payload)
+            except Exception:
+                detail = str(exc)
+            return {"ok": False, "provider": "external_remotion", "message": detail or str(exc)}
         except urllib.error.URLError as exc:
             return {"ok": False, "provider": "external_remotion", "message": str(exc)}
         except Exception as exc:
