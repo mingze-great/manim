@@ -569,6 +569,7 @@ class AiVideoService:
         scenes: list[dict[str, Any]] = []
         opening_effect = str(payload.get("openingEffect") or self._default_opening_effect(visual_style, pace))
         visual_intensity = str(payload.get("visualIntensity") or self._default_visual_intensity(visual_style, pace))
+        edit_directive = str(payload.get("editDirective") or payload.get("customPrompt") or payload.get("goal") or "")
         for index in range(scene_count):
             text = chunks[index] if index < len(chunks) else self._fallback_sentence(index, content_type)
             step = steps[min(index, len(steps) - 1)]
@@ -578,6 +579,8 @@ class AiVideoService:
             target_seconds = int(payload.get("targetSeconds") or 0)
             min_scene_seconds = max(0, target_seconds // scene_count) if target_seconds else 0
             media = self._media_for_scene(content_type, visual_style, text, index)
+            layout_variant = self._layout_variant_for_scene(content_type, visual_style, scene_type, text, index, edit_directive)
+            energy_pattern = self._energy_pattern_for_scene(scene_type, layout_variant, text, index)
             scenes.append(
                 {
                     "id": f"scene_{index + 1:02d}",
@@ -591,10 +594,13 @@ class AiVideoService:
                         "headline": self._headline_for_scene(step[0], text, index),
                         "nodes": self._keywords_for_text(text, list(step[2])),
                         "layout": visual_style,
+                        "layoutVariant": layout_variant,
                         "transition": "impact" if index == 0 and opening_effect == "impact" else self._transition_for_scene(scene_type, index),
                         "camera": "impact_zoom" if index == 0 and opening_effect == "impact" else self._camera_for_style(visual_style, pace),
                         "effect": "opening_impact" if index == 0 and opening_effect == "impact" else "",
                         "intensity": visual_intensity,
+                        "energyPattern": energy_pattern,
+                        "assetPrompt": self._asset_prompt_for_scene(content_type, visual_style, text, step[0], layout_variant),
                         "media": media,
                     },
                 }
@@ -690,6 +696,7 @@ class AiVideoService:
                 continue
             step = template["steps"][min(index, len(template["steps"]) - 1)]
             scene_type = visual.get("type") or raw.get("sceneType") or template["sceneTypes"][index % len(template["sceneTypes"])]
+            layout_variant = visual.get("layoutVariant") or self._layout_variant_for_scene(content_type, visual_style, scene_type, text, index, "")
             normalized.append(
                 {
                     "id": raw.get("id") or f"scene_{index + 1:02d}",
@@ -703,10 +710,13 @@ class AiVideoService:
                         "headline": visual.get("headline") or raw.get("title") or self._headline_for_scene(step[0], text, index),
                         "nodes": visual.get("nodes") or raw.get("keywords") or self._keywords_for_text(text, list(step[2])),
                         "layout": visual.get("layout") or visual_style,
+                        "layoutVariant": layout_variant,
                         "transition": visual.get("transition") or self._transition_for_scene(scene_type, index),
                         "camera": visual.get("camera") or self._camera_for_style(visual_style, pace),
                         "effect": visual.get("effect") or "",
                         "intensity": visual.get("intensity") or "high",
+                        "energyPattern": visual.get("energyPattern") or self._energy_pattern_for_scene(scene_type, layout_variant, text, index),
+                        "assetPrompt": visual.get("assetPrompt") or self._asset_prompt_for_scene(content_type, visual_style, text, step[0], layout_variant),
                         "media": visual.get("media") if isinstance(visual.get("media"), dict) else None,
                     },
                 }
@@ -894,6 +904,11 @@ class AiVideoService:
             "transition": visual.get("transition"),
             "camera": visual.get("camera"),
             "layout": visual.get("layout"),
+            "layoutVariant": visual.get("layoutVariant"),
+            "effect": visual.get("effect"),
+            "intensity": visual.get("intensity"),
+            "energyPattern": visual.get("energyPattern"),
+            "assetPrompt": visual.get("assetPrompt"),
             "media": media,
         }
 
@@ -1063,6 +1078,70 @@ class AiVideoService:
 
     def _default_visual_intensity(self, visual_style: str, pace: str) -> str:
         return "high"
+
+    def _stable_pick(self, seed: str, options: list[str]) -> str:
+        if not options:
+            return ""
+        total = sum(ord(char) for char in seed)
+        return options[total % len(options)]
+
+    def _layout_variant_for_scene(
+        self,
+        content_type: str,
+        visual_style: str,
+        scene_type: str,
+        text: str,
+        index: int,
+        directive: str,
+    ) -> str:
+        if index == 0:
+            options = ["center_burst", "media_hero", "kinetic_focus", "diagonal_impact"]
+        elif scene_type in {"commerce_hook", "compare_split", "benefit_stack", "use_case", "cta_burst"}:
+            options = ["media_product", "diagonal_split", "center_burst", "floating_tags", "text_left_media_right"]
+        elif scene_type in {"question_board", "step_board", "diagram_flow", "example_card", "summary_cards"}:
+            options = ["center_orbit", "diagram_stage", "text_left_media_right", "floating_tags"]
+        elif scene_type in {"data_report", "metric_wall", "trend_line", "data_nodes"}:
+            options = ["data_wall", "scan_dashboard", "center_orbit", "diagonal_split"]
+        elif content_type in {"lifestyle", "mood"}:
+            options = ["media_hero", "center_orbit", "text_left_media_right", "floating_tags"]
+        else:
+            options = ["center_burst", "media_hero", "diagonal_split", "center_orbit", "floating_tags"]
+        return self._stable_pick(f"{content_type}|{visual_style}|{scene_type}|{index}|{text}|{directive}", options)
+
+    def _energy_pattern_for_scene(self, scene_type: str, layout_variant: str, text: str, index: int) -> str:
+        if layout_variant in {"center_burst", "kinetic_focus", "diagonal_impact"}:
+            options = ["shockwave", "prism_rays", "glitch_slices"]
+        elif layout_variant in {"media_hero", "media_product", "text_left_media_right"}:
+            options = ["parallax_media", "light_sweep", "depth_scan"]
+        elif layout_variant in {"data_wall", "scan_dashboard"}:
+            options = ["data_scan", "ticker_bars", "metric_pulse"]
+        else:
+            options = ["orbit_rings", "floating_particles", "tag_burst"]
+        return self._stable_pick(f"{scene_type}|{layout_variant}|{index}|{text}", options)
+
+    def _asset_prompt_for_scene(
+        self,
+        content_type: str,
+        visual_style: str,
+        text: str,
+        scene_label: str,
+        layout_variant: str,
+    ) -> str:
+        topic = self._topic_from_prompt(text)
+        style_hints = {
+            "commerce_boost": "high-impact product advertising, glossy product surfaces, dramatic lighting",
+            "viral_pop": "short-form viral visual, saturated colors, bold kinetic energy",
+            "tech_blueprint": "futuristic interface, luminous data layers, blueprint depth",
+            "data_report": "premium data visualization backdrop, metric dashboards, clean depth",
+            "premium_black_gold": "luxury black-gold cinematic advertising, reflective highlights",
+            "clean_explainer": "clean educational visual, clear diagrams, bright modern workspace",
+        }
+        return (
+            f"{scene_label} visual for {content_type}: {topic}. "
+            f"Layout: {layout_variant}. "
+            f"Style: {style_hints.get(visual_style, 'cinematic editorial visual with strong depth and motion-ready composition')}. "
+            "No text, no watermark, leave clean areas for animated typography."
+        )
 
     def _normalize_prompt_payload(self, payload: dict[str, Any] | None) -> dict[str, Any]:
         normalized = dict(payload or {})

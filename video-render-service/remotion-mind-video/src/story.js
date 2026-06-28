@@ -198,6 +198,11 @@ const normalizeScene = ({item, index, modes, contentType}) => {
     transition: item.transition || 'cut',
     camera: item.camera || 'cinematic_push',
     layout: item.layout || '',
+    layoutVariant: item.layoutVariant || '',
+    effect: item.effect || '',
+    intensity: item.intensity || 'high',
+    energyPattern: item.energyPattern || '',
+    assetPrompt: item.assetPrompt || '',
     media: item.media || null,
     audioSrc: item.audioSrc || item.audio?.src || null
   };
@@ -259,6 +264,11 @@ export const scriptToStory = ({
       transition: fromBackend ? sceneInput.transition : 'cut',
       camera: fromBackend ? sceneInput.camera : 'cinematic_push',
       layout: fromBackend ? sceneInput.layout : style,
+      layoutVariant: fromBackend ? sceneInput.layoutVariant : '',
+      effect: fromBackend ? sceneInput.effect : '',
+      intensity: fromBackend ? (sceneInput.intensity || 'high') : 'high',
+      energyPattern: fromBackend ? sceneInput.energyPattern : '',
+      assetPrompt: fromBackend ? sceneInput.assetPrompt : '',
       media: fromBackend ? sceneInput.media : null
     };
   });

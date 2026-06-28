@@ -120,6 +120,119 @@ const KeywordRail = ({scene, palette, local, vertical = false}) => (
   </div>
 );
 
+const EnergyField = ({scene, palette, local, progress}) => {
+  const pattern = scene.energyPattern || 'orbit_rings';
+  const opacity = scene.intensity === 'medium' ? 0.42 : 0.68;
+  if (pattern === 'shockwave' || pattern === 'prism_rays') {
+    return (
+      <AbsoluteFill style={{pointerEvents: 'none', opacity, mixBlendMode: 'screen'}}>
+        {[0, 1, 2].map((index) => (
+          <div key={index} style={{
+            position: 'absolute',
+            left: 640 - 170 - index * 44,
+            top: 360 - 170 - index * 44,
+            width: 340 + index * 88,
+            height: 340 + index * 88,
+            borderRadius: '50%',
+            border: `2px solid ${index % 2 ? palette.accent2 : palette.accent}`,
+            transform: `scale(${0.55 + progress * 1.25 + index * 0.08}) rotate(${local * (index + 1)}deg)`,
+            opacity: 0.58 - index * 0.13
+          }} />
+        ))}
+        <div style={{position: 'absolute', inset: -120, background: `conic-gradient(from ${local * 10}deg, transparent, ${palette.accent}66, transparent, ${palette.accent2}55, transparent)`, transform: `rotate(${local * 1.8}deg)`}} />
+      </AbsoluteFill>
+    );
+  }
+  if (pattern === 'glitch_slices') {
+    return (
+      <AbsoluteFill style={{pointerEvents: 'none', opacity, mixBlendMode: 'screen'}}>
+        {Array.from({length: 7}).map((_, index) => (
+          <div key={index} style={{
+            position: 'absolute',
+            left: Math.sin((local + index * 17) / 4) * 42,
+            top: 80 + index * 78,
+            width: '110%',
+            height: 14 + index,
+            background: index % 2 ? palette.accent2 : palette.accent,
+            transform: `skewX(-18deg) translateX(${Math.sin(local / 5 + index) * 28}px)`
+          }} />
+        ))}
+      </AbsoluteFill>
+    );
+  }
+  if (pattern === 'data_scan' || pattern === 'ticker_bars' || pattern === 'metric_pulse') {
+    return (
+      <AbsoluteFill style={{pointerEvents: 'none', opacity: 0.5}}>
+        {Array.from({length: 12}).map((_, index) => (
+          <div key={index} style={{
+            position: 'absolute',
+            left: 70 + index * 96,
+            bottom: 76,
+            width: 26,
+            height: 80 + ((local * (index + 2)) % 260),
+            borderRadius: 6,
+            background: `linear-gradient(180deg, ${palette.accent2}, ${palette.accent})`,
+            boxShadow: `0 0 24px ${palette.accent}66`
+          }} />
+        ))}
+      </AbsoluteFill>
+    );
+  }
+  return (
+    <AbsoluteFill style={{pointerEvents: 'none', opacity}}>
+      {Array.from({length: 10}).map((_, index) => {
+        const angle = (index / 10) * Math.PI * 2 + local / 28;
+        const radius = 185 + Math.sin((local + index * 9) / 18) * 46;
+        return <div key={index} style={{position: 'absolute', left: 640 + Math.cos(angle) * radius, top: 360 + Math.sin(angle) * radius, width: 8 + index % 3 * 6, height: 8 + index % 3 * 6, borderRadius: 99, background: index % 2 ? palette.accent2 : palette.accent, boxShadow: `0 0 28px ${index % 2 ? palette.accent2 : palette.accent}`}} />;
+      })}
+    </AbsoluteFill>
+  );
+};
+
+const MediaOrb = ({scene, palette, local, progress, size = 360}) => {
+  const src = scene.media?.src;
+  const rotate = local * 0.35;
+  return (
+    <div style={{
+      position: 'relative',
+      width: size,
+      height: size,
+      borderRadius: scene.layoutVariant === 'diagonal_split' ? 28 : '50%',
+      overflow: 'hidden',
+      boxShadow: `0 0 90px ${palette.accent}55`,
+      border: `2px solid ${palette.accent2}88`,
+      transform: `scale(${0.92 + progress * 0.12}) rotate(${scene.layoutVariant === 'diagonal_split' ? -4 : 0}deg)`
+    }}>
+      {src ? (
+        <Img src={src} style={{width: '100%', height: '100%', objectFit: 'cover', transform: `scale(${1.08 + progress * 0.12}) translate(${Math.sin(local / 24) * 14}px, ${Math.cos(local / 30) * 10}px)`, filter: 'saturate(1.08) contrast(1.08)'}} />
+      ) : (
+        <div style={{width: '100%', height: '100%', background: `radial-gradient(circle at 30% 28%, ${palette.accent2}, transparent 36%), linear-gradient(135deg, ${palette.panel}, ${palette.bg})`}} />
+      )}
+      <div style={{position: 'absolute', inset: 0, background: `conic-gradient(from ${rotate}deg, transparent, ${palette.accent}55, transparent, ${palette.accent2}44, transparent)`, mixBlendMode: 'screen'}} />
+    </div>
+  );
+};
+
+const KineticTitle = ({scene, palette, local, align = 'left', maxWidth = 820}) => {
+  const {fps} = useVideoConfig();
+  const enter = spring({frame: local, fps, config: {damping: 14, stiffness: 150}});
+  const words = String(scene.body || '').split('').slice(0, 18);
+  const fontSize = scene.body.length > 18 ? 72 : 96;
+  return (
+    <div style={{maxWidth, textAlign: align, transform: `translateY(${(1 - enter) * 40}px)`, opacity: enter}}>
+      <div style={{fontSize: 24, color: palette.accent, marginBottom: 18, letterSpacing: 0}}>{scene.title}</div>
+      <h1 style={{fontSize, lineHeight: 0.94, margin: 0, color: palette.ink}}>
+        {words.map((char, index) => (
+          <span key={`${char}-${index}`} style={{display: 'inline-block', transform: `translateY(${Math.sin((local + index * 3) / 8) * 4}px)`, color: index % 5 === 0 ? palette.accent2 : index % 3 === 0 ? palette.accent : palette.ink}}>
+            {char}
+          </span>
+        ))}
+      </h1>
+      <div style={{marginTop: 28, display: 'flex', justifyContent: align === 'center' ? 'center' : 'flex-start'}}><KeywordRail scene={scene} palette={palette} local={local} /></div>
+    </div>
+  );
+};
+
 const MotionTexture = ({scene, palette, local, progress}) => {
   const scan = interpolate(local, [0, 34], [-18, 118], {extrapolateRight: 'clamp', easing: Easing.bezier(0.16, 1, 0.3, 1)});
   const pulse = 0.45 + Math.sin(local / 9) * 0.18;
@@ -342,6 +455,29 @@ const TransitionLayer = ({scene, palette, local}) => {
 const BigType = ({scene, palette, local, progress}) => {
   const {fps} = useVideoConfig();
   const enter = spring({frame: local, fps, config: {damping: 16, stiffness: 90}});
+  const variant = scene.layoutVariant || 'center_burst';
+  if (variant === 'center_burst' || variant === 'kinetic_focus' || variant === 'diagonal_impact') {
+    return (
+      <AbsoluteFill style={{padding: 78, justifyContent: 'center', alignItems: 'center'}}>
+        <MediaBackdrop scene={scene} palette={palette} local={local} progress={progress} intensity={1.05} />
+        <EnergyField scene={scene} palette={palette} local={local} progress={progress} />
+        <div style={{position: 'absolute', inset: 0, background: `radial-gradient(circle at 50% 50%, transparent 0, ${palette.bg}aa 62%)`}} />
+        <KineticTitle scene={scene} palette={palette} local={local} align="center" maxWidth={980} />
+      </AbsoluteFill>
+    );
+  }
+  if (variant === 'media_hero' || variant === 'text_left_media_right') {
+    return (
+      <AbsoluteFill style={{padding: 76, display: 'grid', gridTemplateColumns: '0.95fr 1.05fr', gap: 48, alignItems: 'center'}}>
+        <MediaBackdrop scene={scene} palette={palette} local={local} progress={progress} intensity={0.85} />
+        <KineticTitle scene={scene} palette={palette} local={local} />
+        <div style={{display: 'grid', placeItems: 'center'}}>
+          <MediaOrb scene={scene} palette={palette} local={local} progress={progress} size={430} />
+        </div>
+        <EnergyField scene={scene} palette={palette} local={local} progress={progress} />
+      </AbsoluteFill>
+    );
+  }
   return (
     <AbsoluteFill style={{padding: 90, justifyContent: 'center'}}>
       <MediaBackdrop scene={scene} palette={palette} local={local} progress={progress} intensity={0.8} />
@@ -370,6 +506,51 @@ const CommerceScene = ({scene, palette, local}) => {
   const {fps} = useVideoConfig();
   const pop = spring({frame: local, fps, config: {damping: 12, stiffness: 150}});
   const progress = clamp(local / Math.max(scene.duration, 1), 0, 1);
+  const variant = scene.layoutVariant || 'media_product';
+  if (variant === 'center_burst' || variant === 'floating_tags') {
+    return (
+      <AbsoluteFill style={{padding: 72, justifyContent: 'center', alignItems: 'center'}}>
+        <MediaBackdrop scene={scene} palette={palette} local={local} progress={progress} intensity={1.1} />
+        <EnergyField scene={scene} palette={palette} local={local} progress={progress} />
+        <KineticTitle scene={scene} palette={palette} local={local} align="center" maxWidth={940} />
+        <div style={{position: 'absolute', left: 82, right: 82, bottom: 78, display: 'flex', justifyContent: 'center', gap: 16}}>
+          {(scene.keywords || []).slice(0, 4).map((keyword, index) => (
+            <div key={keyword} style={{padding: '12px 18px', borderRadius: 999, border: `1px solid ${index % 2 ? palette.accent2 : palette.accent}`, color: index % 2 ? palette.accent2 : palette.accent, background: `${palette.bg}aa`, fontSize: 24, transform: `translateY(${Math.sin((local + index * 10) / 12) * 8}px)`}}>{keyword}</div>
+          ))}
+        </div>
+      </AbsoluteFill>
+    );
+  }
+  if (variant === 'media_product' || variant === 'text_left_media_right') {
+    return (
+      <AbsoluteFill style={{padding: 78, display: 'grid', gridTemplateColumns: '0.9fr 1.1fr', gap: 44, alignItems: 'center'}}>
+        <MediaBackdrop scene={scene} palette={palette} local={local} progress={progress} />
+        <div>
+          <KineticTitle scene={scene} palette={palette} local={local} maxWidth={680} />
+          <div style={{marginTop: 28, fontSize: 28, color: palette.muted}}>{scene.cta || '立即行动'}</div>
+        </div>
+        <div style={{display: 'grid', placeItems: 'center'}}>
+          <MediaOrb scene={scene} palette={palette} local={local} progress={progress} size={450} />
+        </div>
+        <EnergyField scene={scene} palette={palette} local={local} progress={progress} />
+      </AbsoluteFill>
+    );
+  }
+  if (variant === 'diagonal_split') {
+    return (
+      <AbsoluteFill style={{overflow: 'hidden'}}>
+        <MediaBackdrop scene={scene} palette={palette} local={local} progress={progress} />
+        <div style={{position: 'absolute', inset: '-12% 46% -12% -12%', background: `${palette.bg}ee`, transform: 'skewX(-13deg)', borderRight: `3px solid ${palette.accent}`}} />
+        <div style={{position: 'absolute', left: 82, top: 130, width: 610}}>
+          <KineticTitle scene={scene} palette={palette} local={local} maxWidth={610} />
+        </div>
+        <div style={{position: 'absolute', right: 92, top: 122}}>
+          <MediaOrb scene={scene} palette={palette} local={local} progress={progress} size={390} />
+        </div>
+        <EnergyField scene={scene} palette={palette} local={local} progress={progress} />
+      </AbsoluteFill>
+    );
+  }
   return (
     <AbsoluteFill style={{padding: 82}}>
       <MediaBackdrop scene={scene} palette={palette} local={local} progress={progress} />
@@ -389,26 +570,43 @@ const CommerceScene = ({scene, palette, local}) => {
   );
 };
 
-const TeachingScene = ({scene, palette, local}) => (
-  <AbsoluteFill style={{background: '#f6f3ea', color: '#111', padding: 82}}>
-    <MediaBackdrop scene={scene} palette={{...palette, bg: '#f6f3ea', panel: '#fff', accent: '#ff6b2c', accent2: '#2f80ed'}} local={local} progress={clamp(local / Math.max(scene.duration, 1), 0, 1)} intensity={0.35} />
-    <div style={{position: 'absolute', inset: 54, background: '#fff', border: '2px solid #111', borderRadius: 8}} />
-    <div style={{position: 'relative', zIndex: 1}}>
-      <div style={{fontSize: 24, color: '#ff6b2c'}}>STEP {scene.index + 1}</div>
-      <h1 style={{fontSize: 64, margin: '18px 0 28px'}}>{scene.title}</h1>
-      <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24}}>
-        <div style={{fontSize: 42, lineHeight: 1.25}}>{scene.body}</div>
-        <div style={{display: 'grid', gap: 18}}>
-          {(scene.keywords || []).map((k, i) => (
-            <div key={k} style={{padding: 18, border: '2px solid #111', borderRadius: 8, transform: `translateX(${Math.max(0, 1 - (local - i * 8) / 18) * 50}px)`, background: i % 2 ? '#fff6e8' : '#e9f3ff', fontSize: 28}}>
-              {i + 1}. {k}
-            </div>
-          ))}
+const TeachingScene = ({scene, palette, local}) => {
+  const progress = clamp(local / Math.max(scene.duration, 1), 0, 1);
+  const paper = {...palette, bg: '#f6f3ea', panel: '#fff', ink: '#111', accent: '#ff6b2c', accent2: '#2f80ed'};
+  if (scene.layoutVariant === 'center_orbit' || scene.layoutVariant === 'diagram_stage') {
+    return (
+      <AbsoluteFill style={{background: '#f6f3ea', color: '#111', padding: 72, alignItems: 'center', justifyContent: 'center'}}>
+        <MediaBackdrop scene={scene} palette={paper} local={local} progress={progress} intensity={0.28} />
+        <EnergyField scene={scene} palette={paper} local={local} progress={progress} />
+        <KineticTitle scene={scene} palette={paper} local={local} align="center" maxWidth={820} />
+        {(scene.keywords || []).slice(0, 4).map((k, i) => {
+          const angle = (i / 4) * Math.PI * 2 + local / 42;
+          return <div key={k} style={{position: 'absolute', left: 640 + Math.cos(angle) * 390 - 78, top: 360 + Math.sin(angle) * 210 - 28, width: 156, padding: 14, textAlign: 'center', background: i % 2 ? '#fff6e8' : '#e9f3ff', border: '2px solid #111', borderRadius: 8, fontSize: 24}}>{k}</div>;
+        })}
+      </AbsoluteFill>
+    );
+  }
+  return (
+    <AbsoluteFill style={{background: '#f6f3ea', color: '#111', padding: 82}}>
+      <MediaBackdrop scene={scene} palette={paper} local={local} progress={progress} intensity={0.35} />
+      <div style={{position: 'absolute', inset: 54, background: '#fff', border: '2px solid #111', borderRadius: 8}} />
+      <div style={{position: 'relative', zIndex: 1}}>
+        <div style={{fontSize: 24, color: '#ff6b2c'}}>STEP {scene.index + 1}</div>
+        <h1 style={{fontSize: 64, margin: '18px 0 28px'}}>{scene.title}</h1>
+        <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24}}>
+          <div style={{fontSize: 42, lineHeight: 1.25}}>{scene.body}</div>
+          <div style={{display: 'grid', gap: 18}}>
+            {(scene.keywords || []).map((k, i) => (
+              <div key={k} style={{padding: 18, border: '2px solid #111', borderRadius: 8, transform: `translateX(${Math.max(0, 1 - (local - i * 8) / 18) * 50}px)`, background: i % 2 ? '#fff6e8' : '#e9f3ff', fontSize: 28}}>
+                {i + 1}. {k}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
-    </div>
-  </AbsoluteFill>
-);
+    </AbsoluteFill>
+  );
+};
 
 const BlueprintScene = ({scene, palette, local}) => (
   <AbsoluteFill style={{background: palette.bg, color: palette.ink}}>
@@ -454,27 +652,44 @@ const MagazineScene = ({scene, palette, local}) => (
   </AbsoluteFill>
 );
 
-const DataScene = ({scene, palette, local}) => (
-  <AbsoluteFill style={{background: palette.bg, color: palette.ink, padding: 82}}>
-    <MediaBackdrop scene={scene} palette={palette} local={local} progress={clamp(local / Math.max(scene.duration, 1), 0, 1)} intensity={0.42} />
-    <div style={{fontSize: 22, color: palette.accent}}>DATA VIEW</div>
-    <h1 style={{fontSize: 66, margin: '16px 0 28px'}}>{scene.title}</h1>
-    <div style={{display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18}}>
-      {(scene.keywords || []).slice(0, 4).map((keyword, index) => {
-        const h = 130 + ((local * (index + 1)) % 180);
-        return (
-          <div key={keyword} style={{height: 360, display: 'flex', alignItems: 'end', border: `1px solid ${palette.line}`, padding: 16}}>
-            <div style={{width: '100%'}}>
-              <div style={{height: h, background: `linear-gradient(180deg, ${palette.accent2}, ${palette.accent})`, borderRadius: 8}} />
-              <div style={{fontSize: 24, marginTop: 14}}>{keyword}</div>
+const DataScene = ({scene, palette, local}) => {
+  const progress = clamp(local / Math.max(scene.duration, 1), 0, 1);
+  if (scene.layoutVariant === 'center_orbit' || scene.layoutVariant === 'diagonal_split') {
+    return (
+      <AbsoluteFill style={{background: palette.bg, color: palette.ink, padding: 78, justifyContent: 'center'}}>
+        <MediaBackdrop scene={scene} palette={palette} local={local} progress={progress} intensity={0.5} />
+        <EnergyField scene={scene} palette={palette} local={local} progress={progress} />
+        <KineticTitle scene={scene} palette={palette} local={local} maxWidth={760} />
+        <div style={{position: 'absolute', right: 76, top: 110, width: 380, height: 480, display: 'grid', gap: 12}}>
+          {(scene.keywords || []).slice(0, 4).map((keyword, index) => (
+            <div key={keyword} style={{border: `1px solid ${palette.line}`, background: `${palette.panel}cc`, padding: 18, fontSize: 28, color: index % 2 ? palette.accent2 : palette.accent, transform: `translateX(${Math.sin((local + index * 9) / 16) * 18}px)`}}>{keyword}</div>
+          ))}
+        </div>
+      </AbsoluteFill>
+    );
+  }
+  return (
+    <AbsoluteFill style={{background: palette.bg, color: palette.ink, padding: 82}}>
+      <MediaBackdrop scene={scene} palette={palette} local={local} progress={progress} intensity={0.42} />
+      <div style={{fontSize: 22, color: palette.accent}}>DATA VIEW</div>
+      <h1 style={{fontSize: 66, margin: '16px 0 28px'}}>{scene.title}</h1>
+      <div style={{display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18}}>
+        {(scene.keywords || []).slice(0, 4).map((keyword, index) => {
+          const h = 130 + ((local * (index + 1)) % 180);
+          return (
+            <div key={keyword} style={{height: 360, display: 'flex', alignItems: 'end', border: `1px solid ${palette.line}`, padding: 16}}>
+              <div style={{width: '100%'}}>
+                <div style={{height: h, background: `linear-gradient(180deg, ${palette.accent2}, ${palette.accent})`, borderRadius: 8}} />
+                <div style={{fontSize: 24, marginTop: 14}}>{keyword}</div>
+              </div>
             </div>
-          </div>
-        );
-      })}
-    </div>
-    <p style={{fontSize: 30, marginTop: 26, color: palette.muted}}>{scene.body}</p>
-  </AbsoluteFill>
-);
+          );
+        })}
+      </div>
+      <p style={{fontSize: 30, marginTop: 26, color: palette.muted}}>{scene.body}</p>
+    </AbsoluteFill>
+  );
+};
 
 const TimelineScene = ({scene, palette, local}) => (
   <AbsoluteFill style={{background: `linear-gradient(135deg, ${palette.bg}, ${palette.panel})`, color: palette.ink, padding: 82}}>
