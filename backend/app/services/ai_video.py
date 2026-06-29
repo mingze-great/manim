@@ -7,7 +7,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import wave
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +29,8 @@ STAGE_MESSAGES = {
     "failed": "生成失败",
     "cancelled": "任务已取消",
 }
+
+ACTIVE_JOB_STATUSES = {"pending", "scripting", "scene_planning", "tts_generating", "audio_processing", "rendering", "uploading"}
 
 
 CONTENT_TEMPLATES: dict[str, dict[str, Any]] = {
@@ -234,6 +236,28 @@ class AiVideoService:
         project = db.query(AiVideoProject).filter(AiVideoProject.id == job.project_id).first()
         if project and project.status not in {"completed", "failed"}:
             project.status = "cancelled"
+            project.updated_at = datetime.utcnow()
+        db.commit()
+        db.refresh(job)
+        return job
+
+    def reconcile_stale_job(self, db: Session, job: AiVideoJob) -> AiVideoJob:
+        if job.status not in ACTIVE_JOB_STATUSES:
+            return job
+        if job.id in self._running_jobs:
+            return job
+        stale_after = datetime.utcnow() - timedelta(minutes=10)
+        checkpoint = job.updated_at or job.created_at
+        if checkpoint and checkpoint > stale_after:
+            return job
+        job.status = "failed"
+        job.stage = "failed"
+        job.progress = min(job.progress or 0, 99)
+        job.error_message = "生成任务已中断，可能是服务重启或部署导致后台线程退出。请点击重试重新生成。"
+        job.updated_at = datetime.utcnow()
+        project = db.query(AiVideoProject).filter(AiVideoProject.id == job.project_id).first()
+        if project and project.status not in {"completed", "failed", "cancelled"}:
+            project.status = "failed"
             project.updated_at = datetime.utcnow()
         db.commit()
         db.refresh(job)

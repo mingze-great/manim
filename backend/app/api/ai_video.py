@@ -148,6 +148,7 @@ def get_job(
     job = query.first()
     if not job:
         raise HTTPException(status_code=404, detail="AI video job not found")
+    job = service.reconcile_stale_job(db, job)
     return _job_response(job)
 
 
