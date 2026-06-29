@@ -223,8 +223,13 @@ def apply_edit(
     current_user: Annotated[User, Depends(get_current_user)],
 ):
     project = _require_project(db, project_id, current_user)
-    version = service.apply_edit_plan(db, project, current_user.id, payload.editPlan, payload.message)
-    return {"versionId": version.id, "versionNo": version.version_no, "project": _project_response(db, project)}
+    version, job = service.apply_edit_plan(db, project, current_user.id, payload.editPlan, payload.message)
+    return {
+        "versionId": version.id,
+        "versionNo": version.version_no,
+        "jobId": f"job_{job.id}",
+        "project": _project_response(db, project),
+    }
 
 
 @router.post("/projects/{project_id}/versions/{version_id}/rollback")

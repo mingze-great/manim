@@ -330,7 +330,7 @@ class AiVideoService:
         user_id: int,
         plan: list[str],
         message: str | None,
-    ) -> AiVideoVersion:
+    ) -> tuple[AiVideoVersion, AiVideoJob]:
         latest = (
             db.query(AiVideoVersion)
             .filter(AiVideoVersion.project_id == project.id)
@@ -375,7 +375,7 @@ class AiVideoService:
         db.commit()
         db.refresh(retry)
         threading.Thread(target=self._run_generation_job, args=(retry.id,), daemon=True).start()
-        return version
+        return version, retry
 
     def rollback_project_version(self, db: Session, project: AiVideoProject, version_id: int) -> AiVideoVersion:
         version = (
@@ -501,6 +501,7 @@ class AiVideoService:
 
     def _default_project_json(self, project: AiVideoProject, payload: dict[str, Any]) -> dict[str, Any]:
         payload = self._normalize_prompt_payload(payload)
+        payload.setdefault("title", project.title)
         content_type = self._resolve_content_type(payload, fallback=project.video_type)
         template = CONTENT_TEMPLATES.get(content_type, CONTENT_TEMPLATES["insight"])
         visual_style = self._resolve_visual_style(payload, template)
@@ -517,7 +518,7 @@ class AiVideoService:
         if isinstance(draft_scenes, list) and draft_scenes:
             scenes = self._normalize_draft_scenes(draft_scenes, content_type, visual_style, pace)
         else:
-            scenes = self._build_scenes(script, payload, content_type, visual_style, pace)
+            scenes = self._build_scenes(script, payload, content_type, visual_style, pace, project.title)
 
         return {
             "title": project.title,
@@ -559,6 +560,7 @@ class AiVideoService:
         content_type: str,
         visual_style: str,
         pace: str,
+        project_title: str = "",
     ) -> list[dict[str, Any]]:
         template = CONTENT_TEMPLATES.get(content_type, CONTENT_TEMPLATES["insight"])
         requested_count = int(payload.get("sceneCount") or 0)
@@ -592,6 +594,7 @@ class AiVideoService:
                     "visual": {
                         "type": scene_type,
                         "headline": self._headline_for_scene(step[0], text, index),
+                        "openingTitle": self._opening_title_for_scene(payload, project_title=project_title, text=text) if index == 0 else "",
                         "nodes": self._keywords_for_text(text, list(step[2])),
                         "layout": visual_style,
                         "layoutVariant": layout_variant,
@@ -708,6 +711,7 @@ class AiVideoService:
                     "visual": {
                         "type": scene_type,
                         "headline": visual.get("headline") or raw.get("title") or self._headline_for_scene(step[0], text, index),
+                        "openingTitle": visual.get("openingTitle") or raw.get("openingTitle") or "",
                         "nodes": visual.get("nodes") or raw.get("keywords") or self._keywords_for_text(text, list(step[2])),
                         "layout": visual.get("layout") or visual_style,
                         "layoutVariant": layout_variant,
@@ -903,6 +907,7 @@ class AiVideoService:
             "subtitleText": scene.get("subtitleText"),
             "displayText": scene.get("subtitleText"),
             "title": visual.get("headline") or scene.get("title"),
+            "openingTitle": visual.get("openingTitle"),
             "mode": visual.get("type"),
             "keywords": visual.get("nodes") or [],
             "durationFrames": scene.get("durationFrames"),
@@ -1150,6 +1155,33 @@ class AiVideoService:
             f"Style: {style_hints.get(visual_style, 'cinematic editorial visual with strong depth and motion-ready composition')}. "
             "No text, no watermark, leave clean areas for animated typography."
         )
+
+    def _opening_title_for_scene(self, payload: dict[str, Any], project_title: str, text: str) -> str:
+        def usable(value: str) -> str:
+            cleaned = self._display_text_for_scene(value, "", 0).strip()
+            placeholders = {"ai 视频项目", "ai video", "scene 1", "scene 01", "主题开场", "痛点开场", "提出问题", "反常识开场"}
+            if not cleaned or cleaned.lower() in placeholders:
+                return ""
+            if re.fullmatch(r"scene\s*\d+", cleaned.lower()):
+                return ""
+            return cleaned[:20]
+
+        candidates = [
+            str(project_title or ""),
+            str(payload.get("title") or ""),
+            str(payload.get("topic") or ""),
+            str(payload.get("goal") or ""),
+            str(payload.get("creativeBrief") or ""),
+            self._topic_from_prompt(str(payload.get("script") or payload.get("prompt") or "")),
+        ]
+        for candidate in candidates:
+            cleaned = usable(candidate)
+            if cleaned:
+                return cleaned
+        keywords = self._keywords_for_text(text, [])
+        if keywords:
+            return " / ".join(keywords[:2])[:20]
+        return usable(text) or "主题开场"
 
     def _normalize_prompt_payload(self, payload: dict[str, Any] | None) -> dict[str, Any]:
         normalized = dict(payload or {})

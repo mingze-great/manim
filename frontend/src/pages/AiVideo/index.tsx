@@ -449,6 +449,9 @@ export function AiVideoEditor() {
   const [editText, setEditText] = useState('')
   const [plan, setPlan] = useState<string[]>([])
   const [versions, setVersions] = useState<any[]>([])
+  const [activeJob, setActiveJob] = useState<AiVideoJob | null>(null)
+  const [planning, setPlanning] = useState(false)
+  const [applying, setApplying] = useState(false)
 
   const load = async () => {
     if (!id) return
@@ -460,22 +463,53 @@ export function AiVideoEditor() {
 
   useEffect(() => { load() }, [id])
 
+  useEffect(() => {
+    if (!activeJob || ['completed', 'failed', 'cancelled'].includes(activeJob.status)) return
+    const timer = window.setInterval(async () => {
+      const { data } = await aiVideoApi.getJob(activeJob.jobId)
+      setActiveJob(data)
+      if (data.status === 'completed') {
+        message.success('已按修改意见重新生成视频')
+        setPlan([])
+        setEditText('')
+        load()
+      }
+      if (data.status === 'failed') {
+        message.error(data.errorMessage || '重新生成失败')
+      }
+    }, 2500)
+    return () => window.clearInterval(timer)
+  }, [activeJob?.jobId, activeJob?.status])
+
   const scenes = project?.projectJson?.scenes || []
   const outputUrl = resolveBackendUrl(project?.outputUrl)
 
   const createPlan = async () => {
     if (!project || !editText.trim()) return
-    const { data } = await aiVideoApi.planEdit(project.id, editText)
-    setPlan(data.editPlan)
+    setPlanning(true)
+    try {
+      const { data } = await aiVideoApi.planEdit(project.id, editText)
+      setPlan(data.editPlan)
+      message.success('已根据你的修改意见生成执行计划')
+    } finally {
+      setPlanning(false)
+    }
   }
 
   const applyPlan = async () => {
-    if (!project) return
-    await aiVideoApi.applyEdit(project.id, plan, editText)
-    message.success('已开始按你的要求重新生成')
-    setPlan([])
-    setEditText('')
-    load()
+    if (!project || !editText.trim()) return
+    const finalPlan = plan.length ? plan : (await aiVideoApi.planEdit(project.id, editText)).data.editPlan
+    setPlan(finalPlan)
+    setApplying(true)
+    try {
+      const { data } = await aiVideoApi.applyEdit(project.id, finalPlan, editText)
+      setProject(data.project)
+      const jobRes = await aiVideoApi.getJob(data.jobId)
+      setActiveJob(jobRes.data)
+      message.success('已开始按你的修改意见重新生成视频')
+    } finally {
+      setApplying(false)
+    }
   }
 
   return (
@@ -497,9 +531,21 @@ export function AiVideoEditor() {
           <h2>继续用对话修改</h2>
           <div className="director-box">
             <Input.TextArea rows={6} value={editText} onChange={e => setEditText(e.target.value)} placeholder="例如：开头再抓人一点，整体更像小红书，字幕少一点，节奏更快。" />
-            <Button className="ghost-action" onClick={createPlan}>生成修改计划</Button>
-            {plan.map((item, index) => <div className="stage-item" key={item}><span className="stage-dot">{index + 1}</span><span>{item}</span></div>)}
-            {!!plan.length && <Button className="primary-action" onClick={applyPlan}>应用并重新生成</Button>}
+            <Button className="ghost-action" onClick={createPlan} loading={planning} disabled={!editText.trim()}>按修改意见生成计划</Button>
+            {!!plan.length && <div className="edit-plan-box">
+              <strong>将按这些修改执行</strong>
+              {plan.map((item, index) => <div className="stage-item" key={item}><span className="stage-dot">{index + 1}</span><span>{item}</span></div>)}
+            </div>}
+            <Button className="primary-action" onClick={applyPlan} loading={applying} disabled={!editText.trim() || !!activeJob && !['completed', 'failed', 'cancelled'].includes(activeJob.status)}>
+              应用修改并重新生成视频
+            </Button>
+            {activeJob && !['completed', 'failed', 'cancelled'].includes(activeJob.status) && (
+              <div className="edit-render-progress">
+                <strong>{stageLabels[activeJob.stage] || activeJob.message || '重新生成中'}</strong>
+                <Progress percent={activeJob.progress} status="active" />
+              </div>
+            )}
+            {activeJob?.status === 'failed' && <p className="audio-note">重新生成失败：{activeJob.errorMessage}</p>}
             {outputUrl && <Button className="light-action" icon={<CloudDownloadOutlined />} href={outputUrl}>下载 MP4</Button>}
           </div>
           <h2 className="section-gap">版本历史</h2>

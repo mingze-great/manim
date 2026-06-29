@@ -224,18 +224,25 @@ const MediaOrb = ({scene, palette, local, progress, size = 360}) => {
 const KineticTitle = ({scene, palette, local, align = 'left', maxWidth = 820}) => {
   const {fps} = useVideoConfig();
   const enter = spring({frame: local, fps, config: {damping: 14, stiffness: 150}});
-  const words = String(scene.body || '').split('').slice(0, 18);
-  const fontSize = scene.body.length > 18 ? 72 : 96;
+  const isOpening = scene.effect === 'opening_impact';
+  const titleText = isOpening
+    ? String(scene.openingTitle || scene.title || scene.keywords?.slice(0, 2).join(' / ') || scene.body || '').slice(0, 20)
+    : String(scene.body || '').slice(0, 18);
+  const chars = titleText.split('');
+  const fontSize = isOpening ? (titleText.length > 12 ? 92 : 118) : (scene.body.length > 18 ? 72 : 96);
   return (
     <div style={{maxWidth, textAlign: align, transform: `translateY(${(1 - enter) * 40}px)`, opacity: enter}}>
-      <div style={{fontSize: 24, color: palette.accent, marginBottom: 18, letterSpacing: 0}}>{scene.title}</div>
+      <div style={{fontSize: 24, color: palette.accent, marginBottom: 18, letterSpacing: 0}}>{isOpening ? 'OPENING THEME' : scene.title}</div>
       <h1 style={{fontSize, lineHeight: 0.94, margin: 0, color: palette.ink}}>
-        {words.map((char, index) => (
-          <span key={`${char}-${index}`} style={{display: 'inline-block', transform: `translateY(${Math.sin((local + index * 3) / 8) * 4}px)`, color: index % 5 === 0 ? palette.accent2 : index % 3 === 0 ? palette.accent : palette.ink}}>
-            {char}
-          </span>
-        ))}
+        {isOpening ? (
+          <span style={{display: 'inline-block', textShadow: `0 0 36px ${palette.accent}88, 0 0 90px ${palette.accent2}55`, transform: `scale(${0.96 + enter * 0.04})`}}>{titleText}</span>
+        ) : chars.map((char, index) => (
+            <span key={`${char}-${index}`} style={{display: 'inline-block', transform: `translateY(${Math.sin((local + index * 3) / 8) * 4}px)`, color: index % 5 === 0 ? palette.accent2 : index % 3 === 0 ? palette.accent : palette.ink}}>
+              {char}
+            </span>
+          ))}
       </h1>
+      {isOpening && <div style={{marginTop: 22, fontSize: 34, color: palette.muted, lineHeight: 1.2}}>{scene.body}</div>}
       <div style={{marginTop: 28, display: 'flex', justifyContent: align === 'center' ? 'center' : 'flex-start'}}><KeywordRail scene={scene} palette={palette} local={local} /></div>
     </div>
   );
@@ -247,24 +254,33 @@ const MotionTexture = ({scene, palette, local, progress}) => {
   const type = scene.transition || scene.mode;
 
   if (scene.effect === 'opening_impact') {
-    const burst = interpolate(local, [0, 10, 24], [0.92, 0.55, 0], {extrapolateRight: 'clamp'});
+    const burst = interpolate(local, [0, 8, 30], [1, 0.72, 0], {extrapolateRight: 'clamp'});
+    const flash = interpolate(local, [0, 3, 12], [0.9, 0.35, 0], {extrapolateRight: 'clamp'});
     return (
       <AbsoluteFill style={{pointerEvents: 'none', opacity: burst, mixBlendMode: 'screen'}}>
+        <AbsoluteFill style={{background: '#fff', opacity: flash}} />
         <div style={{
           position: 'absolute',
-          inset: -180,
-          background: `conic-gradient(from ${local * 14}deg, ${palette.accent}, transparent 24%, ${palette.accent2}, transparent 62%, #fff)`,
-          transform: `scale(${0.75 + progress * 1.1}) rotate(${local * 1.6}deg)`
+          left: '50%',
+          top: '50%',
+          width: 980,
+          height: 980,
+          marginLeft: -490,
+          marginTop: -490,
+          borderRadius: '50%',
+          background: `radial-gradient(circle, #fff 0%, ${palette.accent2}22 12%, transparent 32%), conic-gradient(from ${local * 18}deg, ${palette.accent}, transparent 18%, ${palette.accent2}, transparent 54%, #fff, transparent 82%)`,
+          transform: `scale(${0.22 + progress * 1.7}) rotate(${local * 2.4}deg)`
         }} />
-        {[0, 1, 2, 3].map((index) => (
+        {[0, 1, 2, 3, 4, 5].map((index) => (
           <div key={index} style={{
             position: 'absolute',
-            left: `${12 + index * 22}%`,
-            top: `${14 + index * 12}%`,
-            width: 360,
-            height: 18,
+            left: `${-8 + index * 19}%`,
+            top: `${10 + index * 11}%`,
+            width: 520,
+            height: 22,
             background: `linear-gradient(90deg, transparent, ${index % 2 ? palette.accent2 : palette.accent}, transparent)`,
-            transform: `translateX(${local * (18 + index * 5)}px) skewX(-18deg)`
+            transform: `translateX(${local * (26 + index * 7)}px) skewX(-20deg)`,
+            boxShadow: `0 0 34px ${index % 2 ? palette.accent2 : palette.accent}`
           }} />
         ))}
       </AbsoluteFill>
