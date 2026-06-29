@@ -31,7 +31,7 @@ STAGE_MESSAGES = {
 }
 
 ACTIVE_JOB_STATUSES = {"pending", "scripting", "scene_planning", "tts_generating", "audio_processing", "rendering", "uploading"}
-AI_VIDEO_STORAGE_ROOT = Path(os.getenv("AI_VIDEO_STORAGE_ROOT", Path(__file__).resolve().parents[1] / "storage" / "ai-video" / "tasks")).resolve()
+AI_VIDEO_STORAGE_ROOT = Path(os.getenv("AI_VIDEO_STORAGE_ROOT", Path(__file__).resolve().parents[2] / "storage" / "ai-video" / "tasks")).resolve()
 
 
 CONTENT_TEMPLATES: dict[str, dict[str, Any]] = {
