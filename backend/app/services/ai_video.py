@@ -31,6 +31,7 @@ STAGE_MESSAGES = {
 }
 
 ACTIVE_JOB_STATUSES = {"pending", "scripting", "scene_planning", "tts_generating", "audio_processing", "rendering", "uploading"}
+AI_VIDEO_STORAGE_ROOT = Path(os.getenv("AI_VIDEO_STORAGE_ROOT", Path(__file__).resolve().parents[1] / "storage" / "ai-video" / "tasks")).resolve()
 
 
 CONTENT_TEMPLATES: dict[str, dict[str, Any]] = {
@@ -157,7 +158,7 @@ STYLE_PRESETS: dict[str, dict[str, Any]] = {
 
 class AiVideoService:
     def __init__(self) -> None:
-        self.storage_root = Path("storage") / "ai-video" / "tasks"
+        self.storage_root = AI_VIDEO_STORAGE_ROOT
         self.render_service_url = os.getenv("AI_VIDEO_RENDER_SERVICE_URL", "http://127.0.0.1:18787").rstrip("/")
         self.render_audio_root = Path(
             os.getenv(

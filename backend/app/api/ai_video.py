@@ -23,7 +23,7 @@ from app.schemas.ai_video import (
     AiVideoStoryboardDraftRequest,
     AiVideoStoryboardDraftResponse,
 )
-from app.services.ai_video import AiVideoService, STAGE_MESSAGES
+from app.services.ai_video import AI_VIDEO_STORAGE_ROOT, AiVideoService, STAGE_MESSAGES
 
 router = APIRouter(prefix="/ai-video", tags=["ai-video"])
 service = AiVideoService()
@@ -333,7 +333,7 @@ def create_brand_kit(
 
 @router.get("/files/{job_id}/{file_path:path}")
 def get_file(job_id: int, file_path: str):
-    root = (Path("storage") / "ai-video" / "tasks" / f"job_{job_id}").resolve()
+    root = (AI_VIDEO_STORAGE_ROOT / f"job_{job_id}").resolve()
     target = (root / file_path).resolve()
     if not str(target).startswith(str(root)) or not target.exists() or not target.is_file():
         raise HTTPException(status_code=404, detail="File not found")
