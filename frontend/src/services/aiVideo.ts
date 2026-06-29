@@ -3,6 +3,8 @@ import api from './api'
 export interface AiVideoJobCreate {
   title?: string
   prompt?: string
+  requirements?: string
+  creativeBrief?: string
   script: string
   videoType: string
   contentType?: string

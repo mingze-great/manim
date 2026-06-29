@@ -300,7 +300,7 @@ export function AiVideoCreate() {
 
   useEffect(() => {
     if (mode === 'style') {
-      form.setFieldsValue({ prompt: `${typeMeta.prompt}\n${styleMeta.prompt}` })
+      form.setFieldsValue({ requirements: `${typeMeta.prompt}\n${styleMeta.prompt}` })
     }
   }, [form, mode, styleMeta.prompt, typeMeta.prompt])
 
@@ -318,16 +318,19 @@ export function AiVideoCreate() {
   }, [job, navigate])
 
   const submit = async (values: any) => {
-    const prompt = String(values.prompt || '').trim()
-    if (!prompt) {
+    const requirements = String(values.requirements || '').trim()
+    const script = String(values.script || '').trim()
+    if (!requirements) {
       message.warning('先写一句你想生成什么视频')
       return
     }
     const payload: AiVideoJobCreate = {
       title: values.title || undefined,
-      prompt,
-      script: prompt,
-      customPrompt: mode === 'style' ? `${styleMeta.prompt}\n${prompt}` : prompt,
+      prompt: requirements,
+      requirements,
+      creativeBrief: requirements,
+      script,
+      customPrompt: mode === 'style' ? `${styleMeta.prompt}\n${requirements}` : requirements,
       videoType: mode === 'style' ? selectedType : 'auto',
       contentType: mode === 'style' ? selectedType : undefined,
       style: mode === 'style' ? selectedStyle : 'auto',
@@ -370,7 +373,8 @@ export function AiVideoCreate() {
         layout="vertical"
         onFinish={submit}
         initialValues={{
-          prompt: '帮我做一条小红书护肤品种草视频，高级感，开头抓人，强调熬夜修护，最后引导购买。',
+          requirements: '帮我做一条小红书护肤品种草视频，高级感，开头抓人，强调熬夜修护，最后引导购买。',
+          script: '',
           aspectRatio: '16:9',
           targetPlatform: 'xiaohongshu',
           voiceId: '中文女',
@@ -401,18 +405,25 @@ export function AiVideoCreate() {
           )}
 
           <section className="ai-video-panel span-8 prompt-panel">
-            <div className="panel-kicker">Prompt</div>
+            <div className="panel-kicker">Creative Brief</div>
             <h2>你想生成什么视频？</h2>
-            <Form.Item name="prompt" rules={[{ required: true, message: '请输入生成要求' }]}>
+            <Form.Item name="requirements" rules={[{ required: true, message: '请输入生成要求' }]}>
               <Input.TextArea
-                rows={9}
+                rows={6}
                 className="big-prompt"
                 placeholder="例如：做一条小红书护肤品种草视频，高级感，前三秒抓人，强调熬夜修护，最后引导购买。"
               />
             </Form.Item>
+            <Form.Item name="script">
+              <Input.TextArea
+                rows={5}
+                className="big-prompt script-prompt"
+                placeholder="Optional script / voiceover. If filled, rendering follows this text strictly. Leave empty to let AI write it from the creative brief."
+              />
+            </Form.Item>
             <div className="prompt-hints">
               {['开头要抓人', '像小红书种草', '少一点文字', '更快节奏', '更高级感'].map(item => (
-                <button key={item} type="button" onClick={() => form.setFieldValue('prompt', `${form.getFieldValue('prompt') || ''} ${item}`.trim())}>{item}</button>
+                <button key={item} type="button" onClick={() => form.setFieldValue('requirements', `${form.getFieldValue('requirements') || ''} ${item}`.trim())}>{item}</button>
               ))}
             </div>
             <Space wrap className="submit-row">

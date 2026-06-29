@@ -172,7 +172,8 @@ class AiVideoService:
 
     def create_generation_job(self, db: Session, user_id: int, payload: dict[str, Any]) -> AiVideoJob:
         payload = self._normalize_prompt_payload(payload)
-        title = str(payload.get("title") or self._derive_title(str(payload.get("script") or "")))
+        title_source = str(payload.get("script") or payload.get("creativeBrief") or payload.get("requirements") or "")
+        title = str(payload.get("title") or self._derive_title(title_source))
         content_type = self._resolve_content_type(payload)
         project = AiVideoProject(
             user_id=user_id,
@@ -283,9 +284,10 @@ class AiVideoService:
 
     def build_storyboard_draft(self, payload: dict[str, Any]) -> dict[str, Any]:
         payload = self._normalize_prompt_payload(payload)
+        title_source = str(payload.get("script") or payload.get("creativeBrief") or payload.get("requirements") or "")
         project = AiVideoProject(
             user_id=0,
-            title=str(payload.get("title") or self._derive_title(str(payload.get("script") or ""))),
+            title=str(payload.get("title") or self._derive_title(title_source)),
             video_type=self._resolve_content_type(payload),
             aspect_ratio=str(payload.get("aspectRatio") or "16:9"),
         )
@@ -512,13 +514,14 @@ class AiVideoService:
         subtitle_mode = str(payload.get("subtitleMode") or style_preset.get("density") or "keywords")
         visual_intensity = str(payload.get("visualIntensity") or payload.get("motionIntensity") or self._default_visual_intensity(visual_style, pace))
         opening_effect = str(payload.get("openingEffect") or self._default_opening_effect(visual_style, pace))
-        script = str(payload.get("script") or payload.get("prompt") or project.title)
+        script = str(payload.get("script") or payload.get("creativeBrief") or payload.get("requirements") or payload.get("prompt") or project.title)
+        script_source = str(payload.get("scriptSource") or ("user" if str(payload.get("script") or "").strip() else "generated"))
 
         draft_scenes = payload.get("draftScenes")
         if isinstance(draft_scenes, list) and draft_scenes:
             scenes = self._normalize_draft_scenes(draft_scenes, content_type, visual_style, pace)
         else:
-            scenes = self._build_scenes(script, payload, content_type, visual_style, pace, project.title)
+            scenes = self._build_scenes(script, payload, content_type, visual_style, pace, project.title, script_source)
 
         return {
             "title": project.title,
@@ -526,7 +529,10 @@ class AiVideoService:
             "aspectRatio": project.aspect_ratio,
             "platform": platform,
             "goal": payload.get("goal") or payload.get("customPrompt") or "完成一条可发布的视频",
-            "prompt": payload.get("prompt") or payload.get("script") or "",
+            "prompt": payload.get("prompt") or payload.get("creativeBrief") or payload.get("requirements") or "",
+            "requirements": payload.get("requirements") or payload.get("creativeBrief") or "",
+            "creativeBrief": payload.get("creativeBrief") or payload.get("requirements") or "",
+            "scriptSource": script_source,
             "customPrompt": payload.get("customPrompt") or "",
             "style": {
                 "theme": visual_style,
@@ -561,11 +567,12 @@ class AiVideoService:
         visual_style: str,
         pace: str,
         project_title: str = "",
+        script_source: str = "generated",
     ) -> list[dict[str, Any]]:
         template = CONTENT_TEMPLATES.get(content_type, CONTENT_TEMPLATES["insight"])
         requested_count = int(payload.get("sceneCount") or 0)
         scene_count = requested_count if requested_count else self._infer_scene_count(payload, template)
-        chunks = self._split_script(script, scene_count, content_type)
+        chunks = self._split_script(script, scene_count, content_type, allow_prompt_expansion=script_source != "user")
         scene_types = template["sceneTypes"]
         steps = template["steps"]
         scenes: list[dict[str, Any]] = []
@@ -576,7 +583,7 @@ class AiVideoService:
             text = chunks[index] if index < len(chunks) else self._fallback_sentence(index, content_type)
             step = steps[min(index, len(steps) - 1)]
             scene_type = scene_types[index % len(scene_types)]
-            if index == 0:
+            if index == 0 and script_source != "user":
                 text = self._strengthen_opening_hook(text, content_type, payload)
             target_seconds = int(payload.get("targetSeconds") or 0)
             min_scene_seconds = max(0, target_seconds // scene_count) if target_seconds else 0
@@ -953,6 +960,7 @@ class AiVideoService:
             part for part in [payload.get("customPrompt") or "", f"用户修改优先级最高：{message.strip()}"] if part
         )
         payload["editDirective"] = message.strip()
+        payload["scriptSource"] = project_json.get("scriptSource") or "user"
         payload["script"] = "。".join(scene.get("voiceText", "") for scene in project_json.get("scenes", []) if scene.get("voiceText"))
         regenerate_scenes = self._should_regenerate_scenes(message, patch)
         source_scenes = project_json.get("scenes") or []
@@ -988,6 +996,10 @@ class AiVideoService:
         return {
             "title": project_json.get("title") or "AI 视频项目",
             "script": "。".join(scene.get("voiceText", "") for scene in project_json.get("scenes", []) if scene.get("voiceText")),
+            "requirements": project_json.get("requirements") or project_json.get("creativeBrief") or project_json.get("prompt") or "",
+            "creativeBrief": project_json.get("creativeBrief") or project_json.get("requirements") or project_json.get("prompt") or "",
+            "prompt": project_json.get("prompt") or project_json.get("creativeBrief") or project_json.get("requirements") or "",
+            "scriptSource": project_json.get("scriptSource") or "user",
             "videoType": project_json.get("videoType") or "insight",
             "contentType": project_json.get("videoType") or "insight",
             "style": style.get("theme") or "dark_editorial",
@@ -1185,22 +1197,32 @@ class AiVideoService:
 
     def _normalize_prompt_payload(self, payload: dict[str, Any] | None) -> dict[str, Any]:
         normalized = dict(payload or {})
-        prompt = str(normalized.get("prompt") or normalized.get("script") or normalized.get("customPrompt") or "").strip()
-        prompt_parts = self._split_prompt_parts(prompt)
-        if prompt_parts["creativeBrief"]:
-            normalized["creativeBrief"] = prompt_parts["creativeBrief"]
-        if prompt_parts["script"]:
-            normalized["script"] = prompt_parts["script"]
-        elif prompt and not str(normalized.get("script") or "").strip():
-            normalized["script"] = prompt
-        if prompt and not str(normalized.get("script") or "").strip():
-            normalized["script"] = prompt
-        if prompt and not str(normalized.get("customPrompt") or "").strip():
-            normalized["customPrompt"] = prompt
+        user_script = str(normalized.get("script") or "").strip()
+        requirements = str(
+            normalized.get("requirements")
+            or normalized.get("creativeBrief")
+            or normalized.get("prompt")
+            or normalized.get("customPrompt")
+            or ""
+        ).strip()
+        if user_script:
+            normalized["script"] = user_script
+            normalized["scriptSource"] = "user"
+        else:
+            prompt_parts = self._split_prompt_parts(requirements)
+            creative_brief = prompt_parts["creativeBrief"] or requirements
+            normalized["script"] = prompt_parts["script"] or creative_brief
+            normalized["scriptSource"] = "generated"
+            requirements = creative_brief
+        if requirements:
+            normalized["requirements"] = requirements
+            normalized["creativeBrief"] = requirements
+            normalized.setdefault("prompt", requirements)
+            normalized.setdefault("customPrompt", requirements)
 
         intent_text = " ".join(
             str(normalized.get(key) or "")
-            for key in ("prompt", "customPrompt", "script", "goal")
+            for key in ("requirements", "creativeBrief", "prompt", "customPrompt", "goal")
         )
         inferred = self._parse_edit_intent(intent_text)
 
@@ -1270,18 +1292,18 @@ class AiVideoService:
             return 5
         return min(5, max(3, len(template.get("steps") or [])))
 
-    def _split_script(self, script: str, scene_count: int = 3, content_type: str = "insight") -> list[str]:
+    def _split_script(self, script: str, scene_count: int = 3, content_type: str = "insight", allow_prompt_expansion: bool = True) -> list[str]:
         normalized = " ".join(str(script or "").replace("\n", " ").split())
         if not normalized:
             return [self._fallback_sentence(i, content_type) for i in range(scene_count)]
         parts = [part.strip(" ，,、；;：:") for part in re.split(r"(?<=[。！？!?；;])\s*", normalized) if part.strip()]
-        if self._looks_like_generation_request(normalized) and "文案：" not in normalized and "旁白：" not in normalized and len(parts) < scene_count:
+        if allow_prompt_expansion and self._looks_like_generation_request(normalized) and "文案：" not in normalized and "旁白：" not in normalized and len(parts) < scene_count:
             return self._expand_prompt_to_scene_texts(normalized, content_type, scene_count)
         if len(parts) >= scene_count:
             return parts[:scene_count]
         if len(parts) == 1 and len(parts[0]) > 42:
             text = parts[0]
-            if self._looks_like_generation_request(text):
+            if allow_prompt_expansion and self._looks_like_generation_request(text):
                 parts = self._expand_prompt_to_scene_texts(text, content_type, scene_count)
             else:
                 size = max(18, len(text) // scene_count)

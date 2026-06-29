@@ -7,6 +7,8 @@ from pydantic import BaseModel, Field
 class AiVideoJobCreate(BaseModel):
     script: str = Field(default="", min_length=0)
     prompt: Optional[str] = None
+    requirements: Optional[str] = None
+    creativeBrief: Optional[str] = None
     title: Optional[str] = None
     videoType: str = "insight"
     contentType: Optional[str] = None
@@ -30,6 +32,8 @@ class AiVideoStoryboardDraftRequest(BaseModel):
     title: Optional[str] = None
     script: str = Field(default="", min_length=0)
     prompt: Optional[str] = None
+    requirements: Optional[str] = None
+    creativeBrief: Optional[str] = None
     videoType: str = "insight"
     contentType: Optional[str] = None
     style: str = "dark_editorial"
