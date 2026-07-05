@@ -1,0 +1,24 @@
+<svg width="1440" height="920" viewBox="0 0 1440 920" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="1440" height="920" fill="#F7F5FC"/>
+<rect x="80" y="60" width="1280" height="150" rx="28" fill="url(#g4)"/>
+<text x="140" y="138" fill="#FFFFFF" font-family="Arial" font-size="42" font-weight="700">公众号文章工作台</text>
+<text x="140" y="184" fill="#F2EAFF" font-family="Arial" font-size="24">正文、配图、排版和手机预览在一个工作台里完成</text>
+<rect x="80" y="250" width="760" height="590" rx="24" fill="#FFFFFF" stroke="#DDD6FE"/>
+<text x="120" y="314" fill="#5B21B6" font-family="Arial" font-size="32" font-weight="700">正文编辑区</text>
+<rect x="120" y="344" width="680" height="420" rx="18" fill="#FBFAFF" stroke="#DDD6FE"/>
+<text x="150" y="396" fill="#6B7280" font-family="Arial" font-size="22">这里生成大纲、正文、段落配图和排版内容</text>
+<rect x="900" y="250" width="460" height="590" rx="24" fill="#FFFFFF" stroke="#DDD6FE"/>
+<text x="940" y="314" fill="#5B21B6" font-family="Arial" font-size="32" font-weight="700">手机预览</text>
+<rect x="1020" y="356" width="220" height="400" rx="28" fill="#111827"/>
+<rect x="1034" y="390" width="192" height="338" rx="20" fill="#FFFFFF"/>
+<text x="1068" y="450" fill="#111827" font-family="Arial" font-size="20">图文标题</text>
+<text x="1068" y="490" fill="#6B7280" font-family="Arial" font-size="18">段落配图预览</text>
+<text x="1068" y="530" fill="#6B7280" font-family="Arial" font-size="18">排版效果预览</text>
+<defs>
+<linearGradient id="g4" x1="80" y1="60" x2="1360" y2="210" gradientUnits="userSpaceOnUse">
+<stop stop-color="#5B21B6"/>
+<stop offset="0.6" stop-color="#7C3AED"/>
+<stop offset="1" stop-color="#A855F7"/>
+</linearGradient>
+</defs>
+</svg>

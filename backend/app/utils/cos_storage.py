@@ -34,6 +34,19 @@ class COSStorage:
         if not self.enabled or not self.client:
             return None
 
+        try:
+            with open(local_path, 'rb') as fp:
+                self.client.put_object(
+                    Bucket=self.bucket,
+                    Body=fp,
+                    Key=remote_key,
+                    ContentType='video/mp4'
+                )
+            return remote_key
+        except Exception as e:
+            print(f"[COS] Upload failed: {e}")
+            return None
+
     def upload_image(self, body: bytes, remote_key: str, content_type: str = 'image/png') -> Optional[str]:
         if not self.enabled or not self.client:
             return None
@@ -53,25 +66,12 @@ class COSStorage:
     def get_public_url(self, key: str) -> Optional[str]:
         if not key:
             return None
+        if self.domain:
+            return f"{self.domain.rstrip('/')}/{key.lstrip('/')}"
         presigned = self.generate_presigned_url(key, expires=3600 * 24 * 365)
         if presigned:
             return presigned
-        if self.domain:
-            return f"{self.domain.rstrip('/')}/{key.lstrip('/')}"
         return None
-        
-        try:
-            with open(local_path, 'rb') as fp:
-                self.client.put_object(
-                    Bucket=self.bucket,
-                    Body=fp,
-                    Key=remote_key,
-                    ContentType='video/mp4'
-                )
-            return remote_key
-        except Exception as e:
-            print(f"[COS] Upload failed: {e}")
-            return None
     
     def generate_presigned_url(self, key: str, expires: int = 3600) -> Optional[str]:
         if not self.enabled or not self.client:

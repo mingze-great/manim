@@ -11,7 +11,7 @@ from datetime import datetime
 
 from app.config import get_settings
 from app.database import engine, Base
-from app.api import auth, projects, tasks, templates, admin, payment, monitoring, internal, video_topics, articles, articles_stream, chat_styles
+from app.api import auth, projects, tasks, templates, admin, payment, monitoring, internal, video_topics, articles, articles_stream, chat_styles, ai_video
 
 settings = get_settings()
 
@@ -466,6 +466,7 @@ app.include_router(video_topics.router, prefix="/api")
 app.include_router(articles.router, prefix="/api")
 app.include_router(articles_stream.router, prefix="/api")
 app.include_router(chat_styles.router, prefix="/api")
+app.include_router(ai_video.router, prefix="/api")
 
 
 import asyncio
@@ -617,6 +618,9 @@ def download_video(
     
     search_dirs = [
         pathlib.Path(__file__).parent.parent / "videos",
+        pathlib.Path("/opt/manim-v2-3003-snapshot/backend/videos"),
+        pathlib.Path("/opt/manim-v2-3003-repro-3002-current/backend/videos"),
+        pathlib.Path("/opt/manim-v2-3003-repro-3002-current/backend/app/videos"),
         pathlib.Path("/opt/manim/backend/videos"),
         pathlib.Path("/opt/manim-v2/backend/videos"),
     ]
@@ -634,7 +638,7 @@ def download_video(
     return FileResponse(video_path, media_type="video/mp4", filename=safe_filename)
 
 
-@app.get("/api/videos/template_examples/{filename}")
+@app.get("/api/videos/template_examples/{filename:path}")
 def download_template_example_video(filename: str):
     safe_filename = pathlib.Path(filename).name
     

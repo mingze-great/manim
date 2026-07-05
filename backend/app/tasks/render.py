@@ -20,8 +20,6 @@ from app.services.manim import ManimService
 settings = get_settings()
 
 RENDER_TOTAL_TIMEOUT = 240
-CODE_GENERATION_ASYNC_TIMEOUT = 300
-CODE_GENERATION_TOTAL_TIMEOUT = 420
 MIN_VALID_VIDEO_DURATION = 2.0
 MIN_VALID_VIDEO_SIZE = 200 * 1024
 
@@ -185,7 +183,7 @@ def pick_valid_rendered_video(temp_dir: str):
     return valid[0] if valid else None
 
 
-def run_async_code_gen(script_val, template_id, code_ref_val, reference_code=None, model=None):
+def run_async_code_gen(script_val, template_id, code_ref_val, reference_code=None, model=None, video_title=None):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
@@ -193,8 +191,14 @@ def run_async_code_gen(script_val, template_id, code_ref_val, reference_code=Non
         manim_service = ManimService(db)
         result = loop.run_until_complete(
             asyncio.wait_for(
-                manim_service.generate_code(script_val, template_id, code_ref_val, model=model, reference_code=reference_code),
-                timeout=CODE_GENERATION_ASYNC_TIMEOUT
+                manim_service.generate_code(
+                    script_val,
+                    template_code=template_id,
+                    video_title=video_title,
+                    model=model,
+                    reference_code=reference_code,
+                ),
+                timeout=120
             )
         )
         db.close()
@@ -205,6 +209,18 @@ def run_async_code_gen(script_val, template_id, code_ref_val, reference_code=Non
         except:
             pass
         loop.close()
+
+
+def _normalize_video_title(raw_title: str | None, fallback_theme: str | None = None) -> str | None:
+    title = str(raw_title or fallback_theme or "").strip()
+    if not title:
+        return None
+    for prefix in ("\u89c6\u9891\u521b\u4f5c-", "????-", "??????-"):
+        if title.startswith(prefix):
+            trimmed = title[len(prefix):].strip()
+            if trimmed:
+                return trimmed
+    return title
 
 
 def _is_math_project(project: Project | None) -> bool:
@@ -269,9 +285,10 @@ def render_video_task(task_id: int, project_id: int, template_id: int = None, cu
                     reference_code = _resolve_math_reference_code(template) if _is_math_project(project) else template.reference_code
             
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(run_async_code_gen, script_val, template_code, code_ref_val, reference_code, None)
+                intro_title = _normalize_video_title(project.title, project.theme)
+                future = executor.submit(run_async_code_gen, script_val, template_code, code_ref_val, reference_code, None, intro_title)
                 try:
-                    manim_code = future.result(timeout=CODE_GENERATION_TOTAL_TIMEOUT)
+                    manim_code = future.result(timeout=180)
                 except concurrent.futures.TimeoutError:
                     update_task_progress(task_id, 20, "failed", error_message="Script generation timeout", log="脚本生成超时！\n")
                     raise RuntimeError("Code generation timeout")
@@ -494,19 +511,22 @@ def generate_code_task(task_id: int, project_id: int, template_id: int = None, m
             
             # 使用线程池执行异步代码生成
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(run_async_code_gen, script_val, template_code, None, reference_code, model)
-                
-                # 等待完成，更新进度
+                intro_title = _normalize_video_title(project.title, project.theme)
+                future = executor.submit(run_async_code_gen, script_val, template_code, None, reference_code, model, intro_title)
+
                 progress = 30
-                start_time = time.time()
-                while not future.done():
+                deadline = time.time() + 180
+                while True:
+                    if future.done():
+                        break
+                    if time.time() >= deadline:
+                        future.cancel()
+                        raise concurrent.futures.TimeoutError("Script generation timeout")
                     time.sleep(2)
-                    if time.time() - start_time > CODE_GENERATION_TOTAL_TIMEOUT:
-                        raise concurrent.futures.TimeoutError()
                     progress = min(progress + 5, 80)
-                    update_task_progress(task_id, progress, "processing", log="脚本生成中...\n")
-                
-                result = future.result(timeout=CODE_GENERATION_TOTAL_TIMEOUT)
+                    update_task_progress(task_id, progress, "processing", log="?????...\n")
+
+                result = future.result()
             
             if result:
                 # 更新项目的 manim_code

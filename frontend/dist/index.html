@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>思维可视化平台</title>
+    <script>
+      window.onerror = function(msg, src, line, col, error) {
+        console.error('Global error:', msg, src, line, col, error);
+        return false;
+      };
+      window.addEventListener('unhandledrejection', function(e) {
+        console.error('Unhandled rejection:', e.reason);
+      });
+
+      if (window.location.pathname === '/logout-bridge') {
+        try {
+          localStorage.setItem('auth-logout-at', String(Date.now()));
+          localStorage.removeItem('auth-storage');
+          sessionStorage.removeItem('admin_mode');
+        } catch (e) {
+          console.error('V2 logout bridge failed', e);
+        }
+        window.__LOGOUT_BRIDGE__ = true;
+      }
+    </script>
+    <script type="module" crossorigin src="/assets/index-DCKqpdeB.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

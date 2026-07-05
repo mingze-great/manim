@@ -1,0 +1,26 @@
+<svg width="1440" height="920" viewBox="0 0 1440 920" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="1440" height="920" fill="#F4F7FA"/>
+<rect x="80" y="60" width="1280" height="150" rx="28" fill="url(#g5)"/>
+<text x="140" y="138" fill="#FFFFFF" font-family="Arial" font-size="42" font-weight="700">我的作品中心</text>
+<text x="140" y="184" fill="#EAF6FF" font-family="Arial" font-size="24">统一管理视频、讲解项目和公众号文章</text>
+<rect x="80" y="250" width="1280" height="590" rx="24" fill="#FFFFFF" stroke="#D8E4EC"/>
+<rect x="120" y="300" width="1220" height="120" rx="18" fill="#F8FAFC" stroke="#D8E4EC"/>
+<text x="156" y="352" fill="#17394F" font-family="Arial" font-size="26" font-weight="700">筛选与搜索</text>
+<text x="156" y="392" fill="#667985" font-family="Arial" font-size="22">按模块、时间或关键词查看历史项目</text>
+<rect x="120" y="460" width="380" height="300" rx="18" fill="#FBFCFE" stroke="#D8E4EC"/>
+<rect x="530" y="460" width="380" height="300" rx="18" fill="#FBFCFE" stroke="#D8E4EC"/>
+<rect x="940" y="460" width="380" height="300" rx="18" fill="#FBFCFE" stroke="#D8E4EC"/>
+<text x="154" y="520" fill="#17394F" font-family="Arial" font-size="24" font-weight="700">项目卡片 A</text>
+<text x="564" y="520" fill="#17394F" font-family="Arial" font-size="24" font-weight="700">项目卡片 B</text>
+<text x="974" y="520" fill="#17394F" font-family="Arial" font-size="24" font-weight="700">项目卡片 C</text>
+<text x="154" y="566" fill="#667985" font-family="Arial" font-size="20">继续编辑 / 下载 / 删除</text>
+<text x="564" y="566" fill="#667985" font-family="Arial" font-size="20">继续编辑 / 下载 / 删除</text>
+<text x="974" y="566" fill="#667985" font-family="Arial" font-size="20">继续编辑 / 下载 / 删除</text>
+<defs>
+<linearGradient id="g5" x1="80" y1="60" x2="1360" y2="210" gradientUnits="userSpaceOnUse">
+<stop stop-color="#123555"/>
+<stop offset="0.6" stop-color="#2A6B84"/>
+<stop offset="1" stop-color="#EFA14E"/>
+</linearGradient>
+</defs>
+</svg>

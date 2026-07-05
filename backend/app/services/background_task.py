@@ -21,6 +21,22 @@ from app.services.manim import ManimService
 SHARED_TEMPLATE_EXAMPLES_DIR = pathlib.Path("/opt/manim/shared/videos/template_examples")
 
 
+def _escape_python_double_quoted(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _normalize_video_title(raw_title: str | None, fallback_theme: str | None = None) -> str:
+    title = str(raw_title or fallback_theme or "").strip()
+    if not title:
+        return ""
+    for prefix in ("视频创作-", "瑙嗛鍒涗綔-"):
+        if title.startswith(prefix):
+            trimmed = title[len(prefix):].strip()
+            if trimmed:
+                return trimmed
+    return title
+
+
 def get_template_example_video_dirs() -> list[pathlib.Path]:
     backend_root = pathlib.Path(__file__).parent.parent.parent
     app_root = pathlib.Path(__file__).parent.parent
@@ -186,11 +202,11 @@ class BackgroundTaskManager:
             
             fixed_code, warnings = manim_service.validate_code(code)
             
-            if project.theme:
-                import re
+            intro_title = _normalize_video_title(project.title, project.theme)
+            if intro_title:
                 fixed_code = re.sub(
                     r'INTRO_TITLE\s*=\s*"[^"]*"',
-                    f'INTRO_TITLE = "{project.theme}"',
+                    f'INTRO_TITLE = "{_escape_python_double_quoted(intro_title)}"',
                     fixed_code
                 )
             
