@@ -189,18 +189,21 @@
 
 @media (max-width: 768px) {
   .showcase-scroll-wrapper {
-    overflow-x: auto;
+    overflow-x: hidden;
+    overflow-y: visible;
   }
 
   .showcase-card-row {
-    display: flex;
-    gap: 12px;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 14px;
     padding: 0;
   }
 
   .showcase-card {
-    width: 280px;
-    flex: 0 0 280px;
+    width: 100%;
+    min-width: 0;
+    flex: none;
   }
 
   .showcase-card:hover {
