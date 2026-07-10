@@ -209,6 +209,8 @@ const normalizeScene = ({item, index, modes, contentType}) => {
   };
 };
 
+const looksLikeProblemAnalysisZhihu = (text) => /看似厉害的人是怎么分析问题的|期望与现状的落差|王小锤|创业公司的 CEO/.test(String(text || ''));
+
 export const scriptToStory = ({
   script,
   style = 'dark_editorial',
@@ -274,6 +276,21 @@ export const scriptToStory = ({
       media: fromBackend ? sceneInput.media : null
     };
   });
+
+  if (scenes.length && looksLikeProblemAnalysisZhihu(script) && !normalizedScenes.length) {
+    const variants = ['center_burst', 'media_hero', 'evidence_card', 'center_orbit', 'diagonal_split', 'center_burst'];
+    scenes.forEach((scene, index) => {
+      scene.layoutVariant = scene.layoutVariant || variants[index % variants.length];
+      if (index === 0) {
+        scene.mode = 'hook_flash';
+        scene.effect = 'opening_impact';
+        scene.openingTitle = scene.openingTitle || scene.title || '看似厉害的人是怎么分析问题的？';
+      }
+      if (index === 2) {
+        scene.mode = 'evidence_card';
+      }
+    });
+  }
 
   return {
     fps: 30,

@@ -225,6 +225,9 @@ def _project_video_file_from_url(video_url: str | None) -> Path | None:
         return None
     search_dirs = [
         Path(__file__).resolve().parents[2] / 'videos',
+        Path('/opt/manim-v2-3003-snapshot/backend/videos'),
+        Path('/opt/manim-v2-3003-repro-3002-current/backend/videos'),
+        Path('/opt/manim-v2-3003-repro-3002-current/backend/app/videos'),
         Path('/opt/manim/backend/videos'),
         Path('/opt/manim-v2/backend/videos'),
     ]
@@ -254,6 +257,24 @@ def _normalize_project_video_url(project: Project):
 
 def _project_background_title(project: Project):
     return str(project.theme or project.title or "").strip() or "主题内容"
+
+
+def _inject_uploaded_background_for_project(project: Project, code: str) -> str:
+    background_path = str(getattr(project, "background_image_path", "") or "").strip()
+    if not background_path or not os.path.exists(background_path):
+        return code
+    flags = _load_generation_flags(project.generation_flags)
+    if str(flags.get("background_image_source") or "").strip() != "upload":
+        return code
+    media_type = str(flags.get("background_media_type") or "").strip()
+    if not media_type:
+        media_type = "video" if Path(background_path).suffix.lower() in {".mp4", ".mov", ".webm", ".m4v"} else "image"
+    return ManimService.inject_uploaded_background(
+        code,
+        background_path,
+        media_type,
+        str(flags.get("background_usage_scope") or "global").strip() or "global",
+    )
 
 
 def _sync_template_background(project: Project, db: Session, flags: dict, force_template: bool = False):
@@ -1176,6 +1197,7 @@ async def upload_style_reference(
 async def upload_background_image(
     project_id: int,
     file: UploadFile = File(...),
+    usage_scope: str = Form("global"),
     current_user: Annotated[User, Depends(get_current_user)] = None,
     db: Annotated[Session, Depends(get_db)] = None,
 ):
@@ -1186,20 +1208,28 @@ async def upload_background_image(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    if project.module_type not in {"stickman", "explainer"}:
-        raise HTTPException(status_code=400, detail="Only stickman or explainer projects support background image")
+    if project.module_type not in {"manim", "stickman", "explainer"}:
+        raise HTTPException(status_code=400, detail="当前项目不支持背景素材")
+
+    safe_scope = str(usage_scope or "global").strip()
+    if safe_scope not in {"global", "opening", "per_scene_random"}:
+        safe_scope = "global"
 
     suffix = Path(file.filename or "background.png").suffix.lower()
-    if suffix not in {".png", ".jpg", ".jpeg", ".webp"}:
-        raise HTTPException(status_code=400, detail="仅支持 png/jpg/jpeg/webp 图片")
+    image_suffixes = {".png", ".jpg", ".jpeg", ".webp"}
+    video_suffixes = {".mp4", ".mov", ".webm", ".m4v"}
+    if suffix not in image_suffixes | video_suffixes:
+        raise HTTPException(status_code=400, detail="仅支持 png/jpg/jpeg/webp 图片或 mp4/mov/webm/m4v 视频")
 
     base_dir = Path(__file__).resolve().parents[2] / "uploads" / "background_images"
     base_dir.mkdir(parents=True, exist_ok=True)
-    image_path = base_dir / f"project_{project_id}_{uuid.uuid4().hex}{suffix}"
+    image_path = base_dir / f"project_{project_id}_upload_{uuid.uuid4().hex}{suffix}"
 
     content = await file.read()
     if not content:
-        raise HTTPException(status_code=400, detail="背景图文件为空")
+        raise HTTPException(status_code=400, detail="背景素材文件为空")
+    if len(content) > 80 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="背景素材不能超过 80MB")
     with open(image_path, "wb") as buffer:
         buffer.write(content)
 
@@ -1208,11 +1238,18 @@ async def upload_background_image(
     project.background_image_path = str(image_path)
     next_flags = _load_generation_flags(project.generation_flags)
     next_flags["background_image_source"] = "upload"
+    next_flags["background_media_type"] = "video" if suffix in video_suffixes else "image"
+    next_flags["background_usage_scope"] = safe_scope
+    next_flags["background_original_name"] = Path(file.filename or image_path.name).name
     project.generation_flags = json.dumps(next_flags, ensure_ascii=False)
     if str(project.module_type or "") == "explainer":
         _invalidate_explainer_visual_outputs(project)
-    else:
+    elif str(project.module_type or "") == "stickman":
         _invalidate_stickman_visual_outputs(project)
+    else:
+        project.manim_code = None
+        if str(project.status or "") == "code_generated":
+            project.status = "chatting"
     db.commit()
     db.refresh(project)
     return project
@@ -1615,7 +1652,7 @@ async def regenerate_code(
         video_title=str(project.title or project.theme or "").strip() or None
     )
     
-    project.manim_code = manim_code
+    project.manim_code = _inject_uploaded_background_for_project(project, manim_code)
     project.status = "chatting"
     db.commit()
     

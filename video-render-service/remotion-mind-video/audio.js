@@ -11,6 +11,7 @@ const publicDir = path.join(__dirname, 'public');
 const generatedDir = path.join(publicDir, 'generated-audio');
 const powershell = 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
 const cosyVoiceBaseUrl = process.env.COSYVOICE_URL ?? 'http://127.0.0.1:50000';
+const cosyVoiceTimeoutMs = Number(process.env.COSYVOICE_TIMEOUT_MS ?? 600000);
 
 const safeSegment = (value) => String(value).replace(/[^a-zA-Z0-9_-]/g, '-');
 
@@ -126,7 +127,7 @@ const synthesizeWithCosyVoice = async ({text, outPath, voice = '中文女'}) => 
   const response = await fetch(`${cosyVoiceBaseUrl.replace(/\/$/, '')}/inference_sft`, {
     method: 'POST',
     body: formData,
-    signal: AbortSignal.timeout(120000)
+    signal: AbortSignal.timeout(cosyVoiceTimeoutMs)
   });
 
   if (!response.ok) {

@@ -12,6 +12,7 @@ import re
 import shutil
 import sys
 import time
+from pathlib import Path
 
 from app.database import get_db
 from app.models.user import User
@@ -153,6 +154,71 @@ def _normalize_video_title(raw_title: str | None, fallback_theme: str | None = N
             if trimmed:
                 return trimmed
     return title
+
+
+def _build_uploaded_background_context(project: Project | None) -> str | None:
+    if not project:
+        return None
+    background_path = str(getattr(project, "background_image_path", "") or "").strip()
+    if not background_path or not os.path.exists(background_path):
+        return None
+    try:
+        flags = json.loads(getattr(project, "generation_flags", None) or "{}")
+    except Exception:
+        flags = {}
+    if str(flags.get("background_image_source") or "").strip() != "upload":
+        return None
+    media_type = str(flags.get("background_media_type") or "").strip()
+    if not media_type:
+        suffix = Path(background_path).suffix.lower()
+        media_type = "video" if suffix in {".mp4", ".mov", ".webm", ".m4v"} else "image"
+    usage_scope = str(flags.get("background_usage_scope") or "global").strip()
+    scope_label = {
+        "global": "全局背景",
+        "opening": "仅开头使用",
+        "per_scene_random": "每页随机变化",
+    }.get(usage_scope, "全局背景")
+    return "\n".join([
+        f"素材绝对路径：{background_path}",
+        f"素材类型：{media_type}",
+        f"使用范围：{scope_label} ({usage_scope})",
+        "注意：路径是服务器本地绝对路径，生成代码时请直接使用原始字符串 r\"...\"。",
+    ])
+
+
+def _uploaded_background_payload(project: Project | None) -> dict | None:
+    if not project:
+        return None
+    background_path = str(getattr(project, "background_image_path", "") or "").strip()
+    if not background_path or not os.path.exists(background_path):
+        return None
+    try:
+        flags = json.loads(getattr(project, "generation_flags", None) or "{}")
+    except Exception:
+        flags = {}
+    if str(flags.get("background_image_source") or "").strip() != "upload":
+        return None
+    media_type = str(flags.get("background_media_type") or "").strip()
+    if not media_type:
+        suffix = Path(background_path).suffix.lower()
+        media_type = "video" if suffix in {".mp4", ".mov", ".webm", ".m4v"} else "image"
+    return {
+        "path": background_path,
+        "media_type": media_type,
+        "usage_scope": str(flags.get("background_usage_scope") or "global").strip() or "global",
+    }
+
+
+def _inject_uploaded_background_for_project(project: Project | None, code: str) -> str:
+    payload = _uploaded_background_payload(project)
+    if not payload:
+        return code
+    return ManimService.inject_uploaded_background(
+        code,
+        payload["path"],
+        payload["media_type"],
+        payload["usage_scope"],
+    )
 
 
 RENDER_SEMAPHORE = asyncio.Semaphore(4)
@@ -397,6 +463,7 @@ async def generate_code_stream(
                     video_title=_normalize_video_title(project_local.title, project_local.theme),
                     model=model,
                     reference_code=reference_code or None,
+                    background_context=_build_uploaded_background_context(project_local),
                 )
             )
             
@@ -415,6 +482,7 @@ async def generate_code_stream(
             yield f"data: {json.dumps({'step': 'generate', 'progress': 70, 'message': '脚本生成完成，正在验证...'})}\n\n"
             
             fixed_code, warnings = manim_service.validate_code(manim_code)
+            fixed_code = _inject_uploaded_background_for_project(project_local, fixed_code)
             
             yield f"data: {json.dumps({'step': 'validate', 'progress': 80, 'message': '脚本验证中...'})}\n\n"
             await asyncio.sleep(0.1)
@@ -481,6 +549,8 @@ async def render_video_stream(
         
         old_server_status = await render_dispatcher.check_old_server_status()
         old_server_available = OLD_SERVER_SEMAPHORE._value if old_server_status.get("status") == "healthy" else 0
+        if _uploaded_background_payload(project):
+            old_server_available = 0
         total_available = RENDER_SEMAPHORE._value + old_server_available
         
         if total_available == 0:
@@ -512,7 +582,7 @@ async def render_video_stream(
                         if match:
                             scene_name = match.group(1)
                     
-                    code_content = manim_code_str
+                    code_content = _inject_uploaded_background_for_project(project_local, manim_code_str)
                     
                     try:
                         compile(code_content, '<string>', 'exec')

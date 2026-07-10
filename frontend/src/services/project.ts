@@ -158,9 +158,10 @@ export const projectApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
   },
-  uploadBackgroundImage: (id: number, file: File) => {
+  uploadBackgroundImage: (id: number, file: File, usageScope: 'global' | 'opening' | 'per_scene_random' = 'global') => {
     const formData = new FormData()
     formData.append('file', file)
+    formData.append('usage_scope', usageScope)
     return api.post<Project>(`/projects/${id}/background-image`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })

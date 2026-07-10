@@ -234,6 +234,82 @@
   max-width: 100%;
 }
 
+.visual-background-card {
+  margin: 14px 0 16px;
+  padding: 16px;
+  border: 1px solid rgba(28, 90, 107, 0.16);
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(28, 90, 107, 0.08), rgba(255, 255, 255, 0.92)),
+    #ffffff;
+  box-shadow: 0 16px 42px rgba(15, 23, 42, 0.07);
+}
+
+.visual-background-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.visual-background-kicker {
+  display: inline-flex;
+  margin-bottom: 4px;
+  color: #1c5a6b;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.visual-background-head h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: #173642;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.visual-background-file {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.visual-background-preview {
+  display: grid;
+  grid-template-columns: minmax(0, 180px) auto;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.visual-background-preview img,
+.visual-background-preview video {
+  width: 180px;
+  height: 102px;
+  border-radius: 12px;
+  object-fit: cover;
+  background: #0f172a;
+}
+
+.visual-background-scope {
+  display: block;
+  margin-top: 12px;
+}
+
+.visual-background-tip {
+  margin: 10px 0 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
 .btn-gradient {
   background: linear-gradient(135deg, #1c5a6b 0%, #2d7a88 100%);
   border: none;

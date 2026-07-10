@@ -58,6 +58,39 @@ def get_templates(
     )
 
 
+@router.get("/public-preview")
+def get_public_template_preview(
+    db: Annotated[Session, Depends(get_db)],
+    limit: int = Query(200, ge=1, le=300),
+):
+    """Public read-only template previews for the marketing homepage.
+
+    This intentionally excludes code, prompt, reference_code, ownership details,
+    and any fields that would let anonymous visitors use templates directly.
+    """
+    templates = db.query(Template).filter(
+        Template.is_active.is_(True),
+        Template.is_visible.is_(True),
+        Template.example_video_url.isnot(None),
+        Template.example_video_url != "",
+    ).order_by(Template.created_at.desc(), Template.id.desc()).limit(limit).all()
+
+    return {
+        "templates": [
+            {
+                "id": template.id,
+                "name": template.name,
+                "description": template.description,
+                "category": template.category,
+                "thumbnail": template.thumbnail,
+                "example_video_url": template.example_video_url,
+                "is_system": bool(template.is_system),
+            }
+            for template in templates
+        ]
+    }
+
+
 @router.get("/{template_id}", response_model=TemplateResponse)
 def get_template(
     template_id: int,

@@ -15,6 +15,8 @@ const port = Number(process.env.PORT ?? 18787);
 app.use(express.json({limit: '20mb'}));
 app.use('/renders', express.static(path.join(__dirname, 'renders')));
 app.use('/generated-audio', express.static(path.join(__dirname, 'public', 'generated-audio')));
+app.use('/workflow-inputs', express.static(path.join(__dirname, 'public', 'workflow-inputs')));
+app.use('/workflow-assets', express.static(path.join(__dirname, 'public', 'workflow-assets')));
 
 const getBundle = async () => {
   return bundle({
@@ -56,6 +58,41 @@ const renderMindVideo = async ({inputProps, filenamePrefix = 'mindfilm'}) => {
     filename,
     durationInFrames: story.durationInFrames,
     seconds: Math.round((story.durationInFrames / story.fps) * 10) / 10
+  };
+};
+
+const renderKnowledgeIpVideo = async ({inputProps, filenamePrefix = 'knowledge-ip'}) => {
+  const serveUrl = await getBundle();
+  const composition = await selectComposition({
+    serveUrl,
+    id: 'KnowledgeIpPackage',
+    inputProps,
+    browserExecutable
+  });
+  const filename = `${filenamePrefix}-${Date.now()}.mp4`;
+  const outputLocation = path.join(__dirname, 'renders', filename);
+
+  await fs.mkdir(path.dirname(outputLocation), {recursive: true});
+  await renderMedia({
+    composition,
+    serveUrl,
+    codec: 'h264',
+    audioCodec: 'aac',
+    enforceAudioTrack: true,
+    outputLocation,
+    inputProps,
+    concurrency: 1,
+    chromiumOptions: {
+      gl: 'angle'
+    },
+    browserExecutable
+  });
+
+  return {
+    url: `/renders/${filename}`,
+    filename,
+    durationInFrames: composition.durationInFrames,
+    seconds: Math.round((composition.durationInFrames / composition.fps) * 10) / 10
   };
 };
 
@@ -130,6 +167,30 @@ app.post('/api/render-project', async (req, res) => {
     res.status(500).json({
       ok: false,
       message: error instanceof Error ? error.message : 'Render failed'
+    });
+  }
+});
+
+app.post('/api/render-knowledge-ip', async (req, res) => {
+  try {
+    const inputProps = {
+      sourceVideo: String(req.body?.sourceVideo ?? 'workflow-inputs/knowledge-ip-test.mp4'),
+      durationMs: Number(req.body?.durationMs ?? 172400),
+      segments: Array.isArray(req.body?.segments) ? req.body.segments : undefined,
+      captions: Array.isArray(req.body?.captions) ? req.body.captions : undefined
+    };
+    const result = await renderKnowledgeIpVideo({inputProps, filenamePrefix: 'knowledge-ip-package'});
+    res.json({
+      ok: true,
+      ...result,
+      provider: 'remotion_source_audio',
+      composition: 'KnowledgeIpPackage'
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      ok: false,
+      message: error instanceof Error ? error.message : 'Knowledge IP render failed'
     });
   }
 });

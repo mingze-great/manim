@@ -9,6 +9,7 @@ import shutil
 import sys
 import json
 import time
+from pathlib import Path
 from datetime import datetime
 
 from app.config import get_settings
@@ -183,7 +184,72 @@ def pick_valid_rendered_video(temp_dir: str):
     return valid[0] if valid else None
 
 
-def run_async_code_gen(script_val, template_id, code_ref_val, reference_code=None, model=None, video_title=None):
+def _build_uploaded_background_context(project: Project | None) -> str | None:
+    if not project:
+        return None
+    background_path = str(getattr(project, "background_image_path", "") or "").strip()
+    if not background_path or not os.path.exists(background_path):
+        return None
+    try:
+        flags = json.loads(getattr(project, "generation_flags", None) or "{}")
+    except Exception:
+        flags = {}
+    if str(flags.get("background_image_source") or "").strip() != "upload":
+        return None
+    media_type = str(flags.get("background_media_type") or "").strip()
+    if not media_type:
+        suffix = Path(background_path).suffix.lower()
+        media_type = "video" if suffix in {".mp4", ".mov", ".webm", ".m4v"} else "image"
+    usage_scope = str(flags.get("background_usage_scope") or "global").strip()
+    scope_label = {
+        "global": "全局背景",
+        "opening": "仅开头使用",
+        "per_scene_random": "每页随机变化",
+    }.get(usage_scope, "全局背景")
+    return "\n".join([
+        f"素材绝对路径：{background_path}",
+        f"素材类型：{media_type}",
+        f"使用范围：{scope_label} ({usage_scope})",
+        "注意：路径是服务器本地绝对路径，生成代码时请直接使用原始字符串 r\"...\"。",
+    ])
+
+
+def _uploaded_background_payload(project: Project | None) -> dict | None:
+    if not project:
+        return None
+    background_path = str(getattr(project, "background_image_path", "") or "").strip()
+    if not background_path or not os.path.exists(background_path):
+        return None
+    try:
+        flags = json.loads(getattr(project, "generation_flags", None) or "{}")
+    except Exception:
+        flags = {}
+    if str(flags.get("background_image_source") or "").strip() != "upload":
+        return None
+    media_type = str(flags.get("background_media_type") or "").strip()
+    if not media_type:
+        suffix = Path(background_path).suffix.lower()
+        media_type = "video" if suffix in {".mp4", ".mov", ".webm", ".m4v"} else "image"
+    return {
+        "path": background_path,
+        "media_type": media_type,
+        "usage_scope": str(flags.get("background_usage_scope") or "global").strip() or "global",
+    }
+
+
+def _inject_uploaded_background_for_project(project: Project | None, code: str) -> str:
+    payload = _uploaded_background_payload(project)
+    if not payload:
+        return code
+    return ManimService.inject_uploaded_background(
+        code,
+        payload["path"],
+        payload["media_type"],
+        payload["usage_scope"],
+    )
+
+
+def run_async_code_gen(script_val, template_id, code_ref_val, reference_code=None, model=None, video_title=None, background_context=None):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
@@ -197,6 +263,7 @@ def run_async_code_gen(script_val, template_id, code_ref_val, reference_code=Non
                     video_title=video_title,
                     model=model,
                     reference_code=reference_code,
+                    background_context=background_context,
                 ),
                 timeout=120
             )
@@ -286,17 +353,19 @@ def render_video_task(task_id: int, project_id: int, template_id: int = None, cu
             
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                 intro_title = _normalize_video_title(project.title, project.theme)
-                future = executor.submit(run_async_code_gen, script_val, template_code, code_ref_val, reference_code, None, intro_title)
+                future = executor.submit(run_async_code_gen, script_val, template_code, code_ref_val, reference_code, None, intro_title, _build_uploaded_background_context(project))
                 try:
                     manim_code = future.result(timeout=180)
                 except concurrent.futures.TimeoutError:
                     update_task_progress(task_id, 20, "failed", error_message="Script generation timeout", log="脚本生成超时！\n")
                     raise RuntimeError("Code generation timeout")
             
+            manim_code = _inject_uploaded_background_for_project(project, manim_code)
             project.manim_code = manim_code
             db.commit()
             update_task_progress(task_id, 20, "processing", log=f"脚本生成完成 (长度: {len(manim_code)})\n")
         
+        manim_code = _inject_uploaded_background_for_project(project, manim_code)
         if not manim_code:
             update_task_progress(task_id, 0, "failed", error_message="No code to render", log="没有可渲染的代码\n")
             raise RuntimeError("No code to render")
@@ -512,7 +581,7 @@ def generate_code_task(task_id: int, project_id: int, template_id: int = None, m
             # 使用线程池执行异步代码生成
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                 intro_title = _normalize_video_title(project.title, project.theme)
-                future = executor.submit(run_async_code_gen, script_val, template_code, None, reference_code, model, intro_title)
+                future = executor.submit(run_async_code_gen, script_val, template_code, None, reference_code, model, intro_title, _build_uploaded_background_context(project))
 
                 progress = 30
                 deadline = time.time() + 180
@@ -530,6 +599,7 @@ def generate_code_task(task_id: int, project_id: int, template_id: int = None, m
             
             if result:
                 # 更新项目的 manim_code
+                result = _inject_uploaded_background_for_project(project, result)
                 project.manim_code = result
                 project.status = "code_generated"
                 db.commit()

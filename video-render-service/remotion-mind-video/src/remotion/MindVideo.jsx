@@ -125,7 +125,8 @@ const SafeVisualImage = ({src, style}) => {
   if (/^https?:\/\//i.test(src)) {
     return <img src={src} alt="" style={style} crossOrigin="anonymous" referrerPolicy="no-referrer" />;
   }
-  return <Img src={src} style={style} />;
+  const relativeSrc = src.startsWith('/') ? src.slice(1) : src;
+  return <Img src={staticFile(relativeSrc)} style={style} />;
 };
 
 const EnergyField = ({scene, palette, local, progress}) => {
@@ -676,6 +677,55 @@ const MagazineScene = ({scene, palette, local}) => (
   </AbsoluteFill>
 );
 
+const EvidenceScene = ({scene, palette, local}) => {
+  const progress = clamp(local / Math.max(scene.duration, 1), 0, 1);
+  const mediaSrc = scene.media?.src;
+  return (
+    <AbsoluteFill style={{background: palette.bg, color: palette.ink, padding: 72}}>
+      <MediaBackdrop scene={scene} palette={palette} local={local} progress={progress} intensity={0.24} />
+      <div style={{position: 'absolute', inset: 48, border: `1px solid ${palette.line}`, borderRadius: 28}} />
+      <div style={{position: 'relative', zIndex: 1, display: 'grid', gridTemplateColumns: '0.92fr 1.08fr', gap: 40, alignItems: 'center', height: '100%'}}>
+        <div style={{maxWidth: 500}}>
+          <div style={{fontSize: 22, color: palette.accent, letterSpacing: 0}}>EVIDENCE / {String(scene.index + 1).padStart(2, '0')}</div>
+          <h1 style={{fontSize: 66, lineHeight: 1.02, margin: '18px 0 20px', color: palette.ink}}>{scene.title || scene.openingTitle || scene.keywords?.[0] || '证据卡'}</h1>
+          <p style={{fontSize: 30, lineHeight: 1.42, margin: 0, color: palette.muted}}>{scene.body}</p>
+          <div style={{marginTop: 24}}>
+            <KeywordRail scene={scene} palette={palette} local={local} vertical />
+          </div>
+          <div style={{marginTop: 28, fontSize: 22, color: palette.accent2}}>{scene.cta || '先把问题看清，再谈解决方案'}</div>
+        </div>
+        <div style={{display: 'grid', placeItems: 'center'}}>
+          <div style={{
+            width: 360,
+            padding: 12,
+            borderRadius: 38,
+            background: 'rgba(0, 0, 0, 0.38)',
+            boxShadow: '0 28px 90px rgba(0, 0, 0, 0.42)',
+            border: `1px solid ${palette.line}`,
+            transform: `translateY(${Math.sin(local / 16) * 10}px) rotate(-2deg)`
+          }}>
+            <div style={{
+              borderRadius: 30,
+              overflow: 'hidden',
+              background: '#0b0d12',
+              border: `1px solid ${palette.line}`,
+              aspectRatio: '9 / 16'
+            }}>
+              {mediaSrc ? (
+                <SafeVisualImage
+                  src={mediaSrc}
+                  style={{width: '100%', height: '100%', objectFit: 'cover', display: 'block', filter: 'saturate(0.96) contrast(1.04)'}}
+                />
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </div>
+      <EnergyField scene={scene} palette={palette} local={local} progress={progress} />
+    </AbsoluteFill>
+  );
+};
+
 const DataScene = ({scene, palette, local}) => {
   const progress = clamp(local / Math.max(scene.duration, 1), 0, 1);
   if (scene.layoutVariant === 'center_orbit' || scene.layoutVariant === 'diagonal_split') {
@@ -760,6 +810,7 @@ const sceneGroups = {
   timeline: TimelineScene,
   conflict_map: TimelineScene,
   data_report: DataScene,
+  evidence_card: EvidenceScene,
   discussion_prompt: BigType,
   metric_wall: DataScene,
   trend_line: DataScene,

@@ -262,7 +262,7 @@ class ManimService:
         import asyncio
         return asyncio.run(self.generate_code(script))
     
-    async def generate_code(self, script: str, template_code: str = None, video_title: str = None, model: str = None, reference_code: str = None, retry_callback=None) -> tuple:
+    async def generate_code(self, script: str, template_code: str = None, video_title: str = None, model: str = None, reference_code: str = None, retry_callback=None, background_context: str = None) -> tuple:
         language = detect_language(script)
         
         # 数学可视化参考代码模式（优先级最高）
@@ -360,9 +360,32 @@ Important requirements:
         title_instruction = ""
         if video_title:
             title_instruction = f"\n视频标题：「{video_title}」\n请使用这个标题作为视频开头的大标题。\n" if language == 'zh' else f"\nVideo Title: \"{video_title}\"\nUse this title as the opening title of the video.\n"
+
+        background_instruction = ""
+        if background_context:
+            background_instruction = f"""
+
+## 用户上传背景素材
+{background_context}
+
+请在生成的 Manim 代码中优先使用该素材增强画面：
+1. 图片素材使用 ImageMobject(r"素材绝对路径") 加载，铺满画布，作为底层背景。
+2. 视频素材如果无法直接播放，不要报错；用同风格动态粒子、网格、光效、镜头漂移模拟动态背景。
+3. 使用范围为 global 时，所有场景都保留该背景并叠加半透明暗色蒙层，确保文字清晰。
+4. 使用范围为 opening 时，只在开头标题段重点展示该背景，后续场景提取其主色延展。
+5. 使用范围为 per_scene_random 时，每个要点场景基于该背景做不同缩放、漂移、裁切、模糊、遮罩或粒子叠加。
+6. 背景必须在所有文字和主体图形下方，不能遮挡正文。
+""" if language == 'zh' else f"""
+
+## Uploaded Background Asset
+{background_context}
+
+Use this asset as a background layer. Keep text readable with dark overlays. If the asset is video and direct playback is unavailable, approximate it with animated particles, grids, glows, and camera motion without failing.
+"""
         
         user_message = f"""请根据以下内容生成 Manim 动画代码：
 {title_instruction}
+{background_instruction}
 {script}
 
 要求：
@@ -375,6 +398,7 @@ DO NOT translate the following English content to Chinese.
 Use the exact titles and descriptions from the script below.
 
 {title_instruction}
+{background_instruction}
 
 SCRIPT CONTENT TO USE (extract from this, keep in English):
 {script}
@@ -439,7 +463,74 @@ Requirements:
                         print(f"[ManimService] AI修复也失败: {fix_err}")
         
         return code
-    
+
+    @staticmethod
+    def inject_uploaded_background(code: str, background_path: str | None, media_type: str = "image", usage_scope: str = "global") -> str:
+        """Add a deterministic uploaded background layer instead of relying only on the LLM."""
+        import os
+        import re
+
+        if not code or not background_path:
+            return code
+        if "__UPLOADED_BACKGROUND_LAYER__" in code:
+            return code
+        if str(media_type or "image") != "image":
+            return code
+        if not os.path.exists(background_path):
+            return code
+
+        safe_path = background_path.replace("\\", "\\\\").replace('"', '\\"')
+        scope = str(usage_scope or "global")
+        opacity = "0.82"
+        shade = "0.18"
+        if scope == "opening":
+            opacity = "0.90"
+            shade = "0.14"
+        elif scope == "per_scene_random":
+            opacity = "0.78"
+            shade = "0.20"
+
+        if "import os" not in code:
+            code = "import os\n" + code
+
+        injection = f'''
+        # __UPLOADED_BACKGROUND_LAYER__
+        def __add_uploaded_background_layer():
+            try:
+                __bg_path = r"{safe_path}"
+                if os.path.exists(__bg_path):
+                    __bg = ImageMobject(__bg_path)
+                    __bg.set_height(config.frame_height)
+                    if __bg.width < config.frame_width:
+                        __bg.set_width(config.frame_width)
+                    __bg.move_to(ORIGIN)
+                    __bg.set_opacity({opacity})
+                    __bg.set_z_index(-20)
+                    __shade = Rectangle(
+                        width=config.frame_width,
+                        height=config.frame_height,
+                        stroke_width=0,
+                        fill_color=BLACK,
+                        fill_opacity={shade},
+                    )
+                    __shade.set_z_index(-19)
+                    self.add(__bg, __shade)
+                    return VGroup(__bg, __shade)
+            except Exception as __bg_error:
+                print("uploaded background skipped:", __bg_error)
+            return VGroup()
+        __uploaded_background_layer = __add_uploaded_background_layer()
+'''
+
+        match = re.search(r"(\n\s+def\s+construct\s*\(\s*self\s*\)\s*:)\s*", code)
+        if not match:
+            return code
+        insert_at = match.end(1)
+        remainder = code[match.end():]
+        if remainder and not remainder.startswith("\n"):
+            remainder = "\n        " + remainder.lstrip()
+        return code[:insert_at] + injection + remainder
+
     def fix_manim_compatibility(self, code: str) -> str:
         """修复 Manim 代码兼容性问题"""
         import re
@@ -471,9 +562,14 @@ Requirements:
         code = re.sub(r',\s*inner_radius\s*=\s*[^,\)]+', '', code)
         code = re.sub(r'outer_radius\s*=\s*', 'radius=', code)
         
-        # 6. 替换外部资源为内置图形
+        # 6. 替换外部资源为内置图形，但保留服务器本地上传素材
         code = re.sub(r'SVGMobject\s*\(\s*["\']([^"\']+)["\'][^)]*\)', 'Circle(radius=0.5, color=WHITE)', code)
-        code = re.sub(r'ImageMobject\s*\(\s*["\'][^"\']+["\']\s*\)', 'Rectangle(width=2, height=1.5, color=BLUE)', code)
+        def _replace_external_image(match):
+            raw_path = str(match.group(1) or "").strip()
+            if raw_path.startswith(("http://", "https://")):
+                return 'Rectangle(width=2, height=1.5, color=BLUE)'
+            return match.group(0)
+        code = re.sub(r'ImageMobject\s*\(\s*["\']([^"\']+)["\']\s*\)', _replace_external_image, code)
         
         # 7. 移除不支持的动画参数
         code = re.sub(r'(FadeOut|FadeIn)\(([^)]+),\s*rotate\s*=\s*[^,)]+', r'\1(\2', code)

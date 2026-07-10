@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Alert, Button, Input, message, Divider, Card, Segmented, Select, Modal } from 'antd'
-import { RocketOutlined, BulbOutlined, VideoCameraOutlined, HighlightOutlined, FileTextOutlined } from '@ant-design/icons'
+import { Alert, Button, Input, message, Divider, Card, Segmented, Select, Modal, Radio, Upload, Space } from 'antd'
+import { RocketOutlined, BulbOutlined, VideoCameraOutlined, HighlightOutlined, FileTextOutlined, UploadOutlined, PictureOutlined } from '@ant-design/icons'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
 import { projectApi } from '@/services/project'
@@ -13,6 +13,7 @@ import './Creator.css'
 const { TextArea } = Input
 
 type ModuleType = 'manim' | 'math' | 'stickman' | 'article'
+type BackgroundUsageScope = 'global' | 'opening' | 'per_scene_random'
 
 const CREATOR_UPDATE_NOTICE_KEY = 'creator_update_notice_20260428_v1'
 
@@ -30,6 +31,9 @@ export default function Creator() {
   const [articleCategories, setArticleCategories] = useState<ArticleCategory[]>([])
   const [selectedArticleCategory, setSelectedArticleCategory] = useState<ArticleCategory | null>(null)
   const [updateNoticeVisible, setUpdateNoticeVisible] = useState(false)
+  const [backgroundFile, setBackgroundFile] = useState<File | null>(null)
+  const [backgroundPreviewUrl, setBackgroundPreviewUrl] = useState<string | null>(null)
+  const [backgroundUsageScope, setBackgroundUsageScope] = useState<BackgroundUsageScope>('global')
 
   const permissions = user?.module_permissions || {}
   const stickmanEnabled = user?.is_admin || permissions.stickman?.enabled !== false
@@ -64,6 +68,9 @@ export default function Creator() {
     setLoading(true)
     try {
       const { data } = await projectApi.create(payload)
+      if (backgroundFile) {
+        await projectApi.uploadBackgroundImage(data.id, backgroundFile, backgroundUsageScope)
+      }
       message.success('创建成功')
       navigate(`/project/${data.id}/chat`)
     } catch (error: any) {
@@ -81,6 +88,14 @@ export default function Creator() {
       category: selectedCategory?.name,
       module_type: 'manim',
       storyboard_count: 3,
+    })
+  }
+
+  const updateBackgroundFile = (file: File | null) => {
+    setBackgroundFile(file)
+    setBackgroundPreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev)
+      return file ? URL.createObjectURL(file) : null
     })
   }
 
@@ -144,6 +159,10 @@ export default function Creator() {
     }
     setUpdateNoticeVisible(true)
   }, [])
+
+  useEffect(() => () => {
+    if (backgroundPreviewUrl) URL.revokeObjectURL(backgroundPreviewUrl)
+  }, [backgroundPreviewUrl])
 
   const handleMarkUpdateNoticeRead = () => {
     try {
@@ -281,6 +300,51 @@ export default function Creator() {
                   rows={4}
                   className="theme-input mb-3"
                 />
+
+                <div className="visual-background-card">
+                  <div className="visual-background-head">
+                    <div>
+                      <span className="visual-background-kicker">进阶背景</span>
+                      <h3><PictureOutlined /> 上传你的品牌背景</h3>
+                    </div>
+                    {backgroundFile ? <span className="visual-background-file">{backgroundFile.name}</span> : null}
+                  </div>
+                  <Upload
+                    accept="image/png,image/jpeg,image/webp,video/mp4,video/webm,video/quicktime"
+                    maxCount={1}
+                    showUploadList={false}
+                    beforeUpload={(file) => {
+                      updateBackgroundFile(file)
+                      return false
+                    }}
+                  >
+                    <Button icon={<UploadOutlined />}>选择图片或短视频背景</Button>
+                  </Upload>
+                  {backgroundPreviewUrl ? (
+                    <div className="visual-background-preview">
+                      {backgroundFile?.type.startsWith('video/') ? (
+                        <video src={backgroundPreviewUrl} muted loop playsInline controls />
+                      ) : (
+                        <img src={backgroundPreviewUrl} alt="背景预览" />
+                      )}
+                      <Button size="small" onClick={() => updateBackgroundFile(null)}>移除</Button>
+                    </div>
+                  ) : null}
+                  <Radio.Group
+                    value={backgroundUsageScope}
+                    onChange={(event) => setBackgroundUsageScope(event.target.value)}
+                    className="visual-background-scope"
+                  >
+                    <Space wrap>
+                      <Radio.Button value="global">作为全局背景</Radio.Button>
+                      <Radio.Button value="opening">仅开头使用</Radio.Button>
+                      <Radio.Button value="per_scene_random">每页随机使用</Radio.Button>
+                    </Space>
+                  </Radio.Group>
+                  <p className="visual-background-tip">
+                    适合上传带水印的网格背景、品牌底图、科技动效或账号专属视觉素材；系统会在生成脚本时自动提示底层加载。
+                  </p>
+                </div>
 
                 <Button
                   type="primary"

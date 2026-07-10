@@ -618,6 +618,9 @@ def download_video(
     
     search_dirs = [
         pathlib.Path(__file__).parent.parent / "videos",
+        pathlib.Path("/opt/manim-v2-3003-snapshot/backend/videos"),
+        pathlib.Path("/opt/manim-v2-3003-repro-3002-current/backend/videos"),
+        pathlib.Path("/opt/manim-v2-3003-repro-3002-current/backend/app/videos"),
         pathlib.Path("/opt/manim/backend/videos"),
         pathlib.Path("/opt/manim-v2/backend/videos"),
     ]

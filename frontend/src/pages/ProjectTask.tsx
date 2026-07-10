@@ -404,7 +404,8 @@ export default function ProjectTask() {
     try {
       const API_BASE = getAppBase()
       const token = useAuthStore.getState().token
-      const fullUrl = videoUrl.startsWith('http') ? videoUrl : `${API_BASE}${videoUrl}`
+      const projectDownloadUrl = `${API_BASE}/api/projects/${id}/video-download`
+      const fullUrl = project?.id ? projectDownloadUrl : (videoUrl.startsWith('http') ? videoUrl : `${API_BASE}${videoUrl}`)
       
       message.loading({ content: '准备下载...', key: 'download', duration: 0 })
       
