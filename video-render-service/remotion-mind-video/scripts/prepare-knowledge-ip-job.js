@@ -13,6 +13,9 @@ const getArg = (name, fallback = null) => {
 const jobId = getArg('job');
 const sourceVideo = getArg('source');
 const segmentsPath = getArg('segments');
+const transcriptPath = getArg('transcript');
+const topTabsPath = getArg('top-tabs');
+const captionTranslationsPath = getArg('caption-translations');
 const title = getArg('title', '知识分享');
 const durationMsArg = Number(getArg('duration-ms', 0));
 const allowRepeat = process.argv.includes('--allow-repeat-materials');
@@ -22,7 +25,7 @@ if (!jobId || !sourceVideo || !segmentsPath) {
   process.exit(1);
 }
 
-const readJson = async (file) => JSON.parse(await fs.readFile(path.resolve(file), 'utf8'));
+const readJson = async (file) => JSON.parse((await fs.readFile(path.resolve(file), 'utf8')).replace(/^\uFEFF/, ''));
 
 const punctuation = /[。！？；.!?;]/;
 const normalizeText = (value) => String(value || '').replace(/\s+/g, '').trim();
@@ -65,6 +68,77 @@ const clampSegment = (item, index, previousEndMs) => {
   };
 };
 
+const captionsFromTranscript = (transcript, translations = []) => {
+  const transcripts = transcript?.transcripts || [];
+  const sentences = transcripts[0]?.sentences || transcript?.sentences || [];
+  const captions = [];
+  const endPunctuation = new Set(['，', '。', '？', '！', '；', ',', '.', '?', '!', ';']);
+
+  for (const sentence of sentences) {
+    const words = Array.isArray(sentence.words) ? sentence.words : [];
+    if (words.length === 0) {
+      const text = normalizeText(sentence.text);
+      if (text && Number.isFinite(Number(sentence.begin_time)) && Number.isFinite(Number(sentence.end_time))) {
+        captions.push({startMs: Number(sentence.begin_time), endMs: Number(sentence.end_time), zh: text, text, en: ''});
+      }
+      continue;
+    }
+
+    let currentText = '';
+    let startMs = null;
+    let endMs = null;
+    let hasPunctuation = false;
+
+    const flush = () => {
+      const text = normalizeText(currentText);
+      if (text && startMs !== null && endMs !== null) {
+        captions.push({startMs, endMs, zh: text, text, en: ''});
+      }
+      currentText = '';
+      startMs = null;
+      endMs = null;
+      hasPunctuation = false;
+    };
+
+    for (const word of words) {
+      const wordText = String(word.text || '');
+      const punctuationMark = String(word.punctuation || '');
+      if (!wordText) continue;
+      if (startMs === null) startMs = Number(word.begin_time);
+      endMs = Number(word.end_time);
+      currentText += `${wordText}${punctuationMark}`;
+      if (endPunctuation.has(punctuationMark)) {
+        hasPunctuation = true;
+        flush();
+      }
+    }
+
+    // If a sentence has no punctuation, keep it together instead of cutting it
+    // in the middle. This matches the "no mid-sentence cut" requirement.
+    if (currentText && !hasPunctuation) flush();
+  }
+
+  return captions
+    .filter((caption) => Number.isFinite(caption.startMs) && Number.isFinite(caption.endMs) && caption.endMs > caption.startMs)
+    .sort((a, b) => a.startMs - b.startMs)
+    .map((caption, index) => ({...caption, en: String(translations[index]?.en || translations[index] || '').trim()}));
+};
+
+const buildTopTabsFromSegments = (segments, providedTabs) => {
+  if (Array.isArray(providedTabs) && providedTabs.length > 0) return providedTabs;
+  const groups = 4;
+  const size = Math.ceil(segments.length / groups);
+  return Array.from({length: groups}, (_, index) => {
+    const group = segments.slice(index * size, (index + 1) * size);
+    const anchor = group[0] || segments[Math.min(index * size, segments.length - 1)];
+    return {
+      label: normalizeText(anchor?.tabLabel || anchor?.summary || anchor?.title || `第${index + 1}节`).slice(0, 8),
+      startMs: Number((group[0] || anchor).startMs),
+      endMs: Number((group[group.length - 1] || anchor).endMs)
+    };
+  });
+};
+
 const raw = await readJson(segmentsPath);
 const sourceSegments = Array.isArray(raw) ? raw : raw.segments;
 if (!Array.isArray(sourceSegments) || sourceSegments.length === 0) {
@@ -84,17 +158,25 @@ if (missingMaterials.length > 0 && !allowRepeat) {
   throw new Error(`Missing materialSrc for ${missingMaterials.length} segment(s). Generate one AI material video per semantic group, or pass --allow-repeat-materials only for debugging.`);
 }
 
-const captions = segments
-  .map((segment) => ({
-    startMs: segment.startMs,
-    endMs: segment.endMs,
-    zh: sentenceSafeCaption(segment),
-    text: sentenceSafeCaption(segment),
-    en: segment.en || ''
-  }))
-  .filter((caption) => caption.zh);
+let captions = [];
+if (transcriptPath) {
+  const captionTranslations = captionTranslationsPath ? await readJson(captionTranslationsPath) : [];
+  captions = captionsFromTranscript(await readJson(transcriptPath), captionTranslations);
+}
+if (captions.length === 0) {
+  captions = segments
+    .map((segment) => ({
+      startMs: segment.startMs,
+      endMs: segment.endMs,
+      zh: sentenceSafeCaption(segment),
+      text: sentenceSafeCaption(segment),
+      en: segment.en || ''
+    }))
+    .filter((caption) => caption.zh);
+}
 
 const durationMs = durationMsArg || Math.max(...segments.map((segment) => segment.endMs));
+const providedTopTabs = topTabsPath ? await readJson(topTabsPath) : raw.topTabs;
 const props = {
   sourceVideo,
   materialTrackSrc: getArg('material-track', null),
@@ -104,6 +186,7 @@ const props = {
     y: Number(getArg('speaker-y', -4))
   },
   segments,
+  topTabs: buildTopTabsFromSegments(segments, providedTopTabs),
   captions
 };
 

@@ -147,8 +147,38 @@ const PaperBackground = () => (
   </AbsoluteFill>
 );
 
-const TopTabs = ({active}) => {
-  const tabs = ['身边的大儒', '古典大儒', '现代大儒', '英雄主义'];
+const buildTopTabs = (segments = [], providedTabs = []) => {
+  if (Array.isArray(providedTabs) && providedTabs.length > 0) {
+    return providedTabs.map((tab, index) => ({
+      label: String(tab.label || tab.title || tab).trim(),
+      startMs: Number(tab.startMs ?? segments[0]?.startMs ?? 0),
+      endMs: Number(tab.endMs ?? segments[segments.length - 1]?.endMs ?? 0),
+      index
+    }));
+  }
+
+  const validSegments = segments.filter((segment) => Number.isFinite(Number(segment.startMs)) && Number.isFinite(Number(segment.endMs)));
+  if (validSegments.length === 0) {
+    return ['核心观点', '关键案例', '解决路径', '行动建议'].map((label, index) => ({label, startMs: index * 1000, endMs: (index + 1) * 1000, index}));
+  }
+
+  const groups = 4;
+  const size = Math.ceil(validSegments.length / groups);
+  return Array.from({length: groups}, (_, index) => {
+    const group = validSegments.slice(index * size, (index + 1) * size);
+    const fallback = validSegments[Math.min(index * size, validSegments.length - 1)];
+    const anchor = group[0] || fallback;
+    return {
+      label: String(anchor.tabLabel || anchor.summary || anchor.title || `第${index + 1}节`).trim(),
+      startMs: Number((group[0] || fallback).startMs),
+      endMs: Number((group[group.length - 1] || fallback).endMs),
+      index
+    };
+  });
+};
+
+const TopTabs = ({active, segments, currentMs, topTabs}) => {
+  const tabs = buildTopTabs(segments, topTabs);
   const title = active.mainTitle || '时代机会';
   return (
     <div style={{
@@ -175,16 +205,20 @@ const TopTabs = ({active}) => {
         fontSize: 34,
         lineHeight: 1
       }}>
-        {tabs.map((tab) => (
-          <div key={tab} style={{
+        {tabs.map((tab) => {
+          const isActive = currentMs >= tab.startMs && currentMs < tab.endMs;
+          const label = tab.label.length > 8 ? `${tab.label.slice(0, 8)}` : tab.label;
+          return (
+          <div key={`${tab.label}-${tab.index}`} style={{
             display: 'grid',
             placeItems: 'center',
             borderRight: '2px solid #111',
-            background: tab === active.tab ? 'rgba(215,189,134,.30)' : 'transparent',
+            background: isActive ? 'rgba(215,189,134,.30)' : 'transparent',
             letterSpacing: 0,
             fontFamily: heitiFont
-          }}>{tab}</div>
-        ))}
+          }}>{label}</div>
+          );
+        })}
       </div>
       <div style={{
         position: 'absolute',
@@ -491,7 +525,8 @@ export const KnowledgeIpPackage = ({
   durationMs = 172400,
   segments = defaultSegments,
   captions = [],
-  speakerCrop = {scale: 1.22, y: -4}
+  speakerCrop = {scale: 1.22, y: -4},
+  topTabs = []
 }) => {
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
@@ -505,7 +540,7 @@ export const KnowledgeIpPackage = ({
       <PaperBackground />
       <MaterialScene active={active} localFrame={localFrame} materialTrackSrc={materialTrackSrc} />
       <SpeakerWindow sourceVideo={sourceVideo} crop={speakerCrop} />
-      <TopTabs active={active} />
+      <TopTabs active={active} segments={segments} currentMs={currentMs} topTabs={topTabs} />
       <SubtitleBand caption={caption} />
       <div style={{position: 'absolute', left: 0, right: 0, top: 982, height: 4, background: '#111'}} />
       <div style={{position: 'absolute', left: 0, right: 0, top: 1738, height: 150, background: 'linear-gradient(180deg, transparent, rgba(255,255,255,.26))'}} />
