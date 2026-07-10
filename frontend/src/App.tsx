@@ -12,6 +12,7 @@ import StickmanCreator from './pages/StickmanCreator'
 import History from './pages/History'
 import Profile from './pages/Profile'
 import Docs from './pages/Docs'
+import KnowledgeIp from './pages/KnowledgeIp'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import ProjectChat from './pages/ProjectChat'
@@ -167,6 +168,7 @@ function AppContent() {
         <Route path="/ai-video/brand-kit" element={<AiVideoBrandKit />} />
         <Route path="/ai-video/exports" element={<AiVideoExports />} />
         <Route path="/ai-video/settings" element={<AiVideoSettings />} />
+        <Route path="/knowledge-ip" element={<KnowledgeIp />} />
         <Route path="/history" element={<History />} />
         <Route path="/profile" element={<Profile />} />
       </Route>

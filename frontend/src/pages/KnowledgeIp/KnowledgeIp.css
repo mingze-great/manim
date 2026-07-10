@@ -1,0 +1,143 @@
+.knowledge-ip-page {
+  min-height: calc(100vh - 88px);
+  color: #101827;
+}
+
+.knowledge-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(360px, .95fr);
+  gap: 28px;
+  padding: 8px 0 28px;
+  align-items: stretch;
+}
+
+.knowledge-hero h1 {
+  margin: 14px 0 16px;
+  font-size: 48px;
+  line-height: 1.04;
+  letter-spacing: 0;
+  font-weight: 900;
+}
+
+.knowledge-hero p {
+  max-width: 680px;
+  margin: 0 0 24px;
+  font-size: 17px;
+  line-height: 1.8;
+  color: #566174;
+}
+
+.hero-tag {
+  border: 1px solid rgba(37, 99, 235, .24);
+  color: #1d4ed8;
+  background: rgba(37, 99, 235, .08);
+  font-weight: 700;
+}
+
+.upload-note {
+  margin-top: 14px;
+  color: #64748b;
+}
+
+.hero-panel,
+.result-card,
+.workflow-step {
+  border-radius: 18px;
+  border: 1px solid rgba(15, 23, 42, .08);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, .08);
+  background: rgba(255, 255, 255, .86);
+}
+
+.hero-panel {
+  overflow: hidden;
+}
+
+.hero-panel video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 9 / 16;
+  max-height: 560px;
+  background: #050505;
+  object-fit: contain;
+}
+
+.panel-caption {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  color: #64748b;
+}
+
+.panel-caption strong {
+  color: #111827;
+}
+
+.workflow-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin: 10px 0 24px;
+}
+
+.workflow-step .ant-card-body {
+  padding: 22px;
+}
+
+.step-index {
+  display: inline-flex;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: linear-gradient(135deg, #111827, #2563eb);
+  font-weight: 900;
+}
+
+.workflow-step h3 {
+  margin: 18px 0 8px;
+  font-size: 18px;
+}
+
+.workflow-step p {
+  margin: 0;
+  color: #64748b;
+  line-height: 1.65;
+}
+
+.result-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.result-heading h2 {
+  margin: 10px 0 8px;
+  font-size: 28px;
+}
+
+.result-heading p {
+  margin: 0;
+  color: #64748b;
+}
+
+.result-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 22px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 1100px) {
+  .knowledge-hero,
+  .workflow-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-panel video {
+    max-height: none;
+  }
+}
