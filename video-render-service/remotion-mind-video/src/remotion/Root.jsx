@@ -42,7 +42,6 @@ export const RemotionRoot = () => (
       defaultProps={{
         sourceVideo: 'workflow-inputs/knowledge-ip-test-cfr.mp4',
         materialTrackSrc: 'workflow-assets/knowledge-ip-test/material_track.mp4',
-        baseVideoSrc: 'workflow-assets/knowledge-ip-test/base_track.mp4',
         durationMs: 172400
       }}
       calculateMetadata={({props}) => {

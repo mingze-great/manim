@@ -93,12 +93,13 @@ const warm = '#d7bd86';
 const red = '#b93422';
 const blue = '#2a5d8f';
 const green = '#276b50';
+const heitiFont = '"Noto Sans CJK SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif';
 
 const activeSegment = (segments, currentMs) =>
   segments.find((item) => currentMs >= item.startMs && currentMs < item.endMs) || segments[segments.length - 1];
 
-const activeCaption = (captions, currentMs, fallback) =>
-  (captions || []).find((item) => currentMs >= item.startMs && currentMs < item.endMs) || fallback;
+const activeCaption = (captions, currentMs) =>
+  (captions || []).find((item) => currentMs >= item.startMs && currentMs < item.endMs) || null;
 
 const splitTwoLines = (text, maxChars = 20) => {
   const cleanText = String(text || '').replace(/\s+/g, '').trim();
@@ -146,28 +147,16 @@ const PaperBackground = () => (
   </AbsoluteFill>
 );
 
-const PhoneStatus = () => (
-  <div style={{position: 'absolute', left: 0, right: 0, top: 0, height: 48, color: '#fff', textShadow: '0 1px 6px rgba(0,0,0,.45)', fontSize: 21, fontWeight: 700}}>
-    <div style={{position: 'absolute', left: 22, top: 12}}>11:48</div>
-    <div style={{position: 'absolute', right: 22, top: 12, display: 'flex', gap: 10, alignItems: 'center'}}>
-      <span>4G</span>
-      <span style={{width: 42, height: 18, border: '2px solid #fff', borderRadius: 5, display: 'inline-block', position: 'relative'}}>
-        <span style={{position: 'absolute', left: 3, top: 3, width: 27, height: 8, borderRadius: 3, background: '#fff'}} />
-      </span>
-    </div>
-  </div>
-);
-
 const TopTabs = ({active}) => {
-  const title = active.mainTitle || '\u666e\u901a\u4eba\u5982\u4f55\u6293\u4f4f\u65f6\u4ee3\u673a\u4f1a';
-  const chapter = active.title || '\u6838\u5fc3\u89c2\u70b9';
+  const tabs = ['身边的大儒', '古典大儒', '现代大儒', '英雄主义'];
+  const title = active.mainTitle || '时代机会';
   return (
     <div style={{
       position: 'absolute',
       top: 0,
       left: 0,
       right: 0,
-      height: 132,
+      height: 178,
       background: 'rgba(248,245,238,.96)',
       borderBottom: '4px solid #111',
       color: ink,
@@ -176,42 +165,38 @@ const TopTabs = ({active}) => {
     }}>
       <div style={{
         position: 'absolute',
-        left: 42,
-        top: 22,
-        fontSize: 42,
-        fontWeight: 1000,
-        letterSpacing: 0,
-        color: '#111'
-      }}>{title}</div>
-      <div style={{
-        position: 'absolute',
-        right: 42,
-        top: 22,
-        height: 42,
-        padding: '0 20px',
-        borderRadius: 999,
-        border: '2px solid rgba(17,17,17,.78)',
-        display: 'flex',
-        alignItems: 'center',
-        fontSize: 21,
-        fontWeight: 900,
-        color: '#111',
-        background: 'rgba(215,189,134,.26)'
-      }}>\u77e5\u8bc6IP\u5305\u88c5</div>
-      <div style={{
-        position: 'absolute',
-        left: 42,
-        right: 42,
-        bottom: 17,
-        height: 38,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        borderTop: '2px solid rgba(17,17,17,.28)',
-        paddingTop: 12
+        left: 0,
+        right: 0,
+        top: 0,
+        height: 76,
+        display: 'grid',
+        gridTemplateColumns: 'repeat(4, 1fr)',
+        borderBottom: '2px solid #111',
+        fontSize: 34,
+        lineHeight: 1
       }}>
-        <div style={{fontSize: 25, fontWeight: 1000, color: '#111'}}>\u5f53\u524d\u7ae0\u8282 / {chapter}</div>
-        <div style={{fontSize: 20, fontWeight: 800, color: 'rgba(17,17,17,.72)'}}>\u7d20\u6750\u540c\u6b65 / \u5b57\u5e55\u540c\u6b65 / \u8fdb\u5ea6\u5305\u88c5</div>
+        {tabs.map((tab) => (
+          <div key={tab} style={{
+            display: 'grid',
+            placeItems: 'center',
+            borderRight: '2px solid #111',
+            background: tab === active.tab ? 'rgba(215,189,134,.30)' : 'transparent',
+            letterSpacing: 0,
+            fontFamily: heitiFont
+          }}>{tab}</div>
+        ))}
+      </div>
+      <div style={{
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        top: 76,
+        height: 102,
+        background: 'rgba(248,245,238,.99)',
+        overflow: 'hidden'
+      }}>
+        <div style={{position: 'absolute', left: 22, top: 10, fontSize: 66, lineHeight: 1, fontWeight: 1000, color: '#111', fontFamily: heitiFont}}>《{title}》</div>
+        <div style={{position: 'absolute', right: 24, top: 41, fontSize: 22, fontWeight: 850, color: '#222', fontFamily: heitiFont}}>知识分享 · 认知提升</div>
       </div>
     </div>
   );
@@ -257,12 +242,12 @@ const MaterialScene = ({active, localFrame, materialTrackSrc}) => {
     position: 'absolute',
     left: 0,
     right: 0,
-    top: 160,
-    height: 520,
+    top: 178,
+    height: 504,
     overflow: 'hidden',
-    background: '#f5f1e9',
-    borderTop: '4px solid #111',
-    borderBottom: '4px solid #111'
+    background: '#050505',
+    borderTop: '6px solid #111',
+    borderBottom: '6px solid #111'
   };
   const materialSrc = materialTrackSrc || active.materialSrc || active.assetSrc || active.videoSrc || active.media?.src;
   const MaterialClip = () => {
@@ -271,19 +256,33 @@ const MaterialScene = ({active, localFrame, materialTrackSrc}) => {
     const segmentFrames = Math.max(1, Math.round(((active.endMs || 0) - (active.startMs || 0)) / 1000 * 30));
     return (
       <div style={{...common, background: '#111'}}>
-        <OffthreadVideo
-          src={src}
-          muted
-          style={{
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover',
-            filter: 'contrast(1.04) saturate(1.06)',
-            transform: materialTrackSrc
-              ? 'scale(1.025)'
-              : `scale(${1.02 + enter * 0.035 + localFrame / segmentFrames * 0.035}) translate(${Math.sin(localFrame / 32) * 8}px, ${Math.cos(localFrame / 35) * 5}px)`
-          }}
-        />
+        <div style={{
+          position: 'absolute',
+          inset: '22px 0',
+          background: '#000',
+          overflow: 'hidden'
+        }}>
+          <OffthreadVideo
+            src={src}
+            muted
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: materialTrackSrc ? 'cover' : 'contain',
+              background: '#000',
+              filter: 'contrast(1.04) saturate(1.06)',
+              transform: materialTrackSrc
+                ? 'scale(1.015)'
+                : `scale(${1.01 + enter * 0.025 + localFrame / segmentFrames * 0.025}) translate(${Math.sin(localFrame / 32) * 8}px, ${Math.cos(localFrame / 35) * 5}px)`
+            }}
+          />
+        </div>
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          pointerEvents: 'none',
+          background: 'linear-gradient(180deg, rgba(0,0,0,.28) 0 22px, transparent 22px calc(100% - 22px), rgba(0,0,0,.30) calc(100% - 22px))'
+        }} />
         <div style={{
           position: 'absolute',
           inset: 0,
@@ -393,16 +392,16 @@ const MaterialScene = ({active, localFrame, materialTrackSrc}) => {
 const SubtitleBand = ({caption}) => {
   const zh = String(caption?.zh || caption?.text || '').replace(/\s+/g, '').trim();
   const en = caption?.en || '';
-  const lines = splitTwoLines(zh, 24).slice(0, 2);
-  const charCount = lines.join('').length;
-  const fontSize = charCount > 46 ? 40 : charCount > 34 ? 46 : 56;
+  if (!zh) return null;
+  const charCount = zh.length;
+  const fontSize = charCount > 24 ? 52 : 60;
   return (
   <div style={{
     position: 'absolute',
-    top: 680,
+    top: 682,
     left: 0,
     right: 0,
-    height: 260,
+    height: 300,
     background: 'rgba(248,245,238,.98)',
     borderTop: '4px solid #111',
     borderBottom: '4px solid #111',
@@ -411,72 +410,55 @@ const SubtitleBand = ({caption}) => {
     justifyContent: 'center',
     flexDirection: 'column',
     color: '#111',
-    padding: '0 54px',
+    padding: '0 78px',
     textAlign: 'center'
   }}>
-    <div style={{fontSize, lineHeight: 1.12, fontWeight: 1000, maxWidth: 990}}>
-      {lines.map((line, index) => (
-        <div key={`${line}-${index}`} style={{whiteSpace: 'nowrap'}}>{line}</div>
-      ))}
-    </div>
-    {en ? <div style={{fontSize: 24, lineHeight: 1.2, fontWeight: 700, marginTop: 10, color: '#333'}}>{en}</div> : null}
+    <div style={{
+      fontSize,
+      lineHeight: 1.18,
+      fontWeight: 1000,
+      maxWidth: 960,
+      wordBreak: 'keep-all',
+      overflowWrap: 'normal'
+    }}>{zh}</div>
+    {en ? <div style={{fontSize: 30, lineHeight: 1.18, fontWeight: 850, marginTop: 12, color: '#222'}}>{en}</div> : null}
   </div>
   );
 };
 
-const SpeakerWindow = ({sourceVideo}) => (
+const SpeakerWindow = ({sourceVideo, crop = {scale: 1.22, y: -4}}) => (
   <div style={{
     position: 'absolute',
-    left: 110,
-    right: 110,
-    top: 1060,
-    height: 480,
-    borderRadius: 34,
+    left: 226,
+    right: 226,
+    top: 1112,
+    height: 600,
+    borderRadius: 58,
     overflow: 'hidden',
     background: '#000',
-    border: `5px solid ${warm}`,
-    boxShadow: '0 14px 36px rgba(0,0,0,.25)'
+    border: `4px solid ${warm}`,
+    boxShadow: '0 24px 58px rgba(0,0,0,.22)'
   }}>
-    <OffthreadVideo src={staticFile(sourceVideo)} style={{width: '100%', height: '100%', objectFit: 'cover'}} volume={1} />
+    <OffthreadVideo
+      src={staticFile(sourceVideo)}
+      style={{
+        width: '100%',
+        height: '100%',
+        objectFit: 'cover',
+        transform: `translateY(${crop.y || 0}px) scale(${crop.scale || 1})`,
+        filter: 'contrast(1.02) saturate(1.02)'
+      }}
+      volume={1}
+    />
+    <div style={{
+      position: 'absolute',
+      inset: 0,
+      borderRadius: 58,
+      boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.16), inset 0 -24px 54px rgba(0,0,0,.18)',
+      pointerEvents: 'none'
+    }} />
   </div>
 );
-
-const PlayerControls = ({currentMs, durationMs, speed = '1x'}) => {
-  const progress = clamp(currentMs / durationMs, 0, 1);
-  return (
-    <>
-      <div style={{position: 'absolute', left: 0, right: 0, bottom: 0, height: 118, background: '#050505', color: '#fff'}}>
-        <div style={{position: 'absolute', left: 34, bottom: 26, width: 66, height: 66, borderRadius: 14, background: '#191919', display: 'grid', placeItems: 'center', fontSize: 34}}>×</div>
-        <div style={{position: 'absolute', left: 285, bottom: 32, fontSize: 42}}>↺</div>
-        <div style={{position: 'absolute', left: 512, bottom: 30, width: 58, height: 58}}>
-          <div style={{position: 'absolute', left: 5, top: 0, width: 16, height: 58, borderRadius: 6, background: '#fff'}} />
-          <div style={{position: 'absolute', right: 5, top: 0, width: 16, height: 58, borderRadius: 6, background: '#fff'}} />
-        </div>
-        <div style={{position: 'absolute', right: 285, bottom: 32, fontSize: 42}}>↻</div>
-        <div style={{position: 'absolute', right: 34, bottom: 26, width: 78, height: 66, borderRadius: 14, background: '#191919', display: 'grid', placeItems: 'center', fontSize: 28, fontWeight: 900}}>{speed}</div>
-      </div>
-      <div style={{position: 'absolute', left: 0, right: 0, bottom: 118, height: 10, background: 'rgba(0,0,0,.18)', overflow: 'hidden'}}>
-        <div style={{
-          height: '100%',
-          width: `${progress * 100}%`,
-          background: 'linear-gradient(90deg, #ffffff, #d7bd86)',
-          boxShadow: '0 0 12px rgba(215,189,134,.85)',
-          transition: 'width 80ms linear'
-        }} />
-        <div style={{
-          position: 'absolute',
-          left: `calc(${progress * 100}% - 5px)`,
-          top: -4,
-          width: 18,
-          height: 18,
-          borderRadius: 99,
-          background: '#fff',
-          boxShadow: '0 0 18px rgba(255,255,255,.9)'
-        }} />
-      </div>
-    </>
-  );
-};
 
 const CleanProgress = ({currentMs, durationMs}) => {
   const progress = clamp(currentMs / durationMs, 0, 1);
@@ -508,44 +490,25 @@ export const KnowledgeIpPackage = ({
   baseVideoSrc = null,
   durationMs = 172400,
   segments = defaultSegments,
-  captions = []
+  captions = [],
+  speakerCrop = {scale: 1.22, y: -4}
 }) => {
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
   const currentMs = (frame / fps) * 1000;
   const active = activeSegment(segments, currentMs);
-  const caption = activeCaption(captions, currentMs, active);
+  const caption = activeCaption(captions, currentMs);
   const localFrame = Math.max(0, frame - Math.round(active.startMs / 1000 * fps));
 
-  const baseSrc = baseVideoSrc ? staticFile(String(baseVideoSrc).replace(/^\/+/, '')) : null;
-
   return (
-    <AbsoluteFill style={{fontFamily: 'PingFang SC, Microsoft YaHei, Arial, sans-serif', overflow: 'hidden', background: paper}}>
-      {baseSrc ? (
-        <OffthreadVideo src={baseSrc} style={{width: '100%', height: '100%', objectFit: 'cover'}} volume={1} />
-      ) : (
-        <>
-          <PaperBackground />
-          <MaterialScene active={active} localFrame={localFrame} materialTrackSrc={materialTrackSrc} />
-          <SpeakerWindow sourceVideo={sourceVideo} />
-        </>
-      )}
+    <AbsoluteFill style={{fontFamily: heitiFont, overflow: 'hidden', background: paper}}>
+      <PaperBackground />
+      <MaterialScene active={active} localFrame={localFrame} materialTrackSrc={materialTrackSrc} />
+      <SpeakerWindow sourceVideo={sourceVideo} crop={speakerCrop} />
       <TopTabs active={active} />
       <SubtitleBand caption={caption} />
-      {baseSrc ? (
-        <div style={{
-          position: 'absolute',
-          left: 110,
-          right: 110,
-          top: 1060,
-          height: 480,
-          borderRadius: 34,
-          border: `5px solid ${warm}`,
-          boxShadow: '0 14px 36px rgba(0,0,0,.25)',
-          pointerEvents: 'none'
-        }} />
-      ) : null}
-      <div style={{position: 'absolute', left: 0, right: 0, top: 1680, height: 180, background: 'linear-gradient(180deg, transparent, rgba(255,255,255,.24))'}} />
+      <div style={{position: 'absolute', left: 0, right: 0, top: 982, height: 4, background: '#111'}} />
+      <div style={{position: 'absolute', left: 0, right: 0, top: 1738, height: 150, background: 'linear-gradient(180deg, transparent, rgba(255,255,255,.26))'}} />
       <CleanProgress currentMs={currentMs} durationMs={durationMs} />
     </AbsoluteFill>
   );

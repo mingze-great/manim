@@ -7,18 +7,28 @@ import {browserExecutable} from '../browser.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '..');
-const propsPath = path.join(projectRoot, 'public/workflow-assets/knowledge-ip-test/remotion_props.json');
+const args = process.argv.slice(2);
+const mode = args[0] && !args[0].startsWith('--') ? args[0] : 'render';
+const previewSecondsArg = args.find((arg, index) => index > 0 && !arg.startsWith('--'));
+const previewSeconds = Number(previewSecondsArg || 0);
+const propsArg = args.find((arg) => arg.startsWith('--props='));
+const jobArg = args.find((arg) => arg.startsWith('--job='));
+const jobId = jobArg ? jobArg.split('=').slice(1).join('=').trim() : process.env.KNOWLEDGE_IP_JOB_ID || 'knowledge-ip-test';
+const propsPath = propsArg
+  ? path.resolve(projectRoot, propsArg.split('=').slice(1).join('='))
+  : path.join(projectRoot, `public/workflow-assets/${jobId}/remotion_props.json`);
 const inputProps = JSON.parse(await fs.readFile(propsPath, 'utf8'));
-inputProps.sourceVideo = inputProps.sourceVideo || 'workflow-inputs/knowledge-ip-test-cfr.mp4';
-inputProps.materialTrackSrc = inputProps.materialTrackSrc || 'workflow-assets/knowledge-ip-test/material_track.mp4';
-inputProps.baseVideoSrc = inputProps.baseVideoSrc || 'workflow-assets/knowledge-ip-test/base_track.mp4';
+inputProps.sourceVideo = inputProps.sourceVideo || `workflow-inputs/${jobId}.mp4`;
+inputProps.materialTrackSrc = inputProps.materialTrackSrc || `workflow-assets/${jobId}/material_track.mp4`;
 inputProps.durationMs = inputProps.durationMs || 172352;
+if (previewSeconds > 0) inputProps.durationMs = previewSeconds * 1000;
 
-console.log(`[knowledge-ip] mode=${process.argv[2] || 'render'}`);
+console.log(`[knowledge-ip] mode=${mode}`);
 console.log(`[knowledge-ip] props=${JSON.stringify({
+  propsPath,
+  jobId,
   sourceVideo: inputProps.sourceVideo,
   materialTrackSrc: inputProps.materialTrackSrc,
-  baseVideoSrc: inputProps.baseVideoSrc,
   durationMs: inputProps.durationMs,
   segments: Array.isArray(inputProps.segments) ? inputProps.segments.length : 0,
   captions: Array.isArray(inputProps.captions) ? inputProps.captions.length : 0,
@@ -43,7 +53,6 @@ console.log(`[knowledge-ip] composition frames=${composition.durationInFrames} f
 await fs.mkdir(path.join(projectRoot, 'renders'), {recursive: true});
 await fs.mkdir(path.join(projectRoot, 'tmp/knowledge-ip-stills'), {recursive: true});
 
-const mode = process.argv[2] || 'render';
 if (mode === 'stills') {
   const frames = [120, 900, 2100, 3900, Math.max(1, composition.durationInFrames - 90)];
   for (const frame of frames) {
@@ -64,7 +73,7 @@ if (mode === 'stills') {
   process.exit(0);
 }
 
-const outputLocation = path.join(projectRoot, 'renders', `knowledge-ip-package-remotion-${Date.now()}.mp4`);
+const outputLocation = path.join(projectRoot, 'renders', `${previewSeconds > 0 ? 'knowledge-ip-preview' : 'knowledge-ip-package-remotion'}-${Date.now()}.mp4`);
 console.log(`[knowledge-ip] rendering media=${outputLocation}`);
 await renderMedia({
   composition,
