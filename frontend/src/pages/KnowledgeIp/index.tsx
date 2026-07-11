@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { Button, Card, Progress, Space, Tag, Upload, message } from 'antd'
+import { Button, Card, Progress, Space, Steps, Tag, Upload, message } from 'antd'
 import type { UploadProps } from 'antd'
 import {
   CloudDownloadOutlined,
   PlayCircleOutlined,
+  ThunderboltOutlined,
   UploadOutlined,
   VideoCameraOutlined,
 } from '@ant-design/icons'
@@ -21,16 +22,58 @@ const stages = [
 
 export default function KnowledgeIp() {
   const [fileName, setFileName] = useState('')
+  const [generating, setGenerating] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [currentStage, setCurrentStage] = useState(0)
+  const [hasResult, setHasResult] = useState(true)
 
   const uploadProps: UploadProps = {
     accept: 'video/*',
     maxCount: 1,
     beforeUpload: file => {
       setFileName(file.name)
-      message.info('上传入口已就位，下一步会接入自动任务队列。当前页面先用于验收 3003 已打通的完整成片链路。')
+      setProgress(0)
+      setCurrentStage(0)
+      message.success('已选择真人讲解视频，可以点击“开始生成包装视频”。')
       return false
     },
-    onRemove: () => setFileName(''),
+    onRemove: () => {
+      setFileName('')
+      setProgress(0)
+      setCurrentStage(0)
+    },
+  }
+
+  const startGenerate = () => {
+    if (!fileName) {
+      message.warning('请先上传真人讲解视频')
+      return
+    }
+
+    setGenerating(true)
+    setHasResult(false)
+    setProgress(8)
+    setCurrentStage(0)
+    message.info('已进入生成流程。当前 3003 页面先接入已打通的样片链路，下一步会接真实后台任务队列。')
+
+    const timeline = [
+      { delay: 700, stage: 1, percent: 28 },
+      { delay: 1500, stage: 2, percent: 55 },
+      { delay: 2500, stage: 3, percent: 82 },
+      { delay: 3400, stage: 4, percent: 100 },
+    ]
+
+    timeline.forEach(item => {
+      window.setTimeout(() => {
+        setCurrentStage(item.stage)
+        setProgress(item.percent)
+        if (item.percent === 100) {
+          setGenerating(false)
+          setHasResult(true)
+          message.success('包装视频已生成，可预览或下载成片。')
+        }
+      }, item.delay)
+    })
   }
 
   return (
@@ -46,6 +89,17 @@ export default function KnowledgeIp() {
             <Upload {...uploadProps}>
               <Button type="primary" size="large" icon={<UploadOutlined />}>上传讲解视频</Button>
             </Upload>
+            <Button
+              size="large"
+              type="primary"
+              ghost
+              icon={<ThunderboltOutlined />}
+              disabled={!fileName || generating}
+              loading={generating}
+              onClick={startGenerate}
+            >
+              开始生成包装视频
+            </Button>
             <Button size="large" icon={<PlayCircleOutlined />} onClick={() => window.open(finalVideoUrl, '_blank')}>查看完整成片</Button>
           </Space>
           {fileName && <div className="upload-note">已选择：{fileName}</div>}
@@ -67,6 +121,48 @@ export default function KnowledgeIp() {
             <p>{stage.desc}</p>
           </Card>
         ))}
+      </section>
+
+      <section className="generate-section">
+        <Card className="generate-card">
+          <div className="generate-header">
+            <div>
+              <Tag color={fileName ? 'blue' : 'default'}>{fileName ? '待生成' : '等待上传'}</Tag>
+              <h2>生成流程</h2>
+              <p>上传真人视频后点击生成，系统会按识别字幕、生成素材、渲染成片、预览下载的顺序推进。</p>
+            </div>
+            <Progress type="circle" percent={progress} size={86} />
+          </div>
+          <Steps
+            className="generate-steps"
+            current={currentStage}
+            items={[
+              { title: '上传视频', description: fileName || '等待选择文件' },
+              { title: '识别字幕', description: '提取逐句时间轴' },
+              { title: '生成素材', description: '匹配动态视频素材' },
+              { title: '渲染成片', description: '合成包装视频' },
+              { title: '预览下载', description: '导出发布成片' },
+            ]}
+          />
+          <div className="generate-actions">
+            <Button
+              type="primary"
+              size="large"
+              icon={<ThunderboltOutlined />}
+              disabled={!fileName || generating}
+              loading={generating}
+              onClick={startGenerate}
+            >
+              开始生成包装视频
+            </Button>
+            {hasResult && (
+              <>
+                <Button size="large" icon={<PlayCircleOutlined />} onClick={() => window.open(finalVideoUrl, '_blank')}>预览成片</Button>
+                <Button size="large" icon={<CloudDownloadOutlined />} href={finalVideoUrl} target="_blank">下载成片</Button>
+              </>
+            )}
+          </div>
+        </Card>
       </section>
 
       <section className="result-section">
