@@ -135,7 +135,13 @@ export default function KnowledgeIp() {
       message.success('视频已上传到服务器，可以开始生成包装视频。')
     } catch (error: any) {
       setStatus('failed')
-      const detail = error?.response?.data?.detail || '上传失败，请检查视频格式或网络后重试。'
+      const statusCode = error?.response?.status
+      const detail =
+        statusCode === 413
+          ? '视频文件过大，请压缩后重试，或联系管理员开通更大的上传额度。'
+          : statusCode === 401
+            ? '登录状态已失效，请重新登录后再上传。'
+            : error?.response?.data?.detail || '上传失败，请检查视频格式或网络后重试。'
       setJob({ id: '', status: 'failed', stage: 'uploaded', progress: 0, message: detail })
       message.error(detail)
     }
