@@ -20,6 +20,13 @@ const sampleVideoUrl = '/renders/knowledge-ip-final-full-bilingual-sync.mp4'
 
 type JobStatus = 'idle' | 'uploading' | 'uploaded' | 'running' | 'completed' | 'failed'
 
+type StageTiming = {
+  started_at?: string
+  ended_at?: string
+  duration_seconds?: number
+  duration_text?: string
+}
+
 type KnowledgeJob = {
   id: string
   status: JobStatus
@@ -32,6 +39,12 @@ type KnowledgeJob = {
   duration_ms?: number
   caption_count?: number
   segment_count?: number
+  render_progress?: number
+  timing?: {
+    elapsed_seconds?: number
+    elapsed_text?: string
+    stages?: Record<string, StageTiming>
+  }
   error?: string
 }
 
@@ -65,6 +78,14 @@ const statusLabel = (status: JobStatus) => {
   if (status === 'completed') return '已完成'
   if (status === 'failed') return '等待上传'
   return '等待上传'
+}
+
+const timingRows = (job?: KnowledgeJob | null) => {
+  const stages = job?.timing?.stages || {}
+  return generateStages
+    .filter(stage => stage.key !== 'completed')
+    .map(stage => ({ ...stage, timing: stages[stage.key] }))
+    .filter(stage => stage.timing?.duration_text || stage.key === job?.stage)
 }
 
 export default function KnowledgeIp() {
@@ -265,7 +286,20 @@ export default function KnowledgeIp() {
           <Progress percent={progress} status={status === 'failed' ? 'exception' : status === 'completed' ? 'success' : 'active'} />
           <Steps className="generate-steps" current={currentStageIndex} status={status === 'failed' ? 'error' : status === 'completed' ? 'finish' : 'process'} items={generateStages.map(stage => ({ title: stage.title }))} />
           {status === 'failed' && <Alert className="generate-alert" type="error" showIcon message="生成遇到问题" description={job?.message || job?.error || '请重新上传视频或稍后重试。'} />}
-          {status === 'running' && <Alert className="generate-alert" type="info" showIcon message="正在生成中" description="长视频会更慢，请不要重复点击。页面会持续刷新当前任务阶段。" />}
+          {status === 'running' && <Alert className="generate-alert" type="info" showIcon message="正在生成中" description={`长视频会更慢，请不要重复点击。当前任务已用时：${job?.timing?.elapsed_text || '统计中'}。`} />}
+          {(job?.timing?.elapsed_text || timingRows(job).length > 0) && (
+            <div className="timing-panel">
+              <div className="timing-total"><span>当前任务用时</span><strong>{job?.timing?.elapsed_text || '统计中'}</strong></div>
+              <div className="timing-grid">
+                {timingRows(job).map(stage => (
+                  <div className="timing-item" key={stage.key}>
+                    <span>{stage.title}</span>
+                    <strong>{stage.timing?.duration_text || (stage.key === job?.stage ? '进行中' : '-')}</strong>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="generate-actions">
             <Button type="primary" size="large" icon={<ThunderboltOutlined />} disabled={!canStart} loading={status === 'running'} onClick={startGenerate}>{status === 'failed' ? '重新生成包装视频' : '开始生成包装视频'}</Button>
             <Button size="large" icon={<ReloadOutlined />} disabled={!job?.id || status === 'running'} onClick={resetJob}>重置流程</Button>
@@ -280,7 +314,7 @@ export default function KnowledgeIp() {
             <div>
               <Tag color={resultUrl ? 'green' : 'default'}>{resultUrl ? '本次任务结果' : '等待生成'}</Tag>
               <h2>{resultUrl ? '本次成片已生成' : '生成完成后这里会出现成片'}</h2>
-              <p>{resultUrl ? `已根据本次上传视频生成：${job?.caption_count || 0} 条字幕，${job?.segment_count || 0} 个内容分段。` : '示例视频只用于展示版式，真实下载入口只会在本次任务完成后出现。'}</p>
+              <p>{resultUrl ? `已根据本次上传视频生成：${job?.caption_count || 0} 条字幕，${job?.segment_count || 0} 个内容分段。总耗时：${job?.timing?.elapsed_text || '已完成'}。` : '示例视频只用于展示版式，真实下载入口只会在本次任务完成后出现。'}</p>
             </div>
             <Progress type="circle" percent={resultUrl ? 100 : progress} size={86} />
           </div>

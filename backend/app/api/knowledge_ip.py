@@ -96,18 +96,57 @@ def _read_job(job_id: str) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _format_seconds(seconds: float | int | None) -> str:
+    try:
+        value = max(0, float(seconds or 0))
+    except Exception:
+        value = 0
+    if value < 60:
+        return f"{value:.1f}秒"
+    minutes = int(value // 60)
+    rest = int(value % 60)
+    return f"{minutes}分{rest}秒"
+
+
+def _refresh_timing(job: dict[str, Any], next_stage: str) -> None:
+    now_ts = time.time()
+    now_iso = _now()
+    job.setdefault("started_at", now_iso)
+    job.setdefault("started_at_ts", now_ts)
+    timing = job.setdefault("timing", {"stages": {}})
+    stages = timing.setdefault("stages", {})
+    previous_stage = job.get("stage")
+    previous_started = job.get("stage_started_at_ts")
+    if previous_stage and previous_stage != next_stage:
+        entry = stages.setdefault(previous_stage, {"started_at": job.get("stage_started_at") or job.get("updated_at") or now_iso})
+        if "ended_at" not in entry:
+            started_ts = previous_started or job.get("started_at_ts") or now_ts
+            entry["ended_at"] = now_iso
+            entry["duration_seconds"] = round(max(0, now_ts - float(started_ts)), 1)
+            entry["duration_text"] = _format_seconds(entry["duration_seconds"])
+    if previous_stage != next_stage:
+        stages.setdefault(next_stage, {"started_at": now_iso})
+        job["stage_started_at"] = now_iso
+        job["stage_started_at_ts"] = now_ts
+    timing["elapsed_seconds"] = round(max(0, now_ts - float(job.get("started_at_ts") or now_ts)), 1)
+    timing["elapsed_text"] = _format_seconds(timing["elapsed_seconds"])
+
+
 def _set_stage(job_id: str, stage: str, *, message: str | None = None, extra: dict[str, Any] | None = None) -> dict[str, Any]:
     job = _read_job(job_id)
+    _refresh_timing(job, stage)
     job["stage"] = stage
     job["progress"] = STAGE_PROGRESS.get(stage, job.get("progress", 0))
     job["message"] = message or STAGE_MESSAGE.get(stage, stage)
     if stage == "failed":
         job["status"] = "failed"
+        job["failed_at"] = _now()
     else:
         job.pop("error", None)
         if stage == "completed":
             job["status"] = "completed"
             job["completed_at"] = _now()
+            _refresh_timing(job, "completed")
         elif stage == "uploaded":
             job["status"] = "uploaded"
         else:
@@ -119,11 +158,50 @@ def _set_stage(job_id: str, stage: str, *, message: str | None = None, extra: di
     return job
 
 
+def _update_render_progress(job_id: str, render_percent: float) -> None:
+    try:
+        job = _read_job(job_id)
+        if job.get("stage") != "render" or job.get("status") != "running":
+            return
+        _refresh_timing(job, "render")
+        render_percent = max(0.0, min(100.0, float(render_percent)))
+        job["render_progress"] = round(render_percent, 1)
+        job["progress"] = min(96, 88 + int(render_percent * 0.08))
+        elapsed = job.get("timing", {}).get("elapsed_text", "")
+        job["message"] = f"正在渲染成片：{render_percent:.1f}%" + (f"，已用时 {elapsed}" if elapsed else "")
+        _write_job(job)
+    except Exception:
+        pass
+
+
 def _run(cmd: list[str], cwd: Path | None = None, timeout: int | None = None) -> str:
     proc = subprocess.run(cmd, cwd=str(cwd) if cwd else None, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout)
     if proc.returncode != 0:
         raise RuntimeError(proc.stdout[-3000:] or f"命令失败: {' '.join(cmd)}")
     return proc.stdout
+
+
+def _run_stream(cmd: list[str], cwd: Path | None = None, timeout: int | None = None, on_line=None) -> str:
+    started = time.time()
+    proc = subprocess.Popen(cmd, cwd=str(cwd) if cwd else None, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1)
+    lines: list[str] = []
+    try:
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            lines.append(line)
+            if on_line:
+                on_line(line.rstrip("\n"))
+            if timeout and time.time() - started > timeout:
+                proc.kill()
+                raise TimeoutError(f"命令超时：{' '.join(cmd)}")
+        code = proc.wait()
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+    output = "".join(lines)
+    if code != 0:
+        raise RuntimeError(output[-3000:] or f"命令失败: {' '.join(cmd)}")
+    return output
 
 
 def _probe_duration_ms(video_path: Path) -> int:
@@ -342,16 +420,24 @@ def _write_props(job_id: str, duration_ms: int, captions: list[dict[str, Any]], 
 
 
 def _render(job_id: str) -> Path:
-    output = _run([
+    log_path = _job_dir(job_id) / "render.log"
+
+    def handle_line(line: str) -> None:
+        with log_path.open("a", encoding="utf-8") as log:
+            log.write(line + "\n")
+        match = re.search(r"progress\s+([0-9.]+)%", line)
+        if match:
+            _update_render_progress(job_id, float(match.group(1)))
+
+    output = _run_stream([
         "node", "scripts/render-knowledge-ip-package.js", "render", f"--job={job_id}"
-    ], cwd=RENDER_ROOT, timeout=7200)
+    ], cwd=RENDER_ROOT, timeout=7200, on_line=handle_line)
     matches = re.findall(r"output\s+(.+\.mp4)", output)
     if not matches:
-        raise RuntimeError(f"Remotion 成片还没有生成?{output[-2000:]}")
+        raise RuntimeError(f"Remotion 成片还没有生成：{output[-2000:]}")
     path = Path(matches[-1].strip())
     if not path.exists() or path.stat().st_size < 1024:
-        raise RuntimeError("Remotion 正在生成动态包装素材。")
-    (_job_dir(job_id) / "render.log").write_text(output, encoding="utf-8")
+        raise RuntimeError("Remotion 成片文件异常，请重新生成。")
     return path
 
 

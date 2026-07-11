@@ -172,6 +172,55 @@
   margin-top: 20px;
 }
 
+.timing-panel {
+  margin-top: 20px;
+  padding: 16px;
+  border-radius: 16px;
+  background: #f8fafc;
+  border: 1px solid rgba(15, 23, 42, .08);
+}
+
+.timing-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  color: #64748b;
+  font-weight: 700;
+}
+
+.timing-total strong {
+  color: #111827;
+  font-size: 18px;
+}
+
+.timing-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.timing-item {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid rgba(15, 23, 42, .06);
+}
+
+.timing-item span {
+  display: block;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.timing-item strong {
+  display: block;
+  margin-top: 4px;
+  color: #0f172a;
+  font-size: 15px;
+}
+
 .generate-actions,
 .result-actions {
   display: flex;
@@ -205,5 +254,9 @@
   .generate-header,
   .result-heading {
     flex-direction: column;
+  }
+
+  .timing-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
