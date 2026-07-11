@@ -618,6 +618,19 @@ def _download_material(url: str, output: Path) -> None:
         raise RuntimeError("素材视频下载异常。")
 
 
+def _is_quota_error(exc: Exception) -> bool:
+    message = str(exc)
+    lowered = message.lower()
+    return (
+        "allocationquota.freetieronly" in lowered
+        or "free quota" in lowered
+        or "免费额度" in message
+        or "额度" in message
+        or "quota" in lowered
+        or "403" in message
+    )
+
+
 def _generate_material_videos(job_id: str, segments: list[dict[str, Any]]) -> list[dict[str, Any]]:
     if not ENABLE_VIDEO_MATERIALS:
         return segments
@@ -636,6 +649,7 @@ def _generate_material_videos(job_id: str, segments: list[dict[str, Any]]) -> li
             continue
         for model in models:
             try:
+                _set_stage(job_id, "materials", message=f"正在生成素材视频：{index}/{len(groups)}，尝试模型 {model}")
                 task_id = _submit_video_material(prompt, model)
                 video_url = _wait_video_material(task_id)
                 _download_material(video_url, output)
@@ -647,10 +661,12 @@ def _generate_material_videos(job_id: str, segments: list[dict[str, Any]]) -> li
                 break
             except Exception as exc:
                 last_error = exc
+                if _is_quota_error(exc):
+                    continue
         if last_error:
             message = str(last_error)
-            if "AllocationQuota.FreeTierOnly" in message or "free quota" in message.lower():
-                raise RuntimeError("素材视频模型额度不可用：请在阿里控制台关闭“免费额度用完即停”或开通付费后再生成。")
+            if _is_quota_error(last_error):
+                raise RuntimeError("素材视频模型额度不可用：当前所有视频模型都没有可用额度，请在阿里控制台关闭“免费额度用完即停”或开通付费后再生成。")
             raise RuntimeError(f"素材视频生成失败：{last_error}")
     return segments
 
