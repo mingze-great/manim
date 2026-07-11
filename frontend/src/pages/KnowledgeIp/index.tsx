@@ -236,9 +236,9 @@ export default function KnowledgeIp() {
           <div className="upload-card-main">
             <div>
               <Tag color={status === 'uploading' ? 'blue' : job?.id ? 'green' : 'default'}>{statusLabel(status)}</Tag>
-              <h2>生成流程</h2>
+              <h2>真人视频</h2>
               <p>点击上传后会直接保存到服务器。上传完成以后，再点击“开始生成包装视频”。</p>
-              {currentFile && <div className="file-meta"><span>{currentFile.name}</span><span>{formatFileSize(currentFile.size)}</span><Button size="small" icon={<DeleteOutlined />} onClick={() => uploadProps.onRemove?.(currentFile)}>重置流程</Button></div>}
+              {currentFile && <div className="file-meta"><span>{currentFile.name}</span><span>{formatFileSize(currentFile.size)}</span><Button size="small" icon={<DeleteOutlined />} onClick={() => uploadProps.onRemove?.(currentFile)}>重新上传</Button></div>}
             </div>
             <Upload {...uploadProps}><Button icon={<UploadOutlined />} loading={status === 'uploading'}>{currentFile ? '更换视频' : '选择视频'}</Button></Upload>
           </div>
@@ -261,9 +261,9 @@ export default function KnowledgeIp() {
           {status === 'failed' && <Alert className="generate-alert" type="error" showIcon message="生成遇到问题" description={job?.message || job?.error || '请重新上传视频或稍后重试。'} />}
           {status === 'running' && <Alert className="generate-alert" type="info" showIcon message="正在生成中" description="长视频会更慢，请不要重复点击。页面会持续刷新当前任务阶段。" />}
           <div className="generate-actions">
-            <Button type="primary" size="large" icon={<ThunderboltOutlined />} disabled={!canStart} loading={status === 'running'} onClick={startGenerate}>{status === 'failed' ? '获取任务进度失败' : '获取任务进度失败'}</Button>
+            <Button type="primary" size="large" icon={<ThunderboltOutlined />} disabled={!canStart} loading={status === 'running'} onClick={startGenerate}>{status === 'failed' ? '重新生成包装视频' : '开始生成包装视频'}</Button>
             <Button size="large" icon={<ReloadOutlined />} disabled={!job?.id || status === 'running'} onClick={resetJob}>重置流程</Button>
-            {resultUrl && <><Button size="large" icon={<PlayCircleOutlined />} onClick={() => window.open(resultUrl, '_blank')}>重置流程</Button><Button size="large" icon={<CloudDownloadOutlined />} href={resultUrl} target="_blank">重置流程</Button></>}
+            {resultUrl && <><Button size="large" icon={<PlayCircleOutlined />} onClick={() => window.open(resultUrl, '_blank')}>预览成片</Button><Button size="large" icon={<CloudDownloadOutlined />} href={resultUrl} target="_blank">下载成片</Button></>}
           </div>
         </Card>
       </section>
