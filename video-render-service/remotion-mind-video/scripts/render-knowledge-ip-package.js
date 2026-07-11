@@ -54,7 +54,8 @@ await fs.mkdir(path.join(projectRoot, 'renders'), {recursive: true});
 await fs.mkdir(path.join(projectRoot, 'tmp/knowledge-ip-stills'), {recursive: true});
 
 if (mode === 'stills') {
-  const frames = [120, 900, 2100, 3900, Math.max(1, composition.durationInFrames - 90)];
+  const wantedFrames = [120, 900, 2100, 3900, Math.max(1, composition.durationInFrames - 90)];
+  const frames = [...new Set(wantedFrames.map((frame) => Math.max(0, Math.min(frame, composition.durationInFrames - 1))))];
   for (const frame of frames) {
     const output = path.join(projectRoot, 'tmp/knowledge-ip-stills', `frame-${frame}.png`);
     console.log(`[knowledge-ip] rendering still frame=${frame}`);

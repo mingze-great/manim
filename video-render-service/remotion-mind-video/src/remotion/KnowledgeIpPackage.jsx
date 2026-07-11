@@ -207,7 +207,7 @@ const TopTabs = ({active, segments, currentMs, topTabs}) => {
       }}>
         {tabs.map((tab) => {
           const isActive = currentMs >= tab.startMs && currentMs < tab.endMs;
-          const label = tab.label.length > 8 ? `${tab.label.slice(0, 8)}` : tab.label;
+          const label = String(tab.label || '').replace(/\s+/g, '').slice(0, 5);
           return (
           <div key={`${tab.label}-${tab.index}`} style={{
             display: 'grid',
@@ -215,7 +215,11 @@ const TopTabs = ({active, segments, currentMs, topTabs}) => {
             borderRight: '2px solid #111',
             background: isActive ? 'rgba(215,189,134,.30)' : 'transparent',
             letterSpacing: 0,
-            fontFamily: heitiFont
+            fontFamily: heitiFont,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'clip',
+            padding: '0 8px'
           }}>{label}</div>
           );
         })}
@@ -353,17 +357,20 @@ const MaterialScene = ({active, localFrame, materialTrackSrc}) => {
             </div>
           </div>
         );
-      case 'phone':
+      case 'phone': {
+        const titleLines = splitTwoLines(active.title || active.zh, 12).slice(0, 2);
+        const bodyLines = splitTwoLines(active.zh, 15).slice(0, 2);
         return (
           <div style={{...common, background: 'linear-gradient(180deg, #dfe9ef, #f4efe3)'}}>
             <div style={{position: 'absolute', left: 315, top: 44, width: 450, height: 420, borderRadius: 44, background: '#101418', border: '12px solid #1e2022', boxShadow: '0 36px 70px rgba(0,0,0,.32)', transform: `translateY(${(1 - enter) * 80}px) scale(${0.92 + enter * 0.08})`}}>
-              <div style={{position: 'absolute', left: 26, right: 26, top: 34, color: '#fff', fontSize: 31, fontWeight: 900}}>知乎 · 热门回答</div>
-              <div style={{position: 'absolute', left: 28, right: 28, top: 100, height: 78, borderRadius: 18, background: '#fff', color: '#111', fontSize: 25, padding: 18, fontWeight: 800}}>前几天我刷知乎时，偶然看到一篇文章</div>
-              <div style={{position: 'absolute', left: 28, right: 28, top: 202, height: 112, borderRadius: 20, background: '#fff4cf', color: '#111', fontSize: 26, lineHeight: 1.25, padding: 18, fontWeight: 900}}>这篇文章系统讲解了分析问题</div>
+              <div style={{position: 'absolute', left: 26, right: 26, top: 34, color: '#fff', fontSize: 31, fontWeight: 900}}>内容要点</div>
+              <div style={{position: 'absolute', left: 28, right: 28, top: 100, minHeight: 78, borderRadius: 18, background: '#fff', color: '#111', fontSize: 25, padding: 18, fontWeight: 900, lineHeight: 1.18}}>{titleLines.map((line) => <div key={line}>{line}</div>)}</div>
+              <div style={{position: 'absolute', left: 28, right: 28, top: 214, minHeight: 112, borderRadius: 20, background: '#fff4cf', color: '#111', fontSize: 26, lineHeight: 1.25, padding: 18, fontWeight: 900}}>{bodyLines.map((line) => <div key={line}>{line}</div>)}</div>
               <div style={{position: 'absolute', left: 120, right: 120, bottom: 28, height: 9, borderRadius: 99, background: '#fff'}} />
             </div>
           </div>
         );
+      }
       case 'cards':
         return (
           <div style={{...common, background: 'linear-gradient(180deg, #f8f4e7, #e5decf)'}}>
@@ -427,8 +434,8 @@ const SubtitleBand = ({caption}) => {
   const zh = String(caption?.zh || caption?.text || '').replace(/\s+/g, '').trim();
   const en = caption?.en || '';
   if (!zh) return null;
-  const charCount = zh.length;
-  const fontSize = charCount > 24 ? 52 : 60;
+  const lines = splitTwoLines(zh, 14).slice(0, 2);
+  const fontSize = zh.length > 24 ? 50 : 60;
   return (
   <div style={{
     position: 'absolute',
@@ -454,8 +461,8 @@ const SubtitleBand = ({caption}) => {
       maxWidth: 960,
       wordBreak: 'keep-all',
       overflowWrap: 'normal'
-    }}>{zh}</div>
-    {en ? <div style={{fontSize: 30, lineHeight: 1.18, fontWeight: 850, marginTop: 12, color: '#222'}}>{en}</div> : null}
+    }}>{lines.map((line) => <div key={line}>{line}</div>)}</div>
+    {en ? <div style={{fontSize: 28, lineHeight: 1.15, fontWeight: 850, marginTop: 12, color: '#222'}}>{splitTwoLines(en, 42).slice(0, 2).map((line) => <div key={line}>{line}</div>)}</div> : null}
   </div>
   );
 };

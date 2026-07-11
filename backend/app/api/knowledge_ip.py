@@ -34,6 +34,12 @@ PUBLIC_INPUT_ROOT = RENDER_ROOT / "public" / "workflow-inputs"
 PUBLIC_ASSET_ROOT = RENDER_ROOT / "public" / "workflow-assets"
 RENDER_OUTPUT_ROOT = RENDER_ROOT / "renders"
 
+VIDEO_SYNTHESIS_URL = os.getenv("DASHSCOPE_VIDEO_BASE_URL", "https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis").strip()
+VIDEO_TASK_URL = os.getenv("DASHSCOPE_VIDEO_TASK_URL", "https://dashscope.aliyuncs.com/api/v1/tasks/{task_id}").strip()
+VIDEO_MATERIAL_MODEL = os.getenv("KNOWLEDGE_IP_VIDEO_MODEL", "wan2.7-t2v-2026-06-12").strip()
+VIDEO_MATERIAL_FALLBACK_MODELS = [m.strip() for m in os.getenv("KNOWLEDGE_IP_VIDEO_FALLBACK_MODELS", "happyhorse-1.1-t2v,wan2.7-t2v-2026-04-25").split(",") if m.strip()]
+ENABLE_VIDEO_MATERIALS = os.getenv("KNOWLEDGE_IP_ENABLE_VIDEO_MATERIALS", "1").lower() not in {"0", "false", "no"}
+
 STAGE_PROGRESS = {
     "uploaded": 0,
     "extract_audio": 12,
@@ -290,6 +296,93 @@ def _normalize_text(value: Any) -> str:
     return re.sub(r"\s+", "", str(value or "")).strip()
 
 
+def _strip_for_label(value: Any, max_chars: int = 5) -> str:
+    text = re.sub(r"[AIaiＡＩ]+", "", str(value or ""))
+    text = re.sub(r"[^0-9A-Za-z\u4e00-\u9fff]+", "", text).strip()
+    return (text[:max_chars] or "重点")
+
+
+def _format_caption_text(words: list[dict[str, Any]]) -> str:
+    parts = []
+    for word in words:
+        token = str(word.get("text") or "")
+        punct = str(word.get("punctuation") or "")
+        if token:
+            parts.append(token + punct)
+    return _normalize_text("".join(parts))
+
+
+def _split_sentence_item(item: dict[str, Any], *, max_chars: int = 22, max_ms: int = 2800) -> list[dict[str, Any]]:
+    words = item.get("words") or []
+    if not isinstance(words, list) or not words:
+        text = _normalize_text(item.get("text") or item.get("sentence") or item.get("content"))
+        begin = item.get("begin_time", item.get("start_time", item.get("start")))
+        end = item.get("end_time", item.get("end"))
+        try:
+            start_ms = int(float(begin)); end_ms = int(float(end))
+        except Exception:
+            return []
+        if not text or end_ms <= start_ms:
+            return []
+        # Fallback: if the ASR provider has no word timing, split only on punctuation and distribute time proportionally.
+        pieces = [p for p in re.split(r"(?<=[，。！？；,.!?;])", text) if p]
+        if len(pieces) <= 1:
+            return [{"startMs": start_ms, "endMs": end_ms, "zh": text, "text": text, "en": ""}]
+        total = sum(len(p) for p in pieces) or len(text)
+        cursor = start_ms
+        out = []
+        for index, piece in enumerate(pieces):
+            dur = int((end_ms - start_ms) * len(piece) / total)
+            next_end = end_ms if index == len(pieces) - 1 else max(cursor + 600, cursor + dur)
+            clean = _normalize_text(piece)
+            if clean:
+                out.append({"startMs": cursor, "endMs": next_end, "zh": clean, "text": clean, "en": ""})
+            cursor = next_end
+        return out
+
+    chunks: list[dict[str, Any]] = []
+    current: list[dict[str, Any]] = []
+    hard_punct = set("。！？!?；;")
+    soft_punct = set("，,.、")
+
+    def flush() -> None:
+        nonlocal current
+        if not current:
+            return
+        text = _format_caption_text(current)
+        try:
+            start_ms = int(float(current[0].get("begin_time", current[0].get("start_time", 0))))
+            end_ms = int(float(current[-1].get("end_time", current[-1].get("end", start_ms))))
+        except Exception:
+            current = []
+            return
+        if text and end_ms > start_ms:
+            chunks.append({"startMs": start_ms, "endMs": end_ms, "zh": text, "text": text, "en": ""})
+        current = []
+
+    for word in words:
+        if not str(word.get("text") or "").strip():
+            continue
+        current.append(word)
+        text = _format_caption_text(current)
+        punct = str(word.get("punctuation") or "")
+        try:
+            duration = int(float(word.get("end_time", 0))) - int(float(current[0].get("begin_time", 0)))
+        except Exception:
+            duration = 0
+        should_flush = False
+        if punct and any(ch in hard_punct for ch in punct) and len(text) >= 6:
+            should_flush = True
+        elif punct and any(ch in soft_punct for ch in punct) and (len(text) >= 10 or duration >= 1400):
+            should_flush = True
+        elif len(text) >= max_chars or duration >= max_ms:
+            should_flush = True
+        if should_flush:
+            flush()
+    flush()
+    return chunks
+
+
 def _captions_from_transcript(transcript: dict[str, Any]) -> list[dict[str, Any]]:
     sentences = []
     if isinstance(transcript.get("transcripts"), list) and transcript["transcripts"]:
@@ -298,18 +391,11 @@ def _captions_from_transcript(transcript: dict[str, Any]) -> list[dict[str, Any]
         sentences = transcript.get("sentences") or []
     captions: list[dict[str, Any]] = []
     for item in sentences:
-        text = _normalize_text(item.get("text") or item.get("sentence") or item.get("content"))
-        begin = item.get("begin_time", item.get("start_time", item.get("start")))
-        end = item.get("end_time", item.get("end_time", item.get("end")))
-        try:
-            start_ms = int(float(begin))
-            end_ms = int(float(end))
-        except Exception:
-            continue
-        if text and end_ms > start_ms:
-            captions.append({"startMs": start_ms, "endMs": end_ms, "zh": text, "text": text, "en": ""})
+        captions.extend(_split_sentence_item(item))
+    captions = [cap for cap in captions if cap.get("zh") and cap.get("endMs", 0) > cap.get("startMs", 0)]
+    captions.sort(key=lambda item: item["startMs"])
     if not captions:
-        raise RuntimeError("未能根据字幕生成有效分段。未能根据字幕生成有效分段。知识分享")
+        raise RuntimeError("未能根据字幕生成有效分段。请上传有人声且声音清楚的视频。")
     return captions
 
 
@@ -346,40 +432,37 @@ def _segments_from_captions(captions: list[dict[str, Any]], duration_ms: int) ->
     segments: list[dict[str, Any]] = []
     group: list[dict[str, Any]] = []
     group_start = captions[0]["startMs"] if captions else 0
-    for cap in captions:
+
+    def emit() -> None:
+        nonlocal group, group_start
         if not group:
-            group_start = cap["startMs"]
-        group.append(cap)
-        current_len = cap["endMs"] - group_start
-        if current_len >= 6500 or len(group) >= 3:
-            zh = "".join(c["zh"] for c in group)
-            idx = len(segments)
-            segments.append({
-                "id": f"seg_{idx+1:02d}",
-                "startMs": group_start,
-                "endMs": group[-1]["endMs"],
-                "tab": _normalize_text(zh)[:6] or f"?{idx+1}?",
-                "title": _normalize_text(zh)[:14] or f"?{idx+1}?",
-                "zh": _normalize_text(zh),
-                "en": group[0].get("en", ""),
-                "kind": kinds[idx % len(kinds)],
-                "mainTitle": "知识分享",
-            })
-            group = []
-    if group:
-        zh = "".join(c["zh"] for c in group)
+            return
+        zh = _normalize_text("".join(c["zh"] for c in group))
         idx = len(segments)
+        title = _strip_for_label(zh, 10)
         segments.append({
             "id": f"seg_{idx+1:02d}",
             "startMs": group_start,
-            "endMs": max(group[-1]["endMs"], duration_ms),
-            "tab": _normalize_text(zh)[:6] or f"?{idx+1}?",
-            "title": _normalize_text(zh)[:14] or f"?{idx+1}?",
-            "zh": _normalize_text(zh),
+            "endMs": group[-1]["endMs"],
+            "tab": _strip_for_label(zh, 5),
+            "title": title,
+            "zh": zh,
             "en": group[0].get("en", ""),
             "kind": kinds[idx % len(kinds)],
             "mainTitle": "知识分享",
         })
+        group = []
+
+    for cap in captions:
+        if not group:
+            group_start = cap["startMs"]
+        proposed_text = _normalize_text("".join(c["zh"] for c in group + [cap]))
+        proposed_ms = cap["endMs"] - group_start
+        if group and (proposed_ms > 4600 or len(group) >= 2 or len(proposed_text) > 34):
+            emit()
+            group_start = cap["startMs"]
+        group.append(cap)
+    emit()
     if segments:
         segments[0]["startMs"] = 0
         segments[-1]["endMs"] = max(segments[-1]["endMs"], duration_ms)
@@ -396,10 +479,166 @@ def _top_tabs(segments: list[dict[str, Any]]) -> list[dict[str, Any]]:
         group = segments[idx * size:(idx + 1) * size]
         if not group:
             continue
-        tabs.append({"label": group[0]["title"][:8], "startMs": group[0]["startMs"], "endMs": group[-1]["endMs"]})
+        joined = "".join(item.get("zh") or item.get("title") or "" for item in group)
+        tabs.append({"label": _strip_for_label(joined, 5), "startMs": group[0]["startMs"], "endMs": group[-1]["endMs"]})
     while len(tabs) < 4 and tabs:
-        tabs.append(tabs[-1] | {"label": f"?{len(tabs)+1}?"})
+        tabs.append(tabs[-1] | {"label": f"第{len(tabs)+1}节"})
     return tabs[:4]
+
+
+def _find_url(value: Any) -> str | None:
+    if isinstance(value, dict):
+        for key in ("video_url", "url", "file_url", "download_url"):
+            candidate = value.get(key)
+            if isinstance(candidate, str) and candidate.startswith("http"):
+                return candidate
+        for child in value.values():
+            found = _find_url(child)
+            if found:
+                return found
+    elif isinstance(value, list):
+        for child in value:
+            found = _find_url(child)
+            if found:
+                return found
+    return None
+
+
+def _video_task_endpoint(task_id: str) -> str:
+    if "{task_id}" in VIDEO_TASK_URL:
+        return VIDEO_TASK_URL.format(task_id=task_id)
+    if "/api/v1/" in VIDEO_SYNTHESIS_URL:
+        return VIDEO_SYNTHESIS_URL.split("/api/v1/", 1)[0].rstrip("/") + f"/api/v1/tasks/{task_id}"
+    return VIDEO_TASK_URL.rstrip("/") + f"/{task_id}"
+
+
+def _build_material_groups(segments: list[dict[str, Any]], max_ms: int = 12000, max_items: int = 3) -> list[list[dict[str, Any]]]:
+    groups: list[list[dict[str, Any]]] = []
+    current: list[dict[str, Any]] = []
+    for segment in segments:
+        if not current:
+            current = [segment]
+            continue
+        span = int(segment.get("endMs", 0)) - int(current[0].get("startMs", 0))
+        if len(current) >= max_items or span > max_ms:
+            groups.append(current)
+            current = [segment]
+        else:
+            current.append(segment)
+    if current:
+        groups.append(current)
+    return groups
+
+
+def _material_prompt(group: list[dict[str, Any]]) -> str:
+    text = "；".join(_normalize_text(item.get("zh") or item.get("title")) for item in group)
+    text = text[:180]
+    return (
+        "9:16短视频上半区使用的电影感动态素材，横屏16:9构图，干净高级，知识类讲解配图，"
+        "不要出现文字、字幕、logo、水印，不要出现手机状态栏。"
+        f"内容主题：{text}。"
+        "画面需要有运动镜头、景深、光影变化，适合做知识IP视频素材。"
+    )
+
+
+def _submit_video_material(prompt: str, model: str, duration: int = 5) -> str:
+    api_key = settings.DASHSCOPE_API_KEY or os.getenv("DASHSCOPE_API_KEY")
+    if not api_key:
+        raise RuntimeError("未配置素材生成 API Key。")
+    payload = {
+        "model": model,
+        "input": {"prompt": prompt},
+        "parameters": {
+            "resolution": os.getenv("KNOWLEDGE_IP_VIDEO_RESOLUTION", "1080P"),
+            "ratio": "16:9",
+            "prompt_extend": True,
+            "watermark": False,
+            "duration": duration,
+        },
+    }
+    resp = requests.post(
+        VIDEO_SYNTHESIS_URL,
+        headers={"X-DashScope-Async": "enable", "Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        json=payload,
+        timeout=120,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    task_id = (data.get("output") or {}).get("task_id") or data.get("task_id")
+    if not task_id:
+        raise RuntimeError(f"素材视频任务提交失败：{json.dumps(data, ensure_ascii=False)[:500]}")
+    return task_id
+
+
+def _wait_video_material(task_id: str, timeout_seconds: int = 1800) -> str:
+    api_key = settings.DASHSCOPE_API_KEY or os.getenv("DASHSCOPE_API_KEY")
+    deadline = time.time() + timeout_seconds
+    endpoint = _video_task_endpoint(task_id)
+    last_payload: Any = None
+    while time.time() < deadline:
+        resp = requests.get(endpoint, headers={"Authorization": f"Bearer {api_key}"}, timeout=60)
+        resp.raise_for_status()
+        data = resp.json()
+        last_payload = data
+        status = str((data.get("output") or {}).get("task_status") or data.get("task_status") or "").upper()
+        if status in {"SUCCEEDED", "SUCCESS", "COMPLETED"}:
+            url = _find_url(data)
+            if not url:
+                raise RuntimeError(f"素材视频生成成功但没有返回下载地址：{json.dumps(data, ensure_ascii=False)[:500]}")
+            return url
+        if status in {"FAILED", "CANCELED", "UNKNOWN"}:
+            raise RuntimeError(f"素材视频生成失败：{json.dumps(data, ensure_ascii=False)[:500]}")
+        time.sleep(8)
+    raise TimeoutError(f"素材视频生成超时：{json.dumps(last_payload, ensure_ascii=False)[:500]}")
+
+
+def _download_material(url: str, output: Path) -> None:
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with requests.get(url, stream=True, timeout=300) as resp:
+        resp.raise_for_status()
+        with output.open("wb") as fh:
+            for chunk in resp.iter_content(chunk_size=1024 * 1024):
+                if chunk:
+                    fh.write(chunk)
+    if output.stat().st_size < 1024:
+        raise RuntimeError("素材视频下载异常。")
+
+
+def _generate_material_videos(job_id: str, segments: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if not ENABLE_VIDEO_MATERIALS:
+        return segments
+    groups = _build_material_groups(segments)
+    models = [VIDEO_MATERIAL_MODEL, *VIDEO_MATERIAL_FALLBACK_MODELS]
+    out_dir = PUBLIC_ASSET_ROOT / job_id / "materials"
+    for index, group in enumerate(groups, start=1):
+        _set_stage(job_id, "materials", message=f"正在生成素材视频：{index}/{len(groups)}")
+        prompt = _material_prompt(group)
+        last_error: Exception | None = None
+        output = out_dir / f"material_{index:02d}.mp4"
+        if output.exists() and output.stat().st_size > 1024:
+            rel = f"workflow-assets/{job_id}/materials/{output.name}"
+            for segment in group:
+                segment["materialSrc"] = rel
+            continue
+        for model in models:
+            try:
+                task_id = _submit_video_material(prompt, model)
+                video_url = _wait_video_material(task_id)
+                _download_material(video_url, output)
+                rel = f"workflow-assets/{job_id}/materials/{output.name}"
+                for segment in group:
+                    segment["materialSrc"] = rel
+                    segment["materialPrompt"] = prompt
+                last_error = None
+                break
+            except Exception as exc:
+                last_error = exc
+        if last_error:
+            message = str(last_error)
+            if "AllocationQuota.FreeTierOnly" in message or "free quota" in message.lower():
+                raise RuntimeError("素材视频模型额度不可用：请在阿里控制台关闭“免费额度用完即停”或开通付费后再生成。")
+            raise RuntimeError(f"素材视频生成失败：{last_error}")
+    return segments
 
 
 def _write_props(job_id: str, duration_ms: int, captions: list[dict[str, Any]], segments: list[dict[str, Any]]) -> Path:
@@ -464,7 +703,8 @@ def _run_job(job_id: str) -> None:
         if not segments:
             raise RuntimeError("未能根据字幕生成有效分段。")
 
-        _set_stage(job_id, "materials", message="正在生成动态包装素材。当前版本使用实时动态图形包装，后续接入 AI 小视频素材。")
+        _set_stage(job_id, "materials", message="正在生成动态素材视频。")
+        segments = _generate_material_videos(job_id, segments)
         _write_props(job_id, duration_ms, captions, segments)
 
         _set_stage(job_id, "render")
