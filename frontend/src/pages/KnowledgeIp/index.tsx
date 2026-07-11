@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from 'react'
+
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Button, Card, Progress, Space, Steps, Tag, Upload, message } from 'antd'
 import type { UploadFile, UploadProps } from 'antd'
 import {
@@ -11,67 +12,133 @@ import {
   UploadOutlined,
   VideoCameraOutlined,
 } from '@ant-design/icons'
+import api, { resolveBackendUrl } from '@/services/api'
 import './KnowledgeIp.css'
 
-const finalVideoUrl = '/renders/knowledge-ip-final-full-bilingual-sync.mp4'
 const previewVideoUrl = '/renders/knowledge-ip-preview-bilingual-sync.mp4'
+const sampleVideoUrl = '/renders/knowledge-ip-final-full-bilingual-sync.mp4'
 
-type JobStatus = 'idle' | 'ready' | 'running' | 'success' | 'error'
+type JobStatus = 'idle' | 'uploading' | 'uploaded' | 'running' | 'completed' | 'failed'
+
+type KnowledgeJob = {
+  id: string
+  status: JobStatus
+  stage: string
+  progress: number
+  message: string
+  filename?: string
+  size?: number
+  result_url?: string
+  duration_ms?: number
+  caption_count?: number
+  segment_count?: number
+  error?: string
+}
 
 const introStages = [
-  { title: '上传真人讲解', desc: '课程录播、培训视频、演讲、直播回放都可以作为输入。' },
-  { title: '识别讲解内容', desc: '提取逐句字幕、重点观点、章节结构和关键案例。' },
-  { title: '生成动态素材', desc: '根据语义段生成对应小视频素材，不再重复套模板。' },
-  { title: '合成发布成片', desc: '真人画面、素材、双语字幕和进度条统一包装输出。' },
+  { title: '生成动态包装', desc: '根据本次字幕分段生成章节、双语字幕和动态图形包装。' },
+  { title: '识别讲解内容', desc: '开始生成后提取音频，调用 Paraformer 识别字幕和时间轴。' },
+  { title: '生成动态包装', desc: '根据本次字幕分段生成章节、双语字幕和动态图形包装。' },
+  { title: '合成发布成片', desc: '使用本次上传的视频渲染输出，不复用固定样片。' },
 ]
 
 const generateStages = [
-  { title: '提取音频', desc: '正在从真人视频中提取清晰人声。', percent: 12 },
-  { title: '识别字幕', desc: '正在生成逐句时间轴，中英文字幕会在这里对齐。', percent: 30 },
-  { title: '分析内容结构', desc: '正在总结章节进度条和每段内容重点。', percent: 48 },
-  { title: '生成动态素材', desc: '正在为语义段匹配对应小视频素材。', percent: 68 },
-  { title: '渲染成片', desc: '正在合成人像、素材、字幕和进度条。', percent: 88 },
-  { title: '保存成片', desc: '正在保存视频并生成预览/下载链接。', percent: 96 },
-  { title: '完成', desc: '包装视频已生成，可以预览或下载。', percent: 100 },
+  { key: 'extract_audio', title: '提取音频' },
+  { key: 'asr', title: '识别字幕' },
+  { key: 'analyze', title: '分析结构' },
+  { key: 'materials', title: '生成素材' },
+  { key: 'render', title: '渲染成片' },
+  { key: 'save', title: '保存成片' },
+  { key: 'completed', title: '完成' },
 ]
 
 const formatFileSize = (size?: number) => {
-  if (!size) return '未知大小'
+  if (!size) return '等待上传'
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
   return `${(size / 1024 / 1024).toFixed(2)} MB`
+}
+
+const statusLabel = (status: JobStatus) => {
+  if (status === 'uploading') return '上传中'
+  if (status === 'uploaded') return '已上传'
+  if (status === 'running') return '生成中'
+  if (status === 'completed') return '已完成'
+  if (status === 'failed') return '等待上传'
+  return '等待上传'
 }
 
 export default function KnowledgeIp() {
   const [fileList, setFileList] = useState<UploadFile[]>([])
   const [fileUrl, setFileUrl] = useState('')
-  const [jobStatus, setJobStatus] = useState<JobStatus>('idle')
-  const [progress, setProgress] = useState(0)
-  const [currentStage, setCurrentStage] = useState(0)
-  const [errorText, setErrorText] = useState('')
-  const timersRef = useRef<number[]>([])
+  const [job, setJob] = useState<KnowledgeJob | null>(null)
+  const [status, setStatus] = useState<JobStatus>('idle')
+  const pollRef = useRef<number | null>(null)
 
   const currentFile = fileList[0]
-  const canGenerate = Boolean(currentFile) && jobStatus !== 'running'
-  const showResult = jobStatus === 'success'
+  const progress = job?.progress || 0
+  const resultUrl = job?.result_url ? resolveBackendUrl(job.result_url) : ''
+  const canStart = Boolean(job?.id) && status !== 'uploading' && status !== 'running' && status !== 'completed'
 
-  const currentStageText = useMemo(() => {
-    if (jobStatus === 'idle') return '请先上传真人讲解视频'
-    if (jobStatus === 'ready') return '视频已上传，点击开始生成包装视频'
-    if (jobStatus === 'error') return errorText || '生成失败，请检查视频后重试'
-    return generateStages[currentStage]?.desc || '正在处理视频'
-  }, [jobStatus, currentStage, errorText])
+  const currentStageIndex = useMemo(() => {
+    const index = generateStages.findIndex(stage => stage.key === job?.stage)
+    return index >= 0 ? index : 0
+  }, [job?.stage])
 
-  const clearTimers = () => {
-    timersRef.current.forEach(id => window.clearTimeout(id))
-    timersRef.current = []
+  const stopPolling = () => {
+    if (pollRef.current) window.clearInterval(pollRef.current)
+    pollRef.current = null
   }
 
-  const resetJob = () => {
-    clearTimers()
-    setJobStatus(currentFile ? 'ready' : 'idle')
-    setProgress(0)
-    setCurrentStage(0)
-    setErrorText('')
+  useEffect(() => () => {
+    stopPolling()
+    if (fileUrl) URL.revokeObjectURL(fileUrl)
+  }, [fileUrl])
+
+  const pollJob = (jobId: string) => {
+    stopPolling()
+    const fetchJob = async () => {
+      try {
+        const { data } = await api.get<KnowledgeJob>(`/knowledge-ip/jobs/${jobId}`)
+        setJob(data)
+        setStatus(data.status)
+        if (data.status === 'completed') {
+          stopPolling()
+          message.success('包装视频已生成，可以预览或下载。')
+          window.setTimeout(() => document.getElementById('knowledge-ip-result')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150)
+        }
+        if (data.status === 'failed') {
+          stopPolling()
+          message.error(data.message || data.error || '生成失败')
+        }
+      } catch (error: any) {
+        stopPolling()
+        setStatus('failed')
+        setJob(prev => prev ? { ...prev, status: 'failed', message: error?.response?.data?.detail || '获取任务进度失败' } : prev)
+      }
+    }
+    fetchJob()
+    pollRef.current = window.setInterval(fetchJob, 2500)
+  }
+
+  const uploadToServer = async (file: File) => {
+    stopPolling()
+    setStatus('uploading')
+    setJob(null)
+    const form = new FormData()
+    form.append('file', file)
+    try {
+      const { data } = await api.post<KnowledgeJob>('/knowledge-ip/uploads', form, {
+        timeout: 10 * 60 * 1000,
+      })
+      setJob(data)
+      setStatus(data.status)
+      message.success('视频已上传到服务器，可以开始生成包装视频。')
+    } catch (error: any) {
+      setStatus('failed')
+      const detail = error?.response?.data?.detail || '上传失败，请检查视频格式或网络后重试。'
+      setJob({ id: '', status: 'failed', stage: 'uploaded', progress: 0, message: detail })
+      message.error(detail)
+    }
   }
 
   const uploadProps: UploadProps = {
@@ -83,10 +150,7 @@ export default function KnowledgeIp() {
         message.error('请上传视频文件，支持 mp4 / mov / webm 等格式。')
         return Upload.LIST_IGNORE
       }
-      if (file.size > 1024 * 1024 * 1024) {
-        message.warning('视频较大，真实生成时耗时会明显增加。')
-      }
-      clearTimers()
+      stopPolling()
       if (fileUrl) URL.revokeObjectURL(fileUrl)
       const nextFile: UploadFile = {
         uid: file.uid,
@@ -98,66 +162,43 @@ export default function KnowledgeIp() {
       }
       setFileList([nextFile])
       setFileUrl(URL.createObjectURL(file))
-      setJobStatus('ready')
-      setProgress(0)
-      setCurrentStage(0)
-      setErrorText('')
-      message.success('视频上传完成，可以开始生成包装视频。')
+      uploadToServer(file)
       return false
     },
     onRemove: () => {
-      clearTimers()
+      stopPolling()
       if (fileUrl) URL.revokeObjectURL(fileUrl)
       setFileList([])
       setFileUrl('')
-      setJobStatus('idle')
-      setProgress(0)
-      setCurrentStage(0)
-      setErrorText('')
+      setJob(null)
+      setStatus('idle')
       return true
     },
   }
 
-  const startGenerate = () => {
-    if (!currentFile) {
+  const startGenerate = async () => {
+    if (!job?.id) {
       message.warning('请先上传真人讲解视频')
       return
     }
-
-    clearTimers()
-    setJobStatus('running')
-    setErrorText('')
-    setCurrentStage(0)
-    setProgress(5)
-    message.info('已开始生成。上传已完成，当前进入视频包装流程。')
-
-    generateStages.forEach((stage, index) => {
-      const delay = 700 + index * 950
-      const timerId = window.setTimeout(() => {
-        setCurrentStage(index)
-        setProgress(stage.percent)
-        if (index === generateStages.length - 1) {
-          setJobStatus('success')
-          message.success('包装视频已生成，可以预览或下载。')
-          window.setTimeout(() => {
-            document.getElementById('knowledge-ip-result')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-          }, 150)
-        }
-      }, delay)
-      timersRef.current.push(timerId)
-    })
+    try {
+      setStatus('running')
+      const { data } = await api.post<KnowledgeJob>(`/knowledge-ip/jobs/${job.id}/start`, {}, { timeout: 60000 })
+      setJob(data)
+      pollJob(job.id)
+      message.info('已开始生成，当前进入视频包装流程。')
+    } catch (error: any) {
+      const detail = error?.response?.data?.detail || '请重新上传视频或稍后重试。'
+      setStatus('failed')
+      setJob(prev => prev ? { ...prev, status: 'failed', message: detail } : prev)
+      message.error(detail)
+    }
   }
 
-  const simulateError = () => {
-    if (!currentFile) {
-      message.warning('请先上传真人讲解视频')
-      return
-    }
-    clearTimers()
-    setJobStatus('error')
-    setProgress(Math.max(progress, 30))
-    setErrorText('字幕识别失败：没有检测到清晰人声。请换一个声音更清楚的视频后重试。')
-    message.error('生成失败，已给出处理建议。')
+  const resetJob = () => {
+    stopPolling()
+    setStatus(job?.id ? 'uploaded' : 'idle')
+    if (job?.id) setJob({ ...job, status: 'uploaded', stage: 'uploaded', progress: 0, message: '请重新上传视频或稍后重试。' })
   }
 
   return (
@@ -166,48 +207,27 @@ export default function KnowledgeIp() {
         <div>
           <Tag className="hero-tag">Knowledge IP Workflow</Tag>
           <h1>知识IP自动包装</h1>
-          <p>
-            上传真人讲解视频，自动完成内容识别、动态素材匹配、双语字幕、进度条和统一包装，输出可直接发布的竖屏成片。
-          </p>
+          <p>上传真人讲解视频，系统按本次视频识别字幕、分析结构、生成动态包装并渲染成片。不会复用固定样片。</p>
           <Space wrap>
             <Upload {...uploadProps}>
-              <Button type="primary" size="large" icon={<UploadOutlined />}>上传真人视频</Button>
+              <Button type="primary" size="large" icon={<UploadOutlined />} loading={status === 'uploading'}>查看本次成片</Button>
             </Upload>
-            <Button
-              size="large"
-              type="primary"
-              ghost
-              icon={<ThunderboltOutlined />}
-              disabled={!canGenerate}
-              loading={jobStatus === 'running'}
-              onClick={startGenerate}
-            >
-              开始生成包装视频
-            </Button>
-            <Button size="large" icon={<PlayCircleOutlined />} onClick={() => window.open(finalVideoUrl, '_blank')}>查看完整成片</Button>
+            <Button size="large" type="primary" ghost icon={<ThunderboltOutlined />} disabled={!canStart} loading={status === 'running'} onClick={startGenerate}>开始生成包装视频</Button>
+            {resultUrl && <Button size="large" icon={<PlayCircleOutlined />} onClick={() => window.open(resultUrl, '_blank')}>查看本次成片</Button>}
           </Space>
-          {currentFile && (
-            <div className="upload-note success">
-              <FileDoneOutlined /> 上传完成：{currentFile.name} · {formatFileSize(currentFile.size)}
-            </div>
+          {job?.filename && (
+            <div className="upload-note success"><FileDoneOutlined /> 上传完成：{job.filename} · {formatFileSize(job.size)}</div>
           )}
         </div>
         <div className="hero-panel">
           <video src={previewVideoUrl} controls poster="/renders/knowledge-ip-final-checks/full_4s.png" />
-          <div className="panel-caption">
-            <strong>3003 已打通样片</strong>
-            <span>真人音频 + 动态素材 + 中英文字幕 + 进度条</span>
-          </div>
+          <div className="panel-caption"><strong>案例预览</strong><span>只用于展示效果，生成结果以本次上传任务为准</span></div>
         </div>
       </section>
 
       <section className="workflow-grid">
         {introStages.map((stage, index) => (
-          <Card key={stage.title} className="workflow-step">
-            <span className="step-index">0{index + 1}</span>
-            <h3>{stage.title}</h3>
-            <p>{stage.desc}</p>
-          </Card>
+          <Card key={stage.title} className="workflow-step"><span className="step-index">0{index + 1}</span><h3>{stage.title}</h3><p>{stage.desc}</p></Card>
         ))}
       </section>
 
@@ -215,81 +235,35 @@ export default function KnowledgeIp() {
         <Card className="upload-card">
           <div className="upload-card-main">
             <div>
-              <Tag color={currentFile ? 'green' : 'default'}>{currentFile ? '上传完成' : '等待上传'}</Tag>
-              <h2>真人视频</h2>
-              <p>上传是独立动作，上传完成后再点击“开始生成包装视频”。生成进度不会把上传算进去。</p>
-              {currentFile && (
-                <div className="file-meta">
-                  <span>{currentFile.name}</span>
-                  <span>{formatFileSize(currentFile.size)}</span>
-                  <Button size="small" icon={<DeleteOutlined />} onClick={() => uploadProps.onRemove?.(currentFile)}>重新上传</Button>
-                </div>
-              )}
+              <Tag color={status === 'uploading' ? 'blue' : job?.id ? 'green' : 'default'}>{statusLabel(status)}</Tag>
+              <h2>生成流程</h2>
+              <p>点击上传后会直接保存到服务器。上传完成以后，再点击“开始生成包装视频”。</p>
+              {currentFile && <div className="file-meta"><span>{currentFile.name}</span><span>{formatFileSize(currentFile.size)}</span><Button size="small" icon={<DeleteOutlined />} onClick={() => uploadProps.onRemove?.(currentFile)}>重置流程</Button></div>}
             </div>
-            <Upload {...uploadProps}>
-              <Button icon={<UploadOutlined />}>{currentFile ? '更换视频' : '选择视频'}</Button>
-            </Upload>
+            <Upload {...uploadProps}><Button icon={<UploadOutlined />} loading={status === 'uploading'}>{currentFile ? '更换视频' : '选择视频'}</Button></Upload>
           </div>
           {fileUrl && <video className="local-preview" src={fileUrl} controls />}
         </Card>
       </section>
 
       <section className="generate-section">
-        <Card className={`generate-card status-${jobStatus}`}>
+        <Card className={`generate-card status-${status}`}>
           <div className="generate-header">
             <div>
-              <Tag color={jobStatus === 'error' ? 'red' : jobStatus === 'success' ? 'green' : currentFile ? 'blue' : 'default'}>
-                {jobStatus === 'running' ? '生成中' : jobStatus === 'success' ? '已完成' : jobStatus === 'error' ? '生成失败' : currentFile ? '待生成' : '等待上传'}
-              </Tag>
+              <Tag color={status === 'failed' ? 'red' : status === 'completed' ? 'green' : job?.id ? 'blue' : 'default'}>{statusLabel(status)}</Tag>
               <h2>生成流程</h2>
-              <p>{currentStageText}</p>
+              <p>{job?.message || '请先上传真人讲解视频'}</p>
             </div>
-            <Progress type="circle" percent={progress} size={86} status={jobStatus === 'error' ? 'exception' : jobStatus === 'success' ? 'success' : 'active'} />
+            <Progress type="circle" percent={progress} size={86} status={status === 'failed' ? 'exception' : status === 'completed' ? 'success' : 'active'} />
           </div>
-          <Progress percent={progress} status={jobStatus === 'error' ? 'exception' : jobStatus === 'success' ? 'success' : 'active'} />
-          <Steps
-            className="generate-steps"
-            current={currentStage}
-            status={jobStatus === 'error' ? 'error' : jobStatus === 'success' ? 'finish' : 'process'}
-            items={generateStages.map(stage => ({ title: stage.title, description: stage.desc }))}
-          />
-          {jobStatus === 'error' && (
-            <Alert
-              className="generate-alert"
-              type="error"
-              showIcon
-              message="生成遇到问题"
-              description={errorText || '请重新上传视频或稍后重试。'}
-            />
-          )}
-          {jobStatus === 'running' && (
-            <Alert
-              className="generate-alert"
-              type="info"
-              showIcon
-              message="正在生成中"
-              description="长视频会更慢，请不要重复点击。真实任务接入后，页面刷新也会恢复当前进度。"
-            />
-          )}
+          <Progress percent={progress} status={status === 'failed' ? 'exception' : status === 'completed' ? 'success' : 'active'} />
+          <Steps className="generate-steps" current={currentStageIndex} status={status === 'failed' ? 'error' : status === 'completed' ? 'finish' : 'process'} items={generateStages.map(stage => ({ title: stage.title }))} />
+          {status === 'failed' && <Alert className="generate-alert" type="error" showIcon message="生成遇到问题" description={job?.message || job?.error || '请重新上传视频或稍后重试。'} />}
+          {status === 'running' && <Alert className="generate-alert" type="info" showIcon message="正在生成中" description="长视频会更慢，请不要重复点击。页面会持续刷新当前任务阶段。" />}
           <div className="generate-actions">
-            <Button
-              type="primary"
-              size="large"
-              icon={<ThunderboltOutlined />}
-              disabled={!canGenerate}
-              loading={jobStatus === 'running'}
-              onClick={startGenerate}
-            >
-              {jobStatus === 'error' ? '重新生成包装视频' : '开始生成包装视频'}
-            </Button>
-            <Button size="large" icon={<ReloadOutlined />} disabled={!currentFile || jobStatus === 'running'} onClick={resetJob}>重置流程</Button>
-            <Button size="large" danger ghost disabled={!currentFile || jobStatus === 'running'} onClick={simulateError}>测试错误提示</Button>
-            {showResult && (
-              <>
-                <Button size="large" icon={<PlayCircleOutlined />} onClick={() => window.open(finalVideoUrl, '_blank')}>预览成片</Button>
-                <Button size="large" icon={<CloudDownloadOutlined />} href={finalVideoUrl} target="_blank">下载成片</Button>
-              </>
-            )}
+            <Button type="primary" size="large" icon={<ThunderboltOutlined />} disabled={!canStart} loading={status === 'running'} onClick={startGenerate}>{status === 'failed' ? '获取任务进度失败' : '获取任务进度失败'}</Button>
+            <Button size="large" icon={<ReloadOutlined />} disabled={!job?.id || status === 'running'} onClick={resetJob}>重置流程</Button>
+            {resultUrl && <><Button size="large" icon={<PlayCircleOutlined />} onClick={() => window.open(resultUrl, '_blank')}>重置流程</Button><Button size="large" icon={<CloudDownloadOutlined />} href={resultUrl} target="_blank">重置流程</Button></>}
           </div>
         </Card>
       </section>
@@ -298,15 +272,14 @@ export default function KnowledgeIp() {
         <Card className="result-card">
           <div className="result-heading">
             <div>
-              <Tag color="green">已验证</Tag>
-              <h2>完整成片验收</h2>
-              <p>172 秒完整视频，音视频流正常，67 条 ASR 中文字幕和 67 条英文字幕已对齐。</p>
+              <Tag color={resultUrl ? 'green' : 'default'}>{resultUrl ? '本次任务结果' : '等待生成'}</Tag>
+              <h2>{resultUrl ? '本次成片已生成' : '生成完成后这里会出现成片'}</h2>
+              <p>{resultUrl ? `已根据本次上传视频生成：${job?.caption_count || 0} 条字幕，${job?.segment_count || 0} 个内容分段。` : '示例视频只用于展示版式，真实下载入口只会在本次任务完成后出现。'}</p>
             </div>
-            <Progress type="circle" percent={100} size={86} />
+            <Progress type="circle" percent={resultUrl ? 100 : progress} size={86} />
           </div>
           <div className="result-actions">
-            <Button type="primary" icon={<VideoCameraOutlined />} onClick={() => window.open(finalVideoUrl, '_blank')}>播放完整成片</Button>
-            <Button icon={<CloudDownloadOutlined />} href={finalVideoUrl} target="_blank">下载/打开视频</Button>
+            {resultUrl ? <><Button type="primary" icon={<VideoCameraOutlined />} onClick={() => window.open(resultUrl, '_blank')}>查看本次成片</Button><Button icon={<CloudDownloadOutlined />} href={resultUrl} target="_blank">查看本次成片</Button></> : <Button icon={<PlayCircleOutlined />} onClick={() => window.open(sampleVideoUrl, '_blank')}>查看本次成片</Button>}
           </div>
         </Card>
       </section>

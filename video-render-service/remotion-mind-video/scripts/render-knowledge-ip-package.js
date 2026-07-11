@@ -19,7 +19,7 @@ const propsPath = propsArg
   : path.join(projectRoot, `public/workflow-assets/${jobId}/remotion_props.json`);
 const inputProps = JSON.parse(await fs.readFile(propsPath, 'utf8'));
 inputProps.sourceVideo = inputProps.sourceVideo || `workflow-inputs/${jobId}.mp4`;
-inputProps.materialTrackSrc = inputProps.materialTrackSrc || `workflow-assets/${jobId}/material_track.mp4`;
+if (inputProps.materialTrackSrc === undefined) inputProps.materialTrackSrc = null;
 inputProps.durationMs = inputProps.durationMs || 172352;
 if (previewSeconds > 0) inputProps.durationMs = previewSeconds * 1000;
 
