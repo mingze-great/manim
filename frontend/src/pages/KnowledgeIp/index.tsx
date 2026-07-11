@@ -318,8 +318,13 @@ export default function KnowledgeIp() {
             </div>
             <Progress type="circle" percent={resultUrl ? 100 : progress} size={86} />
           </div>
+          {resultUrl && (
+            <div className="result-preview">
+              <video key={resultUrl} src={resultUrl} controls playsInline preload="metadata" />
+            </div>
+          )}
           <div className="result-actions">
-            {resultUrl ? <><Button type="primary" icon={<VideoCameraOutlined />} onClick={() => window.open(resultUrl, '_blank')}>播放本次成片</Button><Button icon={<CloudDownloadOutlined />} href={resultUrl} target="_blank">下载本次视频</Button></> : <Button icon={<PlayCircleOutlined />} onClick={() => window.open(sampleVideoUrl, '_blank')}>查看效果案例</Button>}
+            {resultUrl ? <><Button type="primary" icon={<VideoCameraOutlined />} onClick={() => document.querySelector<HTMLVideoElement>('.result-preview video')?.play()}>播放预览</Button><Button icon={<PlayCircleOutlined />} onClick={() => window.open(resultUrl, '_blank')}>新窗口打开</Button><Button icon={<CloudDownloadOutlined />} href={resultUrl} target="_blank">下载本次视频</Button></> : <Button icon={<PlayCircleOutlined />} onClick={() => window.open(sampleVideoUrl, '_blank')}>查看效果案例</Button>}
           </div>
         </Card>
       </section>

@@ -229,6 +229,26 @@
   margin-top: 26px;
 }
 
+.result-preview {
+  display: flex;
+  justify-content: center;
+  margin-top: 24px;
+  padding: 18px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #0f172a, #020617);
+  border: 1px solid rgba(15, 23, 42, .1);
+}
+
+.result-preview video {
+  width: min(360px, 100%);
+  aspect-ratio: 9 / 16;
+  max-height: 72vh;
+  border-radius: 16px;
+  background: #000;
+  object-fit: contain;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .3);
+}
+
 .result-heading {
   align-items: center;
 }
