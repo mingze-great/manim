@@ -562,7 +562,11 @@ def _submit_video_material(prompt: str, model: str, duration: int = 5) -> str:
         json=payload,
         timeout=120,
     )
-    resp.raise_for_status()
+    if resp.status_code >= 400:
+        body = resp.text[:1000]
+        if "AllocationQuota.FreeTierOnly" in body or "free quota" in body.lower() or "????" in body:
+            raise RuntimeError("?????????????????????????????????????????")
+        raise RuntimeError(f"???????? {resp.status_code}?{body}")
     data = resp.json()
     task_id = (data.get("output") or {}).get("task_id") or data.get("task_id")
     if not task_id:
@@ -577,7 +581,11 @@ def _wait_video_material(task_id: str, timeout_seconds: int = 1800) -> str:
     last_payload: Any = None
     while time.time() < deadline:
         resp = requests.get(endpoint, headers={"Authorization": f"Bearer {api_key}"}, timeout=60)
-        resp.raise_for_status()
+        if resp.status_code >= 400:
+            body = resp.text[:1000]
+            if "AllocationQuota.FreeTierOnly" in body or "free quota" in body.lower() or "????" in body:
+                raise RuntimeError("?????????????????????????????????????????")
+            raise RuntimeError(f"?????????? {resp.status_code}?{body}")
         data = resp.json()
         last_payload = data
         status = str((data.get("output") or {}).get("task_status") or data.get("task_status") or "").upper()
