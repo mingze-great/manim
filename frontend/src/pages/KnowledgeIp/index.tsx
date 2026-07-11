@@ -210,7 +210,7 @@ export default function KnowledgeIp() {
           <p>上传真人讲解视频，系统按本次视频识别字幕、分析结构、生成动态包装并渲染成片。不会复用固定样片。</p>
           <Space wrap>
             <Upload {...uploadProps}>
-              <Button type="primary" size="large" icon={<UploadOutlined />} loading={status === 'uploading'}>查看本次成片</Button>
+              <Button type="primary" size="large" icon={<UploadOutlined />} loading={status === 'uploading'}>上传真人视频</Button>
             </Upload>
             <Button size="large" type="primary" ghost icon={<ThunderboltOutlined />} disabled={!canStart} loading={status === 'running'} onClick={startGenerate}>开始生成包装视频</Button>
             {resultUrl && <Button size="large" icon={<PlayCircleOutlined />} onClick={() => window.open(resultUrl, '_blank')}>查看本次成片</Button>}
@@ -279,7 +279,7 @@ export default function KnowledgeIp() {
             <Progress type="circle" percent={resultUrl ? 100 : progress} size={86} />
           </div>
           <div className="result-actions">
-            {resultUrl ? <><Button type="primary" icon={<VideoCameraOutlined />} onClick={() => window.open(resultUrl, '_blank')}>查看本次成片</Button><Button icon={<CloudDownloadOutlined />} href={resultUrl} target="_blank">查看本次成片</Button></> : <Button icon={<PlayCircleOutlined />} onClick={() => window.open(sampleVideoUrl, '_blank')}>查看本次成片</Button>}
+            {resultUrl ? <><Button type="primary" icon={<VideoCameraOutlined />} onClick={() => window.open(resultUrl, '_blank')}>播放本次成片</Button><Button icon={<CloudDownloadOutlined />} href={resultUrl} target="_blank">下载本次视频</Button></> : <Button icon={<PlayCircleOutlined />} onClick={() => window.open(sampleVideoUrl, '_blank')}>查看效果案例</Button>}
           </div>
         </Card>
       </section>
