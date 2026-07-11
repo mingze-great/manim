@@ -15,8 +15,9 @@ import {
 import api, { resolveBackendUrl } from '@/services/api'
 import './KnowledgeIp.css'
 
-const previewVideoUrl = '/renders/knowledge-ip-preview-bilingual-sync.mp4'
-const sampleVideoUrl = '/renders/knowledge-ip-final-full-bilingual-sync.mp4'
+const version = `v=${Date.now()}`
+const previewVideoUrl = `/renders/knowledge-ip-preview-bilingual-sync.mp4?${version}`
+const sampleVideoUrl = `/renders/knowledge-ip-final-full-bilingual-sync.mp4?${version}`
 
 type JobStatus = 'idle' | 'uploading' | 'uploaded' | 'running' | 'completed' | 'failed'
 
