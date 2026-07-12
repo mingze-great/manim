@@ -8,7 +8,8 @@ Create and deploy a standalone SC1 stickman workflow entry outside AI Video Dire
 
 - Local worktree: `E:\ai\agent_knowledge_ip_module_20260712`
 - Branch: `codex/3003-standalone-stickman-workflow-20260712`
-- Deployed commit: `3dd2223ebbf839a1093987389a852d802b8753fe`
+- Deployed HEAD: `47ee6be0eb80f3f94805f0d8fc48b77fc7106680`
+- Runtime code commit: `3dd2223ebbf839a1093987389a852d802b8753fe`
 - Material staging fix commit: `cc182010d0f194af5bf73a72bc4d2e2a7ee49480`
 - Previous standalone module commit: `c85e767664c707bba4002619cc96b6e770aaa064`
 - Previous deployed branch: `codex/3003-knowledge-ip-module-20260712`
