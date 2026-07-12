@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     # 阿里云百炼 API（主模型）
     DASHSCOPE_API_KEY: str = ""
     DASHSCOPE_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    DASHSCOPE_VIDEO_BASE_URL: str = "https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis"
+    DASHSCOPE_VIDEO_TASK_URL: str = "https://dashscope.aliyuncs.com/api/v1/tasks/{task_id}"
+    KNOWLEDGE_IP_VIDEO_MODEL: str = "happyhorse-1.0-t2v"
+    KNOWLEDGE_IP_VIDEO_FALLBACK_MODELS: str = "wan2.7-t2v,happyhorse-1.1-t2v,wan2.6-t2v"
     
     # 代码生成模型配置
     DASHSCOPE_CODE_MODEL: str = "deepseek-v3.2"  # 主代码模型（推荐首次使用）

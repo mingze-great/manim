@@ -11,6 +11,7 @@ import time
 import uuid
 from datetime import datetime
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Annotated, Any
 
 import requests
@@ -34,10 +35,10 @@ PUBLIC_INPUT_ROOT = RENDER_ROOT / "public" / "workflow-inputs"
 PUBLIC_ASSET_ROOT = RENDER_ROOT / "public" / "workflow-assets"
 RENDER_OUTPUT_ROOT = RENDER_ROOT / "renders"
 
-VIDEO_SYNTHESIS_URL = os.getenv("DASHSCOPE_VIDEO_BASE_URL", "https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis").strip()
-VIDEO_TASK_URL = os.getenv("DASHSCOPE_VIDEO_TASK_URL", "https://dashscope.aliyuncs.com/api/v1/tasks/{task_id}").strip()
-VIDEO_MATERIAL_MODEL = os.getenv("KNOWLEDGE_IP_VIDEO_MODEL", "happyhorse-1.0-t2v").strip()
-VIDEO_MATERIAL_FALLBACK_MODELS = [m.strip() for m in os.getenv("KNOWLEDGE_IP_VIDEO_FALLBACK_MODELS", "wan2.7-t2v,happyhorse-1.1-t2v,wan2.6-t2v").split(",") if m.strip()]
+VIDEO_SYNTHESIS_URL = (getattr(settings, "DASHSCOPE_VIDEO_BASE_URL", "") or os.getenv("DASHSCOPE_VIDEO_BASE_URL") or "https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis").strip()
+VIDEO_TASK_URL = (getattr(settings, "DASHSCOPE_VIDEO_TASK_URL", "") or os.getenv("DASHSCOPE_VIDEO_TASK_URL") or "https://dashscope.aliyuncs.com/api/v1/tasks/{task_id}").strip()
+VIDEO_MATERIAL_MODEL = (getattr(settings, "KNOWLEDGE_IP_VIDEO_MODEL", "") or os.getenv("KNOWLEDGE_IP_VIDEO_MODEL") or "happyhorse-1.0-t2v").strip()
+VIDEO_MATERIAL_FALLBACK_MODELS = [m.strip() for m in (getattr(settings, "KNOWLEDGE_IP_VIDEO_FALLBACK_MODELS", "") or os.getenv("KNOWLEDGE_IP_VIDEO_FALLBACK_MODELS") or "wan2.7-t2v,happyhorse-1.1-t2v,wan2.6-t2v").split(",") if m.strip()]
 ENABLE_VIDEO_MATERIALS = os.getenv("KNOWLEDGE_IP_ENABLE_VIDEO_MATERIALS", "1").lower() not in {"0", "false", "no"}
 
 STAGE_PROGRESS = {
@@ -571,8 +572,8 @@ def _submit_video_material(prompt: str, model: str, duration: int = 5) -> str:
     if resp.status_code >= 400:
         body = resp.text[:1000]
         if "AllocationQuota.FreeTierOnly" in body or "free quota" in body.lower() or "????" in body:
-            raise RuntimeError("?????????????????????????????????????????")
-        raise RuntimeError(f"???????? {resp.status_code}?{body}")
+            raise RuntimeError(f"Free-tier quota exhausted or payment not enabled: {body}")
+        raise RuntimeError(f"Material video submit failed ({resp.status_code}): {body}")
     data = resp.json()
     task_id = (data.get("output") or {}).get("task_id") or data.get("task_id")
     if not task_id:
@@ -590,8 +591,8 @@ def _wait_video_material(task_id: str, timeout_seconds: int = 1800) -> str:
         if resp.status_code >= 400:
             body = resp.text[:1000]
             if "AllocationQuota.FreeTierOnly" in body or "free quota" in body.lower() or "????" in body:
-                raise RuntimeError("?????????????????????????????????????????")
-            raise RuntimeError(f"?????????? {resp.status_code}?{body}")
+                raise RuntimeError(f"Free-tier quota exhausted or payment not enabled: {body}")
+            raise RuntimeError(f"Material video polling failed ({resp.status_code}): {body}")
         data = resp.json()
         last_payload = data
         status = str((data.get("output") or {}).get("task_status") or data.get("task_status") or "").upper()
@@ -637,19 +638,22 @@ def _generate_material_videos(job_id: str, segments: list[dict[str, Any]]) -> li
     groups = _build_material_groups(segments)
     models = [VIDEO_MATERIAL_MODEL, *VIDEO_MATERIAL_FALLBACK_MODELS]
     out_dir = PUBLIC_ASSET_ROOT / job_id / "materials"
-    for index, group in enumerate(groups, start=1):
-        _set_stage(job_id, "materials", message=f"正在生成素材视频：{index}/{len(groups)}")
+    errors: list[str] = []
+
+    def process_group(index: int, group: list[dict[str, Any]]) -> tuple[int, list[dict[str, Any]], str | None]:
         prompt = _material_prompt(group)
-        last_error: Exception | None = None
         output = out_dir / f"material_{index:02d}.mp4"
         if output.exists() and output.stat().st_size > 1024:
             rel = f"workflow-assets/{job_id}/materials/{output.name}"
             for segment in group:
                 segment["materialSrc"] = rel
-            continue
+                segment["materialPrompt"] = prompt
+            return index, group, None
+
+        last_error: Exception | None = None
         for model in models:
             try:
-                _set_stage(job_id, "materials", message=f"正在生成素材视频：{index}/{len(groups)}，尝试模型 {model}")
+                _set_stage(job_id, "materials", message=f"Generating AI material {index}/{len(groups)}: {model}")
                 task_id = _submit_video_material(prompt, model)
                 video_url = _wait_video_material(task_id)
                 _download_material(video_url, output)
@@ -657,17 +661,52 @@ def _generate_material_videos(job_id: str, segments: list[dict[str, Any]]) -> li
                 for segment in group:
                     segment["materialSrc"] = rel
                     segment["materialPrompt"] = prompt
-                last_error = None
-                break
+                    segment["materialModel"] = model
+                return index, group, None
             except Exception as exc:
                 last_error = exc
                 if _is_quota_error(exc):
                     continue
-        if last_error:
-            message = str(last_error)
-            if _is_quota_error(last_error):
-                raise RuntimeError("素材视频模型额度不可用：当前所有视频模型都没有可用额度，请在阿里控制台关闭“免费额度用完即停”或开通付费后再生成。")
-            raise RuntimeError(f"素材视频生成失败：{last_error}")
+        error = f"AI material {index}/{len(groups)} failed: {last_error}"
+        _set_stage(job_id, "materials", message=error[:180])
+        return index, group, error
+
+    max_workers = min(2, max(1, len(groups)))
+    results: dict[int, list[dict[str, Any]]] = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [executor.submit(process_group, index, group) for index, group in enumerate(groups, start=1)]
+        for future in as_completed(futures):
+            index, group, error = future.result()
+            results[index] = group
+            if error:
+                errors.append(error)
+
+    fallback_src = None
+    generated_count = 0
+    for index in sorted(results):
+        for segment in results[index]:
+            if segment.get("materialSrc"):
+                fallback_src = segment["materialSrc"]
+                generated_count += 1
+            elif fallback_src:
+                segment["materialSrc"] = fallback_src
+                segment["materialPrompt"] = segment.get("materialPrompt") or ""
+
+    for segment in segments:
+        if not segment.get("materialSrc") and fallback_src:
+            segment["materialSrc"] = fallback_src
+
+    if not fallback_src:
+        detail = errors[0] if errors else "no material video generated"
+        raise RuntimeError(
+            "AI material video generation failed, render fallback was stopped. "
+            "Please configure DASHSCOPE_VIDEO_BASE_URL as the Bailian workspace video synthesis endpoint. "
+            f"Model order: {', '.join(models)}. Error: {detail}"
+        )
+
+    if errors:
+        _set_stage(job_id, "materials", message=f"AI materials generated for {generated_count}/{len(segments)} segments; missing parts were filled by nearby material.")
+
     return segments
 
 
