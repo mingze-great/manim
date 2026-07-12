@@ -933,8 +933,9 @@ class AiVideoService:
             else "MindVideo"
         )
         render_scenes = [self._scene_for_render(scene) for scene in scenes]
+        material_stage_dir: Path | None = None
         if content_type == "knowledge_ip_stickman" or visual_style == "sc1_stickman":
-            self._prepare_sc1_materials_for_render(render_scenes, output_path.parent.parent.name)
+            material_stage_dir = self._prepare_sc1_materials_for_render(render_scenes, output_path.parent.parent.name)
         request_payload = {
             "title": payload.get("title") or "",
             "script": payload.get("script") or "",
@@ -984,8 +985,11 @@ class AiVideoService:
             return {"ok": False, "provider": "external_remotion", "message": str(exc)}
         except Exception as exc:
             return {"ok": False, "provider": "external_remotion", "message": str(exc)}
+        finally:
+            if material_stage_dir:
+                shutil.rmtree(material_stage_dir, ignore_errors=True)
 
-    def _prepare_sc1_materials_for_render(self, scenes: list[dict[str, Any]], task_name: str) -> None:
+    def _prepare_sc1_materials_for_render(self, scenes: list[dict[str, Any]], task_name: str) -> Path:
         target_dir = self.render_material_root / task_name
         target_dir.mkdir(parents=True, exist_ok=True)
         for scene in scenes:
@@ -1000,6 +1004,7 @@ class AiVideoService:
                 if source.exists() and source.is_file():
                     shutil.copyfile(source, target_dir / file_name)
                     image["src"] = f"sc1-materials/{task_name}/{file_name}"
+        return target_dir
 
     def _scene_for_render(self, scene: dict[str, Any]) -> dict[str, Any]:
         visual = scene.get("visual") if isinstance(scene.get("visual"), dict) else {}
