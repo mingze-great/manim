@@ -35,6 +35,7 @@ ACTIVE_JOB_STATUSES = {"pending", "scripting", "scene_planning", "tts_generating
 AI_VIDEO_STORAGE_ROOT = Path(os.getenv("AI_VIDEO_STORAGE_ROOT", Path(__file__).resolve().parents[2] / "storage" / "ai-video" / "tasks")).resolve()
 SC1_MATERIAL_PUBLIC_BASE_URL = os.getenv("SC1_MATERIAL_PUBLIC_BASE_URL", "http://127.0.0.1:18787/sc1-materials").rstrip("/")
 SC1_MATERIAL_IMAGE_COUNT = int(os.getenv("SC1_MATERIAL_IMAGE_COUNT", "56"))
+SC1_MATERIAL_LIBRARY_PATH = Path(os.getenv("SC1_MATERIAL_LIBRARY_PATH", "E:/ai/cankao/sucai" if os.name == "nt" else "/opt/manim_assets/sc1-sucai")).resolve()
 
 
 CONTENT_TEMPLATES: dict[str, dict[str, Any]] = {
@@ -181,6 +182,12 @@ class AiVideoService:
             os.getenv(
                 "AI_VIDEO_RENDER_AUDIO_ROOT",
                 "../video-render-service/remotion-mind-video/public/generated-audio",
+            )
+        )
+        self.render_material_root = Path(
+            os.getenv(
+                "AI_VIDEO_RENDER_MATERIAL_ROOT",
+                "../video-render-service/remotion-mind-video/public/sc1-materials",
             )
         )
         self.render_timeout = int(os.getenv("AI_VIDEO_RENDER_TIMEOUT", "600"))
@@ -925,6 +932,9 @@ class AiVideoService:
             if content_type == "knowledge_ip_stickman" or visual_style == "sc1_stickman"
             else "MindVideo"
         )
+        render_scenes = [self._scene_for_render(scene) for scene in scenes]
+        if content_type == "knowledge_ip_stickman" or visual_style == "sc1_stickman":
+            self._prepare_sc1_materials_for_render(render_scenes, output_path.parent.parent.name)
         request_payload = {
             "title": payload.get("title") or "",
             "script": payload.get("script") or "",
@@ -936,7 +946,7 @@ class AiVideoService:
             "goal": payload.get("goal") or "",
             "density": 1,
             "audioScenes": audio_scenes,
-            "scenes": [self._scene_for_render(scene) for scene in scenes],
+            "scenes": render_scenes,
             "bgmSrc": None,
             "renderComposition": render_composition,
         }
@@ -974,6 +984,22 @@ class AiVideoService:
             return {"ok": False, "provider": "external_remotion", "message": str(exc)}
         except Exception as exc:
             return {"ok": False, "provider": "external_remotion", "message": str(exc)}
+
+    def _prepare_sc1_materials_for_render(self, scenes: list[dict[str, Any]], task_name: str) -> None:
+        target_dir = self.render_material_root / task_name
+        target_dir.mkdir(parents=True, exist_ok=True)
+        for scene in scenes:
+            images = scene.get("assetImages") if isinstance(scene.get("assetImages"), list) else []
+            for image in images:
+                if not isinstance(image, dict):
+                    continue
+                file_name = Path(str(image.get("fileName") or Path(str(image.get("src") or "")).name)).name
+                if not file_name:
+                    continue
+                source = SC1_MATERIAL_LIBRARY_PATH / file_name
+                if source.exists() and source.is_file():
+                    shutil.copyfile(source, target_dir / file_name)
+                    image["src"] = f"sc1-materials/{task_name}/{file_name}"
 
     def _scene_for_render(self, scene: dict[str, Any]) -> dict[str, Any]:
         visual = scene.get("visual") if isinstance(scene.get("visual"), dict) else {}
