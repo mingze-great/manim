@@ -57,6 +57,122 @@ const sceneDurationFrames = (scene, audioScene) => {
   return Math.max(84, Math.min(210, 78 + Math.round(text.length * 2.1)));
 };
 
+const fallbackSegmentTexts = (subtitleText) => {
+  const source = clean(subtitleText);
+  if (!source) return [''];
+  const separators = /[。！？!?；;]+/;
+  const parts = source.split(separators).map(clean).filter(Boolean);
+  if (parts.length >= 2) return [parts[0], parts.slice(1).join(' ')];
+  if (source.length <= 18) return [source];
+  const midpoint = Math.ceil(source.length / 2);
+  return [source.slice(0, midpoint), source.slice(midpoint)].map(clean).filter(Boolean);
+};
+
+const splitCaptionCueTexts = (value) => {
+  const source = clean(value);
+  if (!source) return [];
+  const parts = source
+    .split(/(?<=[，。！？；、,!?;])\s*/)
+    .map((item) => item.replace(/[，。！？；、,!?;]+$/g, '').trim())
+    .filter(Boolean);
+  const chunks = parts.length ? parts : [source];
+  const cues = [];
+  for (const chunk of chunks) {
+    if (chunk.length <= 24) {
+      cues.push(chunk);
+      continue;
+    }
+    for (let cursor = 0; cursor < chunk.length; cursor += 20) {
+      cues.push(chunk.slice(cursor, cursor + 20));
+    }
+  }
+  return cues.length ? cues : [source];
+};
+
+const splitEnglishCueTexts = (value, count) => {
+  const words = clean(value).split(/\s+/).filter(Boolean);
+  if (!words.length || count <= 0) return [];
+  if (count === 1) return [words.join(' ')];
+  const per = Math.max(1, Math.ceil(words.length / count));
+  const result = [];
+  for (let index = 0; index < count; index++) {
+    result.push(words.slice(index * per, (index + 1) * per).join(' '));
+  }
+  return result;
+};
+
+const buildCaptionCues = (segment, startFrame, endFrame) => {
+  const rawCues = Array.isArray(segment.captionCues) && segment.captionCues.length
+    ? segment.captionCues.map((cue) => ({
+        text: clean(cue.text || cue.subtitleText),
+        englishText: clean(cue.englishText || cue.english)
+      })).filter((cue) => cue.text)
+    : splitCaptionCueTexts(segment.subtitleText || segment.text).map((text) => ({text, englishText: ''}));
+  const duration = Math.max(1, endFrame - startFrame);
+  const englishParts = splitEnglishCueTexts(segment.englishText, rawCues.length);
+  const totalWeight = rawCues.reduce((sum, cue) => sum + Math.max(4, cue.text.length), 0) || rawCues.length || 1;
+  let cursor = startFrame;
+  return rawCues.map((cue, index) => {
+    const isLast = index === rawCues.length - 1;
+    const next = isLast ? endFrame : Math.max(cursor + 12, startFrame + Math.round(duration * rawCues.slice(0, index + 1).reduce((sum, item) => sum + Math.max(4, item.text.length), 0) / totalWeight));
+    const result = {
+      startFrame: cursor,
+      endFrame: next,
+      text: cue.text,
+      englishText: cue.englishText || englishParts[index] || segment.englishText || ''
+    };
+    cursor = next;
+    return result;
+  });
+};
+
+const normalizeSceneSegments = (scene, subtitleText, englishText, keywords, durationFrames, sceneIndex) => {
+  const images = Array.isArray(scene.assetImages) ? scene.assetImages.filter((item) => item?.src).slice(0, 2) : [];
+  const rawSegments = Array.isArray(scene.segments) && scene.segments.length
+    ? scene.segments.slice(0, 2)
+    : fallbackSegmentTexts(subtitleText).slice(0, 2).map((text, index) => ({
+        text,
+        subtitleText: text,
+        englishText: index === 0 ? englishText : '',
+        summaryLabel: keywords[index] || keywords[0] || text,
+        enterDirection: ['left', 'right', 'top', 'bottom'][(sceneIndex + index) % 4],
+        startRatio: index / 2,
+        endRatio: (index + 1) / 2
+      }));
+  const source = rawSegments.length ? rawSegments : [{text: subtitleText, subtitleText, englishText, startRatio: 0, endRatio: 1}];
+  return source.map((segment, index) => {
+    const startRatio = clamp(Number(segment.startRatio ?? index / source.length), 0, 0.98);
+    const endRatio = clamp(Number(segment.endRatio ?? (index + 1) / source.length), startRatio + 0.01, 1);
+    const startFrame = Math.round(startRatio * durationFrames);
+    const endFrame = index === source.length - 1 ? durationFrames : Math.max(startFrame + 1, Math.round(endRatio * durationFrames));
+    const image = images.find((item) => Number(item.segmentIndex) === index) || images[index] || null;
+    const text = clean(segment.subtitleText || segment.text || image?.segmentText || subtitleText);
+    return {
+      ...segment,
+      index,
+      startFrame,
+      endFrame,
+      text,
+      subtitleText: text,
+      englishText: clean(segment.englishText || image?.englishText || (index === 0 ? englishText : '')),
+      summaryLabel: clean(segment.summaryLabel || image?.summaryLabel || keywords[index] || keywords[0] || text),
+      enterDirection: clean(segment.enterDirection || image?.enterDirection || ['left', 'right', 'top', 'bottom'][(sceneIndex + index) % 4]),
+      assetImage: image,
+      captionCues: buildCaptionCues({...segment, subtitleText: text, text, englishText: clean(segment.englishText || image?.englishText || (index === 0 ? englishText : ''))}, startFrame, endFrame)
+    };
+  });
+};
+
+const segmentAtLocal = (scene, local) => {
+  const segments = Array.isArray(scene.segments) ? scene.segments : [];
+  return segments.find((segment) => local >= segment.startFrame && local < segment.endFrame) || segments[segments.length - 1] || null;
+};
+
+const captionAtLocal = (segment, local) => {
+  const cues = Array.isArray(segment?.captionCues) ? segment.captionCues : [];
+  return cues.find((cue) => local >= cue.startFrame && local < cue.endFrame) || cues[cues.length - 1] || null;
+};
+
 export const buildSc1StickmanStory = ({
   title = '',
   scenes: providedScenes = [],
@@ -79,6 +195,8 @@ export const buildSc1StickmanStory = ({
     cursor += durationFrames;
     const voiceText = clean(scene.voiceText || scene.text || scene.subtitleText);
     const subtitleText = clean(scene.subtitleText || scene.displayText || voiceText);
+    const englishText = clean(scene.englishText || scene.en || scene.english || '');
+    const keywords = Array.isArray(scene.keywords) && scene.keywords.length ? scene.keywords.slice(0, 3).map(clean).filter(Boolean) : splitLines(subtitleText, 4, 2);
     return {
       ...scene,
       id: scene.id || `sc1-${index + 1}`,
@@ -89,8 +207,9 @@ export const buildSc1StickmanStory = ({
       title: clean(scene.title || scene.headline || `Scene ${index + 1}`),
       voiceText,
       subtitleText,
-      englishText: clean(scene.englishText || scene.en || scene.english || ''),
-      keywords: Array.isArray(scene.keywords) && scene.keywords.length ? scene.keywords.slice(0, 3).map(clean).filter(Boolean) : splitLines(subtitleText, 4, 2),
+      englishText,
+      keywords,
+      segments: normalizeSceneSegments(scene, subtitleText, englishText, keywords, durationFrames, index),
       mode: clean(scene.mode || scene.sceneType || scene.visualType || ['judge', 'wolf', 'chase', 'police', 'execution', 'casefile', 'desk'][index % 7]),
       audioSrc: clean(scene.audioSrc || scene.audio?.src || audioScene?.src || '')
     };
@@ -111,7 +230,8 @@ const useActiveScene = (story) => {
   const active = story.scenes.find((scene) => frame >= scene.startFrame && frame < scene.endFrame) || story.scenes[story.scenes.length - 1];
   const local = Math.max(0, frame - active.startFrame);
   const progress = clamp(local / active.durationFrames, 0, 1);
-  return {active, local, progress, frame};
+  const segment = segmentAtLocal(active, local);
+  return {active, local, progress, frame, segment};
 };
 
 const AudioTrack = ({story, bgmSrc = null}) => (
@@ -153,19 +273,20 @@ const Header = ({title}) => (
   </div>
 );
 
-const KeywordLabels = ({scene, local}) => {
-  const labels = (scene.keywords || []).slice(0, 3);
+const KeywordLabels = ({scene, segment, local}) => {
+  const label = clean(segment?.summaryLabel || scene.keywords?.[0] || scene.title);
+  if (!label) return null;
+  const localInSegment = Math.max(0, local - Number(segment?.startFrame || 0));
+  const enter = interpolate(localInSegment, [0, 14], [0, 1], {extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic)});
+  const exitStart = Math.max(16, Number(segment?.endFrame || scene.durationFrames) - Number(segment?.startFrame || 0) - 12);
+  const exit = interpolate(localInSegment, [exitStart, exitStart + 12], [0, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.in(Easing.cubic)});
+  const opacity = clamp(enter * (1 - exit), 0, 1);
   return (
     <div style={{position: 'absolute', left: 575, right: 160, top: 160, display: 'flex', gap: 30, alignItems: 'center', justifyContent: 'center', height: 52, overflow: 'hidden'}}>
-      {labels.map((keyword, index) => {
-        const enter = interpolate(local, [index * 5, index * 5 + 14], [0, 1], {extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic)});
-        return (
-          <div key={`${keyword}-${index}`} style={{display: 'flex', alignItems: 'center', gap: 8, opacity: enter, transform: `translateY(${(1 - enter) * 16}px)`, fontSize: 30, lineHeight: 1, fontWeight: 900, color: '#111', whiteSpace: 'nowrap', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis'}}>
-            <span style={{width: 24, height: 24, background: colors[(scene.index + index) % colors.length], display: 'inline-block', borderRadius: 2}} />
-            <span>{keyword}</span>
-          </div>
-        );
-      })}
+      <div key={`${scene.id}-${segment?.index || 0}-${label}`} style={{display: 'flex', alignItems: 'center', gap: 10, opacity, transform: `translateY(${(1 - enter) * 18 - exit * 10}px)`, fontSize: 32, lineHeight: 1, fontWeight: 900, color: '#111', whiteSpace: 'nowrap', maxWidth: 520, overflow: 'hidden', textOverflow: 'ellipsis'}}>
+        <span style={{width: 24, height: 24, background: colors[(scene.index + Number(segment?.index || 0)) % colors.length], display: 'inline-block', borderRadius: 2, flex: '0 0 auto'}} />
+        <span>{label}</span>
+      </div>
     </div>
   );
 };
@@ -276,16 +397,24 @@ const OptionalImage = ({src}) => {
   );
 };
 
-const MaterialImage = ({item, index, count, local}) => {
+const MaterialImage = ({item, segment, local}) => {
   const src = item?.src;
   if (!src) return null;
-  const slot = count === 1
-    ? {left: 500, top: 260, width: 920, height: 540, scale: 1.32}
-    : index === 0
-      ? {left: 250, top: 275, width: 650, height: 535, scale: 1.45}
-      : {left: 1010, top: 275, width: 650, height: 535, scale: 1.45};
-  const enter = interpolate(local, [index * 6, index * 6 + 18], [0, 1], {extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic)});
-  const x = (1 - enter) * (index === 0 ? -80 : 80);
+  const slot = {left: 400, top: 250, width: 1120, height: 560, scale: 1.24};
+  const localInSegment = Math.max(0, local - Number(segment?.startFrame || 0));
+  const segmentDuration = Math.max(1, Number(segment?.endFrame || 0) - Number(segment?.startFrame || 0));
+  const enter = interpolate(localInSegment, [0, 20], [0, 1], {extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic)});
+  const exit = interpolate(localInSegment, [Math.max(20, segmentDuration - 14), segmentDuration], [0, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.in(Easing.cubic)});
+  const direction = clean(segment?.enterDirection || item?.enterDirection || 'left');
+  const travel = {
+    left: {x: -170, y: 0},
+    right: {x: 170, y: 0},
+    top: {x: 0, y: -120},
+    bottom: {x: 0, y: 120}
+  }[direction] || {x: -170, y: 0};
+  const x = (1 - enter) * travel.x + exit * -travel.x * 0.45;
+  const y = (1 - enter) * travel.y + exit * -travel.y * 0.45;
+  const opacity = clamp(enter * (1 - exit), 0, 1);
   const shared = {
     width: '100%',
     height: '100%',
@@ -305,8 +434,8 @@ const MaterialImage = ({item, index, count, local}) => {
       top: slot.top,
       width: slot.width,
       height: slot.height,
-      opacity: enter,
-      transform: `translateX(${x}px)`,
+      opacity,
+      transform: `translate(${x}px, ${y}px)`,
       overflow: 'hidden',
       display: 'grid',
       placeItems: 'center'
@@ -316,18 +445,18 @@ const MaterialImage = ({item, index, count, local}) => {
   );
 };
 
-const MaterialSceneImages = ({scene, local}) => {
-  const images = Array.isArray(scene.assetImages) ? scene.assetImages.filter((item) => item?.src).slice(0, 2) : [];
-  if (!images.length) return null;
+const MaterialSceneImages = ({scene, segment, local}) => {
+  const image = segment?.assetImage || (Array.isArray(scene.assetImages) ? scene.assetImages.find((item) => item?.src) : null);
+  if (!image?.src) return null;
   return (
     <div style={{position: 'absolute', left: 0, right: 0, top: 220, height: 600, overflow: 'hidden'}}>
-      {images.map((item, index) => <MaterialImage key={`${item.src}-${index}`} item={item} index={index} count={images.length} local={local} />)}
+      <MaterialImage key={`${scene.id}-${segment?.index || 0}-${image.src}`} item={image} segment={segment} local={local} />
     </div>
   );
 };
 
-const SceneVisual = ({scene, local}) => {
-  if (Array.isArray(scene.assetImages) && scene.assetImages.length) return <MaterialSceneImages scene={scene} local={local} />;
+const SceneVisual = ({scene, local, segment}) => {
+  if (Array.isArray(scene.assetImages) && scene.assetImages.length) return <MaterialSceneImages scene={scene} segment={segment} local={local} />;
   const mediaSrc = scene.media?.src || scene.imageSrc || scene.assetSrc;
   if (mediaSrc) return <OptionalImage src={mediaSrc} />;
   const mode = scene.mode;
@@ -347,14 +476,17 @@ const SceneLayer = ({scene, local}) => {
   const opacity = clamp(enter * (1 - exit), 0, 1);
   return (
     <div style={{position: 'absolute', inset: 0, opacity, transform: `translateX(${slideX}px)`}}>
-      <SceneVisual scene={scene} local={local} />
+      <SceneVisual scene={scene} local={local} segment={segmentAtLocal(scene, local)} />
     </div>
   );
 };
 
-const Subtitle = ({scene}) => {
-  const zhLines = splitLines(scene.subtitleText || scene.voiceText, 23, 2);
-  const enLines = splitEnglishLines(scene.englishText, 58, 2);
+const Subtitle = ({scene, segment, local}) => {
+  const cue = captionAtLocal(segment, local);
+  const zhText = cue?.text || segment?.subtitleText || scene.subtitleText || scene.voiceText;
+  const enText = cue?.englishText || segment?.englishText || scene.englishText;
+  const zhLines = splitLines(zhText, 23, 2);
+  const enLines = splitEnglishLines(enText, 58, 2);
   return (
     <div style={{position: 'absolute', left: 0, right: 0, top: 845, height: 155, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', textAlign: 'center', paddingTop: 10, overflow: 'hidden'}}>
       <div style={{fontSize: zhLines.join('').length > 24 ? 42 : 48, lineHeight: 1.08, fontWeight: 1000, color: '#111'}}>
@@ -377,16 +509,16 @@ const Progress = ({frame, durationInFrames}) => (
 
 export const Sc1StickmanVideo = (props) => {
   const story = buildSc1StickmanStory(props);
-  const {active, local, frame} = useActiveScene(story);
+  const {active, local, frame, segment} = useActiveScene(story);
   const title = clean(props.brandTitle || props.watermark || story.title);
 
   return (
     <AbsoluteFill style={{fontFamily: FONT, background: '#fff', overflow: 'hidden'}}>
       <Paper />
       <Header title={title} />
-      <KeywordLabels scene={active} local={local} />
+      <KeywordLabels scene={active} segment={segment} local={local} />
       <SceneLayer scene={active} local={local} />
-      <Subtitle scene={active} />
+      <Subtitle scene={active} segment={segment} local={local} />
       <AudioTrack story={story} bgmSrc={props.bgmSrc} />
       <Progress frame={frame} durationInFrames={story.durationInFrames} />
     </AbsoluteFill>

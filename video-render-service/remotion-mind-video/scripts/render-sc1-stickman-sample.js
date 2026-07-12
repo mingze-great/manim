@@ -13,64 +13,66 @@ const previewSeconds = Number(args[1] || 0);
 const localMaterialDir = process.env.SC1_MATERIAL_LIBRARY_PATH || 'E:\\ai\\cankao\\sucai';
 const publicMaterialDir = path.join(projectRoot, 'public', 'sc1-materials');
 await fs.mkdir(publicMaterialDir, {recursive: true});
-for (const name of ['1.png', '10.png', '11.png', '12.png', '13.png', '14.png', '15.png', '16.png', '17.png', '18.png']) {
+for (const name of ['17.png', '18.png', '24.png', '26.png', '29.png', '31.png', '39.png', '43.png']) {
   await fs.copyFile(path.join(localMaterialDir, name), path.join(publicMaterialDir, name));
 }
 const materialUrl = (name) => `sc1-materials/${name}`;
 
 const inputProps = {
-  title: '沙雕法律竞赛题挑战你脑洞',
-  brandTitle: '沙雕法律竞赛题挑战你脑洞',
+  title: '\u6c99\u96d5\u6cd5\u5f8b\u7ade\u8d5b\u9898',
+  brandTitle: '\u6c99\u96d5\u6cd5\u5f8b\u7ade\u8d5b\u9898',
   scenes: [
     {
-      title: '来挑战一下你的脑抽程度吧',
-      subtitleText: '来挑战一下你的脑抽程度吧',
-      englishText: 'Come and challenge the degree of your asset-mindedness.',
-      voiceText: '来挑战一下你的脑抽程度吧',
-      keywords: ['法律竞赛', '脑抽挑战'],
+      title: '\u5148\u522b\u6025\u7740\u4e0b\u7ed3\u8bba',
+      subtitleText: '\u5148\u522b\u6025\u7740\u4e0b\u7ed3\u8bba\uff0c\u771f\u6b63\u5173\u952e\u7684\u662f\u628a\u884c\u4e3a\u3001\u5bf9\u8c61\u548c\u540e\u679c\u5206\u5f00\u770b\u3002',
+      englishText: 'Do not rush to a conclusion. Separate the action, the target and the consequence.',
+      voiceText: '\u5148\u522b\u6025\u7740\u4e0b\u7ed3\u8bba\uff0c\u771f\u6b63\u5173\u952e\u7684\u662f\u628a\u884c\u4e3a\u3001\u5bf9\u8c61\u548c\u540e\u679c\u5206\u5f00\u770b\u3002',
+      keywords: ['\u884c\u4e3a\u6027\u8d28', '\u5bf9\u8c61\u8fb9\u754c'],
       mode: 'judge',
-      assetImages: [{src: materialUrl('1.png')}, {src: materialUrl('10.png')}],
-      durationFrames: 96
+      segments: [
+        {
+          text: '\u5148\u522b\u6025\u7740\u4e0b\u7ed3\u8bba\uff0c\u771f\u6b63\u5173\u952e\u7684\u662f\u628a\u884c\u4e3a\u5206\u5f00\u770b',
+          englishText: 'Do not rush to a conclusion. First separate the action.',
+          summaryLabel: '\u884c\u4e3a\u6027\u8d28',
+          enterDirection: 'left',
+          startRatio: 0,
+          endRatio: 0.52,
+          captionCues: [
+            {text: '\u5148\u522b\u6025\u7740\u4e0b\u7ed3\u8bba', englishText: 'Do not rush to a conclusion.'},
+            {text: '\u771f\u6b63\u5173\u952e\u662f\u628a\u884c\u4e3a\u5206\u5f00\u770b', englishText: 'The key is to separate the action.'}
+          ]
+        },
+        {
+          text: '\u518d\u628a\u5bf9\u8c61\u548c\u540e\u679c\u5206\u5f00\u770b',
+          englishText: 'Then separate the target and the consequence.',
+          summaryLabel: '\u5bf9\u8c61\u8fb9\u754c',
+          enterDirection: 'right',
+          startRatio: 0.52,
+          endRatio: 1,
+          captionCues: [
+            {text: '\u518d\u770b\u5bf9\u8c61\u662f\u8c01', englishText: 'Then check who the target is.'},
+            {text: '\u6700\u540e\u770b\u5b83\u9020\u6210\u4ec0\u4e48\u540e\u679c', englishText: 'Finally check what consequence it causes.'}
+          ]
+        }
+      ],
+      assetImages: [
+        {src: materialUrl('29.png'), fileName: '29.png', segmentIndex: 0, summaryLabel: '\u884c\u4e3a\u6027\u8d28', enterDirection: 'left'},
+        {src: materialUrl('43.png'), fileName: '43.png', segmentIndex: 1, summaryLabel: '\u5bf9\u8c61\u8fb9\u754c', enterDirection: 'right'}
+      ],
+      durationFrames: 150
     },
     {
-      title: '喂警犬吃狗算什么行为？',
-      subtitleText: '喂警犬吃狗算什么行为？',
-      englishText: 'What kind of behavior is it to feed dogs to police dogs?',
-      voiceText: '喂警犬吃狗算什么行为？',
-      keywords: ['法律竞赛', '脑抽挑战', '性质题'],
-      mode: 'wolf',
-      assetImages: [{src: materialUrl('11.png')}, {src: materialUrl('12.png')}],
-      durationFrames: 108
-    },
-    {
-      title: '第二题父子题',
-      subtitleText: '第二题父子题',
-      englishText: 'The second parent-child question.',
-      voiceText: '第二题父子题',
-      keywords: ['法律定义', '作死行为'],
-      mode: 'chase',
-      assetImages: [{src: materialUrl('13.png')}, {src: materialUrl('14.png')}],
-      durationFrames: 112
-    },
-    {
-      title: '这只属于一般情况下',
-      subtitleText: '这只属于一般情况下',
-      englishText: 'This only applies under normal circumstances.',
-      voiceText: '这只属于一般情况下',
-      keywords: ['把握反抗', '拒捕袭警'],
-      mode: 'police',
-      assetImages: [{src: materialUrl('15.png')}, {src: materialUrl('16.png')}],
-      durationFrames: 108
-    },
-    {
-      title: '执行死刑时',
-      subtitleText: '执行死刑时',
-      englishText: 'At the time of execution of the death penalty.',
-      voiceText: '执行死刑时',
-      keywords: ['走位题', '不能要求'],
-      mode: 'execution',
-      assetImages: [{src: materialUrl('17.png')}, {src: materialUrl('18.png')}],
-      durationFrames: 108
+      title: '\u5224\u65ad\u8981\u770b\u89c4\u5219\u8fb9\u754c',
+      subtitleText: '\u5982\u679c\u53ea\u770b\u8868\u9762\uff0c\u4f60\u4f1a\u89c9\u5f97\u8fd9\u53ea\u662f\u4e00\u4e2a\u666e\u901a\u9009\u62e9\uff1b\u4f46\u653e\u5230\u89c4\u5219\u8bed\u5883\u91cc\uff0c\u6027\u8d28\u5c31\u5b8c\u5168\u4e0d\u540c\u3002',
+      englishText: 'If you only look at the surface, it seems ordinary. Inside the rule context, the nature changes.',
+      voiceText: '\u5982\u679c\u53ea\u770b\u8868\u9762\uff0c\u4f60\u4f1a\u89c9\u5f97\u8fd9\u53ea\u662f\u4e00\u4e2a\u666e\u901a\u9009\u62e9\uff1b\u4f46\u653e\u5230\u89c4\u5219\u8bed\u5883\u91cc\uff0c\u6027\u8d28\u5c31\u5b8c\u5168\u4e0d\u540c\u3002',
+      keywords: ['\u8868\u9762\u5224\u65ad', '\u89c4\u5219\u8fb9\u754c'],
+      mode: 'casefile',
+      assetImages: [
+        {src: materialUrl('17.png'), fileName: '17.png', segmentIndex: 0, summaryLabel: '\u8868\u9762\u5224\u65ad', enterDirection: 'top'},
+        {src: materialUrl('18.png'), fileName: '18.png', segmentIndex: 1, summaryLabel: '\u89c4\u5219\u8fb9\u754c', enterDirection: 'bottom'}
+      ],
+      durationFrames: 150
     }
   ]
 };
@@ -103,7 +105,7 @@ await fs.mkdir(path.join(projectRoot, 'renders'), {recursive: true});
 await fs.mkdir(path.join(projectRoot, 'tmp/sc1-stills'), {recursive: true});
 
 if (mode === 'stills') {
-  const frames = [0, 75, 165, Math.max(0, composition.durationInFrames - 20)];
+  const frames = [8, 58, 98, 142, Math.max(0, composition.durationInFrames - 24)];
   for (const frame of [...new Set(frames.map((item) => Math.min(item, composition.durationInFrames - 1)))]) {
     const output = path.join(projectRoot, 'tmp/sc1-stills', `frame-${frame}.png`);
     console.log(`[sc1] still frame=${frame} ${output}`);
@@ -128,11 +130,9 @@ await renderMedia({
   serveUrl,
   codec: 'h264',
   audioCodec: 'aac',
-  enforceAudioTrack: true,
-  outputLocation,
   inputProps,
-  concurrency: 1,
+  outputLocation,
   browserExecutable,
   chromiumOptions: {gl: 'angle'},
 });
-console.log(`output ${outputLocation}`);
+console.log(`[sc1] done ${outputLocation}`);

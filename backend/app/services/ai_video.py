@@ -196,6 +196,7 @@ class AiVideoService:
         self.cosyvoice_sample_rate = int(os.getenv("AI_VIDEO_COSYVOICE_SAMPLE_RATE", "22050"))
         self._running_jobs: set[int] = set()
         self._lock = threading.Lock()
+        self._sc1_material_cache: tuple[tuple[str, float, int] | None, list[dict[str, Any]]] = (None, [])
 
     def create_generation_job(self, db: Session, user_id: int, payload: dict[str, Any]) -> AiVideoJob:
         payload = self._normalize_prompt_payload(payload)
@@ -637,15 +638,19 @@ class AiVideoService:
             target_seconds = int(payload.get("targetSeconds") or 0)
             min_scene_seconds = max(0, target_seconds // scene_count) if target_seconds else 0
             media = self._media_for_scene(content_type, visual_style, text, index)
-            material_images = self._sc1_material_images_for_scene(payload, text, index) if content_type == "knowledge_ip_stickman" or visual_style == "sc1_stickman" else []
+            sc1_segments = self._sc1_segments_for_scene(text, index) if content_type == "knowledge_ip_stickman" or visual_style == "sc1_stickman" else []
+            material_images = self._sc1_material_images_for_scene(payload, text, index, sc1_segments) if content_type == "knowledge_ip_stickman" or visual_style == "sc1_stickman" else []
             layout_variant = self._layout_variant_for_scene(content_type, visual_style, scene_type, text, index, edit_directive)
             energy_pattern = self._energy_pattern_for_scene(scene_type, layout_variant, text, index)
+            english_text = " ".join(segment.get("englishText", "") for segment in sc1_segments).strip()
             scenes.append(
                 {
                     "id": f"scene_{index + 1:02d}",
                     "duration": max(self._scene_duration_for_pace(pace, text), min_scene_seconds),
                     "voiceText": text,
                     "subtitleText": self._display_text_for_scene(text, step[0], index),
+                    "englishText": english_text or self._sc1_english_for_segment(text, index, 0),
+                    "segments": sc1_segments,
                     "intent": step[1],
                     "cta": self._cta_for_scene(index, scene_count, content_type),
                     "visual": {
@@ -668,23 +673,274 @@ class AiVideoService:
             )
         return scenes
 
-    def _sc1_material_images_for_scene(self, payload: dict[str, Any], text: str, index: int) -> list[dict[str, Any]]:
+    def _sc1_material_images_for_scene(self, payload: dict[str, Any], text: str, index: int, segments: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
         per_scene = int(payload.get("materialImagesPerScene") or 2)
         per_scene = max(1, min(2, per_scene))
         topic = str(payload.get("prompt") or payload.get("requirements") or payload.get("creativeBrief") or text or "")
-        digest = hashlib.sha1(f"{topic}-{index}".encode("utf-8", errors="ignore")).hexdigest()
-        seed = int(digest[:8], 16)
+        segment_items = (segments or self._sc1_segments_for_scene(text, index))[:per_scene]
+        materials = self._load_sc1_materials()
+        selected: set[str] = set()
         images: list[dict[str, Any]] = []
         for offset in range(per_scene):
-            number = ((seed + index * 7 + offset * 17) % SC1_MATERIAL_IMAGE_COUNT) + 1
+            segment = segment_items[offset] if offset < len(segment_items) else {}
+            segment_text = str(segment.get("text") or text or "")
+            material = self._select_sc1_material(materials, f"{topic} {segment_text}", index, offset, selected)
+            file_name = str(material.get("fileName") or self._fallback_sc1_material_name(topic, index, offset))
+            selected.add(file_name)
+            segment["assetFileName"] = file_name
             images.append(
                 {
-                    "src": f"{SC1_MATERIAL_PUBLIC_BASE_URL}/{number}.png",
-                    "fileName": f"{number}.png",
-                    "slot": "left" if offset == 0 and per_scene > 1 else "right" if offset == 1 else "center",
+                    "src": f"{SC1_MATERIAL_PUBLIC_BASE_URL}/{file_name}",
+                    "fileName": file_name,
+                    "slot": "center",
+                    "segmentIndex": offset,
+                    "segmentText": segment_text,
+                    "englishText": segment.get("englishText") or self._sc1_english_for_segment(segment_text, index, offset),
+                    "summaryLabel": segment.get("summaryLabel") or self._sc1_summary_label(segment_text, offset),
+                    "enterDirection": segment.get("enterDirection") or self._sc1_enter_direction(index, offset),
+                    "startRatio": offset / per_scene,
+                    "endRatio": (offset + 1) / per_scene,
+                    "matchScore": round(float(material.get("score") or 0), 2),
                 }
             )
         return images
+
+    def _fallback_sc1_material_name(self, topic: str, index: int, offset: int) -> str:
+        digest = hashlib.sha1(f"{topic}-{index}-{offset}".encode("utf-8", errors="ignore")).hexdigest()
+        number = (int(digest[:8], 16) % SC1_MATERIAL_IMAGE_COUNT) + 1
+        return f"{number}.png"
+
+    def _sc1_segments_for_scene(self, text: str, scene_index: int) -> list[dict[str, Any]]:
+        parts = self._split_sc1_segment_text(text)
+        if len(parts) == 1:
+            parts.append(parts[0])
+        segments: list[dict[str, Any]] = []
+        for segment_index, segment_text in enumerate(parts[:2]):
+            segments.append(
+                {
+                    "index": segment_index,
+                    "text": segment_text,
+                    "subtitleText": segment_text,
+                    "englishText": self._sc1_english_for_segment(segment_text, scene_index, segment_index),
+                    "summaryLabel": self._sc1_summary_label(segment_text, segment_index),
+                    "enterDirection": self._sc1_enter_direction(scene_index, segment_index),
+                    "startRatio": segment_index / 2,
+                    "endRatio": (segment_index + 1) / 2,
+                }
+            )
+        return segments
+
+    def _split_sc1_segment_text(self, text: str) -> list[str]:
+        cleaned = " ".join(str(text or "").replace("\n", " ").split()).strip()
+        if not cleaned:
+            return ["Scene point"]
+        parts = [
+            item.strip(" .,!?:;\u3001\u3002\uff0c\uff1b\uff1a\uff01\uff1f")
+            for item in re.split(r"(?<=[\u3002\uff01\uff1f!?;；])\s*|[;；]\s*", cleaned)
+            if item.strip(" .,!?:;\u3001\u3002\uff0c\uff1b\uff1a\uff01\uff1f")
+        ]
+        if len(parts) >= 2:
+            first = parts[0]
+            second = " ".join(parts[1:]).strip()
+            return [first, second or first]
+        compact = cleaned.strip(" .,!?:;\u3001\u3002\uff0c\uff1b\uff1a\uff01\uff1f")
+        if len(compact) <= 18:
+            return [compact]
+        midpoint = len(compact) // 2
+        split_at = midpoint
+        for radius in range(0, min(14, midpoint)):
+            for candidate in (midpoint + radius, midpoint - radius):
+                if 0 < candidate < len(compact) and compact[candidate] in "\u3001\u3002\uff0c\uff1b\uff1a,;: ":
+                    split_at = candidate + 1
+                    break
+            if split_at != midpoint:
+                break
+        first = compact[:split_at].strip(" .,!?:;\u3001\u3002\uff0c\uff1b\uff1a\uff01\uff1f")
+        second = compact[split_at:].strip(" .,!?:;\u3001\u3002\uff0c\uff1b\uff1a\uff01\uff1f")
+        return [first or compact, second or compact]
+
+    def _sc1_summary_label(self, text: str, segment_index: int) -> str:
+        cleaned = " ".join(str(text or "").split()).strip()
+        rules = [
+            (["\u98ce\u9669", "\u540e\u679c", "\u4f24\u5bb3"], "\u98ce\u9669\u540e\u679c"),
+            (["\u884c\u4e3a", "\u505a\u6cd5", "\u5582"], "\u884c\u4e3a\u6027\u8d28"),
+            (["\u5bf9\u8c61", "\u8c01", "\u8b66"], "\u5bf9\u8c61\u8fb9\u754c"),
+            (["\u6cd5\u5f8b", "\u89c4\u5219", "\u8fb9\u754c"], "\u89c4\u5219\u8fb9\u754c"),
+            (["\u7ed3\u8bba", "\u7b54\u6848", "\u6240\u4ee5"], "\u7ed3\u8bba\u6536\u675f"),
+            (["\u7b2c\u4e00", "\u5148", "\u5173\u952e"], "\u5173\u952e\u4e00\u6b65"),
+            (["\u7b2c\u4e8c", "\u518d", "\u7136\u540e"], "\u7ee7\u7eed\u62c6\u89e3"),
+        ]
+        for needles, label in rules:
+            if any(needle in cleaned for needle in needles):
+                return label
+        pieces = [
+            item.strip(" .,!?:;\u3001\u3002\uff0c\uff1b\uff1a\uff01\uff1f")
+            for item in re.split(r"[\s\u3001\u3002\uff0c\uff1b\uff1a\uff01\uff1f,;:]+", cleaned)
+            if item.strip(" .,!?:;\u3001\u3002\uff0c\uff1b\uff1a\uff01\uff1f")
+        ]
+        preferred = [item for item in pieces if 2 <= len(item) <= 6]
+        if preferred:
+            return preferred[0]
+        fallback = "\u524d\u60c5\u63d0\u95ee" if segment_index == 0 else "\u540e\u7eed\u5224\u65ad"
+        return (cleaned[:8] if cleaned else fallback).strip() or fallback
+
+    def _sc1_english_for_segment(self, text: str, scene_index: int, segment_index: int) -> str:
+        cleaned = " ".join(str(text or "").split()).strip()
+        lower = cleaned.lower()
+        phrase_rules = [
+            ("\u5148\u522b\u6025", "Do not rush to a conclusion."),
+            ("\u4e0b\u7ed3\u8bba", "Do not rush to a conclusion."),
+            ("\u5982\u679c\u53ea\u770b\u8868\u9762", "If you only look at the surface, the judgment may be wrong."),
+            ("\u5224\u65ad\u8fd9\u7c7b\u95ee\u9898", "To judge this kind of issue, split the behavior, risk and boundary."),
+            ("\u7b2c\u4e00\u6b65", "Step one: identify who the behavior points to."),
+            ("\u7b2c\u4e8c\u6b65", "Step two: check whether it creates real risk."),
+            ("\u7b2c\u4e09\u6b65", "Step three: compare it with the rule boundary."),
+            ("\u6240\u4ee5", "So the answer depends on a structured analysis."),
+            ("\u7b54\u6848", "The answer is not a slogan, but a structured analysis."),
+            ("\u98ce\u9669", "The key is whether the action creates real risk."),
+            ("\u540e\u679c", "The result depends on the consequence it causes."),
+            ("\u6cd5\u5f8b", "Put the facts back into the legal boundary."),
+            ("\u89c4\u5219", "Put the facts back into the rule boundary."),
+        ]
+        for needle, english in phrase_rules:
+            if needle in cleaned:
+                return english
+        if "?" in cleaned or "\uff1f" in cleaned:
+            return "Here is the key question to judge."
+        if any(word in lower for word in ["why", "what", "how"]):
+            return cleaned
+        by_position = [
+            ["First, look at the surface fact.", "Then separate the action, object and consequence."],
+            ["Now identify the real conflict.", "Then check the rule boundary and risk."],
+            ["This part gives the first judgment point.", "This part connects it to the final answer."],
+        ]
+        row = by_position[scene_index % len(by_position)]
+        return row[segment_index % len(row)]
+
+    def _sc1_enter_direction(self, scene_index: int, segment_index: int) -> str:
+        pairs = [("left", "right"), ("right", "left"), ("top", "bottom"), ("bottom", "top")]
+        return pairs[scene_index % len(pairs)][segment_index % 2]
+
+    def _load_sc1_materials(self) -> list[dict[str, Any]]:
+        path = SC1_MATERIAL_LIBRARY_PATH / "materials.json"
+        try:
+            stat = path.stat()
+            key = (str(path), stat.st_mtime, stat.st_size)
+        except OSError:
+            key = (str(path), 0.0, 0)
+        if self._sc1_material_cache[0] == key:
+            return self._sc1_material_cache[1]
+        raw = ""
+        data: list[Any] = []
+        try:
+            raw = path.read_text(encoding="utf-8-sig", errors="replace")
+            loaded = json.loads(raw)
+            data = loaded if isinstance(loaded, list) else []
+        except Exception:
+            data = self._parse_sc1_materials_tolerant(raw)
+        materials = [self._normalize_sc1_material(item) for item in data if isinstance(item, dict)]
+        materials = [item for item in materials if item.get("fileName")]
+        if not materials:
+            materials = [{"fileName": f"{index}.png", "searchText": "", "hasMetadata": False} for index in range(1, SC1_MATERIAL_IMAGE_COUNT + 1)]
+        self._sc1_material_cache = (key, materials)
+        return materials
+
+    def _parse_sc1_materials_tolerant(self, raw: str) -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
+        for match in re.finditer(r'\{[^{}]*"file_name"\s*:\s*"([^"]+)"[^{}]*\}', raw or "", re.S):
+            block = match.group(0)
+            item: dict[str, Any] = {"file_name": match.group(1)}
+            for key in ["primary_subject", "pose_action", "scene_context", "emotion_primary", "metaphor_meaning", "usage_notes"]:
+                value = re.search(rf'"{key}"\s*:\s*"([^"]*)"', block)
+                if value:
+                    item[key] = value.group(1)
+            for key in ["applicable_topics", "storyboard_roles", "search_keywords"]:
+                value = re.search(rf'"{key}"\s*:\s*\[([^\]]*)\]', block, re.S)
+                if value:
+                    item[key] = re.findall(r'"([^"]+)"', value.group(1))
+            items.append(item)
+        return items
+
+    def _normalize_sc1_material(self, item: dict[str, Any]) -> dict[str, Any]:
+        file_name = Path(str(item.get("file_name") or item.get("fileName") or "")).name
+        fields = [
+            "primary_subject",
+            "pose_action",
+            "scene_context",
+            "emotion_primary",
+            "emotion_valence",
+            "metaphor_meaning",
+            "usage_notes",
+            "composition",
+            "subject_position",
+        ]
+        parts: list[str] = []
+        for field in fields:
+            value = item.get(field)
+            if value:
+                parts.append(str(value))
+        for field in ["props_objects", "emotion_secondary", "psychology_concepts", "applicable_topics", "storyboard_roles", "style_tags", "search_keywords"]:
+            value = item.get(field)
+            if isinstance(value, list):
+                parts.extend(str(entry) for entry in value if entry)
+        search_text = " ".join(parts).lower()
+        return {
+            "fileName": file_name,
+            "searchText": search_text,
+            "hasMetadata": bool(search_text.strip()),
+        }
+
+    def _select_sc1_material(self, materials: list[dict[str, Any]], text: str, scene_index: int, segment_index: int, selected: set[str]) -> dict[str, Any]:
+        if not materials:
+            return {"fileName": self._fallback_sc1_material_name(text, scene_index, segment_index), "score": 0}
+        tokens = self._sc1_match_tokens(text)
+        role_hints = ["hook", "problem", "cause"] if segment_index == 0 else ["method", "transition", "result", "summary"]
+        best: dict[str, Any] | None = None
+        best_score = -9999.0
+        for material in materials:
+            file_name = str(material.get("fileName") or "")
+            if not file_name or file_name in selected:
+                continue
+            corpus = str(material.get("searchText") or "").lower()
+            score = 0.0
+            if material.get("hasMetadata"):
+                score += 4.0
+            for token in tokens:
+                if token and token in corpus:
+                    score += min(12, 3 + len(token))
+            for hint in role_hints:
+                if hint in corpus:
+                    score += 7.0
+            number = int(re.sub(r"\D", "", file_name) or 0)
+            if 1 <= number <= 15 and material.get("hasMetadata") is False:
+                score -= 6.0
+            digest = hashlib.sha1(f"{text}-{scene_index}-{segment_index}-{file_name}".encode("utf-8", errors="ignore")).hexdigest()
+            score += (int(digest[:4], 16) % 100) / 1000
+            if score > best_score:
+                best = material
+                best_score = score
+        if not best:
+            best = materials[(scene_index * 2 + segment_index) % len(materials)]
+            best_score = 0.0
+        return {**best, "score": best_score}
+
+    def _sc1_match_tokens(self, text: str) -> list[str]:
+        cleaned = str(text or "").lower()
+        tokens: list[str] = []
+        tokens.extend(re.findall(r"[a-z0-9][a-z0-9_-]{1,}", cleaned))
+        for phrase in re.findall(r"[\u4e00-\u9fff]{2,}", cleaned):
+            tokens.append(phrase)
+            if len(phrase) > 4:
+                tokens.extend([phrase[:4], phrase[-4:]])
+            for size in (2, 3):
+                tokens.extend(phrase[index : index + size] for index in range(0, max(0, len(phrase) - size + 1)))
+        seen: set[str] = set()
+        result: list[str] = []
+        for token in tokens:
+            if token and token not in seen:
+                seen.add(token)
+                result.append(token)
+        return result[:80]
 
     def _media_for_scene(self, content_type: str, visual_style: str, text: str, index: int) -> dict[str, Any]:
         theme_keywords = {
@@ -1015,6 +1271,8 @@ class AiVideoService:
             "voiceText": scene.get("voiceText"),
             "subtitleText": scene.get("subtitleText"),
             "displayText": scene.get("subtitleText"),
+            "englishText": scene.get("englishText"),
+            "segments": scene.get("segments") or [],
             "title": visual.get("headline") or scene.get("title"),
             "openingTitle": visual.get("openingTitle"),
             "mode": visual.get("type"),
