@@ -731,11 +731,13 @@ class AiVideoService:
                 "subtitleText": cleaned,
                 "englishText": self._sc1_english_for_segment(cleaned, scene_index, 0),
                 "summaryLabel": self._sc1_summary_label(cleaned, 0),
+                "summaryLabels": [self._sc1_summary_label(cue, cue_index) for cue_index, cue in enumerate(cues)],
                 "layoutMode": layout_mode,
                 "captionCues": [
                     {
                         "text": cue,
                         "englishText": self._sc1_english_for_segment(cue, scene_index, cue_index),
+                        "summaryLabel": self._sc1_summary_label(cue, cue_index),
                     }
                     for cue_index, cue in enumerate(cues)
                 ],

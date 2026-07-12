@@ -105,7 +105,8 @@ const buildCaptionCues = (segment, startFrame, endFrame) => {
   const rawCues = Array.isArray(segment.captionCues) && segment.captionCues.length
     ? segment.captionCues.map((cue) => ({
         text: clean(cue.text || cue.subtitleText),
-        englishText: clean(cue.englishText || cue.english)
+        englishText: clean(cue.englishText || cue.english),
+        summaryLabel: clean(cue.summaryLabel || cue.label || cue.keyword)
       })).filter((cue) => cue.text)
     : splitCaptionCueTexts(segment.subtitleText || segment.text).map((text) => ({text, englishText: ''}));
   const duration = Math.max(1, endFrame - startFrame);
@@ -119,7 +120,8 @@ const buildCaptionCues = (segment, startFrame, endFrame) => {
       startFrame: cursor,
       endFrame: next,
       text: cue.text,
-      englishText: cue.englishText || englishParts[index] || segment.englishText || ''
+      englishText: cue.englishText || englishParts[index] || segment.englishText || '',
+      summaryLabel: cue.summaryLabel || (Array.isArray(segment.summaryLabels) ? clean(segment.summaryLabels[index]) : '') || segment.summaryLabel || ''
     };
     cursor = next;
     return result;
@@ -171,6 +173,12 @@ const segmentAtLocal = (scene, local) => {
 const captionAtLocal = (segment, local) => {
   const cues = Array.isArray(segment?.captionCues) ? segment.captionCues : [];
   return cues.find((cue) => local >= cue.startFrame && local < cue.endFrame) || cues[cues.length - 1] || null;
+};
+
+const captionIndexAtLocal = (segment, local) => {
+  const cues = Array.isArray(segment?.captionCues) ? segment.captionCues : [];
+  const index = cues.findIndex((cue) => local >= cue.startFrame && local < cue.endFrame);
+  return index >= 0 ? index : Math.max(0, cues.length - 1);
 };
 
 export const buildSc1StickmanStory = ({
@@ -274,19 +282,29 @@ const Header = ({title}) => (
 );
 
 const KeywordLabels = ({scene, segment, local}) => {
-  const label = clean(segment?.summaryLabel || scene.keywords?.[0] || scene.title);
-  if (!label) return null;
-  const localInSegment = Math.max(0, local - Number(segment?.startFrame || 0));
-  const enter = interpolate(localInSegment, [0, 14], [0, 1], {extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic)});
-  const exitStart = Math.max(16, Number(segment?.endFrame || scene.durationFrames) - Number(segment?.startFrame || 0) - 12);
-  const exit = interpolate(localInSegment, [exitStart, exitStart + 12], [0, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.in(Easing.cubic)});
-  const opacity = clamp(enter * (1 - exit), 0, 1);
+  const cues = Array.isArray(segment?.captionCues) ? segment.captionCues : [];
+  const activeIndex = captionIndexAtLocal(segment, local);
+  const visibleCues = cues.slice(0, activeIndex + 1).filter((cue) => clean(cue?.summaryLabel || cue?.label || cue?.keyword));
+  if (!visibleCues.length) return null;
   return (
-    <div style={{position: 'absolute', left: 575, right: 160, top: 160, display: 'flex', gap: 30, alignItems: 'center', justifyContent: 'center', height: 52, overflow: 'hidden'}}>
-      <div key={`${scene.id}-${segment?.index || 0}-${label}`} style={{display: 'flex', alignItems: 'center', gap: 10, opacity, transform: `translateY(${(1 - enter) * 18 - exit * 10}px)`, fontSize: 32, lineHeight: 1, fontWeight: 900, color: '#111', whiteSpace: 'nowrap', maxWidth: 520, overflow: 'hidden', textOverflow: 'ellipsis'}}>
-        <span style={{width: 24, height: 24, background: colors[(scene.index + Number(segment?.index || 0)) % colors.length], display: 'inline-block', borderRadius: 2, flex: '0 0 auto'}} />
-        <span>{label}</span>
-      </div>
+    <div style={{position: 'absolute', left: 520, right: 120, top: 112, height: 108, display: 'flex', flexWrap: 'wrap', alignContent: 'flex-start', alignItems: 'flex-start', justifyContent: 'flex-start', gap: '8px 14px', overflow: 'hidden', zIndex: 4, pointerEvents: 'none'}}>
+      {visibleCues.map((cue, index) => {
+        const label = clean(cue.summaryLabel || cue.label || cue.keyword || segment?.summaryLabel || scene.keywords?.[index] || scene.title);
+        const labelStart = Number(cue.startFrame ?? segment?.startFrame ?? 0);
+        const localInLabel = Math.max(0, local - labelStart);
+        const enter = interpolate(localInLabel, [0, 10], [0, 1], {extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic)});
+        const opacity = clamp(enter, 0, 1);
+        const fontSize = label.length > 12 ? 21 : 23;
+        return (
+          <div
+            key={`${scene.id}-${segment?.index || 0}-${index}-${label}`}
+            style={{display: 'flex', alignItems: 'center', gap: 10, opacity, transform: `translateY(${(1 - enter) * 10}px)`, fontSize, lineHeight: 1.05, fontWeight: 900, color: '#111', whiteSpace: 'nowrap', maxWidth: '48%', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis'}}
+          >
+            <span style={{width: 20, height: 20, background: colors[(scene.index + Number(segment?.index || 0) + index) % colors.length], display: 'inline-block', borderRadius: 2, flex: '0 0 auto'}} />
+            <span>{label}</span>
+          </div>
+        );
+      })}
     </div>
   );
 };

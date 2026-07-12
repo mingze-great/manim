@@ -27,6 +27,7 @@ const inputProps = {
       subtitleText: '\u5148\u522b\u6025\u7740\u4e0b\u7ed3\u8bba\uff0c\u771f\u6b63\u5173\u952e\u7684\u662f\u628a\u884c\u4e3a\u3001\u5bf9\u8c61\u548c\u540e\u679c\u5206\u5f00\u770b\u3002',
       englishText: 'Do not rush to a conclusion. Separate the action, the target and the consequence.',
       voiceText: '\u5148\u522b\u6025\u7740\u4e0b\u7ed3\u8bba\uff0c\u771f\u6b63\u5173\u952e\u7684\u662f\u628a\u884c\u4e3a\u3001\u5bf9\u8c61\u548c\u540e\u679c\u5206\u5f00\u770b\u3002',
+      audioSrc: 'generated-audio/sc1-sample/scene-0.wav',
       keywords: ['\u884c\u4e3a\u6027\u8d28', '\u5bf9\u8c61\u8fb9\u754c'],
       mode: 'judge',
       layoutMode: 'pair_left_right',
@@ -35,13 +36,14 @@ const inputProps = {
           text: '\u5148\u522b\u6025\u7740\u4e0b\u7ed3\u8bba\uff0c\u771f\u6b63\u5173\u952e\u7684\u662f\u628a\u884c\u4e3a\u3001\u5bf9\u8c61\u548c\u540e\u679c\u5206\u5f00\u770b\u3002',
           englishText: 'Do not rush to a conclusion. Separate the action, the target and the consequence.',
           summaryLabel: '\u884c\u4e3a\u6027\u8d28',
+          summaryLabels: ['\u5148\u522b\u4e0b\u7ed3\u8bba', '\u62c6\u884c\u4e3a\u5bf9\u8c61', '\u653e\u56de\u89c4\u5219\u8bed\u5883'],
           layoutMode: 'pair_left_right',
           startRatio: 0,
           endRatio: 1,
           captionCues: [
-            {text: '\u5148\u522b\u6025\u7740\u4e0b\u7ed3\u8bba', englishText: 'Do not rush to a conclusion.'},
-            {text: '\u771f\u6b63\u5173\u952e\u662f\u628a\u884c\u4e3a\u3001\u5bf9\u8c61\u548c\u540e\u679c\u5206\u5f00\u770b', englishText: 'Separate the action, the target and the consequence.'},
-            {text: '\u7136\u540e\u518d\u653e\u56de\u89c4\u5219\u8bed\u5883', englishText: 'Then put it back into the rule context.'}
+            {text: '\u5148\u522b\u6025\u7740\u4e0b\u7ed3\u8bba', englishText: 'Do not rush to a conclusion.', summaryLabel: '\u5148\u522b\u4e0b\u7ed3\u8bba'},
+            {text: '\u771f\u6b63\u5173\u952e\u662f\u628a\u884c\u4e3a\u3001\u5bf9\u8c61\u548c\u540e\u679c\u5206\u5f00\u770b', englishText: 'Separate the action, the target and the consequence.', summaryLabel: '\u62c6\u884c\u4e3a\u5bf9\u8c61'},
+            {text: '\u7136\u540e\u518d\u653e\u56de\u89c4\u5219\u8bed\u5883', englishText: 'Then put it back into the rule context.', summaryLabel: '\u653e\u56de\u89c4\u5219\u8bed\u5883'}
           ]
         }
       ],
@@ -56,6 +58,7 @@ const inputProps = {
       subtitleText: '\u5982\u679c\u53ea\u770b\u8868\u9762\uff0c\u4f60\u4f1a\u89c9\u5f97\u8fd9\u53ea\u662f\u4e00\u4e2a\u666e\u901a\u9009\u62e9\uff1b\u4f46\u653e\u5230\u89c4\u5219\u8bed\u5883\u91cc\uff0c\u6027\u8d28\u5c31\u5b8c\u5168\u4e0d\u540c\u3002',
       englishText: 'If you only look at the surface, it seems ordinary. Inside the rule context, the nature changes.',
       voiceText: '\u5982\u679c\u53ea\u770b\u8868\u9762\uff0c\u4f60\u4f1a\u89c9\u5f97\u8fd9\u53ea\u662f\u4e00\u4e2a\u666e\u901a\u9009\u62e9\uff1b\u4f46\u653e\u5230\u89c4\u5219\u8bed\u5883\u91cc\uff0c\u6027\u8d28\u5c31\u5b8c\u5168\u4e0d\u540c\u3002',
+      audioSrc: 'generated-audio/sc1-sample/scene-1.wav',
       keywords: ['\u8868\u9762\u5224\u65ad', '\u89c4\u5219\u8fb9\u754c'],
       mode: 'casefile',
       layoutMode: 'center_shift_pair',
@@ -64,12 +67,13 @@ const inputProps = {
           text: '\u5982\u679c\u53ea\u770b\u8868\u9762\uff0c\u4f60\u4f1a\u89c9\u5f97\u8fd9\u53ea\u662f\u4e00\u4e2a\u666e\u901a\u9009\u62e9\uff1b\u4f46\u653e\u5230\u89c4\u5219\u8bed\u5883\u91cc\uff0c\u6027\u8d28\u5c31\u5b8c\u5168\u4e0d\u540c\u3002',
           englishText: 'If you only look at the surface, it seems ordinary. Inside the rule context, the nature changes.',
           summaryLabel: '\u89c4\u5219\u8fb9\u754c',
+          summaryLabels: ['\u8868\u9762\u4f1a\u8bef\u5224', '\u89c4\u5219\u91cc\u53d8\u6027\u8d28'],
           layoutMode: 'center_shift_pair',
           startRatio: 0,
           endRatio: 1,
           captionCues: [
-            {text: '\u53ea\u770b\u8868\u9762\u4f1a\u8bef\u5224', englishText: 'If you only look at the surface, you may misjudge.'},
-            {text: '\u653e\u5230\u89c4\u5219\u8bed\u5883\u91cc\u5c31\u4e0d\u4e00\u6837', englishText: 'Inside the rule context, it is different.'}
+            {text: '\u53ea\u770b\u8868\u9762\u4f1a\u8bef\u5224', englishText: 'If you only look at the surface, you may misjudge.', summaryLabel: '\u8868\u9762\u4f1a\u8bef\u5224'},
+            {text: '\u653e\u5230\u89c4\u5219\u8bed\u5883\u91cc\u5c31\u4e0d\u4e00\u6837', englishText: 'Inside the rule context, it is different.', summaryLabel: '\u89c4\u5219\u91cc\u53d8\u6027\u8d28'}
           ]
         }
       ],

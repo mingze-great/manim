@@ -23,7 +23,6 @@ const statusText: Record<string, string> = {
 
 export default function StickmanWorkflow() {
   const [topic, setTopic] = useState('喂警犬吃狗算什么行为')
-  const [sceneCount, setSceneCount] = useState(5)
   const [voiceId, setVoiceId] = useState('中文女')
   const [job, setJob] = useState<AiVideoJob | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -55,7 +54,6 @@ export default function StickmanWorkflow() {
       const { data } = await stickmanWorkflowApi.createJob({
         topic: cleanTopic,
         title: cleanTopic,
-        sceneCount,
         voiceId,
         tone: 'sharp',
         pace: 'medium',
@@ -93,14 +91,6 @@ export default function StickmanWorkflow() {
             placeholder="例如：喂警犬吃狗算什么行为"
           />
           <div className="workflow-controls">
-            <label>
-              <span>场景数量</span>
-              <Select
-                value={sceneCount}
-                onChange={setSceneCount}
-                options={[3, 4, 5, 6, 7, 8].map((value) => ({ label: `${value} 个场景`, value }))}
-              />
-            </label>
             <label>
               <span>配音</span>
               <Select
@@ -156,4 +146,3 @@ export default function StickmanWorkflow() {
     </div>
   )
 }
-

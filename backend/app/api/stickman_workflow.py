@@ -18,7 +18,7 @@ router = APIRouter(prefix="/stickman-workflow", tags=["stickman-workflow"])
 class StickmanWorkflowJobCreate(BaseModel):
     topic: str = Field(..., min_length=2, max_length=120)
     title: Optional[str] = None
-    sceneCount: int = Field(default=5, ge=3, le=8)
+    sceneCount: Optional[int] = Field(default=None, ge=3, le=8)
     voiceId: str = "中文女"
     tone: str = "sharp"
     pace: str = "medium"
@@ -57,13 +57,14 @@ def create_stickman_job(
         "targetPlatform": payload.targetPlatform,
         "tone": payload.tone,
         "pace": payload.pace,
-        "sceneCount": payload.sceneCount,
         "goal": "standalone_sc1_stickman_workflow",
-        "customPrompt": "Use SC1 standalone stickman workflow, two material-library scene images per scene, no overlap, subtitles synced to voice.",
+        "customPrompt": "Use SC1 standalone stickman workflow. Split scenes semantically from the topic/script without asking the user for scene count. Each semantic segment uses two material-library scene images with paired left/right or center-shift layout, no overlap, and Chinese/English subtitles synced to voice.",
         "workflowSource": "standalone_stickman_workflow",
         "useMaterialLibrary": True,
         "materialImagesPerScene": 2,
     }
+    if payload.sceneCount is not None:
+        job_payload["sceneCount"] = payload.sceneCount
     job = service.create_generation_job(db, current_user.id, job_payload)
     return AiVideoJobCreated(jobId=f"job_{job.id}", projectId=job.project_id, status=job.status)
 
@@ -83,4 +84,3 @@ def get_stickman_job(
         raise HTTPException(status_code=404, detail="Stickman workflow job not found")
     job = service.reconcile_stale_job(db, job)
     return _job_response(job)
-
