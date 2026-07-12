@@ -128,25 +128,25 @@ const buildCaptionCues = (segment, startFrame, endFrame) => {
 
 const normalizeSceneSegments = (scene, subtitleText, englishText, keywords, durationFrames, sceneIndex) => {
   const images = Array.isArray(scene.assetImages) ? scene.assetImages.filter((item) => item?.src).slice(0, 2) : [];
-  const rawSegments = Array.isArray(scene.segments) && scene.segments.length
-    ? scene.segments.slice(0, 2)
-    : fallbackSegmentTexts(subtitleText).slice(0, 2).map((text, index) => ({
-        text,
-        subtitleText: text,
-        englishText: index === 0 ? englishText : '',
-        summaryLabel: keywords[index] || keywords[0] || text,
-        enterDirection: ['left', 'right', 'top', 'bottom'][(sceneIndex + index) % 4],
-        startRatio: index / 2,
-        endRatio: (index + 1) / 2
-      }));
-  const source = rawSegments.length ? rawSegments : [{text: subtitleText, subtitleText, englishText, startRatio: 0, endRatio: 1}];
+  const layoutMode = clean(scene.layoutMode || scene.sceneLayoutMode || (sceneIndex % 2 === 0 ? 'pair_left_right' : 'center_shift_pair'));
+  const providedSegments = Array.isArray(scene.segments) && scene.segments.length ? scene.segments : [];
+  const source = providedSegments.length
+    ? providedSegments.slice(0, 2)
+    : [{
+        text: subtitleText,
+        subtitleText,
+        englishText,
+        summaryLabel: keywords[0] || subtitleText,
+        layoutMode,
+        startRatio: 0,
+        endRatio: 1
+      }];
   return source.map((segment, index) => {
     const startRatio = clamp(Number(segment.startRatio ?? index / source.length), 0, 0.98);
     const endRatio = clamp(Number(segment.endRatio ?? (index + 1) / source.length), startRatio + 0.01, 1);
     const startFrame = Math.round(startRatio * durationFrames);
     const endFrame = index === source.length - 1 ? durationFrames : Math.max(startFrame + 1, Math.round(endRatio * durationFrames));
-    const image = images.find((item) => Number(item.segmentIndex) === index) || images[index] || null;
-    const text = clean(segment.subtitleText || segment.text || image?.segmentText || subtitleText);
+    const text = clean(segment.subtitleText || segment.text || subtitleText);
     return {
       ...segment,
       index,
@@ -154,11 +154,11 @@ const normalizeSceneSegments = (scene, subtitleText, englishText, keywords, dura
       endFrame,
       text,
       subtitleText: text,
-      englishText: clean(segment.englishText || image?.englishText || (index === 0 ? englishText : '')),
-      summaryLabel: clean(segment.summaryLabel || image?.summaryLabel || keywords[index] || keywords[0] || text),
-      enterDirection: clean(segment.enterDirection || image?.enterDirection || ['left', 'right', 'top', 'bottom'][(sceneIndex + index) % 4]),
-      assetImage: image,
-      captionCues: buildCaptionCues({...segment, subtitleText: text, text, englishText: clean(segment.englishText || image?.englishText || (index === 0 ? englishText : ''))}, startFrame, endFrame)
+      englishText: clean(segment.englishText || englishText),
+      summaryLabel: clean(segment.summaryLabel || keywords[index] || keywords[0] || text),
+      layoutMode: clean(segment.layoutMode || layoutMode),
+      assetImages: images,
+      captionCues: buildCaptionCues({...segment, subtitleText: text, text, englishText: clean(segment.englishText || englishText)}, startFrame, endFrame)
     };
   });
 };
@@ -397,23 +397,28 @@ const OptionalImage = ({src}) => {
   );
 };
 
-const MaterialImage = ({item, segment, local}) => {
+const lerp = (a, b, t) => a + (b - a) * t;
+
+const interpolateBox = (from, to, t) => ({
+  left: lerp(from.left, to.left, t),
+  top: lerp(from.top, to.top, t),
+  width: lerp(from.width, to.width, t),
+  height: lerp(from.height, to.height, t),
+});
+
+const SceneImage = ({item, box, progress, start = 0, direction = 'left'}) => {
   const src = item?.src;
   if (!src) return null;
-  const slot = {left: 400, top: 250, width: 1120, height: 560, scale: 1.24};
-  const localInSegment = Math.max(0, local - Number(segment?.startFrame || 0));
-  const segmentDuration = Math.max(1, Number(segment?.endFrame || 0) - Number(segment?.startFrame || 0));
-  const enter = interpolate(localInSegment, [0, 20], [0, 1], {extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic)});
-  const exit = interpolate(localInSegment, [Math.max(20, segmentDuration - 14), segmentDuration], [0, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.in(Easing.cubic)});
-  const direction = clean(segment?.enterDirection || item?.enterDirection || 'left');
+  const localProgress = clamp((progress - start) / Math.max(0.0001, 1 - start), 0, 1);
+  const enter = interpolate(localProgress, [0, 0.16], [0, 1], {extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic)});
+  const exit = interpolate(progress, [0.9, 1], [0, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.in(Easing.cubic)});
   const travel = {
-    left: {x: -170, y: 0},
-    right: {x: 170, y: 0},
+    left: {x: -180, y: 0},
+    right: {x: 180, y: 0},
     top: {x: 0, y: -120},
-    bottom: {x: 0, y: 120}
-  }[direction] || {x: -170, y: 0};
-  const x = (1 - enter) * travel.x + exit * -travel.x * 0.45;
-  const y = (1 - enter) * travel.y + exit * -travel.y * 0.45;
+    bottom: {x: 0, y: 120},
+    center: {x: 0, y: 0}
+  }[direction] || {x: 0, y: 0};
   const opacity = clamp(enter * (1 - exit), 0, 1);
   const shared = {
     width: '100%',
@@ -421,7 +426,7 @@ const MaterialImage = ({item, segment, local}) => {
     objectFit: 'contain',
     filter: 'grayscale(1) contrast(2.25)',
     mixBlendMode: 'multiply',
-    transform: `scale(${slot.scale})`,
+    transform: `scale(${item?.scale || 1.18})`,
   };
   const source = String(src);
   const image = /^(https?:|file:)\/\//i.test(source)
@@ -430,12 +435,12 @@ const MaterialImage = ({item, segment, local}) => {
   return (
     <div style={{
       position: 'absolute',
-      left: slot.left,
-      top: slot.top,
-      width: slot.width,
-      height: slot.height,
+      left: box.left,
+      top: box.top,
+      width: box.width,
+      height: box.height,
       opacity,
-      transform: `translate(${x}px, ${y}px)`,
+      transform: `translate(${(1 - enter) * travel.x}px, ${(1 - enter) * travel.y}px)`,
       overflow: 'hidden',
       display: 'grid',
       placeItems: 'center'
@@ -446,11 +451,25 @@ const MaterialImage = ({item, segment, local}) => {
 };
 
 const MaterialSceneImages = ({scene, segment, local}) => {
-  const image = segment?.assetImage || (Array.isArray(scene.assetImages) ? scene.assetImages.find((item) => item?.src) : null);
-  if (!image?.src) return null;
+  const images = Array.isArray(scene.assetImages) ? scene.assetImages.filter((item) => item?.src).slice(0, 2) : [];
+  if (!images.length) return null;
+  const segmentStart = Number(segment?.startFrame || 0);
+  const segmentDuration = Math.max(1, Number(segment?.endFrame || scene.durationFrames) - segmentStart);
+  const progress = clamp((local - segmentStart) / segmentDuration, 0, 1);
+  const layoutMode = clean(segment?.layoutMode || scene.layoutMode || 'pair_left_right');
+  const secondStart = layoutMode === 'center_shift_pair' ? 0.42 : 0.36;
+  const leftBox = {left: 220, top: 275, width: 660, height: 500};
+  const rightBox = {left: 1040, top: 275, width: 660, height: 500};
+  const centerBox = {left: 400, top: 250, width: 1120, height: 560};
+  const firstBox = layoutMode === 'center_shift_pair'
+    ? (progress < secondStart ? centerBox : interpolateBox(centerBox, leftBox, clamp((progress - secondStart) / 0.18, 0, 1)))
+    : leftBox;
+  const firstDirection = layoutMode === 'center_shift_pair' ? 'center' : (images[0]?.enterDirection || 'left');
+  const secondDirection = images[1]?.enterDirection || 'right';
   return (
     <div style={{position: 'absolute', left: 0, right: 0, top: 220, height: 600, overflow: 'hidden'}}>
-      <MaterialImage key={`${scene.id}-${segment?.index || 0}-${image.src}`} item={image} segment={segment} local={local} />
+      <SceneImage item={images[0]} box={firstBox} progress={progress} start={0} direction={firstDirection} />
+      {images[1] ? <SceneImage item={images[1]} box={rightBox} progress={progress} start={secondStart} direction={secondDirection} /> : null}
     </div>
   );
 };

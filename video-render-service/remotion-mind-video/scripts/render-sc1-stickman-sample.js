@@ -29,29 +29,19 @@ const inputProps = {
       voiceText: '\u5148\u522b\u6025\u7740\u4e0b\u7ed3\u8bba\uff0c\u771f\u6b63\u5173\u952e\u7684\u662f\u628a\u884c\u4e3a\u3001\u5bf9\u8c61\u548c\u540e\u679c\u5206\u5f00\u770b\u3002',
       keywords: ['\u884c\u4e3a\u6027\u8d28', '\u5bf9\u8c61\u8fb9\u754c'],
       mode: 'judge',
+      layoutMode: 'pair_left_right',
       segments: [
         {
-          text: '\u5148\u522b\u6025\u7740\u4e0b\u7ed3\u8bba\uff0c\u771f\u6b63\u5173\u952e\u7684\u662f\u628a\u884c\u4e3a\u5206\u5f00\u770b',
-          englishText: 'Do not rush to a conclusion. First separate the action.',
+          text: '\u5148\u522b\u6025\u7740\u4e0b\u7ed3\u8bba\uff0c\u771f\u6b63\u5173\u952e\u7684\u662f\u628a\u884c\u4e3a\u3001\u5bf9\u8c61\u548c\u540e\u679c\u5206\u5f00\u770b\u3002',
+          englishText: 'Do not rush to a conclusion. Separate the action, the target and the consequence.',
           summaryLabel: '\u884c\u4e3a\u6027\u8d28',
-          enterDirection: 'left',
+          layoutMode: 'pair_left_right',
           startRatio: 0,
-          endRatio: 0.52,
-          captionCues: [
-            {text: '\u5148\u522b\u6025\u7740\u4e0b\u7ed3\u8bba', englishText: 'Do not rush to a conclusion.'},
-            {text: '\u771f\u6b63\u5173\u952e\u662f\u628a\u884c\u4e3a\u5206\u5f00\u770b', englishText: 'The key is to separate the action.'}
-          ]
-        },
-        {
-          text: '\u518d\u628a\u5bf9\u8c61\u548c\u540e\u679c\u5206\u5f00\u770b',
-          englishText: 'Then separate the target and the consequence.',
-          summaryLabel: '\u5bf9\u8c61\u8fb9\u754c',
-          enterDirection: 'right',
-          startRatio: 0.52,
           endRatio: 1,
           captionCues: [
-            {text: '\u518d\u770b\u5bf9\u8c61\u662f\u8c01', englishText: 'Then check who the target is.'},
-            {text: '\u6700\u540e\u770b\u5b83\u9020\u6210\u4ec0\u4e48\u540e\u679c', englishText: 'Finally check what consequence it causes.'}
+            {text: '\u5148\u522b\u6025\u7740\u4e0b\u7ed3\u8bba', englishText: 'Do not rush to a conclusion.'},
+            {text: '\u771f\u6b63\u5173\u952e\u662f\u628a\u884c\u4e3a\u3001\u5bf9\u8c61\u548c\u540e\u679c\u5206\u5f00\u770b', englishText: 'Separate the action, the target and the consequence.'},
+            {text: '\u7136\u540e\u518d\u653e\u56de\u89c4\u5219\u8bed\u5883', englishText: 'Then put it back into the rule context.'}
           ]
         }
       ],
@@ -68,9 +58,24 @@ const inputProps = {
       voiceText: '\u5982\u679c\u53ea\u770b\u8868\u9762\uff0c\u4f60\u4f1a\u89c9\u5f97\u8fd9\u53ea\u662f\u4e00\u4e2a\u666e\u901a\u9009\u62e9\uff1b\u4f46\u653e\u5230\u89c4\u5219\u8bed\u5883\u91cc\uff0c\u6027\u8d28\u5c31\u5b8c\u5168\u4e0d\u540c\u3002',
       keywords: ['\u8868\u9762\u5224\u65ad', '\u89c4\u5219\u8fb9\u754c'],
       mode: 'casefile',
+      layoutMode: 'center_shift_pair',
+      segments: [
+        {
+          text: '\u5982\u679c\u53ea\u770b\u8868\u9762\uff0c\u4f60\u4f1a\u89c9\u5f97\u8fd9\u53ea\u662f\u4e00\u4e2a\u666e\u901a\u9009\u62e9\uff1b\u4f46\u653e\u5230\u89c4\u5219\u8bed\u5883\u91cc\uff0c\u6027\u8d28\u5c31\u5b8c\u5168\u4e0d\u540c\u3002',
+          englishText: 'If you only look at the surface, it seems ordinary. Inside the rule context, the nature changes.',
+          summaryLabel: '\u89c4\u5219\u8fb9\u754c',
+          layoutMode: 'center_shift_pair',
+          startRatio: 0,
+          endRatio: 1,
+          captionCues: [
+            {text: '\u53ea\u770b\u8868\u9762\u4f1a\u8bef\u5224', englishText: 'If you only look at the surface, you may misjudge.'},
+            {text: '\u653e\u5230\u89c4\u5219\u8bed\u5883\u91cc\u5c31\u4e0d\u4e00\u6837', englishText: 'Inside the rule context, it is different.'}
+          ]
+        }
+      ],
       assetImages: [
-        {src: materialUrl('17.png'), fileName: '17.png', segmentIndex: 0, summaryLabel: '\u8868\u9762\u5224\u65ad', enterDirection: 'top'},
-        {src: materialUrl('18.png'), fileName: '18.png', segmentIndex: 1, summaryLabel: '\u89c4\u5219\u8fb9\u754c', enterDirection: 'bottom'}
+        {src: materialUrl('17.png'), fileName: '17.png', segmentIndex: 0, summaryLabel: '\u8868\u9762\u5224\u65ad', enterDirection: 'center'},
+        {src: materialUrl('18.png'), fileName: '18.png', segmentIndex: 1, summaryLabel: '\u89c4\u5219\u8fb9\u754c', enterDirection: 'right'}
       ],
       durationFrames: 150
     }

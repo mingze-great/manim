@@ -1,4 +1,4 @@
-import json
+﻿import json
 import hashlib
 import os
 import re
@@ -677,29 +677,39 @@ class AiVideoService:
         per_scene = int(payload.get("materialImagesPerScene") or 2)
         per_scene = max(1, min(2, per_scene))
         topic = str(payload.get("prompt") or payload.get("requirements") or payload.get("creativeBrief") or text or "")
-        segment_items = (segments or self._sc1_segments_for_scene(text, index))[:per_scene]
+        segment_items = segments or self._sc1_segments_for_scene(text, index)
+        segment = segment_items[0] if segment_items else {}
+        cue_texts = [str(cue.get("text") or "").strip() for cue in (segment.get("captionCues") if isinstance(segment.get("captionCues"), list) else []) if str(cue.get("text") or "").strip()]
+        if not cue_texts:
+            cue_texts = self._split_sc1_caption_cues(text)
+        pivot = max(1, (len(cue_texts) + 1) // 2)
+        first_text = " ".join(cue_texts[:pivot]).strip() or text
+        second_text = (" ".join(cue_texts[pivot:]).strip() or cue_texts[-1]) if cue_texts else text
+        layout_mode = str(segment.get("layoutMode") or self._sc1_layout_mode_for_scene(index, text)).strip()
+        slot_hints = ["left", "right"] if layout_mode == "pair_left_right" else ["center", "right"]
+        image_texts = [first_text, second_text]
         materials = self._load_sc1_materials()
         selected: set[str] = set()
         images: list[dict[str, Any]] = []
         for offset in range(per_scene):
-            segment = segment_items[offset] if offset < len(segment_items) else {}
-            segment_text = str(segment.get("text") or text or "")
+            segment_text = image_texts[offset] if offset < len(image_texts) else text
             material = self._select_sc1_material(materials, f"{topic} {segment_text}", index, offset, selected)
             file_name = str(material.get("fileName") or self._fallback_sc1_material_name(topic, index, offset))
             selected.add(file_name)
-            segment["assetFileName"] = file_name
             images.append(
                 {
                     "src": f"{SC1_MATERIAL_PUBLIC_BASE_URL}/{file_name}",
                     "fileName": file_name,
-                    "slot": "center",
+                    "slot": slot_hints[offset] if offset < len(slot_hints) else ("right" if offset else "center"),
                     "segmentIndex": offset,
                     "segmentText": segment_text,
-                    "englishText": segment.get("englishText") or self._sc1_english_for_segment(segment_text, index, offset),
-                    "summaryLabel": segment.get("summaryLabel") or self._sc1_summary_label(segment_text, offset),
-                    "enterDirection": segment.get("enterDirection") or self._sc1_enter_direction(index, offset),
-                    "startRatio": offset / per_scene,
-                    "endRatio": (offset + 1) / per_scene,
+                    "englishText": self._sc1_english_for_segment(segment_text, index, offset),
+                    "summaryLabel": self._sc1_summary_label(segment_text, offset),
+                    "enterDirection": "center" if layout_mode == "center_shift_pair" and offset == 0 else ("right" if offset else "left"),
+                    "startRatio": 0 if offset == 0 else 0.4,
+                    "endRatio": 1,
+                    "visibleFromRatio": 0 if offset == 0 else 0.38,
+                    "layoutMode": layout_mode,
                     "matchScore": round(float(material.get("score") or 0), 2),
                 }
             )
@@ -711,53 +721,60 @@ class AiVideoService:
         return f"{number}.png"
 
     def _sc1_segments_for_scene(self, text: str, scene_index: int) -> list[dict[str, Any]]:
-        parts = self._split_sc1_segment_text(text)
-        if len(parts) == 1:
-            parts.append(parts[0])
-        segments: list[dict[str, Any]] = []
-        for segment_index, segment_text in enumerate(parts[:2]):
-            segments.append(
-                {
-                    "index": segment_index,
-                    "text": segment_text,
-                    "subtitleText": segment_text,
-                    "englishText": self._sc1_english_for_segment(segment_text, scene_index, segment_index),
-                    "summaryLabel": self._sc1_summary_label(segment_text, segment_index),
-                    "enterDirection": self._sc1_enter_direction(scene_index, segment_index),
-                    "startRatio": segment_index / 2,
-                    "endRatio": (segment_index + 1) / 2,
-                }
-            )
-        return segments
+        cleaned = " ".join(str(text or "").replace("\n", " ").split()).strip() or "Scene point"
+        cues = self._split_sc1_caption_cues(cleaned)
+        layout_mode = self._sc1_layout_mode_for_scene(scene_index, cleaned)
+        return [
+            {
+                "index": 0,
+                "text": cleaned,
+                "subtitleText": cleaned,
+                "englishText": self._sc1_english_for_segment(cleaned, scene_index, 0),
+                "summaryLabel": self._sc1_summary_label(cleaned, 0),
+                "layoutMode": layout_mode,
+                "captionCues": [
+                    {
+                        "text": cue,
+                        "englishText": self._sc1_english_for_segment(cue, scene_index, cue_index),
+                    }
+                    for cue_index, cue in enumerate(cues)
+                ],
+                "startRatio": 0,
+                "endRatio": 1,
+            }
+        ]
 
-    def _split_sc1_segment_text(self, text: str) -> list[str]:
+    def _split_sc1_caption_cues(self, text: str) -> list[str]:
         cleaned = " ".join(str(text or "").replace("\n", " ").split()).strip()
         if not cleaned:
             return ["Scene point"]
         parts = [
-            item.strip(" .,!?:;\u3001\u3002\uff0c\uff1b\uff1a\uff01\uff1f")
-            for item in re.split(r"(?<=[\u3002\uff01\uff1f!?;；])\s*|[;；]\s*", cleaned)
-            if item.strip(" .,!?:;\u3001\u3002\uff0c\uff1b\uff1a\uff01\uff1f")
+            item.strip(" .,!?:;、。，；：！？")
+            for item in re.split(r"(?<=[。！？!?;?])\s*", cleaned)
+            if item.strip(" .,!?:;、。，；：！？")
         ]
         if len(parts) >= 2:
-            first = parts[0]
-            second = " ".join(parts[1:]).strip()
-            return [first, second or first]
-        compact = cleaned.strip(" .,!?:;\u3001\u3002\uff0c\uff1b\uff1a\uff01\uff1f")
-        if len(compact) <= 18:
-            return [compact]
-        midpoint = len(compact) // 2
+            return parts[:4]
+        if len(cleaned) <= 20:
+            return [cleaned]
+        midpoint = len(cleaned) // 2
         split_at = midpoint
         for radius in range(0, min(14, midpoint)):
             for candidate in (midpoint + radius, midpoint - radius):
-                if 0 < candidate < len(compact) and compact[candidate] in "\u3001\u3002\uff0c\uff1b\uff1a,;: ":
+                if 0 < candidate < len(cleaned) and cleaned[candidate] in "、。，；：,;: ":
                     split_at = candidate + 1
                     break
             if split_at != midpoint:
                 break
-        first = compact[:split_at].strip(" .,!?:;\u3001\u3002\uff0c\uff1b\uff1a\uff01\uff1f")
-        second = compact[split_at:].strip(" .,!?:;\u3001\u3002\uff0c\uff1b\uff1a\uff01\uff1f")
-        return [first or compact, second or compact]
+        first = cleaned[:split_at].strip(" .,!?:;、。，；：！？")
+        second = cleaned[split_at:].strip(" .,!?:;、。，；：！？")
+        return [first or cleaned, second or cleaned]
+
+    def _sc1_layout_mode_for_scene(self, scene_index: int, text: str) -> str:
+        text = str(text or "")
+        if any(keyword in text for keyword in ["对比", "判断", "规则", "边界", "结论"]):
+            return "center_shift_pair"
+        return "pair_left_right" if scene_index % 2 == 0 else "center_shift_pair"
 
     def _sc1_summary_label(self, text: str, segment_index: int) -> str:
         cleaned = " ".join(str(text or "").split()).strip()
@@ -1266,13 +1283,15 @@ class AiVideoService:
         visual = scene.get("visual") if isinstance(scene.get("visual"), dict) else {}
         media = visual.get("media") if isinstance(visual.get("media"), dict) else {}
         audio = scene.get("audio") if isinstance(scene.get("audio"), dict) else {}
+        segments = scene.get("segments") if isinstance(scene.get("segments"), list) else []
         return {
             "id": scene.get("id"),
             "voiceText": scene.get("voiceText"),
             "subtitleText": scene.get("subtitleText"),
             "displayText": scene.get("subtitleText"),
             "englishText": scene.get("englishText"),
-            "segments": scene.get("segments") or [],
+            "segments": segments,
+            "layoutMode": (segments[0].get("layoutMode") if segments and isinstance(segments[0], dict) else "") or scene.get("layoutMode") or "",
             "title": visual.get("headline") or scene.get("title"),
             "openingTitle": visual.get("openingTitle"),
             "mode": visual.get("type"),
