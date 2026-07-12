@@ -139,6 +139,19 @@ CONTENT_TEMPLATES: dict[str, dict[str, Any]] = {
             ("方法复用", "提炼可复制框架", ["方法", "框架", "复用"]),
         ],
     },
+    "knowledge_ip_stickman": {
+        "label": "火柴人知识 IP",
+        "defaultStyle": "sc1_stickman",
+        "tone": "sharp",
+        "pace": "medium",
+        "sceneTypes": ["judge", "wolf", "casefile", "police", "execution", "desk", "chase"],
+        "steps": [
+            ("开场钩子", "先用脑洞问题抓住注意力", ["争议", "问题", "挑战"]),
+            ("规则判断", "把规则和边界说清楚", ["法律", "定义", "边界"]),
+            ("行为分析", "让用户看到行为后果", ["行为", "后果", "对比"]),
+            ("结尾收束", "给出最终判断和提醒", ["结论", "提醒", "行动"]),
+        ],
+    },
 }
 
 
@@ -153,6 +166,7 @@ STYLE_PRESETS: dict[str, dict[str, Any]] = {
     "data_report": {"label": "数据报告", "palette": "data_green", "motion": "precise", "density": "high"},
     "news_flash": {"label": "热点快讯", "palette": "news_red", "motion": "fast_cut", "density": "high"},
     "premium_black_gold": {"label": "高级黑金", "palette": "black_gold", "motion": "cinematic", "density": "medium"},
+    "sc1_stickman": {"label": "SC1火柴人", "palette": "paper_ink", "motion": "slide", "density": "medium"},
 }
 
 
@@ -881,10 +895,18 @@ class AiVideoService:
         output_path: Path,
         log_path: str | None,
     ) -> dict[str, Any]:
+        content_type = str(payload.get("contentType") or payload.get("videoType") or "insight")
+        visual_style = str(payload.get("visualStyle") or payload.get("style") or "dark_editorial")
+        render_composition = (
+            "Sc1StickmanVideo"
+            if content_type == "knowledge_ip_stickman" or visual_style == "sc1_stickman"
+            else "MindVideo"
+        )
         request_payload = {
+            "title": payload.get("title") or "",
             "script": payload.get("script") or "",
-            "style": payload.get("visualStyle") or payload.get("style") or "dark_editorial",
-            "contentType": payload.get("contentType") or payload.get("videoType") or "insight",
+            "style": visual_style,
+            "contentType": content_type,
             "targetPlatform": payload.get("targetPlatform") or "douyin",
             "tone": payload.get("tone") or "professional",
             "pace": payload.get("pace") or "medium",
@@ -893,6 +915,7 @@ class AiVideoService:
             "audioScenes": audio_scenes,
             "scenes": [self._scene_for_render(scene) for scene in scenes],
             "bgmSrc": None,
+            "renderComposition": render_composition,
         }
         body = json.dumps(request_payload, ensure_ascii=False).encode("utf-8")
         request = urllib.request.Request(
@@ -1322,6 +1345,8 @@ class AiVideoService:
         if not normalized:
             return [self._fallback_sentence(i, content_type) for i in range(scene_count)]
         parts = [part.strip(" ，,、；;：:") for part in re.split(r"(?<=[。！？!?；;])\s*", normalized) if part.strip()]
+        if content_type == "knowledge_ip_stickman" and allow_prompt_expansion and len(parts) < scene_count:
+            return self._expand_prompt_to_scene_texts(normalized, content_type, scene_count)
         if allow_prompt_expansion and self._looks_like_generation_request(normalized) and "文案：" not in normalized and "旁白：" not in normalized and len(parts) < scene_count:
             return self._expand_prompt_to_scene_texts(normalized, content_type, scene_count)
         if len(parts) >= scene_count:
@@ -1338,11 +1363,18 @@ class AiVideoService:
         return parts[:scene_count]
 
     def _looks_like_generation_request(self, text: str) -> bool:
-        return any(word in text for word in ["帮我", "生成", "做一条", "做一个", "视频", "短视频", "文案", "风格"])
+        return any(word in text for word in ["帮我", "生成", "做一条", "做一个", "视频", "短视频", "文案", "风格", "火柴人", "知识IP", "知识 IP"])
 
     def _expand_prompt_to_scene_texts(self, prompt: str, content_type: str, scene_count: int) -> list[str]:
         topic = self._topic_from_prompt(prompt)
         pools = {
+            "knowledge_ip_stickman": [
+                f"来挑战一下你的脑洞：{topic}，你第一反应可能是错的。",
+                f"先别急着下结论，真正关键的是把“{topic}”里的行为、对象和后果分开看。",
+                "如果只看表面，你会觉得这只是一个普通选择；但换到规则语境里，性质就完全不同。",
+                "判断这类问题，第一步看行为指向谁，第二步看有没有造成风险，第三步再看法律或规则边界。",
+                f"所以这道题的答案不是背结论，而是学会用结构去拆：{topic}到底伤害了什么、触发了什么后果。",
+            ],
             "product_seed": [
                 f"别急着买，先看清楚这个真实痛点：{topic}。",
                 "真正打动用户的不是参数，而是它能解决熬夜、低效或选择困难这种具体问题。",

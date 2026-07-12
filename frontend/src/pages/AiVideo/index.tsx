@@ -38,6 +38,15 @@ type Option = {
 
 const videoTypes: Option[] = [
   {
+    key: 'knowledge_ip_stickman',
+    label: '火柴人知识IP',
+    english: 'SC1 Stickman',
+    icon: 'SC',
+    defaultStyle: 'sc1_stickman',
+    desc: '白底黑线火柴人、关键词标签、底部说明字幕和滑动转场，适合法律、心理、认知、职场知识号。',
+    prompt: '帮我做一条火柴人知识IP视频，白底黑线风格，像脑洞题讲解，顶部有账号标题，中间用人物/场景图表达，底部根据文案生成说明文字和英文小字幕，镜头之间用滑动转场。',
+  },
+  {
     key: 'product_seed',
     label: '种草带货',
     english: 'Product Hook',
@@ -94,6 +103,7 @@ const videoTypes: Option[] = [
 ]
 
 const visualStyles: Option[] = [
+  { key: 'sc1_stickman', label: 'SC1火柴人', english: 'Stickman', icon: 'SC', desc: '白底、黑色火柴人、彩色关键词标签、横屏讲解与滑动转场。', prompt: '视觉风格使用SC1火柴人复刻模板：白底黑线、人物剪影、彩色关键词标签、底部双语说明、横向滑动转场。' },
   { key: 'premium_black_gold', label: '高级黑金', english: 'Black Gold', icon: 'BG', desc: '黑金质感、慢推镜头、强品牌感。', prompt: '视觉风格要高级黑金，克制、有质感，字幕不要太满。' },
   { key: 'commerce_boost', label: '电商转化', english: 'Commerce', icon: 'CB', desc: '卖点卡、对比画面、强行动引导。', prompt: '视觉风格要适合带货转化，突出卖点、对比和 CTA。' },
   { key: 'clean_explainer', label: '极简白板', english: 'Explainer', icon: 'CE', desc: '白板线条、步骤卡片、讲解清楚。', prompt: '视觉风格要极简白板，重点突出步骤、关键词和逻辑。' },

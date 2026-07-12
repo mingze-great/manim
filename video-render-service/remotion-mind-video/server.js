@@ -23,12 +23,11 @@ const getBundle = async () => {
   });
 };
 
-const renderMindVideo = async ({inputProps, filenamePrefix = 'mindfilm'}) => {
-  const story = scriptToStory(inputProps);
+const renderMindVideo = async ({inputProps, filenamePrefix = 'mindfilm', compositionId = 'MindVideo'}) => {
   const serveUrl = await getBundle();
   const composition = await selectComposition({
     serveUrl,
-    id: 'MindVideo',
+    id: compositionId,
     inputProps,
     browserExecutable
   });
@@ -54,8 +53,8 @@ const renderMindVideo = async ({inputProps, filenamePrefix = 'mindfilm'}) => {
   return {
     url: `/renders/${filename}`,
     filename,
-    durationInFrames: story.durationInFrames,
-    seconds: Math.round((story.durationInFrames / story.fps) * 10) / 10
+    durationInFrames: composition.durationInFrames,
+    seconds: Math.round((composition.durationInFrames / composition.fps) * 10) / 10
   };
 };
 
@@ -113,13 +112,19 @@ app.post('/api/render-project', async (req, res) => {
       scenes: Array.isArray(req.body?.scenes) ? req.body.scenes : [],
       density: Number(req.body?.density ?? 1),
       audioScenes: Array.isArray(req.body?.audioScenes) ? req.body.audioScenes : [],
-      bgmSrc: req.body?.bgmSrc ?? null
+      bgmSrc: req.body?.bgmSrc ?? null,
+      title: String(req.body?.title ?? '')
     };
     if (!inputProps.audioScenes.length) {
       res.status(400).json({ok: false, message: 'CosyVoice audioScenes are required'});
       return;
     }
-    const result = await renderMindVideo({inputProps, filenamePrefix: 'mindfilm-cosyvoice'});
+    const compositionId = String(req.body?.renderComposition ?? req.body?.compositionId ?? '').trim() || 'MindVideo';
+    const result = await renderMindVideo({
+      inputProps,
+      filenamePrefix: compositionId === 'Sc1StickmanVideo' ? 'sc1-stickman' : 'mindfilm-cosyvoice',
+      compositionId
+    });
     res.json({
       ok: true,
       ...result,
@@ -146,7 +151,8 @@ app.post('/api/render', async (req, res) => {
       pace: String(req.body?.pace ?? 'medium'),
       goal: String(req.body?.goal ?? ''),
       scenes: Array.isArray(req.body?.scenes) ? req.body.scenes : [],
-      density: Number(req.body?.density ?? 1)
+      density: Number(req.body?.density ?? 1),
+      title: String(req.body?.title ?? '')
     };
     const baseStory = scriptToStory(baseProps);
     const audio = await prepareAudioForStory({
@@ -163,7 +169,12 @@ app.post('/api/render', async (req, res) => {
       audioScenes: audio.audioScenes,
       bgmSrc: audio.bgmSrc
     };
-    const result = await renderMindVideo({inputProps});
+    const compositionId = String(req.body?.renderComposition ?? req.body?.compositionId ?? '').trim() || 'MindVideo';
+    const result = await renderMindVideo({
+      inputProps,
+      compositionId,
+      filenamePrefix: compositionId === 'Sc1StickmanVideo' ? 'sc1-stickman' : 'mindfilm'
+    });
 
     res.json({
       ok: true,

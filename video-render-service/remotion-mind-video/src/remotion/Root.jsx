@@ -2,6 +2,7 @@ import React from 'react';
 import {Composition} from 'remotion';
 import {MindVideo} from './MindVideo.jsx';
 import {KnowledgeIpPackage} from './KnowledgeIpPackage.jsx';
+import {Sc1StickmanVideo, buildSc1StickmanStory} from './Sc1StickmanVideo.jsx';
 import {defaultScript, scriptToStory} from '../story.js';
 
 const sampleStory = scriptToStory({script: defaultScript, style: 'aurora', density: 1});
@@ -52,6 +53,29 @@ export const RemotionRoot = () => (
           fps,
           width: 1080,
           height: 1920
+        };
+      }}
+    />
+    <Composition
+      id="Sc1StickmanVideo"
+      component={Sc1StickmanVideo}
+      durationInFrames={360}
+      fps={30}
+      width={1920}
+      height={1080}
+      defaultProps={{
+        title: 'SC1 Stickman Workflow',
+        scenes: [],
+        audioScenes: [],
+        bgmSrc: null
+      }}
+      calculateMetadata={({props}) => {
+        const story = buildSc1StickmanStory(props);
+        return {
+          durationInFrames: story.durationInFrames,
+          fps: story.fps,
+          width: story.width,
+          height: story.height
         };
       }}
     />

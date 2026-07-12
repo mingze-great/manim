@@ -443,6 +443,7 @@
 .style-data_report::before { background: linear-gradient(90deg, #54ffa9 12%, transparent 12% 24%, #9cfffa 24% 34%, transparent 34%); }
 .style-news_flash::before { background: linear-gradient(135deg, #ff1f3d 0 45%, #2f80ed 45%); }
 .style-premium_black_gold::before { background: linear-gradient(135deg, #050403, #d7a948); }
+.style-sc1_stickman::before { background: linear-gradient(#111 0 0) 20% 72% / 70% 3px no-repeat, radial-gradient(circle at 48% 34%, #111 0 9%, transparent 10%), linear-gradient(90deg, #c51cff 0 12%, transparent 12% 20%, #f3d21b 20% 32%, transparent 32%), #fff; opacity: .22; }
 
 .option-card:hover,
 .option-card.active {

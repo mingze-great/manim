@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "concurrently -k -n web,api -c cyan,magenta \"vite --host 127.0.0.1 --port 5173\" \"node server.js\"",
     "build": "vite build",
-    "render:sample": "node scripts/render-sample.js"
+    "render:sample": "node scripts/render-sample.js",
+    "render:sc1": "node scripts/render-sc1-stickman-sample.js"
   },
   "dependencies": {
     "@remotion/bundler": "^4.0.346",
