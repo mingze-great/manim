@@ -91,6 +91,36 @@ End-to-end smoke:
 - In-app browser screenshot verification was blocked on the local machine because the C drive had `0` free space and the browser plugin could not write runtime assets. HTTP route and end-to-end remote generation were verified instead.
 - Remote disk remains tight. Before this deployment, old Remotion temporary renders and generated audio were cleaned to keep enough space for smoke generation.
 
+## Follow-up Deployment - 2026-07-13
+
+- Deployed runtime code commit: `d4c31d217c6a7edebb0ed0b95dd5cefefaec11bf`
+- Bundle transport:
+  - `/opt/manim_backups/stickman-dashscope-fix-20260713.bundle`
+  - `/opt/manim_backups/stickman-cosyvoice-trim-fix-20260713.bundle`
+- Backup before this follow-up: `/opt/manim_backups/3003_before_stickman_segment_summaries_20260713_002028`
+- Fixes:
+  - Standalone fire-stickman workflow no longer exposes or sends `sceneCount`; scene count is inferred semantically from topic/script.
+  - Segment summary labels are generated per caption cue and accumulate within the same two-image scene segment.
+  - Summary labels stay in the safe top band above scene images and do not overlap subtitles.
+  - CosyVoice PCM trimming now preserves valid low-volume PCM when silence trimming would remove too much audio.
+- Local verification:
+  - `python -m py_compile backend/app/services/ai_video.py backend/app/api/stickman_workflow.py backend/app/main.py`
+  - `npm run build` in `frontend`
+  - `node scripts/render-sc1-stickman-sample.js stills`
+  - `node scripts/render-sc1-stickman-sample.js render`
+  - `ffprobe` confirmed local sample had H.264 video and AAC audio.
+- Remote verification:
+  - Backend py_compile passed on `/opt/manim-v2-3003-snapshot`.
+  - `manim-v2-3003-backend.service`, `manim-v2-3003-worker.service`, and `manim-v2-3003-ai-video-render.service` active after restart.
+  - End-to-end standalone workflow job: `job_41`, project `38`.
+  - Request payload used only topic/title/voice, no `sceneCount`.
+  - Topic: `判断越界`
+  - Output URL: `/api/ai-video/files/41/output/video.mp4`
+  - Output file: `/opt/manim-v2-3003-snapshot/backend/storage/ai-video/tasks/job_41/output/video.mp4`
+  - Downloaded local file: `E:\ai\agent_knowledge_ip_module_20260712\downloaded_test_videos\stickman_workflow\job_41-video.mp4`
+  - `ffprobe` confirmed `23.66s` H.264 video plus AAC audio.
+  - Frame checks at `4s`, `12s`, `17s`, and `21s` confirmed scene images, Chinese/English subtitles, and accumulated summary labels render without overlap.
+
 ## Rollback
 
 Rollback to previous deployed standalone base:
