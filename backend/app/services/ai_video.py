@@ -1207,7 +1207,9 @@ class AiVideoService:
         except Exception as exc:
             raise RuntimeError(f"Open-source CosyVoice unavailable: {exc}") from exc
 
-        pcm = self._trim_pcm_silence(pcm)
+        raw_pcm = pcm
+        trimmed_pcm = self._trim_pcm_silence(raw_pcm)
+        pcm = trimmed_pcm if len(trimmed_pcm) >= 1024 else raw_pcm
         if len(pcm) < 1024:
             raise RuntimeError("Open-source CosyVoice returned empty audio")
         if len(pcm) % 2:
