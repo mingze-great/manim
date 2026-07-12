@@ -8,7 +8,8 @@ Create and deploy a standalone SC1 stickman workflow entry outside AI Video Dire
 
 - Local worktree: `E:\ai\agent_knowledge_ip_module_20260712`
 - Branch: `codex/3003-standalone-stickman-workflow-20260712`
-- Deployed commit: `cc182010d0f194af5bf73a72bc4d2e2a7ee49480`
+- Deployed commit: `3dd2223ebbf839a1093987389a852d802b8753fe`
+- Material staging fix commit: `cc182010d0f194af5bf73a72bc4d2e2a7ee49480`
 - Previous standalone module commit: `c85e767664c707bba4002619cc96b6e770aaa064`
 - Previous deployed branch: `codex/3003-knowledge-ip-module-20260712`
 - Previous deployed commit: `1ab199775445f10a49039ae64532a1d4fcab33d5`
@@ -101,4 +102,3 @@ systemctl restart manim-v2-3003-backend.service manim-v2-3003-worker.service man
 ```
 
 Backup path for reference: `/opt/manim_backups/3003_before_standalone_stickman_20260712_214201`
-
