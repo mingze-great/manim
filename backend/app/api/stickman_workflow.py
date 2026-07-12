@@ -51,7 +51,7 @@ def create_stickman_job(
         "style": "sc1_stickman",
         "visualStyle": "sc1_stickman",
         "aspectRatio": "16:9",
-        "voiceProvider": "cosyvoice",
+        "voiceProvider": "dashscope_cosyvoice",
         "voiceId": payload.voiceId,
         "subtitleMode": "keywords",
         "targetPlatform": payload.targetPlatform,

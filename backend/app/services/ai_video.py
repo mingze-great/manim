@@ -4,6 +4,7 @@ import os
 import re
 import shutil
 import threading
+import dashscope
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -12,6 +13,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from dashscope.audio.tts_v2 import SpeechSynthesizer
+from pydub import AudioSegment
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
@@ -194,6 +197,14 @@ class AiVideoService:
         self.cosyvoice_url = os.getenv("AI_VIDEO_COSYVOICE_URL", "http://127.0.0.1:50000").rstrip("/")
         self.cosyvoice_timeout = int(os.getenv("AI_VIDEO_COSYVOICE_TIMEOUT", "300"))
         self.cosyvoice_sample_rate = int(os.getenv("AI_VIDEO_COSYVOICE_SAMPLE_RATE", "22050"))
+        self.dashscope_api_key = os.getenv("STICKMAN_TTS_API_KEY") or os.getenv("DASHSCOPE_API_KEY") or os.getenv("IMAGE_API_KEY", "")
+        self.dashscope_tts_models = [
+            item.strip()
+            for item in (os.getenv("STICKMAN_TTS_FALLBACK_MODELS") or "cosyvoice-v3.5-flash,cosyvoice-v3-plus").split(",")
+            if item.strip()
+        ]
+        dashscope.api_key = self.dashscope_api_key
+        dashscope.base_websocket_api_url = "wss://dashscope.aliyuncs.com/api-ws/v1/inference"
         self._running_jobs: set[int] = set()
         self._lock = threading.Lock()
         self._sc1_material_cache: tuple[tuple[str, float, int] | None, list[dict[str, Any]]] = (None, [])
@@ -595,7 +606,7 @@ class AiVideoService:
                 "tone": tone,
             },
             "voice": {
-                "provider": payload.get("voiceProvider") or "cosyvoice",
+                "provider": payload.get("voiceProvider") or "dashscope_cosyvoice",
                 "speaker": payload.get("voiceId") or "中文女",
                 "emotion": tone,
                 "speed": {"fast": 1.08, "medium": 1.0, "slow": 0.92}.get(pace, 1.0),
@@ -1093,6 +1104,9 @@ class AiVideoService:
         voice = self._resolve_cosyvoice_voice(
             str(payload.get("voiceId") or project_json.get("voice", {}).get("speaker") or "中文女")
         )
+        provider = str(payload.get("voiceProvider") or project_json.get("voice", {}).get("provider") or "dashscope_cosyvoice").strip()
+        if provider == "dashscope_cosyvoice":
+            voice = self._resolve_dashscope_voice(str(payload.get("voiceId") or project_json.get("voice", {}).get("speaker") or "中文女"))
         audio_scenes: list[dict[str, Any]] = []
         for index, scene in enumerate(project_json.get("scenes") or []):
             text = str(scene.get("voiceText") or scene.get("subtitleText") or "").strip()
@@ -1102,10 +1116,20 @@ class AiVideoService:
             filename = f"scene-{index + 1:02d}.wav"
             backend_audio_path = backend_audio_dir / filename
             render_audio_path = render_audio_dir / filename
-            self._append_log(log_path, f"Open-source CosyVoice scene={index + 1} voice={voice} text={text[:80]}")
-            seconds = self._generate_open_source_cosyvoice_audio(text, voice, backend_audio_path)
+            self._append_log(log_path, f"CosyVoice scene={index + 1} provider={provider} voice={voice} text={text[:80]}")
+            if provider == "dashscope_cosyvoice":
+                try:
+                    seconds = self._generate_dashscope_cosyvoice_audio(text, voice, backend_audio_path)
+                except Exception as exc:
+                    fallback_voice = self._resolve_cosyvoice_voice(str(payload.get("voiceId") or project_json.get("voice", {}).get("speaker") or "中文女"))
+                    self._append_log(log_path, f"DashScope CosyVoice fallback to open-source scene={index + 1} error={exc}")
+                    seconds = self._generate_open_source_cosyvoice_audio(text, fallback_voice, backend_audio_path)
+                    voice = fallback_voice
+                    provider = "open_source_cosyvoice"
+            else:
+                seconds = self._generate_open_source_cosyvoice_audio(text, voice, backend_audio_path)
             if seconds <= 0 or not backend_audio_path.exists() or backend_audio_path.stat().st_size <= 0:
-                raise RuntimeError(f"Open-source CosyVoice returned invalid audio for scene_{index + 1}")
+                raise RuntimeError(f"CosyVoice returned invalid audio for scene_{index + 1}")
 
             shutil.copyfile(backend_audio_path, render_audio_path)
             pause_frames = 2 if index < len(project_json.get("scenes") or []) - 1 else 4
@@ -1116,7 +1140,7 @@ class AiVideoService:
             scene["duration"] = round(duration_seconds, 2)
             scene["durationFrames"] = duration_frames
             scene["audio"] = {
-                "provider": "open_source_cosyvoice",
+                "provider": provider,
                 "voice": voice,
                 "path": str(backend_audio_path),
                 "src": f"generated-audio/{render_audio_dir.name}/{filename}",
@@ -1130,13 +1154,41 @@ class AiVideoService:
                     "src": f"generated-audio/{render_audio_dir.name}/{filename}",
                     "seconds": seconds,
                     "durationInFrames": duration_frames,
-                    "provider": "open_source_cosyvoice",
+                    "provider": provider,
                 }
             )
 
-        project_json.setdefault("voice", {})["provider"] = "open_source_cosyvoice"
+        project_json.setdefault("voice", {})["provider"] = provider
         project_json.setdefault("voice", {})["speaker"] = voice
         return audio_scenes
+
+    def _generate_dashscope_cosyvoice_audio(self, text: str, voice: str, output_path: Path) -> float:
+        last_error: Exception | None = None
+        for model in self._resolve_dashscope_cosyvoice_models(voice):
+            try:
+                synthesizer = SpeechSynthesizer(model=model, voice=voice)
+                audio_bytes = synthesizer.call(text)
+                if not audio_bytes:
+                    raise RuntimeError("DashScope CosyVoice returned empty audio")
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(output_path, "wb") as file:
+                    file.write(audio_bytes)
+                audio = AudioSegment.from_file(output_path)
+                if len(audio.raw_data) < 1024 or audio.rms <= 0:
+                    raise RuntimeError("DashScope CosyVoice returned silent audio")
+                return max(len(audio) / 1000.0, 0.01)
+            except Exception as exc:
+                last_error = exc
+        raise RuntimeError(f"DashScope CosyVoice failed: {last_error}")
+
+    def _resolve_dashscope_cosyvoice_models(self, voice: str) -> list[str]:
+        preferred = "cosyvoice-v3.5-plus" if str(voice or "").startswith("cosyvoice-v3.5-plus-") else "cosyvoice-v3.5-flash"
+        ordered: list[str] = []
+        for candidate in [preferred, *self.dashscope_tts_models, "cosyvoice-v3-plus"]:
+            model = str(candidate or "").strip()
+            if model and model not in ordered:
+                ordered.append(model)
+        return ordered
 
     def _generate_open_source_cosyvoice_audio(self, text: str, voice: str, output_path: Path) -> float:
         data = urllib.parse.urlencode({"tts_text": text, "spk_id": voice}).encode("utf-8")
@@ -1923,6 +1975,23 @@ class AiVideoService:
         if not normalized or "?" in normalized or "\ufffd" in normalized:
             return female
         return mapping.get(normalized, female)
+
+    def _resolve_dashscope_voice(self, voice: str) -> str:
+        normalized = str(voice or "").strip()
+        mapping = {
+            "中文女": "longanhuan",
+            "女声": "longanhuan",
+            "元气女声": "longanhuan",
+            "longanhuan": "longanhuan",
+            "中文男": "longshuo_v3",
+            "男声": "longshuo_v3",
+            "稳重男声": "longshuo_v3",
+            "longshuo_v3": "longshuo_v3",
+            "longanyang": "longanyang",
+        }
+        if normalized.startswith("cosyvoice-v3.5-plus-"):
+            return normalized
+        return mapping.get(normalized, "longanhuan")
 
     def _derive_title(self, script: str) -> str:
         cleaned = " ".join(str(script or "").split())
