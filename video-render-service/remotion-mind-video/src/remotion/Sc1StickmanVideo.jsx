@@ -156,11 +156,11 @@ const Header = ({title}) => (
 const KeywordLabels = ({scene, local}) => {
   const labels = (scene.keywords || []).slice(0, 3);
   return (
-    <div style={{position: 'absolute', left: 650, top: 145, display: 'flex', gap: 30, alignItems: 'center'}}>
+    <div style={{position: 'absolute', left: 575, right: 160, top: 160, display: 'flex', gap: 30, alignItems: 'center', justifyContent: 'center', height: 52, overflow: 'hidden'}}>
       {labels.map((keyword, index) => {
         const enter = interpolate(local, [index * 5, index * 5 + 14], [0, 1], {extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic)});
         return (
-          <div key={`${keyword}-${index}`} style={{display: 'flex', alignItems: 'center', gap: 8, opacity: enter, transform: `translateY(${(1 - enter) * 16}px)`, fontSize: 25, fontWeight: 900, color: '#111'}}>
+          <div key={`${keyword}-${index}`} style={{display: 'flex', alignItems: 'center', gap: 8, opacity: enter, transform: `translateY(${(1 - enter) * 16}px)`, fontSize: 30, lineHeight: 1, fontWeight: 900, color: '#111', whiteSpace: 'nowrap', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis'}}>
             <span style={{width: 24, height: 24, background: colors[(scene.index + index) % colors.length], display: 'inline-block', borderRadius: 2}} />
             <span>{keyword}</span>
           </div>
@@ -266,17 +266,68 @@ const DeskScene = ({local}) => (
 const OptionalImage = ({src}) => {
   if (!src) return null;
   const source = String(src);
-  const image = /^https?:\/\//i.test(source)
-    ? <img src={source} alt="" crossOrigin="anonymous" referrerPolicy="no-referrer" style={{width: '100%', height: '100%', objectFit: 'contain'}} />
-    : <Img src={staticFile(source.replace(/^\/+/, ''))} style={{width: '100%', height: '100%', objectFit: 'contain'}} />;
+  const image = /^(https?:|file:)\/\//i.test(source)
+    ? <img src={source} alt="" crossOrigin="anonymous" referrerPolicy="no-referrer" style={{width: '100%', height: '100%', objectFit: 'contain', filter: 'grayscale(1) contrast(2.2)', mixBlendMode: 'multiply'}} />
+    : <Img src={staticFile(source.replace(/^\/+/, ''))} style={{width: '100%', height: '100%', objectFit: 'contain', filter: 'grayscale(1) contrast(2.2)', mixBlendMode: 'multiply'}} />;
   return (
-    <div style={{position: 'absolute', left: 390, top: 210, width: 1140, height: 565, display: 'grid', placeItems: 'center'}}>
+    <div style={{position: 'absolute', left: 390, top: 250, width: 1140, height: 555, display: 'grid', placeItems: 'center', overflow: 'hidden'}}>
       {image}
     </div>
   );
 };
 
+const MaterialImage = ({item, index, count, local}) => {
+  const src = item?.src;
+  if (!src) return null;
+  const slot = count === 1
+    ? {left: 500, top: 260, width: 920, height: 540, scale: 1.32}
+    : index === 0
+      ? {left: 250, top: 275, width: 650, height: 535, scale: 1.45}
+      : {left: 1010, top: 275, width: 650, height: 535, scale: 1.45};
+  const enter = interpolate(local, [index * 6, index * 6 + 18], [0, 1], {extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic)});
+  const x = (1 - enter) * (index === 0 ? -80 : 80);
+  const shared = {
+    width: '100%',
+    height: '100%',
+    objectFit: 'contain',
+    filter: 'grayscale(1) contrast(2.25)',
+    mixBlendMode: 'multiply',
+    transform: `scale(${slot.scale})`,
+  };
+  const source = String(src);
+  const image = /^(https?:|file:)\/\//i.test(source)
+    ? <img src={source} alt="" crossOrigin="anonymous" referrerPolicy="no-referrer" style={shared} />
+    : <Img src={staticFile(source.replace(/^\/+/, ''))} style={shared} />;
+  return (
+    <div style={{
+      position: 'absolute',
+      left: slot.left,
+      top: slot.top,
+      width: slot.width,
+      height: slot.height,
+      opacity: enter,
+      transform: `translateX(${x}px)`,
+      overflow: 'hidden',
+      display: 'grid',
+      placeItems: 'center'
+    }}>
+      {image}
+    </div>
+  );
+};
+
+const MaterialSceneImages = ({scene, local}) => {
+  const images = Array.isArray(scene.assetImages) ? scene.assetImages.filter((item) => item?.src).slice(0, 2) : [];
+  if (!images.length) return null;
+  return (
+    <div style={{position: 'absolute', left: 0, right: 0, top: 220, height: 600, overflow: 'hidden'}}>
+      {images.map((item, index) => <MaterialImage key={`${item.src}-${index}`} item={item} index={index} count={images.length} local={local} />)}
+    </div>
+  );
+};
+
 const SceneVisual = ({scene, local}) => {
+  if (Array.isArray(scene.assetImages) && scene.assetImages.length) return <MaterialSceneImages scene={scene} local={local} />;
   const mediaSrc = scene.media?.src || scene.imageSrc || scene.assetSrc;
   if (mediaSrc) return <OptionalImage src={mediaSrc} />;
   const mode = scene.mode;
@@ -296,9 +347,7 @@ const SceneLayer = ({scene, local}) => {
   const opacity = clamp(enter * (1 - exit), 0, 1);
   return (
     <div style={{position: 'absolute', inset: 0, opacity, transform: `translateX(${slideX}px)`}}>
-      <KeywordLabels scene={scene} local={local} />
       <SceneVisual scene={scene} local={local} />
-      <Subtitle scene={scene} />
     </div>
   );
 };
@@ -307,7 +356,7 @@ const Subtitle = ({scene}) => {
   const zhLines = splitLines(scene.subtitleText || scene.voiceText, 23, 2);
   const enLines = splitEnglishLines(scene.englishText, 58, 2);
   return (
-    <div style={{position: 'absolute', left: 0, right: 0, top: 845, height: 155, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', textAlign: 'center', paddingTop: 10}}>
+    <div style={{position: 'absolute', left: 0, right: 0, top: 845, height: 155, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', textAlign: 'center', paddingTop: 10, overflow: 'hidden'}}>
       <div style={{fontSize: zhLines.join('').length > 24 ? 42 : 48, lineHeight: 1.08, fontWeight: 1000, color: '#111'}}>
         {zhLines.map((line) => <div key={line}>{line}</div>)}
       </div>
@@ -335,7 +384,9 @@ export const Sc1StickmanVideo = (props) => {
     <AbsoluteFill style={{fontFamily: FONT, background: '#fff', overflow: 'hidden'}}>
       <Paper />
       <Header title={title} />
+      <KeywordLabels scene={active} local={local} />
       <SceneLayer scene={active} local={local} />
+      <Subtitle scene={active} />
       <AudioTrack story={story} bgmSrc={props.bgmSrc} />
       <Progress frame={frame} durationInFrames={story.durationInFrames} />
     </AbsoluteFill>

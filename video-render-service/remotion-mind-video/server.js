@@ -11,10 +11,12 @@ import {checkCosyVoice, ensureAudioDirs, listVoices, prepareAudioForStory} from 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const port = Number(process.env.PORT ?? 18787);
+const sc1MaterialLibraryPath = process.env.SC1_MATERIAL_LIBRARY_PATH || '/opt/manim_assets/sc1-sucai';
 
 app.use(express.json({limit: '20mb'}));
 app.use('/renders', express.static(path.join(__dirname, 'renders')));
 app.use('/generated-audio', express.static(path.join(__dirname, 'public', 'generated-audio')));
+app.use('/sc1-materials', express.static(sc1MaterialLibraryPath));
 
 const getBundle = async () => {
   return bundle({
@@ -79,6 +81,7 @@ app.get('/api/health', async (_req, res) => {
     service: 'remotion-mind-video',
     port,
     browserExecutable,
+    sc1MaterialLibraryPath,
     requiresExternalAudio: true
   });
 });

@@ -11,7 +11,7 @@ from datetime import datetime
 
 from app.config import get_settings
 from app.database import engine, Base
-from app.api import auth, projects, tasks, templates, admin, payment, monitoring, internal, video_topics, articles, articles_stream, chat_styles, ai_video, knowledge_ip
+from app.api import auth, projects, tasks, templates, admin, payment, monitoring, internal, video_topics, articles, articles_stream, chat_styles, ai_video, knowledge_ip, stickman_workflow
 
 settings = get_settings()
 
@@ -468,6 +468,7 @@ app.include_router(articles_stream.router, prefix="/api")
 app.include_router(chat_styles.router, prefix="/api")
 app.include_router(ai_video.router, prefix="/api")
 app.include_router(knowledge_ip.router, prefix="/api")
+app.include_router(stickman_workflow.router, prefix="/api")
 
 
 import asyncio

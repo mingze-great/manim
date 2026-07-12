@@ -10,6 +10,13 @@ const projectRoot = path.resolve(__dirname, '..');
 const args = process.argv.slice(2);
 const mode = args[0] || 'stills';
 const previewSeconds = Number(args[1] || 0);
+const localMaterialDir = process.env.SC1_MATERIAL_LIBRARY_PATH || 'E:\\ai\\cankao\\sucai';
+const publicMaterialDir = path.join(projectRoot, 'public', 'sc1-materials');
+await fs.mkdir(publicMaterialDir, {recursive: true});
+for (const name of ['1.png', '10.png', '11.png', '12.png', '13.png', '14.png', '15.png', '16.png', '17.png', '18.png']) {
+  await fs.copyFile(path.join(localMaterialDir, name), path.join(publicMaterialDir, name));
+}
+const materialUrl = (name) => `sc1-materials/${name}`;
 
 const inputProps = {
   title: '沙雕法律竞赛题挑战你脑洞',
@@ -22,6 +29,7 @@ const inputProps = {
       voiceText: '来挑战一下你的脑抽程度吧',
       keywords: ['法律竞赛', '脑抽挑战'],
       mode: 'judge',
+      assetImages: [{src: materialUrl('1.png')}, {src: materialUrl('10.png')}],
       durationFrames: 96
     },
     {
@@ -31,6 +39,7 @@ const inputProps = {
       voiceText: '喂警犬吃狗算什么行为？',
       keywords: ['法律竞赛', '脑抽挑战', '性质题'],
       mode: 'wolf',
+      assetImages: [{src: materialUrl('11.png')}, {src: materialUrl('12.png')}],
       durationFrames: 108
     },
     {
@@ -40,6 +49,7 @@ const inputProps = {
       voiceText: '第二题父子题',
       keywords: ['法律定义', '作死行为'],
       mode: 'chase',
+      assetImages: [{src: materialUrl('13.png')}, {src: materialUrl('14.png')}],
       durationFrames: 112
     },
     {
@@ -49,6 +59,7 @@ const inputProps = {
       voiceText: '这只属于一般情况下',
       keywords: ['把握反抗', '拒捕袭警'],
       mode: 'police',
+      assetImages: [{src: materialUrl('15.png')}, {src: materialUrl('16.png')}],
       durationFrames: 108
     },
     {
@@ -58,6 +69,7 @@ const inputProps = {
       voiceText: '执行死刑时',
       keywords: ['走位题', '不能要求'],
       mode: 'execution',
+      assetImages: [{src: materialUrl('17.png')}, {src: materialUrl('18.png')}],
       durationFrames: 108
     }
   ]

@@ -25,6 +25,7 @@ export default function MainLayout() {
   }, [user])
 
   const menuItems: MenuProps['items'] = [
+    { key: '/stickman-workflow', icon: <VideoCameraOutlined />, label: '火柴人工作流' },
     { key: '/creator', icon: <PlusOutlined />, label: '开始创作' },
     { key: '/ai-video/dashboard', icon: <VideoCameraOutlined />, label: 'AI 视频导演' },
     { key: '/knowledge-ip', icon: <FileProtectOutlined />, label: '知识IP包装' },
@@ -63,6 +64,7 @@ export default function MainLayout() {
   }
 
   const getPageTitle = () => {
+    if (location.pathname.startsWith('/stickman-workflow')) return '火柴人工作流'
     const item = menuItems.find(m => m && 'key' in m && m.key === location.pathname)
     if (item && 'label' in item) return item.label as string
     if (location.pathname.startsWith('/creator')) return '创作工作台'

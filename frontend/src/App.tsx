@@ -9,6 +9,7 @@ import Creator from './pages/Creator'
 import ExplainerCreator from './pages/ExplainerCreator'
 import StickmanModuleEntry from './pages/StickmanModuleEntry'
 import StickmanCreator from './pages/StickmanCreator'
+import StickmanWorkflow from './pages/StickmanWorkflow'
 import History from './pages/History'
 import Profile from './pages/Profile'
 import Docs from './pages/Docs'
@@ -150,6 +151,7 @@ function AppContent() {
         <Route path="/creator/explainer" element={<ExplainerCreator />} />
         <Route path="/creator/stickman" element={<StickmanModuleEntry />} />
         <Route path="/creator/stickman/:variant" element={<StickmanCreator />} />
+        <Route path="/stickman-workflow" element={<StickmanWorkflow />} />
         <Route path="/project/:id/chat" element={<ProjectChat />} />
         <Route path="/project/:id/task" element={<ProjectTask />} />
         <Route path="/project/:id/explainer" element={<ExplainerStudio />} />
