@@ -16,8 +16,8 @@ router = APIRouter(prefix="/stickman-workflow", tags=["stickman-workflow"])
 
 
 class StickmanWorkflowJobCreate(BaseModel):
-    topic: str = Field(..., min_length=2, max_length=120)
-    title: Optional[str] = None
+    title: str = Field(..., min_length=2, max_length=120)
+    topic: Optional[str] = None
     sceneCount: Optional[int] = Field(default=None, ge=3, le=8)
     voiceId: str = "中文女"
     tone: str = "sharp"
@@ -38,8 +38,7 @@ def create_stickman_job(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ):
-    topic = payload.topic.strip()
-    title = (payload.title or topic).strip()
+    title = payload.title.strip()
     job_payload = {
         "title": title,
         "prompt": title,
@@ -58,7 +57,7 @@ def create_stickman_job(
         "tone": payload.tone,
         "pace": payload.pace,
         "goal": "standalone_sc1_stickman_workflow",
-        "customPrompt": f"Use SC1 standalone stickman workflow. Generate copy from the title first: {title}. Use the original topic as supporting context: {topic}. Split scenes semantically from the title/script without asking the user for scene count. Each semantic segment uses two material-library scene images with paired left/right or center-shift layout, no overlap, and Chinese/English subtitles synced to voice.",
+        "customPrompt": f"Use SC1 standalone stickman workflow. The only user-facing input is the title: {title}. Generate reference-style copy from this title first, then split scenes semantically with the current caption-cue method. Each semantic segment uses two material-library scene images with paired left/right or center-shift layout, no overlap, and Chinese/English subtitles synced to voice.",
         "workflowSource": "standalone_stickman_workflow",
         "useMaterialLibrary": True,
         "materialImagesPerScene": 2,

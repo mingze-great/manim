@@ -10,7 +10,7 @@ const { TextArea } = Input
 
 const statusText: Record<string, string> = {
   pending: '任务已创建',
-  scripting: '正在拆解主题',
+  scripting: '正在根据标题生成文案',
   scene_planning: '正在编排火柴人场景',
   tts_generating: '正在生成配音',
   audio_processing: '正在同步音频',
@@ -22,7 +22,7 @@ const statusText: Record<string, string> = {
 }
 
 export default function StickmanWorkflow() {
-  const [topic, setTopic] = useState('喂警犬吃狗算什么行为')
+  const [title, setTitle] = useState('喂警犬吃狗算什么行为')
   const [voiceId, setVoiceId] = useState('中文女')
   const [job, setJob] = useState<AiVideoJob | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -43,17 +43,16 @@ export default function StickmanWorkflow() {
   }, [job?.jobId, job?.status])
 
   const createVideo = async () => {
-    const cleanTopic = topic.trim()
-    if (cleanTopic.length < 2) {
-      message.warning('请输入一个具体主题')
+    const cleanTitle = title.trim()
+    if (cleanTitle.length < 2) {
+      message.warning('请输入一个具体标题')
       return
     }
     setSubmitting(true)
     setJob(null)
     try {
       const { data } = await stickmanWorkflowApi.createJob({
-        topic: cleanTopic,
-        title: cleanTopic,
+        title: cleanTitle,
         voiceId,
         tone: 'sharp',
         pace: 'medium',
@@ -74,17 +73,17 @@ export default function StickmanWorkflow() {
       <div className="stickman-workflow-header">
         <div>
           <Typography.Title level={2}>火柴人工作流</Typography.Title>
-          <Typography.Paragraph>输入一个主题，生成参考视频同款的横版火柴人知识视频。</Typography.Paragraph>
+          <Typography.Paragraph>输入一个标题，系统会自动生成同风格文案、分镜、字幕和配音。</Typography.Paragraph>
         </div>
         <div className="workflow-badge">SC1 独立模块</div>
       </div>
 
       <div className="stickman-workflow-grid">
         <section className="workflow-panel workflow-form-panel">
-          <div className="panel-title">主题输入</div>
+          <div className="panel-title">标题输入</div>
           <TextArea
-            value={topic}
-            onChange={(event) => setTopic(event.target.value)}
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
             rows={5}
             maxLength={120}
             showCount
@@ -139,7 +138,7 @@ export default function StickmanWorkflow() {
               )}
             </>
           ) : (
-            <div className="workflow-empty">还没有任务。输入主题后点击生成。</div>
+            <div className="workflow-empty">还没有任务。输入标题后点击生成。</div>
           )}
         </section>
       </div>

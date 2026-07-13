@@ -2,8 +2,8 @@ import api from './api'
 import type { AiVideoJob } from './aiVideo'
 
 export interface StickmanWorkflowJobCreate {
-  topic: string
-  title?: string
+  title: string
+  topic?: string
   voiceId?: string
   tone?: string
   pace?: string
