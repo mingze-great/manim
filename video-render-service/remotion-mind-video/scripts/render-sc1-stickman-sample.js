@@ -10,10 +10,23 @@ const projectRoot = path.resolve(__dirname, '..');
 const args = process.argv.slice(2);
 const mode = args[0] || 'stills';
 const previewSeconds = Number(args[1] || 0);
-const localMaterialDir = process.env.SC1_MATERIAL_LIBRARY_PATH || 'E:\\ai\\cankao\\sucai';
+const localMaterialDir = process.env.SC1_MATERIAL_LIBRARY_PATH || (
+  process.platform === 'win32'
+    ? 'C:\\Users\\Administrator\\Documents\\Codex\\2026-07-13\\e-ai-cankao-sucai\\outputs'
+    : '/opt/manim_assets/sc1-outputs'
+);
 const publicMaterialDir = path.join(projectRoot, 'public', 'sc1-materials');
 await fs.mkdir(publicMaterialDir, {recursive: true});
-for (const name of ['17.png', '18.png', '24.png', '26.png', '29.png', '31.png', '39.png', '43.png']) {
+for (const name of [
+  'psychology-stickman-01-anxiety-cover-mouth.png',
+  'psychology-stickman-02-inner-strength.png',
+  'psychology-stickman-03-study-pressure.png',
+  'psychology-stickman-09-boundary-setting.png',
+  'psychology-stickman-13-breathing-regulation.png',
+  'psychology-stickman-20-being-heard.png',
+  'psychology-stickman-33-growth-after-pressure.png',
+  'psychology-stickman-36-self-soothing.png',
+]) {
   await fs.copyFile(path.join(localMaterialDir, name), path.join(publicMaterialDir, name));
 }
 const materialUrl = (name) => `sc1-materials/${name}`;
@@ -48,8 +61,8 @@ const inputProps = {
         }
       ],
       assetImages: [
-        {src: materialUrl('29.png'), fileName: '29.png', segmentIndex: 0, summaryLabel: '\u884c\u4e3a\u6027\u8d28', enterDirection: 'left'},
-        {src: materialUrl('43.png'), fileName: '43.png', segmentIndex: 1, summaryLabel: '\u5bf9\u8c61\u8fb9\u754c', enterDirection: 'right'}
+        {src: materialUrl('psychology-stickman-01-anxiety-cover-mouth.png'), fileName: 'psychology-stickman-01-anxiety-cover-mouth.png', segmentIndex: 0, summaryLabel: '\u7126\u8651\u9632\u5fa1', enterDirection: 'left'},
+        {src: materialUrl('psychology-stickman-02-inner-strength.png'), fileName: 'psychology-stickman-02-inner-strength.png', segmentIndex: 1, summaryLabel: '\u5185\u5728\u529b\u91cf', enterDirection: 'right'}
       ],
       durationFrames: 150
     },
@@ -78,8 +91,8 @@ const inputProps = {
         }
       ],
       assetImages: [
-        {src: materialUrl('17.png'), fileName: '17.png', segmentIndex: 0, summaryLabel: '\u8868\u9762\u5224\u65ad', enterDirection: 'center'},
-        {src: materialUrl('18.png'), fileName: '18.png', segmentIndex: 1, summaryLabel: '\u89c4\u5219\u8fb9\u754c', enterDirection: 'right'}
+        {src: materialUrl('psychology-stickman-09-boundary-setting.png'), fileName: 'psychology-stickman-09-boundary-setting.png', segmentIndex: 0, summaryLabel: '\u8fb9\u754c\u611f', enterDirection: 'center'},
+        {src: materialUrl('psychology-stickman-33-growth-after-pressure.png'), fileName: 'psychology-stickman-33-growth-after-pressure.png', segmentIndex: 1, summaryLabel: '\u538b\u529b\u540e\u6210\u957f', enterDirection: 'right'}
       ],
       durationFrames: 150
     }

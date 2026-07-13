@@ -42,9 +42,9 @@ def create_stickman_job(
     title = (payload.title or topic).strip()
     job_payload = {
         "title": title,
-        "prompt": topic,
-        "requirements": topic,
-        "creativeBrief": topic,
+        "prompt": title,
+        "requirements": title,
+        "creativeBrief": title,
         "script": "",
         "videoType": "knowledge_ip_stickman",
         "contentType": "knowledge_ip_stickman",
@@ -58,7 +58,7 @@ def create_stickman_job(
         "tone": payload.tone,
         "pace": payload.pace,
         "goal": "standalone_sc1_stickman_workflow",
-        "customPrompt": "Use SC1 standalone stickman workflow. Split scenes semantically from the topic/script without asking the user for scene count. Each semantic segment uses two material-library scene images with paired left/right or center-shift layout, no overlap, and Chinese/English subtitles synced to voice.",
+        "customPrompt": f"Use SC1 standalone stickman workflow. Generate copy from the title first: {title}. Use the original topic as supporting context: {topic}. Split scenes semantically from the title/script without asking the user for scene count. Each semantic segment uses two material-library scene images with paired left/right or center-shift layout, no overlap, and Chinese/English subtitles synced to voice.",
         "workflowSource": "standalone_stickman_workflow",
         "useMaterialLibrary": True,
         "materialImagesPerScene": 2,

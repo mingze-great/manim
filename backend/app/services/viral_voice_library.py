@@ -95,7 +95,7 @@ def _create_voice_from_sample(path: Path, index: int) -> dict:
             "model": "voice-enrollment",
             "input": {
                 "action": "create_voice",
-                "target_model": "cosyvoice-v3.5-plus",
+                "target_model": "cosyvoice-v3.5-flash",
                 "prefix": _sample_prefix(path),
                 "url": public_url,
             },

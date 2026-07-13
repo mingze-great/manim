@@ -11,7 +11,11 @@ import {checkCosyVoice, ensureAudioDirs, listVoices, prepareAudioForStory} from 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const port = Number(process.env.PORT ?? 18787);
-const sc1MaterialLibraryPath = process.env.SC1_MATERIAL_LIBRARY_PATH || '/opt/manim_assets/sc1-sucai';
+const sc1MaterialLibraryPath = process.env.SC1_MATERIAL_LIBRARY_PATH || (
+  process.platform === 'win32'
+    ? 'C:\\Users\\Administrator\\Documents\\Codex\\2026-07-13\\e-ai-cankao-sucai\\outputs'
+    : '/opt/manim_assets/sc1-outputs'
+);
 
 app.use(express.json({limit: '20mb'}));
 app.use('/renders', express.static(path.join(__dirname, 'renders')));

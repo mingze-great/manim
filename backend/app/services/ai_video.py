@@ -38,7 +38,14 @@ ACTIVE_JOB_STATUSES = {"pending", "scripting", "scene_planning", "tts_generating
 AI_VIDEO_STORAGE_ROOT = Path(os.getenv("AI_VIDEO_STORAGE_ROOT", Path(__file__).resolve().parents[2] / "storage" / "ai-video" / "tasks")).resolve()
 SC1_MATERIAL_PUBLIC_BASE_URL = os.getenv("SC1_MATERIAL_PUBLIC_BASE_URL", "http://127.0.0.1:18787/sc1-materials").rstrip("/")
 SC1_MATERIAL_IMAGE_COUNT = int(os.getenv("SC1_MATERIAL_IMAGE_COUNT", "56"))
-SC1_MATERIAL_LIBRARY_PATH = Path(os.getenv("SC1_MATERIAL_LIBRARY_PATH", "E:/ai/cankao/sucai" if os.name == "nt" else "/opt/manim_assets/sc1-sucai")).resolve()
+SC1_MATERIAL_LIBRARY_PATH = Path(
+    os.getenv(
+        "SC1_MATERIAL_LIBRARY_PATH",
+        "C:/Users/Administrator/Documents/Codex/2026-07-13/e-ai-cankao-sucai/outputs"
+        if os.name == "nt"
+        else "/opt/manim_assets/sc1-outputs",
+    )
+).resolve()
 
 
 CONTENT_TEMPLATES: dict[str, dict[str, Any]] = {
@@ -200,8 +207,11 @@ class AiVideoService:
         self.dashscope_api_key = os.getenv("STICKMAN_TTS_API_KEY") or os.getenv("DASHSCOPE_API_KEY") or os.getenv("IMAGE_API_KEY", "")
         self.dashscope_tts_models = [
             item.strip()
-            for item in (os.getenv("STICKMAN_TTS_FALLBACK_MODELS") or "cosyvoice-v3.5-flash,cosyvoice-v3-plus").split(",")
-            if item.strip()
+            for item in (
+                os.getenv("STICKMAN_TTS_FALLBACK_MODELS")
+                or "cosyvoice-v3.5-flash,cosyvoice-v3-plus,cosyvoice-v3-flash"
+            ).split(",")
+            if item.strip() and item.strip() != "cosyvoice-v3.5-plus"
         ]
         dashscope.api_key = self.dashscope_api_key
         dashscope.base_websocket_api_url = "wss://dashscope.aliyuncs.com/api-ws/v1/inference"
@@ -640,6 +650,7 @@ class AiVideoService:
         opening_effect = str(payload.get("openingEffect") or self._default_opening_effect(visual_style, pace))
         visual_intensity = str(payload.get("visualIntensity") or self._default_visual_intensity(visual_style, pace))
         edit_directive = str(payload.get("editDirective") or payload.get("customPrompt") or payload.get("goal") or "")
+        sc1_selected_materials: set[str] = set()
         for index in range(scene_count):
             text = chunks[index] if index < len(chunks) else self._fallback_sentence(index, content_type)
             step = steps[min(index, len(steps) - 1)]
@@ -650,7 +661,7 @@ class AiVideoService:
             min_scene_seconds = max(0, target_seconds // scene_count) if target_seconds else 0
             media = self._media_for_scene(content_type, visual_style, text, index)
             sc1_segments = self._sc1_segments_for_scene(text, index) if content_type == "knowledge_ip_stickman" or visual_style == "sc1_stickman" else []
-            material_images = self._sc1_material_images_for_scene(payload, text, index, sc1_segments) if content_type == "knowledge_ip_stickman" or visual_style == "sc1_stickman" else []
+            material_images = self._sc1_material_images_for_scene(payload, text, index, sc1_segments, sc1_selected_materials) if content_type == "knowledge_ip_stickman" or visual_style == "sc1_stickman" else []
             layout_variant = self._layout_variant_for_scene(content_type, visual_style, scene_type, text, index, edit_directive)
             energy_pattern = self._energy_pattern_for_scene(scene_type, layout_variant, text, index)
             english_text = " ".join(segment.get("englishText", "") for segment in sc1_segments).strip()
@@ -684,7 +695,14 @@ class AiVideoService:
             )
         return scenes
 
-    def _sc1_material_images_for_scene(self, payload: dict[str, Any], text: str, index: int, segments: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+    def _sc1_material_images_for_scene(
+        self,
+        payload: dict[str, Any],
+        text: str,
+        index: int,
+        segments: list[dict[str, Any]] | None = None,
+        selected_materials: set[str] | None = None,
+    ) -> list[dict[str, Any]]:
         per_scene = int(payload.get("materialImagesPerScene") or 2)
         per_scene = max(1, min(2, per_scene))
         topic = str(payload.get("prompt") or payload.get("requirements") or payload.get("creativeBrief") or text or "")
@@ -700,7 +718,7 @@ class AiVideoService:
         slot_hints = ["left", "right"] if layout_mode == "pair_left_right" else ["center", "right"]
         image_texts = [first_text, second_text]
         materials = self._load_sc1_materials()
-        selected: set[str] = set()
+        selected: set[str] = selected_materials if selected_materials is not None else set()
         images: list[dict[str, Any]] = []
         for offset in range(per_scene):
             segment_text = image_texts[offset] if offset < len(image_texts) else text
@@ -852,12 +870,22 @@ class AiVideoService:
         return pairs[scene_index % len(pairs)][segment_index % 2]
 
     def _load_sc1_materials(self) -> list[dict[str, Any]]:
-        path = SC1_MATERIAL_LIBRARY_PATH / "materials.json"
+        configured_path = SC1_MATERIAL_LIBRARY_PATH
+        if configured_path.is_file():
+            path = configured_path
+            material_root = configured_path.parent
+        else:
+            material_root = configured_path
+            candidates = [
+                configured_path / "materials.generated.json",
+                configured_path / "materials.json",
+            ]
+            path = next((candidate for candidate in candidates if candidate.exists()), candidates[0])
         try:
             stat = path.stat()
-            key = (str(path), stat.st_mtime, stat.st_size)
+            key = (str(material_root), stat.st_mtime, stat.st_size)
         except OSError:
-            key = (str(path), 0.0, 0)
+            key = (str(material_root), 0.0, 0)
         if self._sc1_material_cache[0] == key:
             return self._sc1_material_cache[1]
         raw = ""
@@ -1182,11 +1210,17 @@ class AiVideoService:
         raise RuntimeError(f"DashScope CosyVoice failed: {last_error}")
 
     def _resolve_dashscope_cosyvoice_models(self, voice: str) -> list[str]:
-        preferred = "cosyvoice-v3.5-plus" if str(voice or "").startswith("cosyvoice-v3.5-plus-") else "cosyvoice-v3.5-flash"
+        voice_key = str(voice or "")
+        if voice_key.startswith("cosyvoice-v3-plus-"):
+            preferred = "cosyvoice-v3-plus"
+        elif voice_key.startswith("cosyvoice-v3-flash-"):
+            preferred = "cosyvoice-v3-flash"
+        else:
+            preferred = "cosyvoice-v3.5-flash"
         ordered: list[str] = []
-        for candidate in [preferred, *self.dashscope_tts_models, "cosyvoice-v3-plus"]:
+        for candidate in [preferred, *self.dashscope_tts_models, "cosyvoice-v3-plus", "cosyvoice-v3-flash"]:
             model = str(candidate or "").strip()
-            if model and model not in ordered:
+            if model and model != "cosyvoice-v3.5-plus" and model not in ordered:
                 ordered.append(model)
         return ordered
 
@@ -1319,6 +1353,7 @@ class AiVideoService:
                 shutil.rmtree(material_stage_dir, ignore_errors=True)
 
     def _prepare_sc1_materials_for_render(self, scenes: list[dict[str, Any]], task_name: str) -> Path:
+        material_root = SC1_MATERIAL_LIBRARY_PATH.parent if SC1_MATERIAL_LIBRARY_PATH.is_file() else SC1_MATERIAL_LIBRARY_PATH
         target_dir = self.render_material_root / task_name
         target_dir.mkdir(parents=True, exist_ok=True)
         for scene in scenes:
@@ -1329,7 +1364,7 @@ class AiVideoService:
                 file_name = Path(str(image.get("fileName") or Path(str(image.get("src") or "")).name)).name
                 if not file_name:
                     continue
-                source = SC1_MATERIAL_LIBRARY_PATH / file_name
+                source = material_root / file_name
                 if source.exists() and source.is_file():
                     shutil.copyfile(source, target_dir / file_name)
                     image["src"] = f"sc1-materials/{task_name}/{file_name}"
@@ -1991,7 +2026,7 @@ class AiVideoService:
             "longshuo_v3": "longshuo_v3",
             "longanyang": "longanyang",
         }
-        if normalized.startswith("cosyvoice-v3.5-plus-"):
+        if normalized.startswith(("cosyvoice-v3.5-flash-", "cosyvoice-v3-plus-", "cosyvoice-v3-flash-", "cosyvoice-v3.5-plus-")):
             return normalized
         return mapping.get(normalized, "longanhuan")
 

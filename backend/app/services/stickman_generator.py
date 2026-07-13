@@ -45,6 +45,8 @@ class StickmanGenerator:
         self.tts_api_key = self.settings.STICKMAN_TTS_API_KEY or getattr(self.settings, "IMAGE_API_KEY", "") or self.settings.DASHSCOPE_API_KEY
         self.tts_base_url = self.settings.STICKMAN_TTS_BASE_URL
         self.tts_model = self.settings.STICKMAN_TTS_MODEL
+        if self.tts_model == "cosyvoice-v3.5-plus":
+            self.tts_model = "cosyvoice-v3.5-flash"
         self.tts_provider = self.settings.STICKMAN_TTS_PROVIDER
         self.tts_voice = self.settings.STICKMAN_TTS_VOICE
         self.tts_voice_library = self._load_tts_voice_library()
@@ -781,15 +783,19 @@ class StickmanGenerator:
 
         if provider == "dashscope_cosyvoice":
             try:
-                # 根据音色类型自动选择模型
-                # 自定义音色（以 cosyvoice-v3.5-plus- 开头）需要用 cosyvoice-v3.5-plus 模型
-                # 预设音色需要用 cosyvoice-v3-flash 模型
-                if voice.startswith("cosyvoice-v3.5-plus-"):
-                    model = "cosyvoice-v3.5-plus"
-                else:
-                    model = "cosyvoice-v3-flash"
-                synthesizer = SpeechSynthesizer(model=model, voice=voice)
-                audio_bytes = synthesizer.call(text)
+                # Try the configured three-model CosyVoice stack without using v3.5-plus.
+                audio_bytes = None
+                last_tts_error = None
+                for model in ["cosyvoice-v3.5-flash", "cosyvoice-v3-plus", "cosyvoice-v3-flash"]:
+                    try:
+                        synthesizer = SpeechSynthesizer(model=model, voice=voice)
+                        audio_bytes = synthesizer.call(text)
+                        if audio_bytes:
+                            break
+                    except Exception as exc:
+                        last_tts_error = exc
+                if not audio_bytes:
+                    raise RuntimeError(f"CosyVoice returned empty audio: {last_tts_error}")
                 with open(save_path, 'wb') as file:
                     file.write(audio_bytes)
                 audio = AudioSegment.from_file(save_path)

@@ -273,9 +273,9 @@ const Paper = () => (
 );
 
 const Header = ({title}) => (
-  <div style={{position: 'absolute', left: 30, top: 25, display: 'flex', alignItems: 'center', gap: 10, color: '#111', fontSize: 27, fontWeight: 900}}>
-    <div style={{width: 28, height: 28, borderRadius: '50%', border: '4px solid #62a9df', display: 'grid', placeItems: 'center'}}>
-      <div style={{width: 10, height: 10, borderRadius: '50%', background: '#62a9df'}} />
+  <div style={{position: 'absolute', left: 28, top: 20, display: 'flex', alignItems: 'center', gap: 12, color: '#111', fontSize: 34, fontWeight: 900, lineHeight: 1}}>
+    <div style={{width: 30, height: 30, borderRadius: '50%', border: '4px solid #62a9df', display: 'grid', placeItems: 'center', flex: '0 0 auto'}}>
+      <div style={{width: 11, height: 11, borderRadius: '50%', background: '#62a9df'}} />
     </div>
     <span>{title}</span>
   </div>
@@ -287,20 +287,20 @@ const KeywordLabels = ({scene, segment, local}) => {
   const visibleCues = cues.slice(0, activeIndex + 1).filter((cue) => clean(cue?.summaryLabel || cue?.label || cue?.keyword));
   if (!visibleCues.length) return null;
   return (
-    <div style={{position: 'absolute', left: 520, right: 120, top: 112, height: 108, display: 'flex', flexWrap: 'wrap', alignContent: 'flex-start', alignItems: 'flex-start', justifyContent: 'flex-start', gap: '8px 14px', overflow: 'hidden', zIndex: 4, pointerEvents: 'none'}}>
+    <div style={{position: 'absolute', left: 500, right: 120, top: 96, minHeight: 120, display: 'flex', flexWrap: 'wrap', alignContent: 'flex-start', alignItems: 'flex-start', justifyContent: 'flex-start', gap: '10px 18px', overflow: 'hidden', zIndex: 4, pointerEvents: 'none'}}>
       {visibleCues.map((cue, index) => {
         const label = clean(cue.summaryLabel || cue.label || cue.keyword || segment?.summaryLabel || scene.keywords?.[index] || scene.title);
         const labelStart = Number(cue.startFrame ?? segment?.startFrame ?? 0);
         const localInLabel = Math.max(0, local - labelStart);
         const enter = interpolate(localInLabel, [0, 10], [0, 1], {extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic)});
         const opacity = clamp(enter, 0, 1);
-        const fontSize = label.length > 12 ? 21 : 23;
+        const fontSize = label.length > 12 ? 25 : 27;
         return (
           <div
             key={`${scene.id}-${segment?.index || 0}-${index}-${label}`}
-            style={{display: 'flex', alignItems: 'center', gap: 10, opacity, transform: `translateY(${(1 - enter) * 10}px)`, fontSize, lineHeight: 1.05, fontWeight: 900, color: '#111', whiteSpace: 'nowrap', maxWidth: '48%', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis'}}
+            style={{display: 'flex', alignItems: 'center', gap: 12, opacity, transform: `translateY(${(1 - enter) * 10}px)`, fontSize, lineHeight: 1.05, fontWeight: 900, color: '#111', whiteSpace: 'nowrap', maxWidth: '50%', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis'}}
           >
-            <span style={{width: 20, height: 20, background: colors[(scene.index + Number(segment?.index || 0) + index) % colors.length], display: 'inline-block', borderRadius: 2, flex: '0 0 auto'}} />
+            <span style={{width: 22, height: 22, background: colors[(scene.index + Number(segment?.index || 0) + index) % colors.length], display: 'inline-block', borderRadius: 2, flex: '0 0 auto'}} />
             <span>{label}</span>
           </div>
         );
@@ -444,7 +444,7 @@ const SceneImage = ({item, box, progress, start = 0, direction = 'left'}) => {
     objectFit: 'contain',
     filter: 'grayscale(1) contrast(2.25)',
     mixBlendMode: 'multiply',
-    transform: `scale(${item?.scale || 1.18})`,
+    transform: `scale(${item?.scale || 0.96})`,
   };
   const source = String(src);
   const image = /^(https?:|file:)\/\//i.test(source)
@@ -459,7 +459,7 @@ const SceneImage = ({item, box, progress, start = 0, direction = 'left'}) => {
       height: box.height,
       opacity,
       transform: `translate(${(1 - enter) * travel.x}px, ${(1 - enter) * travel.y}px)`,
-      overflow: 'hidden',
+      overflow: 'visible',
       display: 'grid',
       placeItems: 'center'
     }}>
@@ -476,16 +476,16 @@ const MaterialSceneImages = ({scene, segment, local}) => {
   const progress = clamp((local - segmentStart) / segmentDuration, 0, 1);
   const layoutMode = clean(segment?.layoutMode || scene.layoutMode || 'pair_left_right');
   const secondStart = layoutMode === 'center_shift_pair' ? 0.42 : 0.36;
-  const leftBox = {left: 220, top: 275, width: 660, height: 500};
-  const rightBox = {left: 1040, top: 275, width: 660, height: 500};
-  const centerBox = {left: 400, top: 250, width: 1120, height: 560};
+  const leftBox = {left: 255, top: 278, width: 600, height: 445};
+  const rightBox = {left: 1040, top: 278, width: 600, height: 445};
+  const centerBox = {left: 440, top: 250, width: 1040, height: 495};
   const firstBox = layoutMode === 'center_shift_pair'
     ? (progress < secondStart ? centerBox : interpolateBox(centerBox, leftBox, clamp((progress - secondStart) / 0.18, 0, 1)))
     : leftBox;
   const firstDirection = layoutMode === 'center_shift_pair' ? 'center' : (images[0]?.enterDirection || 'left');
   const secondDirection = images[1]?.enterDirection || 'right';
   return (
-    <div style={{position: 'absolute', left: 0, right: 0, top: 220, height: 600, overflow: 'hidden'}}>
+    <div style={{position: 'absolute', left: 0, right: 0, top: 0, height: 820, overflow: 'hidden'}}>
       <SceneImage item={images[0]} box={firstBox} progress={progress} start={0} direction={firstDirection} />
       {images[1] ? <SceneImage item={images[1]} box={rightBox} progress={progress} start={secondStart} direction={secondDirection} /> : null}
     </div>

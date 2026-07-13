@@ -1084,7 +1084,7 @@ async def create_custom_voice(
             'model': 'voice-enrollment',
             'input': {
                 'action': 'create_voice',
-                'target_model': 'cosyvoice-v3.5-plus',
+                'target_model': 'cosyvoice-v3.5-flash',
                 'prefix': f'u{current_user.id}'[:8],
                 'url': public_url,
             },

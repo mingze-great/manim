@@ -58,10 +58,12 @@ class StickmanGenerator:
         self.tts_api_key = self.settings.STICKMAN_TTS_API_KEY or getattr(self.settings, "IMAGE_API_KEY", "") or self.settings.DASHSCOPE_API_KEY
         self.tts_base_url = self.settings.STICKMAN_TTS_BASE_URL
         self.tts_model = self.settings.STICKMAN_TTS_MODEL
+        if self.tts_model == "cosyvoice-v3.5-plus":
+            self.tts_model = "cosyvoice-v3.5-flash"
         self.tts_fallback_models = [
             item.strip()
             for item in (getattr(self.settings, "STICKMAN_TTS_FALLBACK_MODELS", "") or "").split(",")
-            if item.strip()
+            if item.strip() and item.strip() != "cosyvoice-v3.5-plus"
         ]
         self.tts_provider = self.settings.STICKMAN_TTS_PROVIDER
         self.tts_voice = self.settings.STICKMAN_TTS_VOICE
@@ -132,11 +134,15 @@ class StickmanGenerator:
         configured = str(getattr(self.settings, "STICKMAN_MATERIAL_LIBRARY_PATH", "") or "").strip()
         candidates = [configured] if configured else []
         if os.name == "nt":
+            candidates.append(r"C:\Users\Administrator\Documents\Codex\2026-07-13\e-ai-cankao-sucai\outputs\materials.generated.json")
+            candidates.append(r"C:\Users\Administrator\Documents\Codex\2026-07-13\e-ai-cankao-sucai\outputs\materials.json")
             candidates.append(r"E:\ai\cankao\sucai_clean_alpha\materials.json")
             candidates.append(r"E:\ai\cankao\sucai_clean\materials.json")
             candidates.append(r"E:\ai\cankao\sucai_cropped\materials.json")
             candidates.append(r"E:\ai\cankao\sucai\materials.json")
         else:
+            candidates.append("/opt/manim_assets/sc1-outputs/materials.generated.json")
+            candidates.append("/opt/manim_assets/sc1-outputs/materials.json")
             candidates.append("/opt/manim-v2-material-library/materials.json")
             candidates.append("/opt/manim-v2-materials/materials.json")
         candidates.append(str(Path(__file__).resolve().parents[1] / "assets" / "materials" / "materials.json"))
@@ -185,11 +191,13 @@ class StickmanGenerator:
         if self.material_library_path and self.material_library_path.exists():
             candidates.append(str(self.material_library_path.parent))
         if os.name == "nt":
+            candidates.append(r"C:\Users\Administrator\Documents\Codex\2026-07-13\e-ai-cankao-sucai\outputs")
             candidates.append(r"E:\ai\cankao\sucai_clean_alpha")
             candidates.append(r"E:\ai\cankao\sucai_clean")
             candidates.append(r"E:\ai\cankao\sucai_cropped")
             candidates.append(r"E:\ai\cankao\sucai")
         else:
+            candidates.append("/opt/manim_assets/sc1-outputs")
             candidates.append("/opt/manim-v2-material-library")
             candidates.append("/opt/manim-v2-materials")
         candidates.append(str(Path(__file__).resolve().parents[1] / "assets" / "materials"))
@@ -3420,15 +3428,21 @@ class StickmanGenerator:
         return voice
 
     def _resolve_cosyvoice_models(self, voice: str):
-        preferred = "cosyvoice-v3.5-plus" if voice.startswith("cosyvoice-v3.5-plus-") else "cosyvoice-v3-flash"
+        voice_key = str(voice or "")
+        if voice_key.startswith("cosyvoice-v3-plus-"):
+            preferred = "cosyvoice-v3-plus"
+        elif voice_key.startswith("cosyvoice-v3-flash-"):
+            preferred = "cosyvoice-v3-flash"
+        else:
+            preferred = "cosyvoice-v3.5-flash"
         ordered = []
         seen = set()
-        for candidate in [preferred, *self.tts_fallback_models]:
+        for candidate in [preferred, *self.tts_fallback_models, "cosyvoice-v3-plus", "cosyvoice-v3-flash"]:
             model = str(candidate or "").strip()
-            if model and model not in seen:
+            if model and model != "cosyvoice-v3.5-plus" and model not in seen:
                 ordered.append(model)
                 seen.add(model)
-        return ordered or ["cosyvoice-v3.5-plus"]
+        return ordered or ["cosyvoice-v3.5-flash", "cosyvoice-v3-plus", "cosyvoice-v3-flash"]
 
     def _extract_audio_payload(self, result: dict):
         output = result.get("output") or {}
@@ -3460,7 +3474,9 @@ class StickmanGenerator:
     def _postprocess_tts_audio(self, audio: AudioSegment, provider: str, voice: str):
         processed = audio.set_channels(1)
         voice_key = str(voice or "").strip()
-        cloned_voice = provider == "dashscope_cosyvoice" and voice_key.startswith("cosyvoice-v3.5-plus-")
+        cloned_voice = provider == "dashscope_cosyvoice" and voice_key.startswith(
+            ("cosyvoice-v3.5-flash-", "cosyvoice-v3-plus-", "cosyvoice-v3-flash-", "cosyvoice-v3.5-plus-")
+        )
 
         # Clone voices often sound stiff at sentence edges; trim the clicky boundary
         # and add a slightly softer fade-in/fade-out to smooth transitions.
