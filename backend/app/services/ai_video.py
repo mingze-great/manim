@@ -36,14 +36,18 @@ STAGE_MESSAGES = {
 
 ACTIVE_JOB_STATUSES = {"pending", "scripting", "scene_planning", "tts_generating", "audio_processing", "rendering", "uploading"}
 AI_VIDEO_STORAGE_ROOT = Path(os.getenv("AI_VIDEO_STORAGE_ROOT", Path(__file__).resolve().parents[2] / "storage" / "ai-video" / "tasks")).resolve()
+REPO_ROOT = Path(__file__).resolve().parents[3]
 SC1_MATERIAL_PUBLIC_BASE_URL = os.getenv("SC1_MATERIAL_PUBLIC_BASE_URL", "http://127.0.0.1:18787/sc1-materials").rstrip("/")
 SC1_MATERIAL_IMAGE_COUNT = int(os.getenv("SC1_MATERIAL_IMAGE_COUNT", "56"))
+default_sc1_material_library_path = (
+    str(REPO_ROOT / "e-ai-cankao-sucai" / "outputs")
+    if os.name == "nt"
+    else "/opt/manim_assets/sc1-outputs"
+)
 SC1_MATERIAL_LIBRARY_PATH = Path(
     os.getenv(
         "SC1_MATERIAL_LIBRARY_PATH",
-        "C:/Users/Administrator/Documents/Codex/2026-07-13/e-ai-cankao-sucai/outputs"
-        if os.name == "nt"
-        else "/opt/manim_assets/sc1-outputs",
+        default_sc1_material_library_path,
     )
 ).resolve()
 
@@ -191,13 +195,13 @@ class AiVideoService:
         self.render_audio_root = Path(
             os.getenv(
                 "AI_VIDEO_RENDER_AUDIO_ROOT",
-                "../video-render-service/remotion-mind-video/public/generated-audio",
+                str(REPO_ROOT / "video-render-service" / "remotion-mind-video" / "public" / "generated-audio"),
             )
         )
         self.render_material_root = Path(
             os.getenv(
                 "AI_VIDEO_RENDER_MATERIAL_ROOT",
-                "../video-render-service/remotion-mind-video/public/sc1-materials",
+                str(REPO_ROOT / "video-render-service" / "remotion-mind-video" / "public" / "sc1-materials"),
             )
         )
         self.render_timeout = int(os.getenv("AI_VIDEO_RENDER_TIMEOUT", "600"))
