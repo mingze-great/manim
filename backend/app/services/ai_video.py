@@ -1367,7 +1367,7 @@ class AiVideoService:
                 source = material_root / file_name
                 if source.exists() and source.is_file():
                     shutil.copyfile(source, target_dir / file_name)
-                    image["src"] = f"sc1-materials/{task_name}/{file_name}"
+                    image["src"] = f"{SC1_MATERIAL_PUBLIC_BASE_URL}/{task_name}/{file_name}"
         return target_dir
 
     def _scene_for_render(self, scene: dict[str, Any]) -> dict[str, Any]:
