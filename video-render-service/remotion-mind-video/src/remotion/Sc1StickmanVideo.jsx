@@ -21,6 +21,11 @@ const colors = ['#c51cff', '#75421e', '#e02525', '#2458e6', '#f3d21b', '#21c928'
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const clean = (value) => String(value || '').replace(/\s+/g, ' ').trim();
+const mediaSource = (value) => {
+  const source = String(value || '').trim();
+  if (!source) return '';
+  return /^(https?:|file:)\/\//i.test(source) ? source : staticFile(source.replace(/^\/+/, ''));
+};
 
 const splitLines = (value, max = 20, limit = 2) => {
   const text = clean(value).replace(/\s+/g, '');
@@ -246,10 +251,10 @@ const AudioTrack = ({story, bgmSrc = null}) => (
   <>
     {story.scenes.map((scene) => scene.audioSrc ? (
       <Sequence key={`audio-${scene.id}`} from={scene.startFrame} durationInFrames={scene.durationFrames}>
-        <Audio src={staticFile(scene.audioSrc)} startFrom={0} endAt={scene.durationFrames} volume={1} />
+        <Audio src={mediaSource(scene.audioSrc)} startFrom={0} endAt={scene.durationFrames} volume={1} />
       </Sequence>
     ) : null)}
-    {bgmSrc ? <Audio src={staticFile(String(bgmSrc).replace(/^\/+/, ''))} volume={0.08} /> : null}
+    {bgmSrc ? <Audio src={mediaSource(bgmSrc)} volume={0.08} /> : null}
   </>
 );
 

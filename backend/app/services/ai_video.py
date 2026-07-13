@@ -1160,6 +1160,7 @@ class AiVideoService:
                 raise RuntimeError(f"CosyVoice returned invalid audio for scene_{index + 1}")
 
             shutil.copyfile(backend_audio_path, render_audio_path)
+            render_audio_src = f"{self.render_service_url}/generated-audio/{render_audio_dir.name}/{filename}"
             pause_frames = 2 if index < len(project_json.get("scenes") or []) - 1 else 4
             planned_seconds = float(scene.get("duration") or 0)
             max_hold_after_audio = 0.22 if index < len(project_json.get("scenes") or []) - 1 else 0.36
@@ -1171,7 +1172,7 @@ class AiVideoService:
                 "provider": provider,
                 "voice": voice,
                 "path": str(backend_audio_path),
-                "src": f"generated-audio/{render_audio_dir.name}/{filename}",
+                "src": render_audio_src,
                 "seconds": seconds,
                 "durationInFrames": duration_frames,
                 "text": text,
@@ -1179,7 +1180,7 @@ class AiVideoService:
             audio_scenes.append(
                 {
                     "index": index,
-                    "src": f"generated-audio/{render_audio_dir.name}/{filename}",
+                    "src": render_audio_src,
                     "seconds": seconds,
                     "durationInFrames": duration_frames,
                     "provider": provider,
