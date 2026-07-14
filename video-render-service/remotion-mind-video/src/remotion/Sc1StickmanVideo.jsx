@@ -480,12 +480,13 @@ const MaterialSceneImages = ({scene, segment, local}) => {
   const segmentDuration = Math.max(1, Number(segment?.endFrame || scene.durationFrames) - segmentStart);
   const progress = clamp((local - segmentStart) / segmentDuration, 0, 1);
   const layoutMode = clean(segment?.layoutMode || scene.layoutMode || 'pair_left_right');
-  const secondStart = layoutMode === 'center_shift_pair' ? 0.42 : 0.36;
+  const secondStart = layoutMode === 'center_shift_pair' ? 0.54 : 0.36;
   const leftBox = {left: 255, top: 278, width: 600, height: 445};
   const rightBox = {left: 1040, top: 278, width: 600, height: 445};
   const centerBox = {left: 440, top: 250, width: 1040, height: 495};
+  const centerShift = clamp((progress - 0.28) / 0.22, 0, 1);
   const firstBox = layoutMode === 'center_shift_pair'
-    ? (progress < secondStart ? centerBox : interpolateBox(centerBox, leftBox, clamp((progress - secondStart) / 0.18, 0, 1)))
+    ? interpolateBox(centerBox, leftBox, centerShift)
     : leftBox;
   const firstDirection = layoutMode === 'center_shift_pair' ? 'center' : (images[0]?.enterDirection || 'left');
   const secondDirection = images[1]?.enterDirection || 'right';
