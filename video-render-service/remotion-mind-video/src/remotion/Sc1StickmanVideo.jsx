@@ -111,11 +111,23 @@ const buildCaptionCues = (segment, startFrame, endFrame) => {
     ? segment.captionCues.map((cue) => ({
         text: clean(cue.text || cue.subtitleText),
         englishText: clean(cue.englishText || cue.english),
-        summaryLabel: clean(cue.summaryLabel || cue.label || cue.keyword)
+        summaryLabel: clean(cue.summaryLabel || cue.label || cue.keyword),
+        startFrame: Number(cue.startFrame),
+        endFrame: Number(cue.endFrame)
       })).filter((cue) => cue.text)
     : splitCaptionCueTexts(segment.subtitleText || segment.text).map((text) => ({text, englishText: ''}));
   const duration = Math.max(1, endFrame - startFrame);
   const englishParts = splitEnglishCueTexts(segment.englishText, rawCues.length);
+  const hasTimedCues = rawCues.length > 0 && rawCues.every((cue) => Number.isFinite(cue.startFrame) && Number.isFinite(cue.endFrame) && cue.endFrame > cue.startFrame);
+  if (hasTimedCues) {
+    return rawCues.map((cue, index) => ({
+      startFrame: clamp(startFrame + cue.startFrame, startFrame, endFrame - 1),
+      endFrame: clamp(startFrame + cue.endFrame, startFrame + 1, endFrame),
+      text: cue.text,
+      englishText: cue.englishText || englishParts[index] || segment.englishText || '',
+      summaryLabel: cue.summaryLabel || (Array.isArray(segment.summaryLabels) ? clean(segment.summaryLabels[index]) : '') || segment.summaryLabel || ''
+    }));
+  }
   const totalWeight = rawCues.reduce((sum, cue) => sum + Math.max(4, cue.text.length), 0) || rawCues.length || 1;
   let cursor = startFrame;
   return rawCues.map((cue, index) => {
@@ -249,11 +261,25 @@ const useActiveScene = (story) => {
 
 const AudioTrack = ({story, bgmSrc = null}) => (
   <>
-    {story.scenes.map((scene) => scene.audioSrc ? (
-      <Sequence key={`audio-${scene.id}`} from={scene.startFrame} durationInFrames={scene.durationFrames}>
-        <Audio src={mediaSource(scene.audioSrc)} startFrom={0} endAt={scene.durationFrames} volume={1} />
-      </Sequence>
-    ) : null)}
+    {story.scenes.flatMap((scene) => {
+      const clips = Array.isArray(scene.audioClips) ? scene.audioClips.filter((clip) => clip?.src) : [];
+      if (clips.length) {
+        return clips.map((clip, index) => {
+          const clipStart = Math.max(0, Number(clip.startFrame || 0));
+          const clipDuration = Math.max(1, Number(clip.durationInFrames || clip.endFrame - clipStart || scene.durationFrames));
+          return (
+            <Sequence key={`audio-${scene.id}-${index}`} from={scene.startFrame + clipStart} durationInFrames={clipDuration}>
+              <Audio src={mediaSource(clip.src)} startFrom={0} endAt={clipDuration} volume={1} />
+            </Sequence>
+          );
+        });
+      }
+      return scene.audioSrc ? [
+        <Sequence key={`audio-${scene.id}`} from={scene.startFrame} durationInFrames={scene.durationFrames}>
+          <Audio src={mediaSource(scene.audioSrc)} startFrom={0} endAt={scene.durationFrames} volume={1} />
+        </Sequence>
+      ] : [];
+    })}
     {bgmSrc ? <Audio src={mediaSource(bgmSrc)} volume={0.08} /> : null}
   </>
 );
@@ -410,9 +436,10 @@ const DeskScene = ({local}) => (
 const OptionalImage = ({src}) => {
   if (!src) return null;
   const source = String(src);
+  const imageStyle = {width: '100%', height: '100%', objectFit: 'contain'};
   const image = /^(https?:|file:)\/\//i.test(source)
-    ? <img src={source} alt="" crossOrigin="anonymous" referrerPolicy="no-referrer" style={{width: '100%', height: '100%', objectFit: 'contain', filter: 'grayscale(1) contrast(2.2)', mixBlendMode: 'multiply'}} />
-    : <Img src={staticFile(source.replace(/^\/+/, ''))} style={{width: '100%', height: '100%', objectFit: 'contain', filter: 'grayscale(1) contrast(2.2)', mixBlendMode: 'multiply'}} />;
+    ? <img src={source} alt="" crossOrigin="anonymous" referrerPolicy="no-referrer" style={imageStyle} />
+    : <Img src={staticFile(source.replace(/^\/+/, ''))} style={imageStyle} />;
   return (
     <div style={{position: 'absolute', left: 390, top: 250, width: 1140, height: 555, display: 'grid', placeItems: 'center', overflow: 'hidden'}}>
       {image}
@@ -447,8 +474,6 @@ const SceneImage = ({item, box, progress, start = 0, direction = 'left'}) => {
     width: '100%',
     height: '100%',
     objectFit: 'contain',
-    filter: 'grayscale(1) contrast(2.25)',
-    mixBlendMode: 'multiply',
     transform: `scale(${item?.scale || 0.96})`,
   };
   const source = String(src);
@@ -536,7 +561,7 @@ const Subtitle = ({scene, segment, local}) => {
         {zhLines.map((line) => <div key={line}>{line}</div>)}
       </div>
       {enLines.length ? (
-        <div style={{marginTop: 7, fontSize: 18, lineHeight: 1.05, fontWeight: 700, color: '#333', fontStyle: 'italic'}}>
+        <div style={{marginTop: 8, fontSize: enLines.join(' ').length > 54 ? 25 : 28, lineHeight: 1.05, fontWeight: 800, color: '#222', fontStyle: 'italic'}}>
           {enLines.map((line) => <div key={line}>{line}</div>)}
         </div>
       ) : null}

@@ -152,7 +152,7 @@ def select_material(materials: list[dict], text: str, scene_index: int, slot: in
 
 
 def split_cues(text: str) -> list[str]:
-    parts = [item.strip(" ，。！？；：、,.!?:;") for item in re.split(r"(?<=[。！？；!?;])\s*", text) if item.strip(" ，。！？；：、,.!?:;")]
+    parts = [item.strip(" ，。！？；：、,.!?:;") for item in re.split(r"(?<=[。！？；!?;.])\s*", text) if item.strip(" ，。！？；：、,.!?:;")]
     if len(parts) >= 2:
         return parts[:3]
     if len(text) <= 24:
@@ -171,7 +171,8 @@ def split_cues(text: str) -> list[str]:
 
 def summary_label(text: str, index: int) -> str:
     rules = [
-        (["第一反应", "挑战", "脑洞"], "脑洞题开场"),
+        (["第一反应", "按住", "站队"], "按住第一反应"),
+        (["挑战", "脑洞", "答错"], "脑洞题开场"),
         (["行为", "动作", "做法"], "行为性质"),
         (["对象", "谁", "保护"], "对象边界"),
         (["风险", "后果", "影响"], "风险后果"),
@@ -284,48 +285,43 @@ def build_scenes(title: str, materials: list[dict]) -> list[dict]:
 
 
 def synthesize_audio(scenes: list[dict], job_id: str, voice: str = DEFAULT_VOICE) -> list[dict]:
-    reuse_job = os.getenv("SC1_REUSE_AUDIO_JOB", "").strip()
-    if reuse_job:
-        audio_scenes = []
-        reuse_dir = PUBLIC_AUDIO_DIR / reuse_job
-        for index, scene in enumerate(scenes):
-            audio_path = reuse_dir / f"scene-{index + 1:02d}.wav"
-            if not audio_path.exists():
-                raise FileNotFoundError(f"Reusable audio missing: {audio_path}")
-            audio = AudioSegment.from_file(audio_path)
-            seconds = max(len(audio) / 1000.0, 0.01)
-            duration_frames = max(54, int(seconds * 30 + 3.999))
-            scene["durationFrames"] = duration_frames
-            scene["duration"] = round(duration_frames / 30, 2)
-            scene["audioSrc"] = f"generated-audio/{reuse_job}/scene-{index + 1:02d}.wav"
-            audio_scenes.append(
+    def scene_cues(scene: dict) -> list[dict]:
+        segments = scene.get("segments") if isinstance(scene.get("segments"), list) else []
+        if not segments:
+            return []
+        cues = segments[0].get("captionCues") if isinstance(segments[0].get("captionCues"), list) else []
+        return cues
+
+    def apply_audio_clips(scene: dict, clips: list[dict]) -> None:
+        cursor = 0
+        audio_clips = []
+        for cue, clip in zip(scene_cues(scene), clips):
+            duration_frames = max(12, int(float(clip["seconds"]) * 30 + 3.999))
+            cue["startFrame"] = cursor
+            cue["endFrame"] = cursor + duration_frames
+            audio_clips.append(
                 {
-                    "index": index,
-                    "src": scene["audioSrc"],
-                    "seconds": seconds,
+                    "src": clip["src"],
+                    "startFrame": cursor,
+                    "endFrame": cursor + duration_frames,
                     "durationInFrames": duration_frames,
-                    "provider": "reused_audio",
-                    "sourceJobId": reuse_job,
+                    "seconds": clip["seconds"],
+                    "provider": clip["provider"],
+                    **({"model": clip["model"]} if clip.get("model") else {}),
                 }
             )
-        return audio_scenes
+            cursor += duration_frames
+        scene["durationFrames"] = max(54, cursor)
+        scene["duration"] = round(scene["durationFrames"] / 30, 2)
+        scene["audioClips"] = audio_clips
+        scene.pop("audioSrc", None)
 
-    api_key = os.getenv("STICKMAN_TTS_API_KEY") or os.getenv("DASHSCOPE_API_KEY") or os.getenv("IMAGE_API_KEY")
-    if not api_key:
-        raise RuntimeError("DASHSCOPE_API_KEY is required for DashScope CosyVoice TTS")
-    dashscope.api_key = api_key
-    dashscope.base_websocket_api_url = "wss://dashscope.aliyuncs.com/api-ws/v1/inference"
-    job_dir = PUBLIC_AUDIO_DIR / job_id
-    job_dir.mkdir(parents=True, exist_ok=True)
-    audio_scenes = []
-    for index, scene in enumerate(scenes):
-        text = clean(scene["voiceText"])
-        out_path = job_dir / f"scene-{index + 1:02d}.wav"
+    def synthesize_one(text: str, out_path: Path, label: str) -> dict:
         last_error = None
         models_to_try = [] if os.getenv("SC1_SKIP_DASHSCOPE", "").strip() else TTS_MODELS
         for model in models_to_try:
             try:
-                print(f"[sc1] tts scene={index + 1} model={model} voice={voice}")
+                print(f"[sc1] tts {label} model={model} voice={voice}")
                 synthesizer = SpeechSynthesizer(model=model, voice=voice)
                 audio_bytes = synthesizer.call(text)
                 if not audio_bytes:
@@ -334,67 +330,99 @@ def synthesize_audio(scenes: list[dict], job_id: str, voice: str = DEFAULT_VOICE
                 audio = AudioSegment.from_file(out_path)
                 if len(audio.raw_data) < 1024 or audio.rms <= 0:
                     raise RuntimeError("silent audio")
-                seconds = max(len(audio) / 1000.0, 0.01)
-                duration_frames = max(54, int(seconds * 30 + 3.999))
-                scene["durationFrames"] = duration_frames
-                scene["duration"] = round(duration_frames / 30, 2)
-                scene["audioSrc"] = f"generated-audio/{job_id}/scene-{index + 1:02d}.wav"
-                audio_scenes.append(
-                    {
-                        "index": index,
-                        "src": scene["audioSrc"],
-                        "seconds": seconds,
-                        "durationInFrames": duration_frames,
-                        "provider": "dashscope_cosyvoice",
-                        "model": model,
-                    }
-                )
-                break
+                return {"seconds": max(len(audio) / 1000.0, 0.01), "provider": "dashscope_cosyvoice", "model": model}
             except Exception as exc:
                 last_error = exc
-                print(f"[sc1] tts failed scene={index + 1} model={model}: {exc}")
-        else:
-            print(f"[sc1] DashScope CosyVoice unavailable; falling back to Windows SAPI scene={index + 1}: {last_error}")
-            text_path = job_dir / f"scene-{index + 1:02d}.txt"
-            text_path.write_text(text, encoding="utf-8")
-            subprocess.run(
-                [
-                    POWERSHELL,
-                    "-NoProfile",
-                    "-ExecutionPolicy",
-                    "Bypass",
-                    "-File",
-                    str(PROJECT_ROOT / "scripts" / "sapi-tts.ps1"),
-                    "-TextPath",
-                    str(text_path),
-                    "-OutPath",
-                    str(out_path),
-                    "-VoiceName",
-                    "",
-                    "-Rate",
-                    "0",
-                ],
-                check=True,
-                timeout=120,
-            )
-            audio = AudioSegment.from_file(out_path)
-            if len(audio.raw_data) < 1024 or audio.rms <= 0:
-                raise RuntimeError(f"SAPI fallback returned invalid audio for scene {index + 1}")
-            seconds = max(len(audio) / 1000.0, 0.01)
-            duration_frames = max(54, int(seconds * 30 + 3.999))
-            scene["durationFrames"] = duration_frames
-            scene["duration"] = round(duration_frames / 30, 2)
-            scene["audioSrc"] = f"generated-audio/{job_id}/scene-{index + 1:02d}.wav"
+                print(f"[sc1] tts failed {label} model={model}: {exc}")
+
+        print(f"[sc1] DashScope CosyVoice unavailable; falling back to Windows SAPI {label}: {last_error}")
+        text_path = out_path.with_suffix(".txt")
+        text_path.write_text(text, encoding="utf-8")
+        subprocess.run(
+            [
+                POWERSHELL,
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(PROJECT_ROOT / "scripts" / "sapi-tts.ps1"),
+                "-TextPath",
+                str(text_path),
+                "-OutPath",
+                str(out_path),
+                "-VoiceName",
+                "",
+                "-Rate",
+                "0",
+            ],
+            check=True,
+            timeout=120,
+        )
+        audio = AudioSegment.from_file(out_path)
+        if len(audio.raw_data) < 1024 or audio.rms <= 0:
+            raise RuntimeError(f"SAPI fallback returned invalid audio for {label}")
+        return {"seconds": max(len(audio) / 1000.0, 0.01), "provider": "sapi_fallback", "dashscopeError": str(last_error)}
+
+    reuse_job = os.getenv("SC1_REUSE_AUDIO_JOB", "").strip()
+    if reuse_job:
+        audio_scenes = []
+        reuse_dir = PUBLIC_AUDIO_DIR / reuse_job
+        for index, scene in enumerate(scenes):
+            clips = []
+            for cue_index, _cue in enumerate(scene_cues(scene)):
+                audio_path = reuse_dir / f"scene-{index + 1:02d}-cue-{cue_index + 1:02d}.wav"
+                if not audio_path.exists():
+                    raise FileNotFoundError(f"Reusable cue audio missing: {audio_path}")
+                audio = AudioSegment.from_file(audio_path)
+                clips.append(
+                    {
+                        "src": f"generated-audio/{reuse_job}/{audio_path.name}",
+                        "seconds": max(len(audio) / 1000.0, 0.01),
+                        "provider": "reused_audio",
+                    }
+                )
+            apply_audio_clips(scene, clips)
             audio_scenes.append(
                 {
                     "index": index,
-                    "src": scene["audioSrc"],
-                    "seconds": seconds,
-                    "durationInFrames": duration_frames,
-                    "provider": "sapi_fallback",
-                    "dashscopeError": str(last_error),
+                    "seconds": sum(clip["seconds"] for clip in clips),
+                    "durationInFrames": scene["durationFrames"],
+                    "provider": "reused_audio",
+                    "sourceJobId": reuse_job,
                 }
             )
+        return audio_scenes
+
+    skip_dashscope = os.getenv("SC1_SKIP_DASHSCOPE", "").strip()
+    api_key = os.getenv("STICKMAN_TTS_API_KEY") or os.getenv("DASHSCOPE_API_KEY") or os.getenv("IMAGE_API_KEY")
+    if api_key:
+        dashscope.api_key = api_key
+        dashscope.base_websocket_api_url = "wss://dashscope.aliyuncs.com/api-ws/v1/inference"
+    elif not skip_dashscope:
+        raise RuntimeError("DASHSCOPE_API_KEY is required for DashScope CosyVoice TTS")
+    job_dir = PUBLIC_AUDIO_DIR / job_id
+    job_dir.mkdir(parents=True, exist_ok=True)
+    audio_scenes = []
+    for index, scene in enumerate(scenes):
+        clips = []
+        for cue_index, cue in enumerate(scene_cues(scene)):
+            out_path = job_dir / f"scene-{index + 1:02d}-cue-{cue_index + 1:02d}.wav"
+            clip = synthesize_one(clean(cue.get("text") or scene["voiceText"]), out_path, f"scene={index + 1} cue={cue_index + 1}")
+            clips.append(
+                {
+                    **clip,
+                    "src": f"generated-audio/{job_id}/{out_path.name}",
+                }
+            )
+        apply_audio_clips(scene, clips)
+        audio_scenes.append(
+            {
+                "index": index,
+                "seconds": sum(clip["seconds"] for clip in clips),
+                "durationInFrames": scene["durationFrames"],
+                "provider": clips[0]["provider"] if clips else "none",
+            }
+        )
     return audio_scenes
 
 

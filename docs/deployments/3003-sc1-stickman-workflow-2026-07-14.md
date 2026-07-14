@@ -1,4 +1,4 @@
-# 3003 SC1 Stickman Workflow Deployment - 2026-07-14
+﻿# 3003 SC1 Stickman Workflow Deployment - 2026-07-14
 
 ## Scope
 
@@ -11,7 +11,7 @@
 ## Source
 
 - Branch: `codex/3003-standalone-stickman-workflow-20260712`
-- Code commit pushed to GitHub: `aaaf4eb9`
+- Code commit pushed to GitHub: this deployment update commit (`Sync SC1 captions with cue audio`)
 - Files changed:
   - `video-render-service/remotion-mind-video/src/remotion/Sc1StickmanVideo.jsx`
   - `video-render-service/remotion-mind-video/scripts/generate-sc1-stickman-title.py`
@@ -21,7 +21,7 @@
 - Remote GitHub fetch failed on 2026-07-14 because `github.com:443` timed out from the server.
 - To avoid blocking validation, the two changed files were deployed by SFTP after backup.
 - Remote HEAD remained `12734b29447216dfe19334f6ea1d678538a89ce2`.
-- Remote effective state is therefore: `12734b29447216dfe19334f6ea1d678538a89ce2` plus SFTP-overlaid SC1 files from `aaaf4eb9`.
+- Remote effective state is therefore: `12734b29447216dfe19334f6ea1d678538a89ce2` plus SFTP-overlaid SC1 files from this deployment update commit.
 
 ## Backup
 
@@ -47,6 +47,14 @@
   - service: `remotion-mind-video`
   - port: `18787`
   - `sc1MaterialLibraryPath`: `/opt/manim_assets/sc1-outputs`
+- Local synchronized cue validation:
+  - Generated video: `E:\ai\agent_knowledge_ip_module_20260712\outputs\sc1-stickman-workflow\sc1-stickman-1784036533.mp4`
+  - Project JSON: `E:\ai\agent_knowledge_ip_module_20260712\outputs\sc1-stickman-workflow\sc1-stickman-1784036533.json`
+  - Duration: video `69.900000s`, audio `69.952000s`
+  - Audio mode: per-caption-cue audio clips; subtitle cue, English subtitle, summary label, and voice clip share the same frame window.
+  - Material source: `C:\Users\Administrator\Documents\Codex\2026-07-13\e-ai-cankao-sucai\outputs\materials.generated.json`
+  - Scene images are selected by caption text against the material JSON metadata and rendered in color without grayscale filters.
+  - Checked frames: `frame-color-latest-009.png`, `frame-sync-latest-018.png`, `frame-sync-latest-034.png`, `frame-sync-latest-052.png`
 
 ## Notes
 
