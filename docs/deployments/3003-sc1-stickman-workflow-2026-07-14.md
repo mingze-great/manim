@@ -58,13 +58,29 @@
 
 ## Notes
 
-- DashScope CosyVoice model order remains:
+- Historical DashScope CosyVoice model order before the open-source voice-clone update:
   - `cosyvoice-v3.5-flash`
   - `cosyvoice-v3-plus`
   - `cosyvoice-v3-flash`
 - `cosyvoice-v3.5-plus` is not used.
-- Local preview audio fell back to Windows SAPI because DashScope returned `AllocationQuota.FreeTierOnly`.
-- For production CosyVoice audio, disable free-tier-only mode in Alibaba DashScope console or provide a key with paid quota.
+- Local preview audio previously fell back to Windows SAPI because DashScope returned `AllocationQuota.FreeTierOnly`.
+- New audio generation should use local IndexTTS2 instead of DashScope/SAPI.
+
+## Open Source Voice Clone Update
+
+- The SC1 title workflow now requires local open-source TTS for new audio generation.
+- Selected engine: `IndexTTS2`, because it is the best fit among IndexTTS2 / F5-TTS / CosyVoice for reference-voice cloning with stricter video timing control.
+- Cloud DashScope TTS and Windows SAPI fallback are no longer used for new audio generation in `generate-sc1-stickman-title.py`.
+- Reference voice extraction was validated from the provided video:
+  - extracted file: `video-render-service/remotion-mind-video/public/generated-audio/sc1-stickman-1784038888/reference-voice.wav`
+  - duration: `24.0s`
+  - channels: `1`
+  - sample rate: `16000`
+  - RMS: `3029`
+- Full cloned audio generation is blocked until local IndexTTS2 is installed and configured:
+  - `SC1_INDEXTTS2_REPO`
+  - `SC1_INDEXTTS2_MODEL_DIR`
+  - optional: `SC1_INDEXTTS2_PYTHON`
 
 ## Rollback
 

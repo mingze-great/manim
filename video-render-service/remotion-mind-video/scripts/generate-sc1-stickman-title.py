@@ -9,8 +9,6 @@ import time
 import urllib.request
 from pathlib import Path
 
-import dashscope
-from dashscope.audio.tts_v2 import SpeechSynthesizer
 from pydub import AudioSegment
 
 
@@ -28,9 +26,18 @@ RENDER_SERVICE_URL = os.getenv("AI_VIDEO_RENDER_SERVICE_URL", "http://127.0.0.1:
 PUBLIC_AUDIO_DIR = PROJECT_ROOT / "public" / "generated-audio"
 PUBLIC_MATERIAL_DIR = PROJECT_ROOT / "public" / "sc1-materials"
 OUTPUT_DIR = REPO_ROOT / "outputs" / "sc1-stickman-workflow"
-TTS_MODELS = ["cosyvoice-v3.5-flash", "cosyvoice-v3-plus", "cosyvoice-v3-flash"]
-DEFAULT_VOICE = os.getenv("SC1_STICKMAN_VOICE", "longshuo_v3")
-POWERSHELL = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+DEFAULT_TOPIC = "为什么你越努力越焦虑"
+DEFAULT_REFERENCE_VIDEO = (
+    r"F:\ai\火柴人工作流\SC1全赛道高级版火柴人\20250901-15010d17-fc2d-4eb8-8983-77b4139cf8ea.mov"
+    if os.name == "nt"
+    else "/opt/manim_assets/sc1-reference/20250901-15010d17-fc2d-4eb8-8983-77b4139cf8ea.mov"
+)
+REFERENCE_VIDEO = Path(os.getenv("SC1_VOICE_REFERENCE_VIDEO", DEFAULT_REFERENCE_VIDEO))
+REFERENCE_AUDIO = Path(os.getenv("SC1_VOICE_REFERENCE_AUDIO", ""))
+TTS_ENGINE = os.getenv("SC1_TTS_ENGINE", "indextts2").strip().lower()
+INDEXTTS2_REPO_VALUE = os.getenv("SC1_INDEXTTS2_REPO", "").strip()
+INDEXTTS2_REPO = Path(INDEXTTS2_REPO_VALUE) if INDEXTTS2_REPO_VALUE else None
+INDEXTTS2_MODEL_DIR = os.getenv("SC1_INDEXTTS2_MODEL_DIR", "checkpoints").strip()
 
 
 def load_env_file() -> None:
@@ -110,6 +117,19 @@ def load_materials() -> list[dict]:
 def tokens_for(text: str) -> list[str]:
     source = clean(text).lower()
     tokens: list[str] = re.findall(r"[a-z0-9][a-z0-9_-]{1,}", source)
+    concept_map = [
+        (["焦虑", "紧张", "不安", "困住"], ["anxiety", "stress", "worry", "panic"]),
+        (["努力", "自律", "硬扛", "用力"], ["perfectionism", "over-control", "burnout", "pressure"]),
+        (["崩溃", "耗尽", "累", "消耗"], ["burnout", "depleted", "emotional exhaustion"]),
+        (["情绪", "逃避", "内耗"], ["emotion", "rumination", "avoidance", "self-soothing"]),
+        (["目标", "完成", "掌控"], ["focus", "flow", "control", "growth"]),
+        (["边界", "拒绝", "停一下"], ["boundary", "self-compassion", "self-soothing"]),
+        (["评委", "标准", "不满意"], ["shame", "spotlight", "perfectionism", "black-white thinking"]),
+        (["重新出发", "变强", "修复"], ["growth", "confidence", "repair", "inner strength"]),
+    ]
+    for needles, additions in concept_map:
+        if any(needle in source for needle in needles):
+            tokens.extend(additions)
     for phrase in re.findall(r"[\u4e00-\u9fff]{2,}", source):
         tokens.append(phrase)
         if len(phrase) > 4:
@@ -179,6 +199,12 @@ def summary_label(text: str, index: int) -> str:
         (["规则", "法律", "边界"], "规则边界"),
         (["结论", "答案", "所以"], "结论收束"),
         (["结构", "四层", "拆"], "结构判断"),
+        (["焦虑", "困住", "骂自己"], "情绪困住"),
+        (["努力", "自律", "用力"], "努力误区"),
+        (["忙碌", "逃避", "情绪"], "逃避情绪"),
+        (["压力", "评委", "消耗"], "压力来源"),
+        (["目标", "掌控感", "完成"], "掌控感"),
+        (["停一下", "重新出发", "硬扛"], "重新出发"),
     ]
     for needles, label in rules:
         if any(needle in text for needle in needles):
@@ -188,35 +214,35 @@ def summary_label(text: str, index: int) -> str:
 
 
 def build_scene_texts(title: str) -> list[tuple[str, str]]:
-    topic = clean(title) or "沙雕法律竞赛题"
+    topic = clean(title) or DEFAULT_TOPIC
     return [
         (
-            f"来挑战一道离谱但很容易答错的题：{topic}。第一反应先按住，不要急着站队。",
-            "Try a weird question that is easy to answer wrong. Hold your first reaction.",
+            f"如果你最近总被{topic}困住，先别急着骂自己。真正的问题，可能从来不是你不够努力。",
+            "If this keeps trapping you, do not blame yourself first. The real issue may not be effort.",
         ),
         (
-            f"真正关键不是谁看起来更有道理，而是把{topic}里的行为、对象和后果分开看。",
-            "The key is not who sounds right, but separating action, object and consequence.",
+            f"很多人一听到{topic}，第一反应就是加倍自律。可越用力，越容易把自己推到崩溃边缘。",
+            "Many people try harder first. But pushing harder can move you closer to breaking down.",
         ),
         (
-            "第一步看行为指向谁：它影响的是普通场景，还是已经进入特殊规则保护的对象。",
-            "Step one: identify who the action points to and what kind of object is involved.",
+            "第一步，先看你是在解决问题，还是在用忙碌逃避情绪。两者看起来很像，结果完全不同。",
+            "Step one: check whether you are solving the problem or escaping emotion through busyness.",
         ),
         (
-            "第二步看有没有真实风险：只是想象中的尴尬，还是造成了可被评价的后果。",
-            "Step two: check whether there is real risk or only imagined embarrassment.",
+            "第二步，看压力到底来自现实，还是来自脑子里那个永远不满意的评委。后者最会消耗人。",
+            "Step two: see whether pressure comes from reality or from the judge inside your head.",
         ),
         (
-            "第三步把事实放回规则边界：同一个动作，放在不同对象上，性质可能完全不同。",
-            "Step three: put the fact back into the rule boundary. The same act can change nature.",
+            "第三步，把目标拆小到今天能完成的一件事。不是降低标准，而是让大脑重新获得掌控感。",
+            "Step three: shrink the goal into one thing you can finish today to regain control.",
         ),
         (
-            f"所以{topic}的答案不是背结论，而是按行为、对象、风险、边界四层拆。",
-            "So the answer is not a slogan, but a four-layer analysis.",
+            f"所以{topic}的破局点，不是再逼自己一把，而是把努力、情绪、目标和边界重新分开。",
+            "So the breakthrough is not forcing yourself harder, but separating effort, emotion, goals and boundaries.",
         ),
         (
-            "最后记住一句：越像段子的题，越要用结构判断，不然最容易被第一反应带跑。",
-            "The more it sounds like a joke, the more you need structured judgment.",
+            "最后记住一句：真正能让人变强的，不是硬扛，而是知道什么时候停一下，再重新出发。",
+            "Remember this: strength is not only endurance. It is knowing when to pause and restart.",
         ),
     ]
 
@@ -284,7 +310,104 @@ def build_scenes(title: str, materials: list[dict]) -> list[dict]:
     return scenes
 
 
-def synthesize_audio(scenes: list[dict], job_id: str, voice: str = DEFAULT_VOICE) -> list[dict]:
+def validate_audio_file(path: Path, label: str, min_seconds: float = 0.1) -> dict:
+    if not path.exists():
+        raise FileNotFoundError(f"{label} audio missing: {path}")
+    audio = AudioSegment.from_file(path)
+    seconds = max(len(audio) / 1000.0, 0.0)
+    if seconds < min_seconds:
+        raise RuntimeError(f"{label} audio too short: {seconds:.3f}s at {path}")
+    if len(audio.raw_data) < 1024 or audio.rms <= 0:
+        raise RuntimeError(f"{label} audio is silent or invalid: {path}")
+    return {
+        "seconds": seconds,
+        "rms": audio.rms,
+        "channels": audio.channels,
+        "frameRate": audio.frame_rate,
+    }
+
+
+def extract_reference_voice(job_dir: Path) -> Path:
+    staged = job_dir / "reference-voice.wav"
+    configured_audio = os.getenv("SC1_VOICE_REFERENCE_AUDIO", "").strip()
+    if configured_audio:
+        source_audio = Path(configured_audio)
+        validate_audio_file(source_audio, "configured reference voice", min_seconds=1.0)
+        if source_audio.resolve() != staged.resolve():
+            shutil.copyfile(source_audio, staged)
+        validate_audio_file(staged, "staged reference voice", min_seconds=1.0)
+        return staged
+
+    if not REFERENCE_VIDEO.exists():
+        raise FileNotFoundError(
+            "SC1 voice reference video not found. Set SC1_VOICE_REFERENCE_VIDEO or "
+            f"SC1_VOICE_REFERENCE_AUDIO. Current path: {REFERENCE_VIDEO}"
+        )
+    start = os.getenv("SC1_VOICE_REFERENCE_START", "0").strip() or "0"
+    seconds = os.getenv("SC1_VOICE_REFERENCE_SECONDS", "24").strip() or "24"
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-ss",
+            start,
+            "-t",
+            seconds,
+            "-i",
+            str(REFERENCE_VIDEO),
+            "-vn",
+            "-ac",
+            "1",
+            "-ar",
+            "16000",
+            "-af",
+            "highpass=f=80,lowpass=f=7600,loudnorm=I=-18:LRA=11:TP=-1.5",
+            str(staged),
+        ],
+        check=True,
+        timeout=180,
+    )
+    validate_audio_file(staged, "extracted reference voice", min_seconds=3.0)
+    return staged
+
+
+def run_indextts2_batch(job_dir: Path, jobs: list[dict], reference_audio: Path) -> None:
+    if TTS_ENGINE != "indextts2":
+        raise RuntimeError(f"Unsupported SC1_TTS_ENGINE={TTS_ENGINE!r}; this workflow currently requires indextts2")
+    if INDEXTTS2_REPO is None or not INDEXTTS2_REPO.exists():
+        raise RuntimeError(
+            "IndexTTS2 is not installed/configured. Clone the IndexTTS repo and set SC1_INDEXTTS2_REPO, "
+            "then set SC1_INDEXTTS2_MODEL_DIR to the downloaded IndexTTS2 checkpoints directory. "
+            f"Current SC1_INDEXTTS2_REPO={INDEXTTS2_REPO_VALUE or '<empty>'}"
+        )
+
+    helper = PROJECT_ROOT / "scripts" / "indextts2_batch.py"
+    manifest = job_dir / "indextts2-jobs.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "referenceAudio": str(reference_audio),
+                "modelDir": INDEXTTS2_MODEL_DIR,
+                "jobs": jobs,
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(INDEXTTS2_REPO) + os.pathsep + env.get("PYTHONPATH", "")
+    python_bin = os.getenv("SC1_INDEXTTS2_PYTHON", sys.executable)
+    subprocess.run(
+        [python_bin, str(helper), "--manifest", str(manifest)],
+        cwd=str(INDEXTTS2_REPO),
+        env=env,
+        check=True,
+        timeout=int(os.getenv("SC1_INDEXTTS2_TIMEOUT", "3600")),
+    )
+
+
+def synthesize_audio(scenes: list[dict], job_id: str) -> list[dict]:
     def scene_cues(scene: dict) -> list[dict]:
         segments = scene.get("segments") if isinstance(scene.get("segments"), list) else []
         if not segments:
@@ -316,53 +439,6 @@ def synthesize_audio(scenes: list[dict], job_id: str, voice: str = DEFAULT_VOICE
         scene["audioClips"] = audio_clips
         scene.pop("audioSrc", None)
 
-    def synthesize_one(text: str, out_path: Path, label: str) -> dict:
-        last_error = None
-        models_to_try = [] if os.getenv("SC1_SKIP_DASHSCOPE", "").strip() else TTS_MODELS
-        for model in models_to_try:
-            try:
-                print(f"[sc1] tts {label} model={model} voice={voice}")
-                synthesizer = SpeechSynthesizer(model=model, voice=voice)
-                audio_bytes = synthesizer.call(text)
-                if not audio_bytes:
-                    raise RuntimeError("empty audio")
-                out_path.write_bytes(audio_bytes)
-                audio = AudioSegment.from_file(out_path)
-                if len(audio.raw_data) < 1024 or audio.rms <= 0:
-                    raise RuntimeError("silent audio")
-                return {"seconds": max(len(audio) / 1000.0, 0.01), "provider": "dashscope_cosyvoice", "model": model}
-            except Exception as exc:
-                last_error = exc
-                print(f"[sc1] tts failed {label} model={model}: {exc}")
-
-        print(f"[sc1] DashScope CosyVoice unavailable; falling back to Windows SAPI {label}: {last_error}")
-        text_path = out_path.with_suffix(".txt")
-        text_path.write_text(text, encoding="utf-8")
-        subprocess.run(
-            [
-                POWERSHELL,
-                "-NoProfile",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-File",
-                str(PROJECT_ROOT / "scripts" / "sapi-tts.ps1"),
-                "-TextPath",
-                str(text_path),
-                "-OutPath",
-                str(out_path),
-                "-VoiceName",
-                "",
-                "-Rate",
-                "0",
-            ],
-            check=True,
-            timeout=120,
-        )
-        audio = AudioSegment.from_file(out_path)
-        if len(audio.raw_data) < 1024 or audio.rms <= 0:
-            raise RuntimeError(f"SAPI fallback returned invalid audio for {label}")
-        return {"seconds": max(len(audio) / 1000.0, 0.01), "provider": "sapi_fallback", "dashscopeError": str(last_error)}
-
     reuse_job = os.getenv("SC1_REUSE_AUDIO_JOB", "").strip()
     if reuse_job:
         audio_scenes = []
@@ -393,25 +469,40 @@ def synthesize_audio(scenes: list[dict], job_id: str, voice: str = DEFAULT_VOICE
             )
         return audio_scenes
 
-    skip_dashscope = os.getenv("SC1_SKIP_DASHSCOPE", "").strip()
-    api_key = os.getenv("STICKMAN_TTS_API_KEY") or os.getenv("DASHSCOPE_API_KEY") or os.getenv("IMAGE_API_KEY")
-    if api_key:
-        dashscope.api_key = api_key
-        dashscope.base_websocket_api_url = "wss://dashscope.aliyuncs.com/api-ws/v1/inference"
-    elif not skip_dashscope:
-        raise RuntimeError("DASHSCOPE_API_KEY is required for DashScope CosyVoice TTS")
     job_dir = PUBLIC_AUDIO_DIR / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
+    reference_audio = extract_reference_voice(job_dir)
+    print(f"[sc1] reference_voice={reference_audio}")
+
+    tts_jobs = []
+    for index, scene in enumerate(scenes):
+        for cue_index, cue in enumerate(scene_cues(scene)):
+            out_path = job_dir / f"scene-{index + 1:02d}-cue-{cue_index + 1:02d}.wav"
+            tts_jobs.append(
+                {
+                    "sceneIndex": index,
+                    "cueIndex": cue_index,
+                    "label": f"scene={index + 1} cue={cue_index + 1}",
+                    "text": clean(cue.get("text") or scene["voiceText"]),
+                    "outputPath": str(out_path),
+                }
+            )
+    run_indextts2_batch(job_dir, tts_jobs, reference_audio)
+
     audio_scenes = []
     for index, scene in enumerate(scenes):
         clips = []
         for cue_index, cue in enumerate(scene_cues(scene)):
             out_path = job_dir / f"scene-{index + 1:02d}-cue-{cue_index + 1:02d}.wav"
-            clip = synthesize_one(clean(cue.get("text") or scene["voiceText"]), out_path, f"scene={index + 1} cue={cue_index + 1}")
+            stats = validate_audio_file(out_path, f"IndexTTS2 scene={index + 1} cue={cue_index + 1}")
             clips.append(
                 {
-                    **clip,
                     "src": f"generated-audio/{job_id}/{out_path.name}",
+                    "seconds": stats["seconds"],
+                    "provider": "indextts2_open_source",
+                    "engine": "indextts2",
+                    "referenceAudio": f"generated-audio/{job_id}/{reference_audio.name}",
+                    "rms": stats["rms"],
                 }
             )
         apply_audio_clips(scene, clips)
@@ -420,7 +511,8 @@ def synthesize_audio(scenes: list[dict], job_id: str, voice: str = DEFAULT_VOICE
                 "index": index,
                 "seconds": sum(clip["seconds"] for clip in clips),
                 "durationInFrames": scene["durationFrames"],
-                "provider": clips[0]["provider"] if clips else "none",
+                "provider": "indextts2_open_source" if clips else "none",
+                "engine": "indextts2",
             }
         )
     return audio_scenes
@@ -478,11 +570,18 @@ def render_video(title: str, scenes: list[dict], audio_scenes: list[dict], job_i
 
 def main() -> int:
     load_env_file()
-    title = clean(" ".join(sys.argv[1:])) or "沙雕法律竞赛题"
+    title = clean(" ".join(sys.argv[1:])) or DEFAULT_TOPIC
     job_id = f"sc1-stickman-{int(time.time())}"
     print(f"[sc1] title={title}")
     print(f"[sc1] material_dir={MATERIAL_DIR}")
     print(f"[sc1] render_service={RENDER_SERVICE_URL}")
+    if os.getenv("SC1_VALIDATE_REFERENCE_AUDIO_ONLY", "").strip():
+        job_dir = PUBLIC_AUDIO_DIR / job_id
+        job_dir.mkdir(parents=True, exist_ok=True)
+        reference_audio = extract_reference_voice(job_dir)
+        stats = validate_audio_file(reference_audio, "reference voice", min_seconds=3.0)
+        print(json.dumps({"ok": True, "referenceAudio": str(reference_audio), **stats}, ensure_ascii=False, indent=2))
+        return 0
     materials = load_materials()
     scenes = build_scenes(title, materials)
     stage_materials(scenes)
