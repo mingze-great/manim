@@ -21,6 +21,7 @@ const colors = ['#c51cff', '#75421e', '#e02525', '#2458e6', '#f3d21b', '#21c928'
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const clean = (value) => String(value || '').replace(/\s+/g, ' ').trim();
+const cleanSubtitle = (value) => clean(value).replace(/[。！？!?；;，,、.]+$/g, '');
 const mediaSource = (value) => {
   const source = String(value || '').trim();
   if (!source) return '';
@@ -77,8 +78,8 @@ const splitCaptionCueTexts = (value) => {
   const source = clean(value);
   if (!source) return [];
   const parts = source
-    .split(/(?<=[，。！？；、,!?;])\s*/)
-    .map((item) => item.replace(/[，。！？；、,!?;]+$/g, '').trim())
+    .split(/(?<=[。！？!?；;])\s*/)
+    .map((item) => item.replace(/[。！？!?；;]+$/g, '').trim())
     .filter(Boolean);
   const chunks = parts.length ? parts : [source];
   const cues = [];
@@ -146,7 +147,7 @@ const buildCaptionCues = (segment, startFrame, endFrame) => {
 };
 
 const normalizeSceneSegments = (scene, subtitleText, englishText, keywords, durationFrames, sceneIndex) => {
-  const images = Array.isArray(scene.assetImages) ? scene.assetImages.filter((item) => item?.src).slice(0, 2) : [];
+  const images = Array.isArray(scene.assetImages) ? scene.assetImages.filter((item) => item?.src).slice(0, 1) : [];
   const layoutMode = clean(scene.layoutMode || scene.sceneLayoutMode || (sceneIndex % 2 === 0 ? 'pair_left_right' : 'center_shift_pair'));
   const providedSegments = Array.isArray(scene.segments) && scene.segments.length ? scene.segments : [];
   const source = providedSegments.length
@@ -315,21 +316,37 @@ const Header = ({title}) => (
 const KeywordLabels = ({scene, segment, local}) => {
   const cues = Array.isArray(segment?.captionCues) ? segment.captionCues : [];
   const activeIndex = captionIndexAtLocal(segment, local);
-  const visibleCues = cues.slice(0, activeIndex + 1).filter((cue) => clean(cue?.summaryLabel || cue?.label || cue?.keyword));
+  const seen = new Set();
+  const visibleCues = [];
+  for (const cue of cues.slice(0, activeIndex + 1)) {
+    const label = clean(cue?.summaryLabel || cue?.label || cue?.keyword);
+    if (!label || seen.has(label)) continue;
+    seen.add(label);
+    visibleCues.push({cue, label});
+  }
   if (!visibleCues.length) return null;
+  const anchors = [
+    {left: 610, top: 210, align: 'left'},
+    {left: 1310, top: 210, align: 'right'},
+    {left: 575, top: 415, align: 'left'},
+    {left: 1345, top: 415, align: 'right'},
+    {left: 600, top: 625, align: 'left'},
+    {left: 1320, top: 625, align: 'right'},
+    {left: 960, top: 770, align: 'center'}
+  ];
   return (
-    <div style={{position: 'absolute', left: 500, right: 120, top: 96, minHeight: 120, display: 'flex', flexWrap: 'wrap', alignContent: 'flex-start', alignItems: 'flex-start', justifyContent: 'flex-start', gap: '10px 18px', overflow: 'hidden', zIndex: 4, pointerEvents: 'none'}}>
-      {visibleCues.map((cue, index) => {
-        const label = clean(cue.summaryLabel || cue.label || cue.keyword || segment?.summaryLabel || scene.keywords?.[index] || scene.title);
+    <div style={{position: 'absolute', inset: 0, zIndex: 4, pointerEvents: 'none'}}>
+      {visibleCues.map(({cue, label}, index) => {
+        const anchor = anchors[index % anchors.length];
         const labelStart = Number(cue.startFrame ?? segment?.startFrame ?? 0);
         const localInLabel = Math.max(0, local - labelStart);
         const enter = interpolate(localInLabel, [0, 10], [0, 1], {extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic)});
         const opacity = clamp(enter, 0, 1);
-        const fontSize = label.length > 12 ? 25 : 27;
+        const fontSize = label.length > 4 ? 24 : 28;
         return (
           <div
             key={`${scene.id}-${segment?.index || 0}-${index}-${label}`}
-            style={{display: 'flex', alignItems: 'center', gap: 12, opacity, transform: `translateY(${(1 - enter) * 10}px)`, fontSize, lineHeight: 1.05, fontWeight: 900, color: '#111', whiteSpace: 'nowrap', maxWidth: '50%', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis'}}
+            style={{position: 'absolute', left: anchor.left, top: anchor.top, display: 'flex', alignItems: 'center', gap: 12, opacity, transform: `translate(-50%, -50%) translateY(${(1 - enter) * 6}px)`, fontSize, lineHeight: 1.05, fontWeight: 900, color: '#111', whiteSpace: 'nowrap', maxWidth: 220, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', justifyContent: anchor.align === 'center' ? 'center' : anchor.align === 'right' ? 'flex-end' : 'flex-start'}}
           >
             <span style={{width: 22, height: 22, background: colors[(scene.index + Number(segment?.index || 0) + index) % colors.length], display: 'inline-block', borderRadius: 2, flex: '0 0 auto'}} />
             <span>{label}</span>
@@ -459,22 +476,10 @@ const interpolateBox = (from, to, t) => ({
 const SceneImage = ({item, box, progress, start = 0, direction = 'left'}) => {
   const src = item?.src;
   if (!src) return null;
-  const localProgress = clamp((progress - start) / Math.max(0.0001, 1 - start), 0, 1);
-  const enter = interpolate(localProgress, [0, 0.16], [0, 1], {extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic)});
-  const exit = interpolate(progress, [0.9, 1], [0, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.in(Easing.cubic)});
-  const travel = {
-    left: {x: -180, y: 0},
-    right: {x: 180, y: 0},
-    top: {x: 0, y: -120},
-    bottom: {x: 0, y: 120},
-    center: {x: 0, y: 0}
-  }[direction] || {x: 0, y: 0};
-  const opacity = clamp(enter * (1 - exit), 0, 1);
   const shared = {
     width: '100%',
     height: '100%',
     objectFit: 'contain',
-    transform: `scale(${item?.scale || 0.96})`,
   };
   const source = String(src);
   const image = /^(https?:|file:)\/\//i.test(source)
@@ -487,9 +492,7 @@ const SceneImage = ({item, box, progress, start = 0, direction = 'left'}) => {
       top: box.top,
       width: box.width,
       height: box.height,
-      opacity,
-      transform: `translate(${(1 - enter) * travel.x}px, ${(1 - enter) * travel.y}px)`,
-      overflow: 'visible',
+      overflow: 'hidden',
       display: 'grid',
       placeItems: 'center'
     }}>
@@ -499,26 +502,16 @@ const SceneImage = ({item, box, progress, start = 0, direction = 'left'}) => {
 };
 
 const MaterialSceneImages = ({scene, segment, local}) => {
-  const images = Array.isArray(scene.assetImages) ? scene.assetImages.filter((item) => item?.src).slice(0, 2) : [];
+  const images = Array.isArray(scene.assetImages) ? scene.assetImages.filter((item) => item?.src).slice(0, 1) : [];
   if (!images.length) return null;
-  const segmentStart = Number(segment?.startFrame || 0);
-  const segmentDuration = Math.max(1, Number(segment?.endFrame || scene.durationFrames) - segmentStart);
-  const progress = clamp((local - segmentStart) / segmentDuration, 0, 1);
-  const layoutMode = clean(segment?.layoutMode || scene.layoutMode || 'pair_left_right');
-  const secondStart = layoutMode === 'center_shift_pair' ? 0.54 : 0.36;
-  const leftBox = {left: 255, top: 278, width: 600, height: 445};
-  const rightBox = {left: 1040, top: 278, width: 600, height: 445};
-  const centerBox = {left: 440, top: 250, width: 1040, height: 495};
-  const centerShift = clamp((progress - 0.28) / 0.22, 0, 1);
-  const firstBox = layoutMode === 'center_shift_pair'
-    ? interpolateBox(centerBox, leftBox, centerShift)
-    : leftBox;
-  const firstDirection = layoutMode === 'center_shift_pair' ? 'center' : (images[0]?.enterDirection || 'left');
-  const secondDirection = images[1]?.enterDirection || 'right';
   return (
-    <div style={{position: 'absolute', left: 0, right: 0, top: 0, height: 820, overflow: 'hidden'}}>
-      <SceneImage item={images[0]} box={firstBox} progress={progress} start={0} direction={firstDirection} />
-      {images[1] ? <SceneImage item={images[1]} box={rightBox} progress={progress} start={secondStart} direction={secondDirection} /> : null}
+    <div style={{position: 'absolute', left: 0, right: 0, top: 245, height: 520, overflow: 'hidden', display: 'grid', placeItems: 'center'}}>
+      <div style={{position: 'relative', width: 760, height: 520, display: 'grid', placeItems: 'center'}}>
+        <SceneImage
+          item={images[0]}
+          box={{left: 80, top: 22, width: 600, height: 430}}
+        />
+      </div>
     </div>
   );
 };
@@ -538,12 +531,8 @@ const SceneVisual = ({scene, local, segment}) => {
 };
 
 const SceneLayer = ({scene, local}) => {
-  const enter = interpolate(local, [0, 18], [0, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic)});
-  const exit = interpolate(local, [scene.durationFrames - 18, scene.durationFrames], [0, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.in(Easing.cubic)});
-  const slideX = (1 - enter) * 140 - exit * 120;
-  const opacity = clamp(enter * (1 - exit), 0, 1);
   return (
-    <div style={{position: 'absolute', inset: 0, opacity, transform: `translateX(${slideX}px)`}}>
+    <div style={{position: 'absolute', inset: 0}}>
       <SceneVisual scene={scene} local={local} segment={segmentAtLocal(scene, local)} />
     </div>
   );
@@ -551,17 +540,17 @@ const SceneLayer = ({scene, local}) => {
 
 const Subtitle = ({scene, segment, local}) => {
   const cue = captionAtLocal(segment, local);
-  const zhText = cue?.text || segment?.subtitleText || scene.subtitleText || scene.voiceText;
+  const zhText = cleanSubtitle(cue?.text || segment?.subtitleText || scene.subtitleText || scene.voiceText);
   const enText = cue?.englishText || segment?.englishText || scene.englishText;
   const zhLines = splitLines(zhText, 23, 2);
   const enLines = splitEnglishLines(enText, 58, 2);
   return (
-    <div style={{position: 'absolute', left: 0, right: 0, top: 845, height: 155, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', textAlign: 'center', paddingTop: 10, overflow: 'hidden'}}>
-      <div style={{fontSize: zhLines.join('').length > 24 ? 42 : 48, lineHeight: 1.08, fontWeight: 1000, color: '#111'}}>
+    <div style={{position: 'absolute', left: 0, right: 0, top: 842, height: 158, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', textAlign: 'center', paddingTop: 10, overflow: 'hidden'}}>
+      <div style={{fontSize: zhLines.join('').length > 24 ? 41 : 47, lineHeight: 1.08, fontWeight: 1000, color: '#111'}}>
         {zhLines.map((line) => <div key={line}>{line}</div>)}
       </div>
       {enLines.length ? (
-        <div style={{marginTop: 8, fontSize: enLines.join(' ').length > 54 ? 25 : 28, lineHeight: 1.05, fontWeight: 800, color: '#222', fontStyle: 'italic'}}>
+        <div style={{marginTop: 8, fontSize: enLines.join(' ').length > 54 ? 24 : 27, lineHeight: 1.05, fontWeight: 800, color: '#222', fontStyle: 'italic'}}>
           {enLines.map((line) => <div key={line}>{line}</div>)}
         </div>
       ) : null}

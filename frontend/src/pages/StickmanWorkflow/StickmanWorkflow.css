@@ -56,7 +56,7 @@
 
 .workflow-controls {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   margin: 14px 0 18px;
 }
@@ -105,6 +105,57 @@
   color: #b91c1c;
 }
 
+.workflow-step-list {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.workflow-step {
+  min-height: 54px;
+  padding: 10px;
+  border: 1px solid #dfe3ea;
+  border-radius: 6px;
+  background: #fafbfc;
+  color: #64748b;
+}
+
+.workflow-step span {
+  display: block;
+  width: 10px;
+  height: 10px;
+  margin-bottom: 7px;
+  border-radius: 50%;
+  background: #cbd5e1;
+}
+
+.workflow-step strong {
+  display: block;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.workflow-step.done {
+  border-color: #b7e2c4;
+  background: #f0fbf4;
+  color: #166534;
+}
+
+.workflow-step.done span {
+  background: #22c55e;
+}
+
+.workflow-step.active {
+  border-color: #93c5fd;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.workflow-step.active span {
+  background: #2563eb;
+}
+
 .workflow-preview {
   margin-top: 16px;
 }
@@ -130,6 +181,10 @@
 
   .stickman-workflow-grid {
     grid-template-columns: 1fr;
+  }
+
+  .workflow-step-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

@@ -4,7 +4,10 @@ import os
 import re
 import shutil
 import threading
+import asyncio
 import dashscope
+import edge_tts
+import requests
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -40,7 +43,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 SC1_MATERIAL_PUBLIC_BASE_URL = os.getenv("SC1_MATERIAL_PUBLIC_BASE_URL", "http://127.0.0.1:18787/sc1-materials").rstrip("/")
 SC1_MATERIAL_IMAGE_COUNT = int(os.getenv("SC1_MATERIAL_IMAGE_COUNT", "56"))
 default_sc1_material_library_path = (
-    str(REPO_ROOT / "e-ai-cankao-sucai" / "outputs")
+    r"E:\ai\火柴人工作流\outputs"
     if os.name == "nt"
     else "/opt/manim_assets/sc1-outputs"
 )
@@ -206,19 +209,28 @@ class AiVideoService:
         )
         self.render_timeout = int(os.getenv("AI_VIDEO_RENDER_TIMEOUT", "600"))
         self.cosyvoice_url = os.getenv("AI_VIDEO_COSYVOICE_URL", "http://127.0.0.1:50000").rstrip("/")
-        self.cosyvoice_timeout = int(os.getenv("AI_VIDEO_COSYVOICE_TIMEOUT", "300"))
+        self.cosyvoice_timeout = int(os.getenv("AI_VIDEO_COSYVOICE_TIMEOUT", "45"))
         self.cosyvoice_sample_rate = int(os.getenv("AI_VIDEO_COSYVOICE_SAMPLE_RATE", "22050"))
         self.dashscope_api_key = os.getenv("STICKMAN_TTS_API_KEY") or os.getenv("DASHSCOPE_API_KEY") or os.getenv("IMAGE_API_KEY", "")
         self.dashscope_tts_models = [
             item.strip()
             for item in (
                 os.getenv("STICKMAN_TTS_FALLBACK_MODELS")
-                or "cosyvoice-v3.5-flash,cosyvoice-v3-plus,cosyvoice-v3-flash"
+                or "cosyvoice-v3-plus,cosyvoice-v3-flash,cosyvoice-v3.5-plus,cosyvoice-v3.5-flash"
             ).split(",")
-            if item.strip() and item.strip() != "cosyvoice-v3.5-plus"
+            if item.strip()
         ]
+        self.dashscope_websocket_url = os.getenv(
+            "DASHSCOPE_BASE_WEBSOCKET_API_URL",
+            "wss://ws-ckc5fvl317n4h4af.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference",
+        )
+        self.dashscope_http_url = os.getenv(
+            "DASHSCOPE_BASE_HTTP_API_URL",
+            "https://ws-ckc5fvl317n4h4af.cn-beijing.maas.aliyuncs.com/api/v1",
+        )
         dashscope.api_key = self.dashscope_api_key
-        dashscope.base_websocket_api_url = "wss://dashscope.aliyuncs.com/api-ws/v1/inference"
+        dashscope.base_websocket_api_url = self.dashscope_websocket_url
+        dashscope.base_http_api_url = self.dashscope_http_url
         self._running_jobs: set[int] = set()
         self._lock = threading.Lock()
         self._sc1_material_cache: tuple[tuple[str, float, int] | None, list[dict[str, Any]]] = (None, [])
@@ -707,20 +719,16 @@ class AiVideoService:
         segments: list[dict[str, Any]] | None = None,
         selected_materials: set[str] | None = None,
     ) -> list[dict[str, Any]]:
-        per_scene = int(payload.get("materialImagesPerScene") or 2)
-        per_scene = max(1, min(2, per_scene))
+        per_scene = 1
         topic = str(payload.get("prompt") or payload.get("requirements") or payload.get("creativeBrief") or text or "")
         segment_items = segments or self._sc1_segments_for_scene(text, index)
         segment = segment_items[0] if segment_items else {}
         cue_texts = [str(cue.get("text") or "").strip() for cue in (segment.get("captionCues") if isinstance(segment.get("captionCues"), list) else []) if str(cue.get("text") or "").strip()]
         if not cue_texts:
             cue_texts = self._split_sc1_caption_cues(text)
-        pivot = max(1, (len(cue_texts) + 1) // 2)
-        first_text = " ".join(cue_texts[:pivot]).strip() or text
-        second_text = (" ".join(cue_texts[pivot:]).strip() or cue_texts[-1]) if cue_texts else text
         layout_mode = str(segment.get("layoutMode") or self._sc1_layout_mode_for_scene(index, text)).strip()
-        slot_hints = ["left", "right"] if layout_mode == "pair_left_right" else ["center", "right"]
-        image_texts = [first_text, second_text]
+        slot_hints = ["center"]
+        image_texts = [" ".join(cue_texts[:3]).strip() or text]
         materials = self._load_sc1_materials()
         selected: set[str] = selected_materials if selected_materials is not None else set()
         images: list[dict[str, Any]] = []
@@ -731,14 +739,14 @@ class AiVideoService:
             selected.add(file_name)
             images.append(
                 {
-                    "src": f"{SC1_MATERIAL_PUBLIC_BASE_URL}/{file_name}",
+                    "src": f"/sc1-materials/{file_name}",
                     "fileName": file_name,
                     "slot": slot_hints[offset] if offset < len(slot_hints) else ("right" if offset else "center"),
                     "segmentIndex": offset,
                     "segmentText": segment_text,
                     "englishText": self._sc1_english_for_segment(segment_text, index, offset),
                     "summaryLabel": self._sc1_summary_label(segment_text, offset),
-                    "enterDirection": "center" if layout_mode == "center_shift_pair" and offset == 0 else ("right" if offset else "left"),
+                    "enterDirection": "center",
                     "startRatio": 0 if offset == 0 else 0.4,
                     "endRatio": 1,
                     "visibleFromRatio": 0 if offset == 0 else 0.38,
@@ -755,22 +763,28 @@ class AiVideoService:
 
     def _sc1_segments_for_scene(self, text: str, scene_index: int) -> list[dict[str, Any]]:
         cleaned = " ".join(str(text or "").replace("\n", " ").split()).strip() or "Scene point"
-        cues = self._split_sc1_caption_cues(cleaned)
+        cues = self._split_sc1_caption_cues(cleaned)[:3]
         layout_mode = self._sc1_layout_mode_for_scene(scene_index, cleaned)
+        summary_labels: list[str] = []
+        used_labels: set[str] = set()
+        for cue_index, cue in enumerate(cues):
+            label = self._sc1_make_unique_label(cue, cue_index, used_labels)
+            used_labels.add(label)
+            summary_labels.append(label)
         return [
             {
                 "index": 0,
                 "text": cleaned,
                 "subtitleText": cleaned,
                 "englishText": self._sc1_english_for_segment(cleaned, scene_index, 0),
-                "summaryLabel": self._sc1_summary_label(cleaned, 0),
-                "summaryLabels": [self._sc1_summary_label(cue, cue_index) for cue_index, cue in enumerate(cues)],
+                "summaryLabel": summary_labels[0] if summary_labels else self._sc1_summary_label(cleaned, 0),
+                "summaryLabels": summary_labels,
                 "layoutMode": layout_mode,
                 "captionCues": [
                     {
                         "text": cue,
                         "englishText": self._sc1_english_for_segment(cue, scene_index, cue_index),
-                        "summaryLabel": self._sc1_summary_label(cue, cue_index),
+                        "summaryLabel": summary_labels[cue_index] if cue_index < len(summary_labels) else self._sc1_summary_label(cue, cue_index),
                     }
                     for cue_index, cue in enumerate(cues)
                 ],
@@ -785,17 +799,41 @@ class AiVideoService:
             return ["Scene point"]
         parts = [
             item.strip(" .,!?:;、。，；：！？")
-            for item in re.split(r"(?<=[。！？!?;?])\s*", cleaned)
+            for item in re.split(r"(?<=[。！？!?；;])\s*", cleaned)
             if item.strip(" .,!?:;、。，；：！？")
         ]
         if len(parts) >= 2:
-            return parts[:4]
-        if len(cleaned) <= 20:
+            if len(parts) <= 3:
+                return parts[:3]
+            total = sum(len(part) for part in parts) or len(parts)
+            target = max(12, total // 3)
+            groups: list[str] = []
+            bucket = ""
+            bucket_len = 0
+            for part in parts:
+                if bucket and bucket_len + len(part) > target and len(groups) < 2:
+                    groups.append(bucket)
+                    bucket = part
+                    bucket_len = len(part)
+                else:
+                    bucket = f"{bucket} {part}".strip()
+                    bucket_len += len(part)
+            if bucket:
+                groups.append(bucket)
+            return [item.strip(" .,!?:;、。，；：！？") for item in groups if item.strip(" .,!?:;、。，；：！？")][:3]
+        if len(cleaned) <= 18:
             return [cleaned]
+        comma_parts = [
+            item.strip(" .,!?:;、。，；：！？")
+            for item in re.split(r"[，,、；;】【：：]", cleaned)
+            if item.strip(" .,!?:;、。，；：！？")
+        ]
+        if len(comma_parts) >= 2:
+            return comma_parts[:3]
         midpoint = len(cleaned) // 2
         split_at = midpoint
-        for radius in range(0, min(14, midpoint)):
-            for candidate in (midpoint + radius, midpoint - radius):
+        for radius in range(0, min(18, midpoint)):
+            for candidate in (midpoint - radius, midpoint + radius):
                 if 0 < candidate < len(cleaned) and cleaned[candidate] in "、。，；：,;: ":
                     split_at = candidate + 1
                     break
@@ -803,7 +841,7 @@ class AiVideoService:
                 break
         first = cleaned[:split_at].strip(" .,!?:;、。，；：！？")
         second = cleaned[split_at:].strip(" .,!?:;、。，；：！？")
-        return [first or cleaned, second or cleaned]
+        return [first or cleaned, second or cleaned][:3]
 
     def _sc1_layout_mode_for_scene(self, scene_index: int, text: str) -> str:
         text = str(text or "")
@@ -813,28 +851,96 @@ class AiVideoService:
 
     def _sc1_summary_label(self, text: str, segment_index: int) -> str:
         cleaned = " ".join(str(text or "").split()).strip()
+        keyword_map = [
+            (["别急", "先别", "不要急", "下结论"], "别急"),
+            (["想太多"], "想太多"),
+            (["拉响警报", "警报"], "警报"),
+            (["深夜", "回放"], "深夜"),
+            (["审判", "责怪", "自责"], "自责"),
+            (["内耗", "拉扯", "拧巴", "反复"], "内耗"),
+            (["表情", "猜", "做错"], "猜错"),
+            (["透支", "消耗"], "透支"),
+            (["关系", "维护", "讨好"], "讨好"),
+            (["责任", "还给"], "松绑"),
+            (["证据", "编答案"], "证据"),
+            (["感受", "说清楚"], "说清"),
+            (["一团雾", "处理的问题"], "化雾"),
+            (["焦虑", "慌", "紧张", "心慌", "不安"], "焦虑"),
+            (["委屈", "难受", "心酸", "压抑", "崩溃"], "委屈"),
+            (["愤怒", "火气", "刺痛", "扎心"], "破防"),
+            (["后果", "风险", "代价", "伤害", "危险"], "警报"),
+            (["边界", "规则", "法律", "界限", "底线"], "边界"),
+            (["真相", "看清", "识破", "发现"], "看清"),
+            (["反转", "翻转", "逆转"], "反转"),
+            (["结论", "判断", "答案", "收束"], "结论"),
+            (["安静", "放松", "松口气", "缓和"], "松口气"),
+            (["释怀", "放下", "松开"], "释怀"),
+            (["提醒", "警醒", "注意", "小心"], "警醒"),
+            (["害怕", "恐慌", "惊"], "害怕"),
+            (["无力", "疲惫", "撑不住", "耗尽"], "无力"),
+            (["共鸣", "理解", "接住", "安慰"], "共鸣"),
+            (["坚持", "稳住", "扛住", "撑住"], "稳住"),
+            (["为什么", "怎么会", "到底"], "追问"),
+            (["不是", "不等于", "误会"], "误判"),
+            (["第一步", "先看"], "先看"),
+            (["第二步", "再看"], "再看"),
+            (["第三步"], "收口"),
+        ]
+        for needles, label in keyword_map:
+            if any(needle in cleaned for needle in needles):
+                return self._sc1_clip_label(label, segment_index)
         rules = [
-            (["\u98ce\u9669", "\u540e\u679c", "\u4f24\u5bb3"], "\u98ce\u9669\u540e\u679c"),
-            (["\u884c\u4e3a", "\u505a\u6cd5", "\u5582"], "\u884c\u4e3a\u6027\u8d28"),
-            (["\u5bf9\u8c61", "\u8c01", "\u8b66"], "\u5bf9\u8c61\u8fb9\u754c"),
-            (["\u6cd5\u5f8b", "\u89c4\u5219", "\u8fb9\u754c"], "\u89c4\u5219\u8fb9\u754c"),
-            (["\u7ed3\u8bba", "\u7b54\u6848", "\u6240\u4ee5"], "\u7ed3\u8bba\u6536\u675f"),
-            (["\u7b2c\u4e00", "\u5148", "\u5173\u952e"], "\u5173\u952e\u4e00\u6b65"),
-            (["\u7b2c\u4e8c", "\u518d", "\u7136\u540e"], "\u7ee7\u7eed\u62c6\u89e3"),
+            (["风险", "后果", "伤害"], "有风险"),
+            (["行为", "做法", "喂"], "看行为"),
+            (["对象", "谁", "警"], "看对象"),
+            (["法律", "规则", "边界"], "看边界"),
+            (["结论", "答案", "所以"], "有答案"),
+            (["第一", "先", "关键"], "先拆开"),
+            (["第二", "再", "然后"], "再判断"),
         ]
         for needles, label in rules:
             if any(needle in cleaned for needle in needles):
+                return self._sc1_clip_label(label, segment_index)
+        compact = re.sub(r"[^\u4e00-\u9fff]+", "", cleaned)
+        if any(word in compact for word in ["心", "情绪", "感受", "难"]):
+            return self._sc1_clip_label("被戳中", segment_index)
+        if any(word in compact for word in ["人", "关系", "对方"]):
+            return self._sc1_clip_label("关系痛", segment_index)
+        if any(word in compact for word in ["事", "问题", "处理"]):
+            return self._sc1_clip_label("看问题", segment_index)
+        return self._sc1_label_fallback_pool()[segment_index % len(self._sc1_label_fallback_pool())]
+
+    def _sc1_clip_label(self, label: str, segment_index: int) -> str:
+        cleaned = re.sub(r"[^\u4e00-\u9fffA-Za-z0-9]+", "", str(label or ""))
+        if 2 <= len(cleaned) <= 4:
+            return cleaned
+        if len(cleaned) > 4:
+            return cleaned[:4]
+        return self._sc1_label_fallback_pool()[segment_index % len(self._sc1_label_fallback_pool())]
+
+    def _sc1_label_fallback_pool(self) -> list[str]:
+        return ["别慌", "看清", "松绑", "稳住", "破防", "醒醒", "自救", "释怀"]
+
+    def _sc1_make_unique_label(self, text: str, segment_index: int, used_labels: set[str]) -> str:
+        candidates = [self._sc1_summary_label(text, segment_index), *self._sc1_label_alternatives(text, segment_index)]
+        for fallback in self._sc1_label_fallback_pool():
+            candidates.append(fallback)
+        for candidate in candidates:
+            label = self._sc1_clip_label(candidate, segment_index)
+            if label and label not in used_labels:
                 return label
-        pieces = [
-            item.strip(" .,!?:;\u3001\u3002\uff0c\uff1b\uff1a\uff01\uff1f")
-            for item in re.split(r"[\s\u3001\u3002\uff0c\uff1b\uff1a\uff01\uff1f,;:]+", cleaned)
-            if item.strip(" .,!?:;\u3001\u3002\uff0c\uff1b\uff1a\uff01\uff1f")
+        return self._sc1_label_fallback_pool()[segment_index % len(self._sc1_label_fallback_pool())]
+
+    def _sc1_label_alternatives(self, text: str, segment_index: int) -> list[str]:
+        cleaned = " ".join(str(text or "").split()).strip()
+        alternatives = [
+            self._sc1_summary_label(cleaned.replace("你以为是", "").replace("其实是", ""), segment_index),
+            self._sc1_summary_label(cleaned.replace("不停", ""), segment_index + 1),
+            self._sc1_summary_label(cleaned.replace("自己", ""), segment_index + 2),
+            self._sc1_summary_label(cleaned.replace("关系", ""), segment_index + 3),
+            self._sc1_summary_label(cleaned.replace("事情本身", "事情"), segment_index + 4),
         ]
-        preferred = [item for item in pieces if 2 <= len(item) <= 6]
-        if preferred:
-            return preferred[0]
-        fallback = "\u524d\u60c5\u63d0\u95ee" if segment_index == 0 else "\u540e\u7eed\u5224\u65ad"
-        return (cleaned[:8] if cleaned else fallback).strip() or fallback
+        return [self._sc1_clip_label(item, segment_index + index) for index, item in enumerate(alternatives) if item]
 
     def _sc1_english_for_segment(self, text: str, scene_index: int, segment_index: int) -> str:
         cleaned = " ".join(str(text or "").split()).strip()
@@ -1142,6 +1248,8 @@ class AiVideoService:
         elif provider in {"dayun_manbo", "manbo", "milorapart"}:
             provider = "dayun_manbo"
             voice = "dayun_manbo"
+        elif provider == "edge_tts":
+            voice = self._resolve_edge_tts_voice(str(payload.get("voiceId") or project_json.get("voice", {}).get("speaker") or "中文女"))
         audio_scenes: list[dict[str, Any]] = []
         for index, scene in enumerate(project_json.get("scenes") or []):
             text = str(scene.get("voiceText") or scene.get("subtitleText") or "").strip()
@@ -1154,6 +1262,8 @@ class AiVideoService:
             self._append_log(log_path, f"CosyVoice scene={index + 1} provider={provider} voice={voice} text={text[:80]}")
             if provider == "dayun_manbo":
                 seconds = self._generate_dayun_manbo_audio(text, backend_audio_path)
+            elif provider == "edge_tts":
+                seconds = self._generate_edge_tts_audio(text, voice, backend_audio_path)
             elif provider == "dashscope_cosyvoice":
                 try:
                     seconds = self._generate_dashscope_cosyvoice_audio(text, voice, backend_audio_path)
@@ -1234,7 +1344,36 @@ class AiVideoService:
         source_path.unlink(missing_ok=True)
         return max(len(audio) / 1000.0, 0.01)
 
+    def _generate_edge_tts_audio(self, text: str, voice: str, output_path: Path) -> float:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        resolved_voice = self._resolve_edge_tts_voice(voice)
+
+        async def _save() -> None:
+            communicate = edge_tts.Communicate(text=text, voice=resolved_voice)
+            await communicate.save(str(output_path))
+
+        try:
+            asyncio.run(_save())
+        except RuntimeError as exc:
+            if "asyncio.run()" in str(exc):
+                loop = asyncio.new_event_loop()
+                try:
+                    loop.run_until_complete(_save())
+                finally:
+                    loop.close()
+            else:
+                raise RuntimeError(f"Edge TTS failed: {exc}") from exc
+        except Exception as exc:
+            raise RuntimeError(f"Edge TTS failed: {exc}") from exc
+
+        audio = AudioSegment.from_file(output_path)
+        if len(audio.raw_data) < 1024 or audio.rms <= 0:
+            raise RuntimeError("Edge TTS returned silent audio")
+        return max(len(audio) / 1000.0, 0.01)
+
     def _generate_dashscope_cosyvoice_audio(self, text: str, voice: str, output_path: Path) -> float:
+        if not self.dashscope_api_key:
+            raise RuntimeError("DashScope CosyVoice API key is not configured")
         last_error: Exception | None = None
         for model in self._resolve_dashscope_cosyvoice_models(voice):
             try:
@@ -1255,20 +1394,23 @@ class AiVideoService:
 
     def _resolve_dashscope_cosyvoice_models(self, voice: str) -> list[str]:
         voice_key = str(voice or "")
-        if voice_key.startswith("cosyvoice-v3-plus-"):
+        if voice_key.startswith("cosyvoice-v3.5-plus-"):
+            preferred = "cosyvoice-v3.5-plus"
+        elif voice_key.startswith("cosyvoice-v3-plus-"):
             preferred = "cosyvoice-v3-plus"
         elif voice_key.startswith("cosyvoice-v3-flash-"):
             preferred = "cosyvoice-v3-flash"
         else:
-            preferred = "cosyvoice-v3.5-flash"
+            preferred = "cosyvoice-v3-plus"
         ordered: list[str] = []
-        for candidate in [preferred, *self.dashscope_tts_models, "cosyvoice-v3-plus", "cosyvoice-v3-flash"]:
+        for candidate in [preferred, *self.dashscope_tts_models, "cosyvoice-v3.5-plus", "cosyvoice-v3.5-flash", "cosyvoice-v3-plus", "cosyvoice-v3-flash"]:
             model = str(candidate or "").strip()
-            if model and model != "cosyvoice-v3.5-plus" and model not in ordered:
+            if model and model not in ordered:
                 ordered.append(model)
         return ordered
 
     def _generate_open_source_cosyvoice_audio(self, text: str, voice: str, output_path: Path) -> float:
+        sft_error: Exception | None = None
         data = urllib.parse.urlencode({"tts_text": text, "spk_id": voice}).encode("utf-8")
         request = urllib.request.Request(
             f"{self.cosyvoice_url}/inference_sft",
@@ -1281,9 +1423,43 @@ class AiVideoService:
                 pcm = response.read()
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="ignore")
-            raise RuntimeError(f"Open-source CosyVoice failed {exc.code}: {detail}") from exc
+            sft_error = RuntimeError(f"Open-source CosyVoice SFT failed {exc.code}: {detail}")
+            pcm = b""
         except Exception as exc:
-            raise RuntimeError(f"Open-source CosyVoice unavailable: {exc}") from exc
+            sft_error = RuntimeError(f"Open-source CosyVoice SFT unavailable: {exc}")
+            pcm = b""
+
+        if len(pcm) < 1024:
+            prompt_candidates = [
+                Path(os.getenv("SC1_COSYVOICE_PROMPT_WAV", "")).expanduser() if os.getenv("SC1_COSYVOICE_PROMPT_WAV") else None,
+                REPO_ROOT / "backend" / "uploads" / "voice_templates" / "sc1-reference-voice.wav",
+                REPO_ROOT / "outputs" / "cosyvoice_zero_shot_sample.wav",
+                Path(r"C:\Users\Administrator\Documents\Codex\2026-07-18\300\outputs\cosyvoice_zero_shot_sample.wav"),
+            ]
+            prompt_text = os.getenv("SC1_COSYVOICE_PROMPT_TEXT", "焦虑不是敌人，它只是先替你把危险放大。")
+            zero_shot_error: Exception | None = None
+            for prompt_wav in prompt_candidates:
+                if not prompt_wav or not prompt_wav.exists():
+                    continue
+                try:
+                    with prompt_wav.open("rb") as prompt_file:
+                        response = requests.post(
+                            f"{self.cosyvoice_url}/inference_zero_shot",
+                            data={"tts_text": text, "prompt_text": prompt_text},
+                            files={"prompt_wav": (prompt_wav.name, prompt_file, "audio/wav")},
+                            timeout=self.cosyvoice_timeout,
+                        )
+                    response.raise_for_status()
+                    pcm = response.content
+                    if len(pcm) >= 1024:
+                        break
+                except Exception as exc:
+                    zero_shot_error = exc
+                    pcm = b""
+            if len(pcm) < 1024:
+                if sft_error:
+                    raise RuntimeError(f"Open-source CosyVoice zero-shot failed: {zero_shot_error}; SFT fallback also failed: {sft_error}") from zero_shot_error or sft_error
+                raise RuntimeError(f"Open-source CosyVoice failed: {zero_shot_error}")
 
         raw_pcm = pcm
         trimmed_pcm = self._trim_pcm_silence(raw_pcm)
@@ -1398,7 +1574,7 @@ class AiVideoService:
 
     def _prepare_sc1_materials_for_render(self, scenes: list[dict[str, Any]], task_name: str) -> Path:
         material_root = SC1_MATERIAL_LIBRARY_PATH.parent if SC1_MATERIAL_LIBRARY_PATH.is_file() else SC1_MATERIAL_LIBRARY_PATH
-        target_dir = self.render_material_root / task_name
+        target_dir = self.render_material_root
         target_dir.mkdir(parents=True, exist_ok=True)
         for scene in scenes:
             images = scene.get("assetImages") if isinstance(scene.get("assetImages"), list) else []
@@ -1411,7 +1587,7 @@ class AiVideoService:
                 source = material_root / file_name
                 if source.exists() and source.is_file():
                     shutil.copyfile(source, target_dir / file_name)
-                    image["src"] = f"{SC1_MATERIAL_PUBLIC_BASE_URL}/{task_name}/{file_name}"
+                image["src"] = f"/sc1-materials/{file_name}"
         return target_dir
 
     def _scene_for_render(self, scene: dict[str, Any]) -> dict[str, Any]:
@@ -2056,6 +2232,20 @@ class AiVideoService:
         if not normalized or "?" in normalized or "\ufffd" in normalized:
             return female
         return mapping.get(normalized, female)
+
+    def _resolve_edge_tts_voice(self, voice: str) -> str:
+        normalized = str(voice or "").strip()
+        mapping = {
+            "中文女": "zh-CN-XiaoxiaoNeural",
+            "女声": "zh-CN-XiaoxiaoNeural",
+            "元气女声": "zh-CN-XiaoxiaoNeural",
+            "中文男": "zh-CN-YunxiNeural",
+            "男声": "zh-CN-YunxiNeural",
+            "稳重男声": "zh-CN-YunxiNeural",
+        }
+        if normalized.startswith(("zh-", "en-", "ja-", "ko-", "fr-", "de-", "es-")):
+            return normalized
+        return mapping.get(normalized, "zh-CN-XiaoxiaoNeural")
 
     def _resolve_dashscope_voice(self, voice: str) -> str:
         normalized = str(voice or "").strip()

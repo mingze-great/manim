@@ -20,6 +20,7 @@ class StickmanWorkflowJobCreate(BaseModel):
     topic: Optional[str] = None
     sceneCount: Optional[int] = Field(default=None, ge=3, le=8)
     voiceId: str = "中文女"
+    materialLibrary: str = "sc1_outputs"
     tone: str = "sharp"
     pace: str = "medium"
     targetPlatform: str = "douyin"
@@ -54,15 +55,16 @@ def create_stickman_job(
         "aspectRatio": "16:9",
         "voiceProvider": voice_provider,
         "voiceId": voice_id,
+        "materialLibrary": payload.materialLibrary or "sc1_outputs",
         "subtitleMode": "keywords",
         "targetPlatform": payload.targetPlatform,
         "tone": payload.tone,
         "pace": payload.pace,
         "goal": "standalone_sc1_stickman_workflow",
-        "customPrompt": f"Use SC1 standalone stickman workflow. The only user-facing input is the title: {title}. Generate reference-style copy from this title first, then split scenes semantically with the current caption-cue method. Each semantic segment uses two material-library scene images with paired left/right or center-shift layout, no overlap, and Chinese/English subtitles synced to voice.",
+        "customPrompt": f"Use SC1 standalone stickman workflow. The only user-facing input is the title: {title}. Generate reference-style copy from this title first, then split scenes semantically with the current caption-cue method. Each semantic segment uses one centered material-library scene image, no zooming or side-by-side layout, and Chinese/English subtitles synced to voice. Summary labels must be short 2-4 character emotional keywords, revealed cumulatively around the image and cleared only when the segment ends.",
         "workflowSource": "standalone_stickman_workflow",
         "useMaterialLibrary": True,
-        "materialImagesPerScene": 2,
+        "materialImagesPerScene": 1,
     }
     if payload.sceneCount is not None:
         job_payload["sceneCount"] = payload.sceneCount

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Input, Progress, Select, Space, Typography, message } from 'antd'
-import { DownloadOutlined, PlayCircleOutlined, RocketOutlined, SoundOutlined } from '@ant-design/icons'
+import { DownloadOutlined, FolderOpenOutlined, PlayCircleOutlined, RocketOutlined, SoundOutlined } from '@ant-design/icons'
 import { resolveBackendUrl } from '@/services/api'
 import { stickmanWorkflowApi } from '@/services/stickmanWorkflow'
 import type { AiVideoJob } from '@/services/aiVideo'
@@ -21,9 +21,21 @@ const statusText: Record<string, string> = {
   cancelled: '已取消',
 }
 
+const progressSteps = [
+  { key: 'pending', label: '创建任务', at: 0 },
+  { key: 'scripting', label: '生成爆款文案', at: 12 },
+  { key: 'scene_planning', label: '拆分字幕和分段', at: 28 },
+  { key: 'tts_generating', label: '生成连续配音', at: 48 },
+  { key: 'audio_processing', label: '同步字幕音频', at: 62 },
+  { key: 'rendering', label: '匹配素材并渲染', at: 82 },
+  { key: 'uploading', label: '保存结果', at: 92 },
+  { key: 'completed', label: '输出成片', at: 100 },
+]
+
 export default function StickmanWorkflow() {
   const [title, setTitle] = useState('喂警犬吃狗算什么行为')
   const [voiceId, setVoiceId] = useState('中文女')
+  const [materialLibrary, setMaterialLibrary] = useState('sc1_outputs')
   const [job, setJob] = useState<AiVideoJob | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
@@ -54,6 +66,7 @@ export default function StickmanWorkflow() {
       const { data } = await stickmanWorkflowApi.createJob({
         title: cleanTitle,
         voiceId,
+        materialLibrary,
         tone: 'sharp',
         pace: 'medium',
         targetPlatform: 'douyin',
@@ -102,6 +115,17 @@ export default function StickmanWorkflow() {
                 ]}
               />
             </label>
+            <label>
+              <span>素材库</span>
+              <Select
+                value={materialLibrary}
+                onChange={setMaterialLibrary}
+                suffixIcon={<FolderOpenOutlined />}
+                options={[
+                  { label: 'SC1 火柴人素材库', value: 'sc1_outputs' },
+                ]}
+              />
+            </label>
           </div>
           <Button
             type="primary"
@@ -124,6 +148,18 @@ export default function StickmanWorkflow() {
                 <strong>{job.progress}%</strong>
               </div>
               <Progress percent={job.progress} status={job.status === 'failed' ? 'exception' : job.status === 'completed' ? 'success' : 'active'} />
+              <div className="workflow-step-list">
+                {progressSteps.map((step) => {
+                  const done = job.progress >= step.at || job.status === 'completed'
+                  const active = job.status === step.key
+                  return (
+                    <div className={`workflow-step ${done ? 'done' : ''} ${active ? 'active' : ''}`} key={step.key}>
+                      <span />
+                      <strong>{step.label}</strong>
+                    </div>
+                  )
+                })}
+              </div>
               {job.errorMessage ? <div className="workflow-error">{job.errorMessage}</div> : null}
               {outputUrl ? (
                 <div className="workflow-preview">

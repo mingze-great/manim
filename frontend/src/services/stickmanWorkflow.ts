@@ -5,6 +5,7 @@ export interface StickmanWorkflowJobCreate {
   title: string
   topic?: string
   voiceId?: string
+  materialLibrary?: string
   tone?: string
   pace?: string
   targetPlatform?: string
