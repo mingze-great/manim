@@ -1,0 +1,29 @@
+name: Deploy V2
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Branch to deploy to v2 server
+        required: true
+        default: feature/chat-style-and-reference-code
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+
+      - name: Deploy on production server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 152.136.218.74
+          username: root
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            export BRANCH="${{ inputs.branch }}"
+            bash /opt/manim-v2/scripts/deploy_v2_from_git.sh

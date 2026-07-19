@@ -1,0 +1,14 @@
+{
+    "model": "glm-5",
+    "messages": [
+        {
+            "role": "user", 
+            "content": "你是谁"
+        }
+    ],
+    "stream": true,
+    "stream_options": {
+        "include_usage": true
+    },
+    "enable_thinking": true
+}

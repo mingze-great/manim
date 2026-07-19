@@ -1,0 +1,10 @@
+{
+    "model": "deepseek-v3",
+    "stream": true,
+    "messages": [
+        {
+            "role": "user", 
+            "content": "9.9和9.11谁大"
+        }
+    ]
+}

@@ -1,0 +1,20 @@
+<svg width="1440" height="920" viewBox="0 0 1440 920" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="1440" height="920" fill="#F5F7FB"/>
+<rect x="80" y="60" width="1280" height="120" rx="24" fill="#FFFFFF" stroke="#DCE6EE"/>
+<text x="120" y="132" fill="#17394F" font-family="Arial" font-size="40" font-weight="700">后台模板管理</text>
+<rect x="80" y="220" width="1280" height="620" rx="28" fill="#FFFFFF" stroke="#DCE6EE"/>
+<rect x="120" y="280" width="560" height="220" rx="22" fill="#FBFCFE" stroke="#D8E4EC"/>
+<text x="150" y="340" fill="#17394F" font-family="Arial" font-size="30" font-weight="700">模板卡片</text>
+<text x="150" y="390" fill="#667985" font-family="Arial" font-size="22">这里能看到模板名称、分类、系统/自定义标签。</text>
+<rect x="150" y="430" width="220" height="50" rx="16" fill="#E28A3D"/>
+<text x="200" y="463" fill="#FFFFFF" font-family="Arial" font-size="22" font-weight="700">上传示例视频</text>
+<rect x="760" y="280" width="540" height="220" rx="22" fill="#FFF9EF" stroke="#F3D7B9"/>
+<text x="790" y="340" fill="#17394F" font-family="Arial" font-size="30" font-weight="700">上传要求</text>
+<text x="790" y="392" fill="#7B6856" font-family="Arial" font-size="22">1. 仅支持 MP4</text>
+<text x="790" y="432" fill="#7B6856" font-family="Arial" font-size="22">2. 文件不能是空文件</text>
+<text x="790" y="472" fill="#7B6856" font-family="Arial" font-size="22">3. 上传后模板卡片会出现“预览示例”按钮</text>
+<rect x="120" y="560" width="1180" height="200" rx="22" fill="#F8FAFC" stroke="#D8E4EC"/>
+<text x="160" y="626" fill="#17394F" font-family="Arial" font-size="28" font-weight="700">常见问题</text>
+<text x="160" y="676" fill="#667985" font-family="Arial" font-size="22">如果失败，先确认登录身份是管理员，再确认文件格式是 .mp4。</text>
+<text x="160" y="716" fill="#667985" font-family="Arial" font-size="22">本次版本已经修复 FormData 请求头兼容问题，避免接口返回 422。</text>
+</svg>

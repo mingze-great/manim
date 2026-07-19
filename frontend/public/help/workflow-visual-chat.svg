@@ -1,0 +1,32 @@
+<svg width="1440" height="920" viewBox="0 0 1440 920" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="1440" height="920" fill="#F4F7FB"/>
+<rect x="80" y="60" width="1280" height="150" rx="28" fill="url(#g1)"/>
+<text x="140" y="140" fill="#FFFFFF" font-family="Arial" font-size="42" font-weight="700">思维可视化对话页</text>
+<text x="140" y="186" fill="#EAF6FF" font-family="Arial" font-size="24">先对话打磨内容，再进入任务页生成脚本与视频</text>
+<rect x="80" y="250" width="1240" height="580" rx="24" fill="#FFFFFF" stroke="#D8E4EC"/>
+<rect x="120" y="300" width="820" height="480" rx="20" fill="#F8FAFC" stroke="#D8E4EC"/>
+<rect x="160" y="340" width="560" height="92" rx="18" fill="#E8F1FF"/>
+<rect x="340" y="458" width="520" height="92" rx="18" fill="#FFF5E8"/>
+<rect x="160" y="576" width="610" height="92" rx="18" fill="#E8F1FF"/>
+<text x="188" y="394" fill="#17394F" font-family="Arial" font-size="22">用户：我想做一期关于拖延心理的知识拆解视频</text>
+<text x="372" y="512" fill="#8A4B16" font-family="Arial" font-size="22">AI：可以，我先帮你把主题拆成 3 个关键矛盾</text>
+<text x="188" y="630" fill="#17394F" font-family="Arial" font-size="22">用户：希望语气更强一点，适合短视频传播</text>
+<rect x="980" y="300" width="300" height="240" rx="20" fill="#FFF9EF" stroke="#F3D7B9"/>
+<text x="1020" y="356" fill="#17394F" font-family="Arial" font-size="28" font-weight="700">对话风格</text>
+<text x="1020" y="406" fill="#7B6856" font-family="Arial" font-size="22">保守型 / 观点型 / 口语型</text>
+<text x="1020" y="450" fill="#7B6856" font-family="Arial" font-size="22">会影响提问方式与表达方式</text>
+<rect x="1020" y="488" width="180" height="48" rx="14" fill="#1C5A6B"/>
+<text x="1060" y="520" fill="#FFFFFF" font-family="Arial" font-size="22" font-weight="700">发送消息</text>
+<rect x="980" y="570" width="300" height="210" rx="20" fill="#F8FAFC" stroke="#D8E4EC"/>
+<text x="1020" y="626" fill="#17394F" font-family="Arial" font-size="28" font-weight="700">完成后</text>
+<text x="1020" y="676" fill="#667985" font-family="Arial" font-size="22">进入任务页</text>
+<text x="1020" y="716" fill="#667985" font-family="Arial" font-size="22">生成脚本</text>
+<text x="1020" y="756" fill="#667985" font-family="Arial" font-size="22">渲染视频</text>
+<defs>
+<linearGradient id="g1" x1="80" y1="60" x2="1360" y2="210" gradientUnits="userSpaceOnUse">
+<stop stop-color="#123555"/>
+<stop offset="0.6" stop-color="#2A6B84"/>
+<stop offset="1" stop-color="#EFA14E"/>
+</linearGradient>
+</defs>
+</svg>

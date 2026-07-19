@@ -1,0 +1,111 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+logsdev/
+logsprod/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# Manim
+media/
+videos/
+*.mp4
+
+# Build artifacts
+*.tar.gz
+*.zip
+frontend/tsconfig.tsbuildinfo
+
+# Local worktrees and temp dirs
+.tmp_v2_build/
+.wt_legacy/
+legacy_build_clean/
+
+# SSH/debug outputs
+ssh_out*.txt
+ssh_err*.txt
+
+# One-off local deploy/debug utilities
+/backend/app/templates/
+/templates/
+/build_v2_frontend.js
+/check_*.py
+/check_*.js
+/create_chat_styles_table.js
+/deploy_*.bundle
+/deploy_*.js
+/deploy_*.py
+/fix_system_config.js
+/inspect_*.py
+/inspect_*.js
+/legacy_index_fixed.html
+/manim-legacy.conf
+/manim-prod.conf
+/migrate_reference_code.py
+/prod_*.js
+/prod_*.py
+/prod_tasks.txt
+/run_*.js
+/set_user_frontend_version.js
+/ssh.js
+/ssh_run.js
+/switch_3003_spa_server.py
+/temp_*
+/update_categories.js
+/update_categories.sql
+/upload_*.js
+/verify_v2_prod.js
+
+# One-off shell helpers
+/scripts/check_*.sh
+/scripts/dev_*.sh
+/scripts/deploy_*.sh
+/scripts/deploy_*.js
+/scripts/prod_*.sh
+/scripts/restart_*.sh
+/scripts/start_*.sh
+/scripts/test_*.sh
+/scripts/verify_*.sh
+/scripts/fix_templates.sh
+/scripts/force_restart_backend.sh
+/scripts/init_*.py
+/scripts/insert_math_templates.sh
+/scripts/rebuild.sh
+/scripts/update_math_templates.sh

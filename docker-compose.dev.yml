@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: manim-postgres-dev
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-manim_dev_password}
+      POSTGRES_DB: manim_dev
+    volumes:
+      - postgres-dev-data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - manim-dev-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: manim-backend-dev
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - ENVIRONMENT=development
+      - DATABASE_URL=postgresql://postgres:${DB_PASSWORD:-manim_dev_password}@postgres:5432/manim_dev
+      - DEBUG=true
+    env_file:
+      - .env.development
+    volumes:
+      - ./backend:/app  # 挂载代码，支持热重载
+      - ./videos/dev:/app/videos
+      - ./logs/dev:/app/logs
+    networks:
+      - manim-dev-network
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: manim-frontend-dev
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+    volumes:
+      - ./videos/dev:/usr/share/nginx/videos:ro
+    networks:
+      - manim-dev-network
+
+networks:
+  manim-dev-network:
+    driver: bridge
+
+volumes:
+  postgres-dev-data:
