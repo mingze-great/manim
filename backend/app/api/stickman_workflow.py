@@ -39,6 +39,8 @@ def create_stickman_job(
     current_user: Annotated[User, Depends(get_current_user)],
 ):
     title = payload.title.strip()
+    voice_id = payload.voiceId.strip() or "中文女"
+    voice_provider = "dayun_manbo" if voice_id in {"dayun_manbo", "manbo"} else "dashscope_cosyvoice"
     job_payload = {
         "title": title,
         "prompt": title,
@@ -50,8 +52,8 @@ def create_stickman_job(
         "style": "sc1_stickman",
         "visualStyle": "sc1_stickman",
         "aspectRatio": "16:9",
-        "voiceProvider": "dashscope_cosyvoice",
-        "voiceId": payload.voiceId,
+        "voiceProvider": voice_provider,
+        "voiceId": voice_id,
         "subtitleMode": "keywords",
         "targetPlatform": payload.targetPlatform,
         "tone": payload.tone,

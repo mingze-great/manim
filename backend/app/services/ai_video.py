@@ -1139,6 +1139,9 @@ class AiVideoService:
         provider = str(payload.get("voiceProvider") or project_json.get("voice", {}).get("provider") or "dashscope_cosyvoice").strip()
         if provider == "dashscope_cosyvoice":
             voice = self._resolve_dashscope_voice(str(payload.get("voiceId") or project_json.get("voice", {}).get("speaker") or "中文女"))
+        elif provider in {"dayun_manbo", "manbo", "milorapart"}:
+            provider = "dayun_manbo"
+            voice = "dayun_manbo"
         audio_scenes: list[dict[str, Any]] = []
         for index, scene in enumerate(project_json.get("scenes") or []):
             text = str(scene.get("voiceText") or scene.get("subtitleText") or "").strip()
@@ -1149,7 +1152,9 @@ class AiVideoService:
             backend_audio_path = backend_audio_dir / filename
             render_audio_path = render_audio_dir / filename
             self._append_log(log_path, f"CosyVoice scene={index + 1} provider={provider} voice={voice} text={text[:80]}")
-            if provider == "dashscope_cosyvoice":
+            if provider == "dayun_manbo":
+                seconds = self._generate_dayun_manbo_audio(text, backend_audio_path)
+            elif provider == "dashscope_cosyvoice":
                 try:
                     seconds = self._generate_dashscope_cosyvoice_audio(text, voice, backend_audio_path)
                 except Exception as exc:
@@ -1194,6 +1199,40 @@ class AiVideoService:
         project_json.setdefault("voice", {})["provider"] = provider
         project_json.setdefault("voice", {})["speaker"] = voice
         return audio_scenes
+
+    def _generate_dayun_manbo_audio(self, text: str, output_path: Path) -> float:
+        cleaned_chars = []
+        for ch in text:
+            if ch.isalnum() or ("一" <= ch <= "鿿"):
+                cleaned_chars.append(ch)
+            else:
+                cleaned_chars.append(" ")
+        tts_text = re.sub(r"\s+", " ", "".join(cleaned_chars)).strip()
+        if not tts_text:
+            raise RuntimeError("Dayun Manbo TTS text is empty after normalization")
+        query = urllib.parse.urlencode({"text": tts_text})
+        api_url = os.getenv("DAYUN_MANBO_TTS_URL", "https://api.milorapart.top/apis/mbAIsc")
+        request = urllib.request.Request(f"{api_url}?{query}", method="GET")
+        try:
+            with urllib.request.urlopen(request, timeout=90) as response:
+                data = json.loads(response.read().decode("utf-8"))
+        except Exception as exc:
+            raise RuntimeError(f"Dayun Manbo TTS request failed: {exc}") from exc
+
+        audio_url = str(data.get("url") or "").strip()
+        if data.get("code") != 200 or not audio_url:
+            raise RuntimeError(f"Dayun Manbo TTS failed: {data.get('msg') or data.get('message') or data}")
+
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        source_path = output_path.with_suffix(".source.mp3")
+        self._download_file(audio_url, source_path)
+        audio = AudioSegment.from_file(source_path)
+        if len(audio.raw_data) < 1024 or audio.rms <= 0:
+            raise RuntimeError("Dayun Manbo TTS returned silent audio")
+        audio = audio.set_channels(1).set_frame_rate(self.cosyvoice_sample_rate)
+        audio.export(output_path, format="wav")
+        source_path.unlink(missing_ok=True)
+        return max(len(audio) / 1000.0, 0.01)
 
     def _generate_dashscope_cosyvoice_audio(self, text: str, voice: str, output_path: Path) -> float:
         last_error: Exception | None = None
