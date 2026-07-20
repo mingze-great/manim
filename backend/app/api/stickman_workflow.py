@@ -19,7 +19,7 @@ class StickmanWorkflowJobCreate(BaseModel):
     title: str = Field(..., min_length=2, max_length=120)
     topic: Optional[str] = None
     sceneCount: Optional[int] = Field(default=None, ge=3, le=8)
-    voiceId: str = "中文女"
+    voiceId: str = "dayun_manbo"
     materialLibrary: str = "sc1_outputs"
     tone: str = "sharp"
     pace: str = "medium"
@@ -40,7 +40,7 @@ def create_stickman_job(
     current_user: Annotated[User, Depends(get_current_user)],
 ):
     title = payload.title.strip()
-    voice_id = payload.voiceId.strip() or "中文女"
+    voice_id = payload.voiceId.strip() or "dayun_manbo"
     voice_provider = "dayun_manbo" if voice_id in {"dayun_manbo", "manbo"} else "dashscope_cosyvoice"
     job_payload = {
         "title": title,
@@ -61,7 +61,14 @@ def create_stickman_job(
         "tone": payload.tone,
         "pace": payload.pace,
         "goal": "standalone_sc1_stickman_workflow",
-        "customPrompt": f"Use SC1 standalone stickman workflow. The only user-facing input is the title: {title}. Generate reference-style copy from this title first, then split scenes semantically with the current caption-cue method. Each semantic segment uses one centered material-library scene image, no zooming or side-by-side layout, and Chinese/English subtitles synced to voice. Summary labels must be short 2-4 character emotional keywords, revealed cumulatively around the image and cleared only when the segment ends.",
+        "customPrompt": (
+            f"Use SC1 standalone stickman workflow. The only user-facing input is the title: {title}. "
+            "Generate reference-style copy from this title first, then split scenes semantically with the current caption-cue method. "
+            "Each semantic segment uses one centered material-library scene image, no zooming or side-by-side layout, "
+            "and Chinese subtitles must track the full voice line sentence by sentence. Use the dayun_manbo reference tone by default unless the user chooses another voice. "
+            "Summary labels must be short 2-4 character emotional keywords, "
+            "revealed cumulatively around the image and cleared only when the segment ends."
+        ),
         "workflowSource": "standalone_stickman_workflow",
         "useMaterialLibrary": True,
         "materialImagesPerScene": 1,

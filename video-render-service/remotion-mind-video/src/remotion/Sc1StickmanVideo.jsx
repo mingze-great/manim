@@ -21,7 +21,7 @@ const colors = ['#c51cff', '#75421e', '#e02525', '#2458e6', '#f3d21b', '#21c928'
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const clean = (value) => String(value || '').replace(/\s+/g, ' ').trim();
-const cleanSubtitle = (value) => clean(value).replace(/[。！？!?；;，,、.]+$/g, '');
+const cleanSubtitle = (value) => clean(value).replace(/[。！？!?；;，,、：:.]+$/g, '');
 const mediaSource = (value) => {
   const source = String(value || '').trim();
   if (!source) return '';
@@ -79,7 +79,7 @@ const splitCaptionCueTexts = (value) => {
   if (!source) return [];
   const parts = source
     .split(/(?<=[。！？!?；;])\s*/)
-    .map((item) => item.replace(/[。！？!?；;]+$/g, '').trim())
+    .map((item) => item.replace(/[。！？!?；;，,、：:]+$/g, '').trim())
     .filter(Boolean);
   const chunks = parts.length ? parts : [source];
   const cues = [];
@@ -151,7 +151,7 @@ const normalizeSceneSegments = (scene, subtitleText, englishText, keywords, dura
   const layoutMode = clean(scene.layoutMode || scene.sceneLayoutMode || (sceneIndex % 2 === 0 ? 'pair_left_right' : 'center_shift_pair'));
   const providedSegments = Array.isArray(scene.segments) && scene.segments.length ? scene.segments : [];
   const source = providedSegments.length
-    ? providedSegments.slice(0, 2)
+    ? providedSegments
     : [{
         text: subtitleText,
         subtitleText,
@@ -313,6 +313,23 @@ const Header = ({title}) => (
   </div>
 );
 
+const TopRightTag = ({text = '心理分享 | 认知突破'}) => (
+  <div style={{
+    position: 'absolute',
+    right: 34,
+    top: 24,
+    zIndex: 6,
+    color: '#111',
+    fontSize: 30,
+    lineHeight: 1,
+    fontWeight: 900,
+    letterSpacing: 0,
+    whiteSpace: 'nowrap'
+  }}>
+    {text}
+  </div>
+);
+
 const KeywordLabels = ({scene, segment, local}) => {
   const cues = Array.isArray(segment?.captionCues) ? segment.captionCues : [];
   const activeIndex = captionIndexAtLocal(segment, local);
@@ -325,15 +342,30 @@ const KeywordLabels = ({scene, segment, local}) => {
     visibleCues.push({cue, label});
   }
   if (!visibleCues.length) return null;
-  const anchors = [
-    {left: 610, top: 210, align: 'left'},
-    {left: 1310, top: 210, align: 'right'},
-    {left: 575, top: 415, align: 'left'},
-    {left: 1345, top: 415, align: 'right'},
-    {left: 600, top: 625, align: 'left'},
-    {left: 1320, top: 625, align: 'right'},
-    {left: 960, top: 770, align: 'center'}
+  const anchorSets = [
+    [
+      {left: 690, top: 195, align: 'left'},
+      {left: 1230, top: 195, align: 'right'},
+      {left: 680, top: 365, align: 'left'},
+      {left: 1240, top: 365, align: 'right'},
+      {left: 960, top: 735, align: 'center'}
+    ],
+    [
+      {left: 760, top: 175, align: 'left'},
+      {left: 760, top: 245, align: 'left'},
+      {left: 760, top: 315, align: 'left'},
+      {left: 1185, top: 175, align: 'right'},
+      {left: 1185, top: 245, align: 'right'}
+    ],
+    [
+      {left: 725, top: 225, align: 'left'},
+      {left: 1195, top: 300, align: 'right'},
+      {left: 745, top: 520, align: 'left'},
+      {left: 1175, top: 610, align: 'right'},
+      {left: 960, top: 185, align: 'center'}
+    ]
   ];
+  const anchors = anchorSets[(scene.index + Number(segment?.index || 0)) % anchorSets.length];
   return (
     <div style={{position: 'absolute', inset: 0, zIndex: 4, pointerEvents: 'none'}}>
       {visibleCues.map(({cue, label}, index) => {
@@ -346,7 +378,7 @@ const KeywordLabels = ({scene, segment, local}) => {
         return (
           <div
             key={`${scene.id}-${segment?.index || 0}-${index}-${label}`}
-            style={{position: 'absolute', left: anchor.left, top: anchor.top, display: 'flex', alignItems: 'center', gap: 12, opacity, transform: `translate(-50%, -50%) translateY(${(1 - enter) * 6}px)`, fontSize, lineHeight: 1.05, fontWeight: 900, color: '#111', whiteSpace: 'nowrap', maxWidth: 220, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', justifyContent: anchor.align === 'center' ? 'center' : anchor.align === 'right' ? 'flex-end' : 'flex-start'}}
+            style={{position: 'absolute', left: anchor.left, top: anchor.top, display: 'flex', alignItems: 'center', gap: 12, opacity, transform: `translate(-50%, -50%) translateY(${(1 - enter) * 8}px)`, fontSize, lineHeight: 1.05, fontWeight: 900, color: '#111', whiteSpace: 'nowrap', maxWidth: 230, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', justifyContent: anchor.align === 'center' ? 'center' : anchor.align === 'right' ? 'flex-end' : 'flex-start'}}
           >
             <span style={{width: 22, height: 22, background: colors[(scene.index + Number(segment?.index || 0) + index) % colors.length], display: 'inline-block', borderRadius: 2, flex: '0 0 auto'}} />
             <span>{label}</span>
@@ -458,7 +490,7 @@ const OptionalImage = ({src}) => {
     ? <img src={source} alt="" crossOrigin="anonymous" referrerPolicy="no-referrer" style={imageStyle} />
     : <Img src={staticFile(source.replace(/^\/+/, ''))} style={imageStyle} />;
   return (
-    <div style={{position: 'absolute', left: 390, top: 250, width: 1140, height: 555, display: 'grid', placeItems: 'center', overflow: 'hidden'}}>
+    <div style={{position: 'absolute', left: 400, top: 240, width: 1120, height: 500, display: 'grid', placeItems: 'center', overflow: 'hidden'}}>
       {image}
     </div>
   );
@@ -473,9 +505,20 @@ const interpolateBox = (from, to, t) => ({
   height: lerp(from.height, to.height, t),
 });
 
-const SceneImage = ({item, box, progress, start = 0, direction = 'left'}) => {
+const slideOffset = (direction, amount) => {
+  const normalized = clean(direction);
+  if (normalized === 'right') return {x: amount, y: 0};
+  if (normalized === 'top') return {x: 0, y: -amount};
+  if (normalized === 'bottom') return {x: 0, y: amount};
+  if (normalized === 'rise') return {x: 0, y: amount * 0.55};
+  return {x: -amount, y: 0};
+};
+
+const SceneImage = ({item, box, local, direction = 'left'}) => {
   const src = item?.src;
   if (!src) return null;
+  const enter = interpolate(local, [0, 16], [0, 1], {extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic)});
+  const offset = slideOffset(direction, 56 * (1 - enter));
   const shared = {
     width: '100%',
     height: '100%',
@@ -492,9 +535,11 @@ const SceneImage = ({item, box, progress, start = 0, direction = 'left'}) => {
       top: box.top,
       width: box.width,
       height: box.height,
-      overflow: 'hidden',
+      overflow: 'visible',
       display: 'grid',
-      placeItems: 'center'
+      placeItems: 'center',
+      opacity: clamp(enter, 0, 1),
+      transform: `translate(${offset.x}px, ${offset.y}px)`
     }}>
       {image}
     </div>
@@ -504,12 +549,18 @@ const SceneImage = ({item, box, progress, start = 0, direction = 'left'}) => {
 const MaterialSceneImages = ({scene, segment, local}) => {
   const images = Array.isArray(scene.assetImages) ? scene.assetImages.filter((item) => item?.src).slice(0, 1) : [];
   if (!images.length) return null;
+  const fallbackDirections = ['left', 'right', 'top', 'bottom', 'rise'];
+  const direction = clean(images[0].enterDirection) && clean(images[0].enterDirection) !== 'center'
+    ? clean(images[0].enterDirection)
+    : fallbackDirections[scene.index % fallbackDirections.length];
   return (
-    <div style={{position: 'absolute', left: 0, right: 0, top: 245, height: 520, overflow: 'hidden', display: 'grid', placeItems: 'center'}}>
-      <div style={{position: 'relative', width: 760, height: 520, display: 'grid', placeItems: 'center'}}>
+    <div style={{position: 'absolute', left: 0, right: 0, top: 255, height: 460, overflow: 'visible', display: 'grid', placeItems: 'center', zIndex: 3}}>
+      <div style={{position: 'relative', width: 500, height: 350, display: 'grid', placeItems: 'center'}}>
         <SceneImage
           item={images[0]}
-          box={{left: 80, top: 22, width: 600, height: 430}}
+          box={{left: 0, top: 0, width: 500, height: 350}}
+          local={local}
+          direction={direction}
         />
       </div>
     </div>
@@ -532,7 +583,7 @@ const SceneVisual = ({scene, local, segment}) => {
 
 const SceneLayer = ({scene, local}) => {
   return (
-    <div style={{position: 'absolute', inset: 0}}>
+    <div style={{position: 'absolute', inset: 0, zIndex: 3}}>
       <SceneVisual scene={scene} local={local} segment={segmentAtLocal(scene, local)} />
     </div>
   );
@@ -573,8 +624,9 @@ export const Sc1StickmanVideo = (props) => {
     <AbsoluteFill style={{fontFamily: FONT, background: '#fff', overflow: 'hidden'}}>
       <Paper />
       <Header title={title} />
-      <KeywordLabels scene={active} segment={segment} local={local} />
+      <TopRightTag text={clean(props.topRightTag || props.categoryTag || '心理分享 | 认知突破')} />
       <SceneLayer scene={active} local={local} />
+      <KeywordLabels scene={active} segment={segment} local={local} />
       <Subtitle scene={active} segment={segment} local={local} />
       <AudioTrack story={story} bgmSrc={props.bgmSrc} />
       <Progress frame={frame} durationInFrames={story.durationInFrames} />

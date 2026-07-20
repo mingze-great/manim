@@ -55,6 +55,33 @@ SC1_MATERIAL_LIBRARY_PATH = Path(
 ).resolve()
 
 
+def _read_config_value(*keys: str, default: str = "") -> str:
+    candidate_files = [
+        Path("/root/.manim_3003_env"),
+        REPO_ROOT / ".env.production",
+        REPO_ROOT / ".env.development",
+    ]
+    for config_path in candidate_files:
+        if not config_path.exists():
+            continue
+        try:
+            lines = config_path.read_text(encoding="utf-8", errors="ignore").splitlines()
+        except Exception:
+            continue
+        for raw_line in lines:
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.startswith("export "):
+                line = line[len("export ") :].strip()
+            for key in keys:
+                prefix = f"{key}="
+                if line.startswith(prefix):
+                    value = line[len(prefix) :].strip()
+                    return value.strip().strip("'\"")
+    return default
+
+
 CONTENT_TEMPLATES: dict[str, dict[str, Any]] = {
     "product_seed": {
         "label": "带货种草",
@@ -208,26 +235,46 @@ class AiVideoService:
             )
         )
         self.render_timeout = int(os.getenv("AI_VIDEO_RENDER_TIMEOUT", "600"))
-        self.cosyvoice_url = os.getenv("AI_VIDEO_COSYVOICE_URL", "http://127.0.0.1:50000").rstrip("/")
-        self.cosyvoice_timeout = int(os.getenv("AI_VIDEO_COSYVOICE_TIMEOUT", "45"))
-        self.cosyvoice_sample_rate = int(os.getenv("AI_VIDEO_COSYVOICE_SAMPLE_RATE", "22050"))
-        self.dashscope_api_key = os.getenv("STICKMAN_TTS_API_KEY") or os.getenv("DASHSCOPE_API_KEY") or os.getenv("IMAGE_API_KEY", "")
+        self.cosyvoice_url = (
+            os.getenv("AI_VIDEO_COSYVOICE_URL")
+            or _read_config_value("AI_VIDEO_COSYVOICE_URL")
+            or "http://127.0.0.1:50000"
+        ).rstrip("/")
+        self.cosyvoice_timeout = int(
+            os.getenv("AI_VIDEO_COSYVOICE_TIMEOUT")
+            or _read_config_value("AI_VIDEO_COSYVOICE_TIMEOUT", default="45")
+            or "45"
+        )
+        self.cosyvoice_sample_rate = int(
+            os.getenv("AI_VIDEO_COSYVOICE_SAMPLE_RATE")
+            or _read_config_value("AI_VIDEO_COSYVOICE_SAMPLE_RATE", default="22050")
+            or "22050"
+        )
+        self.dashscope_api_key = (
+            os.getenv("STICKMAN_TTS_API_KEY")
+            or os.getenv("DASHSCOPE_API_KEY")
+            or os.getenv("IMAGE_API_KEY", "")
+            or _read_config_value("STICKMAN_TTS_API_KEY", "DASHSCOPE_API_KEY", "SC1_DASHSCOPE_API_KEY", "IMAGE_API_KEY")
+        )
         self.dashscope_tts_models = [
             item.strip()
             for item in (
                 os.getenv("STICKMAN_TTS_FALLBACK_MODELS")
+                or _read_config_value("STICKMAN_TTS_FALLBACK_MODELS")
                 or "cosyvoice-v3-plus,cosyvoice-v3-flash,cosyvoice-v3.5-plus,cosyvoice-v3.5-flash"
             ).split(",")
             if item.strip()
         ]
         self.dashscope_websocket_url = os.getenv(
             "DASHSCOPE_BASE_WEBSOCKET_API_URL",
-            "wss://ws-ckc5fvl317n4h4af.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference",
-        )
+            _read_config_value("DASHSCOPE_BASE_WEBSOCKET_API_URL", "SC1_DASHSCOPE_WEBSOCKET_URL")
+            or "wss://ws-ckc5fvl317n4h4af.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference",
+        ).rstrip("/")
         self.dashscope_http_url = os.getenv(
             "DASHSCOPE_BASE_HTTP_API_URL",
-            "https://ws-ckc5fvl317n4h4af.cn-beijing.maas.aliyuncs.com/api/v1",
-        )
+            _read_config_value("DASHSCOPE_BASE_HTTP_API_URL", "SC1_DASHSCOPE_HTTP_URL")
+            or "https://ws-ckc5fvl317n4h4af.cn-beijing.maas.aliyuncs.com/api/v1",
+        ).rstrip("/")
         dashscope.api_key = self.dashscope_api_key
         dashscope.base_websocket_api_url = self.dashscope_websocket_url
         dashscope.base_http_api_url = self.dashscope_http_url
@@ -669,6 +716,7 @@ class AiVideoService:
         sc1_selected_materials: set[str] = set()
         for index in range(scene_count):
             text = chunks[index] if index < len(chunks) else self._fallback_sentence(index, content_type)
+            text = self._ensure_scene_text(text, script or project_title or payload.get("prompt") or payload.get("creativeBrief") or payload.get("requirements") or "", content_type, index)
             step = steps[min(index, len(steps) - 1)]
             scene_type = scene_types[index % len(scene_types)]
             if index == 0 and script_source != "user":
@@ -746,7 +794,7 @@ class AiVideoService:
                     "segmentText": segment_text,
                     "englishText": self._sc1_english_for_segment(segment_text, index, offset),
                     "summaryLabel": self._sc1_summary_label(segment_text, offset),
-                    "enterDirection": "center",
+                    "enterDirection": self._sc1_enter_direction(index, offset),
                     "startRatio": 0 if offset == 0 else 0.4,
                     "endRatio": 1,
                     "visibleFromRatio": 0 if offset == 0 else 0.38,
@@ -849,11 +897,54 @@ class AiVideoService:
             return "center_shift_pair"
         return "pair_left_right" if scene_index % 2 == 0 else "center_shift_pair"
 
+    def _sc1_caption_cue_timings(self, cues: list[dict[str, Any]], duration_frames: int) -> list[dict[str, Any]]:
+        cleaned = [
+            {
+                "text": str(cue.get("text") or "").strip(),
+                "englishText": str(cue.get("englishText") or "").strip(),
+                "summaryLabel": str(cue.get("summaryLabel") or "").strip(),
+            }
+            for cue in cues
+            if str(cue.get("text") or "").strip()
+        ]
+        if not cleaned:
+            return []
+        if duration_frames <= 0:
+            duration_frames = 1
+        cue_count = len(cleaned)
+        min_span = max(6, min(20, duration_frames // max(2, cue_count * 2)))
+        base_span = max(min_span, round(duration_frames / cue_count))
+        avg_len = max(1.0, sum(max(1, len(item["text"])) for item in cleaned) / cue_count)
+        cursor = 0
+        timed: list[dict[str, Any]] = []
+        for index, cue in enumerate(cleaned):
+            remaining = cue_count - index
+            remaining_frames = max(1, duration_frames - cursor)
+            if index == cue_count - 1:
+                span = remaining_frames
+            else:
+                length_bias = len(cue["text"]) / avg_len if avg_len else 1.0
+                length_bias = max(0.85, min(1.15, length_bias))
+                desired = round(base_span * length_bias)
+                max_allowed = max(min_span, remaining_frames - (remaining - 1) * min_span)
+                span = max(min_span, min(max_allowed, desired))
+            start_frame = min(cursor, max(0, duration_frames - 1))
+            end_frame = min(duration_frames, start_frame + span)
+            if end_frame <= start_frame:
+                end_frame = min(duration_frames, start_frame + max(4, min_span))
+            if index == cue_count - 1:
+                end_frame = duration_frames
+            timed.append({**cue, "startFrame": start_frame, "endFrame": end_frame})
+            cursor = end_frame
+        if timed:
+            timed[-1]["endFrame"] = duration_frames
+        return timed
+
     def _sc1_summary_label(self, text: str, segment_index: int) -> str:
         cleaned = " ".join(str(text or "").split()).strip()
         keyword_map = [
             (["别急", "先别", "不要急", "下结论"], "别急"),
-            (["想太多"], "想太多"),
+            (["想太多"], "内耗"),
             (["拉响警报", "警报"], "警报"),
             (["深夜", "回放"], "深夜"),
             (["审判", "责怪", "自责"], "自责"),
@@ -1008,6 +1099,8 @@ class AiVideoService:
             data = self._parse_sc1_materials_tolerant(raw)
         materials = [self._normalize_sc1_material(item) for item in data if isinstance(item, dict)]
         materials = [item for item in materials if item.get("fileName")]
+        for material in materials:
+            material["qualityPenalty"] = self._sc1_material_quality_penalty(material_root / str(material.get("fileName") or ""))
         if not materials:
             materials = [{"fileName": f"{index}.png", "searchText": "", "hasMetadata": False} for index in range(1, SC1_MATERIAL_IMAGE_COUNT + 1)]
         self._sc1_material_cache = (key, materials)
@@ -1058,6 +1151,46 @@ class AiVideoService:
             "hasMetadata": bool(search_text.strip()),
         }
 
+    def _sc1_material_quality_penalty(self, image_path: Path) -> float:
+        if not image_path.exists() or not image_path.is_file():
+            return 0.0
+        lowered_name = image_path.name.lower()
+        if any(token in lowered_name for token in ["cover-mouth", "social-exclusion", "sleep", "lying", "bed", "half", "closeup"]):
+            return 45.0
+        try:
+            from PIL import Image
+
+            with Image.open(image_path) as opened:
+                image = opened.convert("RGBA")
+                image.thumbnail((160, 160), Image.Resampling.LANCZOS)
+                width, height = image.size
+                if width <= 0 or height <= 0:
+                    return 0.0
+                pixels = image.load()
+                foreground: list[tuple[int, int]] = []
+                for y in range(height):
+                    for x in range(width):
+                        red, green, blue, alpha = pixels[x, y]
+                        if alpha > 24 and not (red > 244 and green > 244 and blue > 244):
+                            foreground.append((x, y))
+                if not foreground:
+                    return 0.0
+                bottom_edge = max(y for _, y in foreground)
+                bottom_band_start = max(0, int(height * 0.92))
+                bottom_band_area = max(1, width * (height - bottom_band_start))
+                bottom_pixels = sum(1 for _, y in foreground if y >= bottom_band_start)
+                bottom_ratio = bottom_pixels / bottom_band_area
+                penalty = 0.0
+                if bottom_edge >= height - 2:
+                    penalty += 18.0
+                if bottom_ratio > 0.018:
+                    penalty += 22.0
+                elif bottom_ratio > 0.008:
+                    penalty += 10.0
+                return penalty
+        except Exception:
+            return 0.0
+
     def _select_sc1_material(self, materials: list[dict[str, Any]], text: str, scene_index: int, segment_index: int, selected: set[str]) -> dict[str, Any]:
         if not materials:
             return {"fileName": self._fallback_sc1_material_name(text, scene_index, segment_index), "score": 0}
@@ -1082,6 +1215,7 @@ class AiVideoService:
             number = int(re.sub(r"\D", "", file_name) or 0)
             if 1 <= number <= 15 and material.get("hasMetadata") is False:
                 score -= 6.0
+            score -= float(material.get("qualityPenalty") or 0)
             digest = hashlib.sha1(f"{text}-{scene_index}-{segment_index}-{file_name}".encode("utf-8", errors="ignore")).hexdigest()
             score += (int(digest[:4], 16) % 100) / 1000
             if score > best_score:
@@ -1197,6 +1331,7 @@ class AiVideoService:
             text = str(raw.get("voiceText") or raw.get("subtitleText") or raw.get("text") or "").strip()
             if not text:
                 continue
+            text = self._ensure_scene_text(text, text, content_type, index)
             step = template["steps"][min(index, len(template["steps"]) - 1)]
             scene_type = visual.get("type") or raw.get("sceneType") or template["sceneTypes"][index % len(template["sceneTypes"])]
             layout_variant = visual.get("layoutVariant") or self._layout_variant_for_scene(content_type, visual_style, scene_type, text, index, "")
@@ -1250,6 +1385,26 @@ class AiVideoService:
             voice = "dayun_manbo"
         elif provider == "edge_tts":
             voice = self._resolve_edge_tts_voice(str(payload.get("voiceId") or project_json.get("voice", {}).get("speaker") or "中文女"))
+
+        def synthesize_one(synth_text: str, output_path: Path, label: str) -> float:
+            nonlocal provider, voice
+            self._append_log(log_path, f"CosyVoice {label} provider={provider} voice={voice} text={synth_text[:80]}")
+            if provider == "dayun_manbo":
+                return self._generate_dayun_manbo_audio(synth_text, output_path)
+            if provider == "edge_tts":
+                return self._generate_edge_tts_audio(synth_text, voice, output_path)
+            if provider == "dashscope_cosyvoice":
+                try:
+                    return self._generate_dashscope_cosyvoice_audio(synth_text, voice, output_path)
+                except Exception as exc:
+                    fallback_voice = self._resolve_cosyvoice_voice(str(payload.get("voiceId") or project_json.get("voice", {}).get("speaker") or "中文女"))
+                    self._append_log(log_path, f"DashScope CosyVoice fallback to open-source {label} error={exc}")
+                    seconds_value = self._generate_open_source_cosyvoice_audio(synth_text, fallback_voice, output_path)
+                    voice = fallback_voice
+                    provider = "open_source_cosyvoice"
+                    return seconds_value
+            return self._generate_open_source_cosyvoice_audio(synth_text, voice, output_path)
+
         audio_scenes: list[dict[str, Any]] = []
         for index, scene in enumerate(project_json.get("scenes") or []):
             text = str(scene.get("voiceText") or scene.get("subtitleText") or "").strip()
@@ -1259,22 +1414,39 @@ class AiVideoService:
             filename = f"scene-{index + 1:02d}.wav"
             backend_audio_path = backend_audio_dir / filename
             render_audio_path = render_audio_dir / filename
-            self._append_log(log_path, f"CosyVoice scene={index + 1} provider={provider} voice={voice} text={text[:80]}")
-            if provider == "dayun_manbo":
-                seconds = self._generate_dayun_manbo_audio(text, backend_audio_path)
-            elif provider == "edge_tts":
-                seconds = self._generate_edge_tts_audio(text, voice, backend_audio_path)
-            elif provider == "dashscope_cosyvoice":
-                try:
-                    seconds = self._generate_dashscope_cosyvoice_audio(text, voice, backend_audio_path)
-                except Exception as exc:
-                    fallback_voice = self._resolve_cosyvoice_voice(str(payload.get("voiceId") or project_json.get("voice", {}).get("speaker") or "中文女"))
-                    self._append_log(log_path, f"DashScope CosyVoice fallback to open-source scene={index + 1} error={exc}")
-                    seconds = self._generate_open_source_cosyvoice_audio(text, fallback_voice, backend_audio_path)
-                    voice = fallback_voice
-                    provider = "open_source_cosyvoice"
+            segments = scene.get("segments") if isinstance(scene.get("segments"), list) else []
+            primary_segment = segments[0] if segments and isinstance(segments[0], dict) else {}
+            raw_cues = primary_segment.get("captionCues") if isinstance(primary_segment.get("captionCues"), list) else []
+            cue_timings_exact: list[dict[str, Any]] = []
+            cue_items = [
+                {
+                    "text": str(cue.get("text") or cue.get("subtitleText") or "").strip(),
+                    "englishText": str(cue.get("englishText") or cue.get("english") or "").strip(),
+                    "summaryLabel": str(cue.get("summaryLabel") or cue.get("label") or cue.get("keyword") or "").strip(),
+                }
+                for cue in raw_cues
+                if isinstance(cue, dict) and str(cue.get("text") or cue.get("subtitleText") or "").strip()
+            ]
+            if len(cue_items) > 1:
+                combined = AudioSegment.silent(duration=0, frame_rate=self.cosyvoice_sample_rate).set_channels(1)
+                cursor_ms = 0
+                for cue_index, cue in enumerate(cue_items):
+                    cue_path = backend_audio_dir / f"scene-{index + 1:02d}-cue-{cue_index + 1:02d}.wav"
+                    cue_seconds = synthesize_one(cue["text"], cue_path, f"scene={index + 1} cue={cue_index + 1}")
+                    if cue_seconds <= 0 or not cue_path.exists() or cue_path.stat().st_size <= 0:
+                        raise RuntimeError(f"CosyVoice returned invalid audio for scene_{index + 1} cue_{cue_index + 1}")
+                    cue_audio = AudioSegment.from_file(cue_path).set_channels(1).set_frame_rate(self.cosyvoice_sample_rate)
+                    cue_audio = self._trim_audio_segment_silence(cue_audio)
+                    cue_audio.export(cue_path, format="wav")
+                    start_frame = round(cursor_ms / 1000 * 30)
+                    combined += cue_audio
+                    cursor_ms += len(cue_audio)
+                    end_frame = max(start_frame + 1, round(cursor_ms / 1000 * 30))
+                    cue_timings_exact.append({**cue, "startFrame": start_frame, "endFrame": end_frame})
+                combined.export(backend_audio_path, format="wav")
+                seconds = max(len(combined) / 1000.0, 0.01)
             else:
-                seconds = self._generate_open_source_cosyvoice_audio(text, voice, backend_audio_path)
+                seconds = synthesize_one(text, backend_audio_path, f"scene={index + 1}")
             if seconds <= 0 or not backend_audio_path.exists() or backend_audio_path.stat().st_size <= 0:
                 raise RuntimeError(f"CosyVoice returned invalid audio for scene_{index + 1}")
 
@@ -1287,6 +1459,19 @@ class AiVideoService:
             duration_frames = max(54, int(duration_seconds * 30 + 0.999))
             scene["duration"] = round(duration_seconds, 2)
             scene["durationFrames"] = duration_frames
+            for segment in segments:
+                if not isinstance(segment, dict):
+                    continue
+                cue_timings = cue_timings_exact if cue_timings_exact else self._sc1_caption_cue_timings(
+                    segment.get("captionCues") if isinstance(segment.get("captionCues"), list) else [],
+                    duration_frames,
+                )
+                segment["startFrame"] = 0
+                segment["endFrame"] = duration_frames
+                if cue_timings:
+                    cue_timings = [dict(cue) for cue in cue_timings]
+                    cue_timings[-1]["endFrame"] = duration_frames
+                    segment["captionCues"] = cue_timings
             scene["audio"] = {
                 "provider": provider,
                 "voice": voice,
@@ -1319,7 +1504,7 @@ class AiVideoService:
                 cleaned_chars.append(" ")
         tts_text = re.sub(r"\s+", " ", "".join(cleaned_chars)).strip()
         if not tts_text:
-            raise RuntimeError("Dayun Manbo TTS text is empty after normalization")
+            tts_text = os.getenv("SC1_COSYVOICE_PROMPT_TEXT", "焦虑不是敌人，它只是先替你把危险放大。")
         query = urllib.parse.urlencode({"text": tts_text})
         api_url = os.getenv("DAYUN_MANBO_TTS_URL", "https://api.milorapart.top/apis/mbAIsc")
         request = urllib.request.Request(f"{api_url}?{query}", method="GET")
@@ -1340,9 +1525,25 @@ class AiVideoService:
         if len(audio.raw_data) < 1024 or audio.rms <= 0:
             raise RuntimeError("Dayun Manbo TTS returned silent audio")
         audio = audio.set_channels(1).set_frame_rate(self.cosyvoice_sample_rate)
+        audio = self._trim_audio_segment_silence(audio)
         audio.export(output_path, format="wav")
         source_path.unlink(missing_ok=True)
         return max(len(audio) / 1000.0, 0.01)
+
+    def _trim_audio_segment_silence(self, audio: AudioSegment, threshold: int | None = None, keep_ms: int = 70) -> AudioSegment:
+        if len(audio) < 180 or audio.rms <= 0:
+            return audio
+        silence_threshold = threshold if threshold is not None else max(80, int(audio.rms * 0.12))
+        step_ms = 10
+        start_ms = 0
+        while start_ms < len(audio) and audio[start_ms : min(len(audio), start_ms + step_ms)].rms < silence_threshold:
+            start_ms += step_ms
+        end_ms = len(audio)
+        while end_ms > start_ms and audio[max(0, end_ms - step_ms) : end_ms].rms < silence_threshold:
+            end_ms -= step_ms
+        if end_ms <= start_ms or end_ms - start_ms < 140:
+            return audio
+        return audio[max(0, start_ms - keep_ms) : min(len(audio), end_ms + keep_ms)]
 
     def _generate_edge_tts_audio(self, text: str, voice: str, output_path: Path) -> float:
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1432,6 +1633,8 @@ class AiVideoService:
         if len(pcm) < 1024:
             prompt_candidates = [
                 Path(os.getenv("SC1_COSYVOICE_PROMPT_WAV", "")).expanduser() if os.getenv("SC1_COSYVOICE_PROMPT_WAV") else None,
+                REPO_ROOT / "outputs" / "dayun_tools_manbo_tts_test.mp3",
+                Path(r"C:\Users\Administrator\Documents\Codex\2026-07-18\300\outputs\dayun_tools_manbo_tts_test.mp3"),
                 REPO_ROOT / "backend" / "uploads" / "voice_templates" / "sc1-reference-voice.wav",
                 REPO_ROOT / "outputs" / "cosyvoice_zero_shot_sample.wav",
                 Path(r"C:\Users\Administrator\Documents\Codex\2026-07-18\300\outputs\cosyvoice_zero_shot_sample.wav"),
@@ -1441,12 +1644,13 @@ class AiVideoService:
             for prompt_wav in prompt_candidates:
                 if not prompt_wav or not prompt_wav.exists():
                     continue
+                prompt_source = self._prepare_cosyvoice_prompt_audio(prompt_wav)
                 try:
-                    with prompt_wav.open("rb") as prompt_file:
+                    with prompt_source.open("rb") as prompt_file:
                         response = requests.post(
                             f"{self.cosyvoice_url}/inference_zero_shot",
                             data={"tts_text": text, "prompt_text": prompt_text},
-                            files={"prompt_wav": (prompt_wav.name, prompt_file, "audio/wav")},
+                            files={"prompt_wav": (prompt_source.name, prompt_file, "audio/wav")},
                             timeout=self.cosyvoice_timeout,
                         )
                     response.raise_for_status()
@@ -1456,6 +1660,9 @@ class AiVideoService:
                 except Exception as exc:
                     zero_shot_error = exc
                     pcm = b""
+                finally:
+                    if prompt_source != prompt_wav and prompt_source.exists():
+                        prompt_source.unlink(missing_ok=True)
             if len(pcm) < 1024:
                 if sft_error:
                     raise RuntimeError(f"Open-source CosyVoice zero-shot failed: {zero_shot_error}; SFT fallback also failed: {sft_error}") from zero_shot_error or sft_error
@@ -1476,6 +1683,17 @@ class AiVideoService:
             wav.setframerate(self.cosyvoice_sample_rate)
             wav.writeframes(pcm)
         return len(pcm) / (self.cosyvoice_sample_rate * 2)
+
+    def _prepare_cosyvoice_prompt_audio(self, prompt_path: Path) -> Path:
+        if prompt_path.suffix.lower() == ".wav":
+            return prompt_path
+        converted = prompt_path.with_suffix(".prompt.wav")
+        if converted.exists() and converted.stat().st_mtime >= prompt_path.stat().st_mtime:
+            return converted
+        audio = AudioSegment.from_file(prompt_path)
+        audio = audio.set_channels(1).set_frame_rate(self.cosyvoice_sample_rate)
+        audio.export(converted, format="wav")
+        return converted
 
     def _trim_pcm_silence(self, pcm: bytes, threshold: int = 260, keep_ms: int = 90) -> bytes:
         if len(pcm) < 4:
@@ -1586,7 +1804,62 @@ class AiVideoService:
                     continue
                 source = material_root / file_name
                 if source.exists() and source.is_file():
-                    shutil.copyfile(source, target_dir / file_name)
+                    target = target_dir / file_name
+                    try:
+                        from PIL import Image
+
+                        with Image.open(source) as opened:
+                            rgba = opened.convert("RGBA")
+                            pixels = rgba.load()
+                            width, height = rgba.size
+                            foreground_box: list[int] | None = None
+                            for x in range(width):
+                                for y in range(height):
+                                    red, green, blue, alpha = pixels[x, y]
+                                    if alpha == 0:
+                                        continue
+                                    if red > 245 and green > 245 and blue > 245:
+                                        pixels[x, y] = (255, 255, 255, 0)
+                                    elif red > 235 and green > 235 and blue > 235:
+                                        pixels[x, y] = (red, green, blue, max(0, int(alpha * 0.35)))
+                                    else:
+                                        if foreground_box is None:
+                                            foreground_box = [x, y, x + 1, y + 1]
+                                        else:
+                                            foreground_box[0] = min(foreground_box[0], x)
+                                            foreground_box[1] = min(foreground_box[1], y)
+                                            foreground_box[2] = max(foreground_box[2], x + 1)
+                                            foreground_box[3] = max(foreground_box[3], y + 1)
+                            bbox = tuple(foreground_box) if foreground_box else rgba.getchannel("A").getbbox()
+                            if bbox:
+                                pad_x = max(10, int((bbox[2] - bbox[0]) * 0.025))
+                                pad_y = max(10, int((bbox[3] - bbox[1]) * 0.025))
+                                crop_box = (
+                                    max(0, bbox[0] - pad_x),
+                                    max(0, bbox[1] - pad_y),
+                                    min(width, bbox[2] + pad_x),
+                                    min(height, bbox[3] + pad_y),
+                                )
+                                cropped = rgba.crop(crop_box)
+                                target_ratio = 500 / 350
+                                fill_ratio = 0.86
+                                canvas_width = max(cropped.width, int(cropped.height * target_ratio))
+                                canvas_height = max(cropped.height, int(canvas_width / target_ratio))
+                                canvas_width = max(canvas_width, int(cropped.width / fill_ratio))
+                                canvas_height = max(canvas_height, int(cropped.height / fill_ratio))
+                                if canvas_width / canvas_height < target_ratio:
+                                    canvas_width = int(canvas_height * target_ratio)
+                                else:
+                                    canvas_height = int(canvas_width / target_ratio)
+                                canvas = Image.new("RGBA", (canvas_width, canvas_height), (255, 255, 255, 0))
+                                x_offset = (canvas_width - cropped.width) // 2
+                                y_offset = int((canvas_height - cropped.height) * 0.58)
+                                canvas.alpha_composite(cropped, (x_offset, max(0, y_offset)))
+                                canvas.save(target)
+                            else:
+                                rgba.save(target)
+                    except Exception:
+                        shutil.copyfile(source, target)
                 image["src"] = f"/sc1-materials/{file_name}"
         return target_dir
 
@@ -2080,6 +2353,19 @@ class AiVideoService:
     def _contextual_fallback_sentence(self, index: int, content_type: str, prompt: str) -> str:
         expanded = self._expand_prompt_to_scene_texts(prompt, content_type, index + 1)
         return expanded[index] if index < len(expanded) else self._fallback_sentence(index, content_type)
+
+    def _ensure_scene_text(self, text: str, prompt: str, content_type: str, index: int) -> str:
+        cleaned = " ".join(str(text or "").split()).strip()
+        if not cleaned or cleaned in {"?", "？", "！", "!", "…"}:
+            prompt_text = " ".join(str(prompt or "").split()).strip()
+            if prompt_text:
+                expanded = self._expand_prompt_to_scene_texts(prompt_text, content_type, index + 1)
+                if expanded and index < len(expanded):
+                    candidate = " ".join(str(expanded[index] or "").split()).strip()
+                    if candidate and candidate not in {"?", "？", "！", "!", "…"}:
+                        return candidate
+            return self._fallback_sentence(index, content_type)
+        return cleaned
 
     def _fallback_sentence(self, index: int, content_type: str) -> str:
         defaults = {
