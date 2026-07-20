@@ -26,13 +26,13 @@ Keep the SC1 psychology stickman workflow aligned with the reference video and m
 
 ## Reproducibility Anchor
 - Branch: `codex/3003-standalone-stickman-workflow-20260712`
-- Local HEAD: `332baf8294b8d5190e818f0b370558076a932775`
-- Commit time: `2026-07-20 23:49:12 +0800`
+- Deploy source commit: `207319e98a3d8a1baeeb7bacaabdd185b209d4fa`
+- Deploy source commit time: `2026-07-20 23:49:57 +0800`
 - Snapshot subject: `fix: align sc1 stickman render sync`
 - Remote deploy root: `/opt/manim-v2-3003-snapshot`
 - Latest confirmed remote source commit before this sync: `8dc9992dd`
-- State updated before sync: `2026-07-20 23:49:26 +08:00`
-- Current local worktree commit `332baf8294b8d5190e818f0b370558076a932775` is the source intended for the next 3003 deployment sync.
+- State updated before sync: `2026-07-20 23:50:23 +08:00`
+- Current deploy source commit `207319e98a3d8a1baeeb7bacaabdd185b209d4fa` is the code intended for the next 3003 deployment sync.
 
 ## Files Changed This Round
 - `backend/app/services/ai_video.py`
