@@ -3,6 +3,7 @@ import hashlib
 import os
 import re
 import shutil
+import subprocess
 import threading
 import asyncio
 import dashscope
@@ -1652,20 +1653,13 @@ class AiVideoService:
             ]
             prompt_text = os.getenv("SC1_COSYVOICE_PROMPT_TEXT", "焦虑不是敌人，它只是先替你把危险放大。")
             zero_shot_error: Exception | None = None
-            for prompt_wav in prompt_candidates:
+            for prompt_index, prompt_wav in enumerate(prompt_candidates):
                 if not prompt_wav or not prompt_wav.exists():
                     continue
                 prompt_source = self._prepare_cosyvoice_prompt_audio(prompt_wav)
                 try:
-                    with prompt_source.open("rb") as prompt_file:
-                        response = requests.post(
-                            f"{self.cosyvoice_url}/inference_zero_shot",
-                            data={"tts_text": text, "prompt_text": prompt_text},
-                            files={"prompt_wav": (prompt_source.name, prompt_file, "audio/wav")},
-                            timeout=self.cosyvoice_timeout,
-                        )
-                    response.raise_for_status()
-                    pcm = response.content
+                    zero_shot_path = output_path.with_suffix(f".zero-shot-{prompt_index + 1:02d}.pcm")
+                    pcm = self._request_cosyvoice_zero_shot_pcm(text, prompt_text, prompt_source, zero_shot_path)
                     if len(pcm) >= 1024:
                         break
                 except Exception as exc:
@@ -1694,6 +1688,69 @@ class AiVideoService:
             wav.setframerate(self.cosyvoice_sample_rate)
             wav.writeframes(pcm)
         return len(pcm) / (self.cosyvoice_sample_rate * 2)
+
+    def _request_cosyvoice_zero_shot_pcm(self, text: str, prompt_text: str, prompt_source: Path, output_pcm_path: Path) -> bytes:
+        output_pcm_path.parent.mkdir(parents=True, exist_ok=True)
+        output_pcm_path.unlink(missing_ok=True)
+        command = [
+            "curl",
+            "--silent",
+            "--show-error",
+            "--location",
+            "--connect-timeout",
+            str(min(15, max(5, self.cosyvoice_timeout // 6))),
+            "--max-time",
+            str(self.cosyvoice_timeout),
+            "-X",
+            "POST",
+            f"{self.cosyvoice_url}/inference_zero_shot",
+            "-F",
+            f"tts_text={text}",
+            "-F",
+            f"prompt_text={prompt_text}",
+            "-F",
+            f"prompt_wav=@{prompt_source}",
+            "-o",
+            str(output_pcm_path),
+        ]
+        try:
+            result = subprocess.run(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=self.cosyvoice_timeout + 20,
+            )
+        except FileNotFoundError:
+            return self._request_cosyvoice_zero_shot_pcm_with_requests(text, prompt_text, prompt_source)
+        except subprocess.TimeoutExpired as exc:
+            pcm = output_pcm_path.read_bytes() if output_pcm_path.exists() else b""
+            if len(pcm) >= 1024:
+                output_pcm_path.unlink(missing_ok=True)
+                return pcm
+            raise RuntimeError(f"Open-source CosyVoice zero-shot curl timed out: {exc}") from exc
+
+        pcm = output_pcm_path.read_bytes() if output_pcm_path.exists() else b""
+        output_pcm_path.unlink(missing_ok=True)
+        if result.returncode != 0 and len(pcm) < 1024:
+            raise RuntimeError(f"Open-source CosyVoice zero-shot curl failed {result.returncode}: {(result.stderr or result.stdout or '').strip()[:300]}")
+        return pcm
+
+    def _request_cosyvoice_zero_shot_pcm_with_requests(self, text: str, prompt_text: str, prompt_source: Path) -> bytes:
+        response = None
+        try:
+            with prompt_source.open("rb") as prompt_file:
+                response = requests.post(
+                    f"{self.cosyvoice_url}/inference_zero_shot",
+                    data={"tts_text": text, "prompt_text": prompt_text},
+                    files={"prompt_wav": (prompt_source.name, prompt_file, "audio/wav")},
+                    timeout=self.cosyvoice_timeout,
+                )
+            response.raise_for_status()
+            return response.content
+        finally:
+            if response is not None:
+                response.close()
 
     def _prepare_cosyvoice_prompt_audio(self, prompt_path: Path) -> Path:
         if prompt_path.suffix.lower() == ".wav":

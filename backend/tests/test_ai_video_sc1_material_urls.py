@@ -1,4 +1,5 @@
 import os
+import subprocess
 import sys
 import types
 import wave
@@ -80,3 +81,40 @@ def test_dayun_manbo_tts_rate_limit_falls_back_to_open_source_cosyvoice(tmp_path
     assert audio_scenes[0]["provider"] == "open_source_cosyvoice"
     assert audio_scenes[0]["src"] == "http://127.0.0.1:18787/generated-audio/job_42/scene-01.wav"
     assert (tmp_path / "job_42" / "audio" / "scene-01.wav").exists()
+
+
+def test_open_source_cosyvoice_accepts_valid_pcm_when_stream_times_out(tmp_path, monkeypatch):
+    service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
+    service.cosyvoice_url = "http://127.0.0.1:50000"
+    service.cosyvoice_timeout = 180
+    service.cosyvoice_sample_rate = 22050
+
+    prompt = tmp_path / "prompt.wav"
+    with wave.open(str(prompt), "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(22050)
+        wav.writeframes(b"\x01\x00" * 22050)
+    monkeypatch.setenv("SC1_COSYVOICE_PROMPT_WAV", str(prompt))
+    monkeypatch.setattr(ai_video.urllib.request, "urlopen", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("sft unavailable")))
+    monkeypatch.setattr(ai_video.requests, "post", lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("requests fallback should not be used")))
+
+    calls = []
+
+    def fake_run(command, **_kwargs):
+        calls.append(command)
+        output_path = command[command.index("-o") + 1]
+        with open(output_path, "wb") as file:
+            file.write((1000).to_bytes(2, "little", signed=True) * 22050)
+        return subprocess.CompletedProcess(command, 28, stdout="", stderr="Operation timed out")
+
+    monkeypatch.setattr(ai_video.subprocess, "run", fake_run)
+
+    output_path = tmp_path / "scene.wav"
+    seconds = service._generate_open_source_cosyvoice_audio("先别急着证明自己", "中文女", output_path)
+
+    assert round(seconds, 2) == 1.0
+    assert output_path.exists()
+    assert calls
+    assert "--max-time" in calls[0]
+    assert "180" in calls[0]

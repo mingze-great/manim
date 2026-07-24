@@ -17,11 +17,11 @@
 - 当前部署前源提交：`4db089f2a8ea8cf6b61ec45b8fb4a710e3e6b84f`
 - 当前部署前源提交时间：`2026-07-25 00:04:13 +08:00`
 - 当前部署前源提交信息：`feat: add partner and stickman workflow UI`
-- 当前已部署提交：`c696bd4633c2e07c57a785833508e7f47a6033ac`
-- 当前已部署提交时间：`2026-07-25 01:13:50 +08:00`
-- 当前已部署提交信息：`fix: fallback when dayun tts is rate limited`
-- 当前待部署配置：3004 backend/worker 增加 `AI_VIDEO_COSYVOICE_TIMEOUT=180` 和 `SC1_COSYVOICE_PROMPT_WAV=/opt/manim-v2-3004-snapshot/outputs/dayun_tools_manbo_tts_test.mp3`
-- 状态更新时间：`2026-07-25 01:58:00 +08:00`
+- 当前已部署提交：`8e776f5bb7fa79a33710910b759476f9822ad08d`
+- 当前已部署提交时间：`2026-07-25T01:59:59+08:00`
+- 当前已部署提交信息：`chore: tune 3004 cosyvoice fallback config`
+- 当前待部署客户端修复：`backend/app/services/ai_video.py` 将开源 CosyVoice zero-shot 改为受控 `curl --max-time` 下载 PCM，避免 Python `requests` 等待流关闭导致 worker 卡住。
+- 状态更新时间：`2026-07-25 02:07:30 +08:00`
 
 ## 已完成
 - 已确认现有 3003 分支保持不动，3004 使用独立 git worktree。
@@ -88,11 +88,13 @@
 - 已确认远程 3004 部署标记为 `codex/3004-partner-stickman-platform-20260724@c696bd4633c2e07c57a785833508e7f47a6033ac`，3004 backend、worker、Remotion 服务 active，3003 未修改、未重启。
 - 已定位 `job_6` 后续 TTS 失败链路：Dayun 远程请求仍 429；开源 CosyVoice SFT 因无 speaker 不可用；zero-shot 依赖参考音频和较长生成时间。
 - 已用远程 CosyVoice zero-shot 直接验证 `dayun_tools_manbo_tts_test.mp3` 可作为 prompt 产出音频，探针输出 `/tmp/cosy_dayun_probe_py.pcm` 为 `158720` 字节。
-- 当前待同步配置修复：3004 systemd backend/worker 显式设置 `AI_VIDEO_COSYVOICE_TIMEOUT=180`，并将 zero-shot prompt 固定为 `/opt/manim-v2-3004-snapshot/outputs/dayun_tools_manbo_tts_test.mp3`，避免长句 zero-shot 被 45 秒默认超时截断。
+- 已同步并部署 3004 配置提交 `8e776f5bb7fa79a33710910b759476f9822ad08d`：backend/worker 显式设置 `AI_VIDEO_COSYVOICE_TIMEOUT=180`，并将 zero-shot prompt 固定为 `/opt/manim-v2-3004-snapshot/outputs/dayun_tools_manbo_tts_test.mp3`。
+- 已创建 3004 平台验证任务 `job_7`；任务进入第一个 cue 的 open-source CosyVoice fallback 后未推进。CosyVoice 日志显示 `POST /inference_zero_shot HTTP/1.1 200 OK` 且后续吐出音频 blob，但 job 目录未写入音频文件，根因进一步收敛为 Python 客户端等待流关闭。
+- 已新增回归测试 `test_open_source_cosyvoice_accepts_valid_pcm_when_stream_times_out`，覆盖 curl 返回 timeout 但已写出有效 PCM 时仍接受音频，避免任务卡死；相关测试 `10 passed`。
 
 ## 当前问题
-- 3004 已部署到 `c696bd4633c2e07c57a785833508e7f47a6033ac`；`job_5` 因 Dayun Manbo TTS 429 失败，`job_6` 已进入开源 CosyVoice fallback 但在参考音频/timeout 配置完善前未产出有效音频。
-- Dayun 429 fallback 代码已本地验证并部署到 3004；下一步需要同步 3004 CosyVoice timeout/prompt 配置，并重新创建平台验证任务。
+- 3004 已部署到 `8e776f5bb7fa79a33710910b759476f9822ad08d`；`job_7` 显示配置已生效，但 Python `requests` 客户端仍会等 CosyVoice zero-shot 流关闭，导致 worker 停在 `tts_generating`。
+- 当前待部署客户端修复已本地验证通过；下一步需要同步 `backend/app/services/ai_video.py` 和测试/状态文件到 3004，并重启 3004 backend/worker 后创建 `job_8` 验证。
 - 3004 还没有完成“成功成片 + 下载 MP4 + 音视频流检查 + 抽帧确认”的最终验收。
 - 远程磁盘空间仍偏紧（清理后约 1.2G 可用），若 Remotion 渲染再次因空间不足失败，需要优先清理 3004 可再生构建缓存或旧备份，仍不能影响 3003 运行数据。
 - 参考图生成完整素材库的“两张样图确认 -> 批量生成”能力仍属于第二阶段，当前 MVP 先交付上传 zip 和选择素材库。
@@ -162,7 +164,7 @@
 - 不要在未更新 `PROJECT_STATE.md` 的情况下进行远程同步、部署或上下文交接。
 
 ## 下一步
-1. 提交 3004 CosyVoice timeout/prompt 配置修复和本状态记录。
-2. 只同步 3004 systemd/backend 相关文件，执行 `systemctl daemon-reload`，仅重启 `manim-v2-3004-backend.service` 和 `manim-v2-3004-worker.service`。
-3. 重新创建 3004 `/stickman-workflow` 标题生成任务，优先使用 `dayun_manbo` 声音和 `sc1_outputs` 素材库。
+1. 提交 open-source CosyVoice zero-shot curl 客户端修复和本状态记录。
+2. 同步 `backend/app/services/ai_video.py`、`backend/tests/test_ai_video_sc1_material_urls.py`、`PROJECT_STATE.md` 到 3004，并仅重启 3004 backend/worker。
+3. 重新创建 3004 `/stickman-workflow` 标题生成任务 `job_8`，优先使用 `dayun_manbo` 声音和 `sc1_outputs` 素材库。
 4. 下载成功 MP4，使用 ffmpeg/ffprobe 检查音频流和视频流，抽取关键帧确认场景图、字幕、总结和标签布局，并记录 job id、输出路径、验证结论。
