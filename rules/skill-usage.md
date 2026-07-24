@@ -5,6 +5,126 @@ Skill 不是聊天记忆的替代品，而是把固定工作方法沉淀成可�
 
 进入项目后，不要假设 skill 会自动执行。需要使用 skill 时，必须先读取该 skill 的 `SKILL.md`，再按其中步骤执行。新安装的 skill 通常从下一轮对话开始稳定出现在可用列表中。
 
+不是每次开发都要使用全部 skills。skill 的选择必须按任务复杂度、风险、影响范围和用户目标分层决定。简单需求走轻量核心流程；中等需求增加计划和 review；复杂需求或多需求并行才使用多 agent、worktree 和完整 master-agent 流程。
+
+## Skill 分层选择矩阵
+
+### L0：问答、解释、轻量文档
+适用场景：
+- 用户只问概念、流程、方案优劣。
+- 只改少量文档，不影响代码和部署。
+- 不需要远程验证。
+
+建议 skills：
+- `using-superpowers`：确认是否有适用 skill。
+- `verification-before-completion`：在声称完成前做文件/命令级验证。
+
+不需要：
+- `subagent-driven-development`
+- `using-git-worktrees`
+- `requesting-code-review`
+
+最低交付要求：
+- 文档可发现。
+- `git diff --check` 通过。
+- `PROJECT_STATE.md` 在需要交接时更新。
+
+### L1：小修小改
+适用场景：
+- 单文件或少量文件修改。
+- 明确 bug 或明确 UI/文案调整。
+- 不改变整体架构和接口契约。
+
+建议 skills：
+- `systematic-debugging`：遇到 bug 或异常行为时使用。
+- `test-driven-development`：能写测试的纯逻辑修复使用。
+- `verification-before-completion`：完成前必须使用。
+
+可选 skills：
+- `playwright`：涉及前端交互时使用。
+- `byted-text-to-speech`：涉及 TTS 试音时使用。
+
+不需要：
+- 多 agent。
+- 独立 worktree。
+- 完整 brainstorming，除非需求本身不清楚。
+
+最低交付要求：
+- 最小验证命令通过。
+- 不引入无关改动。
+- 必要时更新 `PROJECT_STATE.md`。
+
+### L2：中等功能或跨模块小改
+适用场景：
+- 涉及两个以上模块，但任务目标清晰。
+- 改动会影响用户可见功能。
+- 需要明确验收标准。
+
+建议 skills：
+- `brainstorming`：需求还不够清楚时使用。
+- `writing-plans`：需要拆步骤或跨模块时使用。
+- `requesting-code-review`：实现完成后使用。
+- `verification-before-completion`：完成前必须使用。
+
+可选 skills：
+- `using-git-worktrees`：如果当前工作树不干净或风险较高。
+- `playwright`：需要平台 UI 验证。
+
+不默认使用：
+- `subagent-driven-development`，除非任务能拆成独立子任务。
+
+最低交付要求：
+- 有计划或清晰 checklist。
+- 有本地验证。
+- 用户可见功能有截图、抽帧、平台任务或等价证据。
+
+### L3：复杂功能、成片链路、远程部署
+适用场景：
+- 影响后端、前端、Remotion、TTS、部署中的多个模块。
+- 影响 3003 成片质量或平台完整生成链路。
+- 需要远程同步、服务重启或平台验收。
+
+建议 skills：
+- `brainstorming`
+- `writing-plans`
+- `using-git-worktrees`
+- `requesting-code-review`
+- `verification-before-completion`
+- `playwright`
+- 必要时使用 `security-best-practices` 或 `security-threat-model`
+
+可选 skills：
+- `subagent-driven-development`：任务能拆分且文件范围不冲突时使用。
+- `dispatching-parallel-agents`：并行调查、验证或开发互不依赖部分。
+
+最低交付要求：
+- `PROJECT_STATE.md` 部署前后都更新。
+- 远程服务状态确认。
+- 通过 3003 平台生成验证 job。
+- 下载 MP4 并抽帧/检查音轨。
+
+### L4：多需求并行
+适用场景：
+- 用户明确要同时开发多个需求。
+- 多个需求能独立验收。
+- 修改范围能隔离，或能建立明确合并策略。
+
+必须 skills：
+- `brainstorming`
+- `writing-plans`
+- `using-git-worktrees`
+- `subagent-driven-development` 或 `dispatching-parallel-agents`
+- `requesting-code-review`
+- `receiving-code-review`
+- `verification-before-completion`
+
+最低交付要求：
+- master agent 总计划。
+- 每个 worker 的任务说明。
+- 每个子任务独立验收结果。
+- master 统一整合和最终验收。
+- `PROJECT_STATE.md` 记录任务拆分、worktree、提交、验证结论。
+
 ## 已安装的流程类 skills
 
 ### `brainstorming`
@@ -224,15 +344,14 @@ Skill 不是聊天记忆的替代品，而是把固定工作方法沉淀成可�
 - 本项目常规 3003 平台开发不需要调用它。
 - 如果要改 Codex skill、OpenAI API 或模型选型，再使用它。
 
-## 复杂开发推荐流程
+## 推荐流程
 
 ### 单需求
-1. `brainstorming`
-2. `writing-plans`
-3. `test-driven-development` 或直接实现
-4. `verification-before-completion`
-5. `requesting-code-review`
-6. `finishing-a-development-branch`
+按复杂度选择：
+
+- 简单明确：`systematic-debugging` 或直接实现 -> `verification-before-completion`
+- 可测试逻辑：`test-driven-development` -> `verification-before-completion`
+- 跨模块：`brainstorming` -> `writing-plans` -> 实现 -> `requesting-code-review` -> `verification-before-completion`
 
 ### 多需求并行
 1. master agent 使用 `brainstorming` 明确需求。

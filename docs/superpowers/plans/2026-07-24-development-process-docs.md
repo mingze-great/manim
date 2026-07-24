@@ -189,7 +189,31 @@
 
 记录方案 A：当前 Codex 单窗口 master + subagents；方案 B：多个 Codex thread/worktree；方案 C：项目专属编排 skill。
 
-### 任务 9：验证文档集合
+### 任务 9：补充 skill 分层选择矩阵
+
+**文件：**
+- 修改：`rules/skill-usage.md`
+- 修改：`specs/development-control-spec.md`
+- 修改：`rules/agent-orchestration.md`
+- 修改：`PROJECT_STATE.md`
+
+**接口：**
+- 输入：用户要求“不是每个开发都用全部 skills，小需求只用核心几个，按实际需求选择”。
+- 输出：L0-L4 任务复杂度分层和对应最低 skill/验证要求。
+
+- [x] **步骤 1：写入 L0-L4 分层**
+
+在 `rules/skill-usage.md` 中写入 L0 轻量问答/文档、L1 小修小改、L2 中等功能、L3 复杂链路/远程部署、L4 多需求并行。
+
+- [x] **步骤 2：写入不默认多 agent**
+
+在 `rules/agent-orchestration.md` 中明确：简单需求、小修小改、单文件调整、30 分钟内可稳定完成的任务，不适合启用多 agent。
+
+- [x] **步骤 3：同步开发流程规格**
+
+在 `specs/development-control-spec.md` 中把任务进入流程改为 L0-L4，并要求按复杂度选择 skills。
+
+### 任务 10：验证文档集合
 
 **文件：**
 - 读取：`AGENTS.md`

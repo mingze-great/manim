@@ -1,7 +1,7 @@
 # 项目状态
 
 ## 当前任务
-完善本地开发流程文档和 skills 体系，让后续 Codex 会话可以按“需求澄清 -> 计划 -> 并行分发 -> 子任务验收 -> 统一整合 -> 最终验收”的 master agent 流程开发。
+完善本地开发流程文档和 skills 体系，让后续 Codex 会话能按任务复杂度选择轻量流程、标准流程或 master agent 并行流程，避免小需求过度工程化，同时保证代码规范性和功能可交付。
 
 ## 当前重点
 - 将核心项目文档中文化。
@@ -11,6 +11,8 @@
 - 补充 `specs/development-control-spec.md`，把需求进入、计划、编码、验证、部署、交接做成闭环规格。
 - 从网络安装开发流程、代码评审、并行 agent、浏览器验证、安全审查等可复用 skills。
 - 补充 `rules/agent-orchestration.md` 和 `specs/master-agent-workflow-spec.md`，定义 master agent 多需求并行开发流程。
+- 补充 skill 分层选择矩阵：L0 轻量问答/文档、L1 小修小改、L2 中等功能、L3 复杂链路/远程部署、L4 多需求并行。
+- 明确简单需求不默认使用多 agent、worktree 或长计划。
 - 更新顶层工作区 `AGENTS.md`，让新上下文能找到真正项目目录。
 
 ## 已完成
@@ -27,6 +29,9 @@
 - `rules/skill-usage.md` 已更新，明确每个已安装 skill 的使用时机。
 - `rules/agent-orchestration.md` 已新增，定义 master agent、worker agent、reviewer agent 的职责、任务分发模板和三种实现方案。
 - `specs/master-agent-workflow-spec.md` 已新增，定义多需求并行开发的 master agent 工作流规格。
+- `rules/skill-usage.md` 已补充分层选择矩阵，要求按实际需求选择核心 skills，不把简单需求强行升级为多 agent 模式。
+- `specs/development-control-spec.md` 已补充 L0-L4 任务进入流程。
+- `rules/agent-orchestration.md` 已补充多 agent 适用边界，明确 30 分钟内可稳定完成的小需求不适合并行。
 
 ## 当前问题
 - 这次是本地 skills 安装和文档治理，不涉及 3003 服务重启或远程部署。
@@ -35,13 +40,13 @@
 
 ## 可复现锚点
 - 当前本地分支：`codex/3003-standalone-stickman-workflow-20260712`
-- 本次 skills/编排文档更新前本地提交：`c1a9b90e49a75d12782e8579a177dde6c83a28e5`
-- 本次 skills/编排文档更新前提交时间：`2026-07-24 21:39:15 +0800`
-- 本次 skills/编排文档更新前提交信息：`docs: localize development controls`
+- 本次分层选择矩阵更新前本地提交：`b30d6b93dd7e579225142ae053917b6e1040ab58`
+- 本次分层选择矩阵更新前提交时间：`2026-07-24 21:58:45 +0800`
+- 本次分层选择矩阵更新前提交信息：`docs: add agent orchestration skills`
 - 远程部署目录：`/opt/manim-v2-3003-snapshot`
 - 最新已确认远程部署 HEAD：`360f19f7bfdc31973f6a097c9fd7132c19765f9b`
 - 最新已确认远程部署时间：`2026-07-20 23:54:24 +0800`
-- 状态更新时间：`2026-07-24 21:54:16 +08:00`
+- 状态更新时间：`2026-07-24 22:09:18 +08:00`
 
 ## 最近修改文件
 - `AGENTS.md`
@@ -63,6 +68,7 @@
 - 当前可用于验证/安全/产品规格的 skill：`playwright`、`screenshot`、`notion-spec-to-implementation`、`security-best-practices`、`security-threat-model`、`byted-text-to-speech`。
 - 建议优先创建的项目专属 skill：`sc1-video-validation`、`3003-deploy-sync`、`sc1-requirements-check`、`3003-master-agent-orchestration`。
 - 多需求并行开发推荐使用：master agent + `brainstorming` + `writing-plans` + `using-git-worktrees` + `subagent-driven-development` + `requesting-code-review` + `verification-before-completion`。
+- skills 不按“全量使用”执行，而按任务复杂度分层选择；L0/L1 只用少量核心 skill 和验证门禁，L4 才使用 master-agent 多 agent 流程。
 - 开发流程拆为：读取规则 -> 判断任务类型 -> 使用 skill/写计划 -> 分发或最小改动 -> 验证 -> review -> 更新状态 -> 提交 -> 必要时部署。
 
 ## 不要重复做
@@ -71,7 +77,8 @@
 - 不要把生成媒体、缓存、storage、uploads 或密钥提交进仓库。
 - 不要在未更新 `PROJECT_STATE.md` 的情况下远程同步或交接上下文。
 - 不要在多需求并行开发时让多个 worker 同时修改同一批核心文件，除非先建立 worktree 和合并策略。
+- 不要把简单需求、小修小改、少量文档更新强行套入 master-agent 或多 agent 流程。
 
 ## 下一步
-- 提交这次 skills 安装记录和 master agent 编排文档变更。
+- 提交这次 skill 分层选择矩阵和多 agent 适用边界文档变更。
 - 如果后续要进一步自动化，优先用 `skill-creator` 创建 `sc1-video-validation`、`3003-deploy-sync` 和 `3003-master-agent-orchestration`。
