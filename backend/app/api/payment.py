@@ -10,6 +10,7 @@ from app.models.user import User
 from app.models.project import Project, ProjectStatus
 from app.models.subscription import Order, Subscription, SUBSCRIPTION_PLANS
 from app.api.auth import get_current_user
+from app.services.partner_program import apply_invite_code_to_user, record_commission_for_order
 from app.services.wechat_pay import get_wechat_pay_service
 
 router = APIRouter(prefix="/payment", tags=["payment"])
@@ -33,6 +34,10 @@ class SubscriptionResponse(BaseModel):
     max_projects: int
     expires_at: str | None
     features: List[str]
+
+
+class RedeemCodeRequest(BaseModel):
+    code: str
 
 
 def generate_order_id() -> str:
@@ -64,6 +69,8 @@ async def create_payment_order(
         order_id=order_id,
         plan=plan,
         amount=amount,
+        partner_id=current_user.referred_by_partner_id,
+        referral_code=current_user.referral_code,
         status="pending",
         description=f"Manim视频平台-{plan_config['name']}"
     )
@@ -128,6 +135,7 @@ async def wechat_pay_notify(
         db.commit()
         
         update_user_subscription(order.user_id, order.plan, db)
+        record_commission_for_order(db, order)
         
         return "<xml><return_code><![CDATA[SUCCESS]]></return_code></xml>"
     
@@ -255,6 +263,7 @@ async def query_order_status(
             order.paid_at = datetime.utcnow()
             db.commit()
             update_user_subscription(order.user_id, order.plan, db)
+            record_commission_for_order(db, order)
             return {"status": "paid", "message": "支付成功"}
         elif trade_state == "NOTPAY":
             return {"status": "pending", "message": "等待支付"}
@@ -266,6 +275,27 @@ async def query_order_status(
             return {"status": "pending", "message": result.get("trade_state_desc", "处理中")}
     
     return {"status": "pending", "message": "查询中"}
+
+
+@router.post("/redeem-code")
+async def redeem_invite_code(
+    payload: RedeemCodeRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)]
+):
+    try:
+        invite = apply_invite_code_to_user(db, current_user, payload.code)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {
+        "message": "兑换成功",
+        "code": invite.code,
+        "plan": invite.plan_key,
+        "material_mode": invite.material_mode,
+        "quota_limit": invite.quota_limit,
+        "quota_period": invite.quota_period,
+        "max_video_seconds": invite.max_video_seconds,
+    }
 
 
 class UsageStatsResponse(BaseModel):

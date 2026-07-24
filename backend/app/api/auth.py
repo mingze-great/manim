@@ -14,6 +14,7 @@ from app.database import get_db
 from app.config import get_settings
 from app.models.user import User, AuditLog
 from app.schemas.user import UserCreate, UserResponse, Token, ChangePasswordRequest
+from app.services.partner_program import get_partner_by_referral_code
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -166,6 +167,17 @@ async def get_current_admin_user(
     return current_user
 
 
+async def get_current_partner_user(
+    current_user: Annotated[User, Depends(get_current_user)]
+):
+    if current_user.is_admin or current_user.role == "partner":
+        return current_user
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Partner privileges required"
+    )
+
+
 @router.post("/register", response_model=UserResponse)
 def register(
     user_data: dict,
@@ -175,6 +187,7 @@ def register(
     username = user_data.get("username")
     phone = str(user_data.get("phone") or "").strip()
     password = user_data.get("password")
+    referral_code = str(user_data.get("referral_code") or user_data.get("referralCode") or user_data.get("ref") or "").strip()
     
     if not all([username, phone, password]):
         raise HTTPException(status_code=400, detail="缺少必填信息：用户名、手机号、密码")
@@ -197,12 +210,15 @@ def register(
         email = build_placeholder_email(str(username), phone + secrets.token_hex(2))
     
     hashed_password = get_password_hash(password)
+    partner = get_partner_by_referral_code(db, referral_code) if referral_code else None
     new_user = User(
         username=username,
         email=email,
         phone=phone,
         hashed_password=hashed_password,
-        is_approved=False
+        is_approved=False,
+        referred_by_partner_id=partner.id if partner else None,
+        referral_code=referral_code.upper() if partner else None,
     )
     db.add(new_user)
     db.commit()

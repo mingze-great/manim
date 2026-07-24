@@ -4,6 +4,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, File
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 import json
@@ -15,12 +16,14 @@ from app.models.project import Project, Conversation
 from app.models.article import Article
 from app.models.task import Task
 from app.models.subscription import Order, Subscription
+from app.models.partner import CommissionLedger, InviteCode, PartnerProfile, ReferralCode
 from app.models.favorite_topic import FavoriteTopic
 from app.models.user_module_permission import UserModulePermission
 from app.schemas.article import ArticleCategoryCreate, ArticleCategoryUpdate
 from app.schemas.user import UserResponse, UserUpdate, UserStats, AuditLogResponse, SystemStats, UserDetail, ProjectStatus, RecentProject, TaskLog, TokenUsageItem, TokenUsageResponse
 from app.api.auth import get_current_user, get_current_admin_user
 from app.config import get_settings
+from app.services.partner_program import ensure_referral_code, generate_invite_code
 import psutil
 from app.services.stickman_v2_assets import (
     save_background_templates,
@@ -58,6 +61,22 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 settings = get_settings()
 
 MODULE_KEYS = ["visual", "stickman_legacy", "stickman_v2", "explainer", "article"]
+
+
+class PartnerCreateRequest(BaseModel):
+    user_id: int
+    display_name: str
+    commission_rate_bps: int = 3000
+
+
+class InviteCodeCreateRequest(BaseModel):
+    partner_id: Optional[int] = None
+    plan_key: str = "basic"
+    material_mode: str = "material_only"
+    quota_limit: int = 30
+    quota_period: str = "daily"
+    max_video_seconds: int = 60
+    max_uses: int = 1
 
 
 def _normalize_module_permissions(payload: dict, user: User) -> dict:
@@ -124,6 +143,148 @@ def _normalize_visual_limit(limit: int):
     return normalized
 def _count_admin_users(users: list[User]) -> int:
     return sum(1 for user in users if bool(user.is_admin))
+
+
+@router.get("/partners")
+async def list_partners(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    partners = db.query(PartnerProfile).order_by(PartnerProfile.created_at.desc()).all()
+    return [
+        {
+            "id": partner.id,
+            "user_id": partner.user_id,
+            "display_name": partner.display_name,
+            "commission_rate_bps": partner.commission_rate_bps,
+            "status": partner.status,
+            "created_at": partner.created_at.isoformat() if partner.created_at else None,
+        }
+        for partner in partners
+    ]
+
+
+@router.post("/partners")
+async def create_partner(
+    payload: PartnerCreateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    user = db.query(User).filter(User.id == payload.user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    partner = db.query(PartnerProfile).filter(PartnerProfile.user_id == user.id).first()
+    if not partner:
+        partner = PartnerProfile(
+            user_id=user.id,
+            display_name=payload.display_name.strip() or user.username,
+            commission_rate_bps=payload.commission_rate_bps,
+            status="active",
+        )
+        db.add(partner)
+        db.flush()
+    else:
+        partner.display_name = payload.display_name.strip() or partner.display_name
+        partner.commission_rate_bps = payload.commission_rate_bps
+        partner.status = "active"
+    user.role = "partner"
+    user.is_approved = True
+    referral = ensure_referral_code(db, partner)
+    db.commit()
+    return {
+        "id": partner.id,
+        "user_id": user.id,
+        "display_name": partner.display_name,
+        "commission_rate_bps": partner.commission_rate_bps,
+        "referral_code": referral.code,
+    }
+
+
+@router.get("/referrals")
+async def list_referrals(
+    partner_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    query = db.query(User).filter(User.referred_by_partner_id.isnot(None))
+    if partner_id:
+        query = query.filter(User.referred_by_partner_id == partner_id)
+    users = query.order_by(User.created_at.desc()).limit(500).all()
+    return [
+        {
+            "id": user.id,
+            "username": user.username,
+            "phone": user.phone,
+            "partner_id": user.referred_by_partner_id,
+            "referral_code": user.referral_code,
+            "is_approved": user.is_approved,
+            "created_at": user.created_at.isoformat() if user.created_at else None,
+        }
+        for user in users
+    ]
+
+
+@router.get("/commissions")
+async def list_commissions(
+    partner_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    query = db.query(CommissionLedger)
+    if partner_id:
+        query = query.filter(CommissionLedger.partner_id == partner_id)
+    rows = query.order_by(CommissionLedger.created_at.desc()).limit(500).all()
+    return [
+        {
+            "id": row.id,
+            "partner_id": row.partner_id,
+            "user_id": row.user_id,
+            "order_id": row.order_id,
+            "amount": row.amount,
+            "commission_amount": row.commission_amount,
+            "status": row.status,
+            "source": row.source,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+        }
+        for row in rows
+    ]
+
+
+@router.post("/invite-codes")
+async def create_invite_code(
+    payload: InviteCodeCreateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    if payload.partner_id:
+        partner = db.query(PartnerProfile).filter(PartnerProfile.id == payload.partner_id).first()
+        if not partner:
+            raise HTTPException(status_code=404, detail="合作者不存在")
+    code = generate_invite_code("SC1")
+    while db.query(InviteCode).filter(InviteCode.code == code).first():
+        code = generate_invite_code("SC1")
+    invite = InviteCode(
+        code=code,
+        partner_id=payload.partner_id,
+        plan_key=payload.plan_key,
+        material_mode=payload.material_mode,
+        quota_limit=payload.quota_limit,
+        quota_period=payload.quota_period,
+        max_video_seconds=payload.max_video_seconds,
+        max_uses=payload.max_uses,
+        created_by_user_id=current_user.id,
+    )
+    db.add(invite)
+    db.commit()
+    db.refresh(invite)
+    return {
+        "id": invite.id,
+        "code": invite.code,
+        "partner_id": invite.partner_id,
+        "plan_key": invite.plan_key,
+        "material_mode": invite.material_mode,
+        "status": invite.status,
+    }
 
 
 @router.get("/available-models")
