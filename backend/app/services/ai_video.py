@@ -1391,7 +1391,17 @@ class AiVideoService:
             nonlocal provider, voice
             self._append_log(log_path, f"CosyVoice {label} provider={provider} voice={voice} text={synth_text[:80]}")
             if provider == "dayun_manbo":
-                return self._generate_dayun_manbo_audio(synth_text, output_path)
+                try:
+                    return self._generate_dayun_manbo_audio(synth_text, output_path)
+                except Exception as exc:
+                    fallback_voice = self._resolve_cosyvoice_voice(
+                        str(payload.get("voiceId") or project_json.get("voice", {}).get("speaker") or "中文女")
+                    )
+                    self._append_log(log_path, f"Dayun Manbo fallback to open-source CosyVoice {label} error={exc}")
+                    seconds_value = self._generate_open_source_cosyvoice_audio(synth_text, fallback_voice, output_path)
+                    voice = fallback_voice
+                    provider = "open_source_cosyvoice"
+                    return seconds_value
             if provider == "edge_tts":
                 return self._generate_edge_tts_audio(synth_text, voice, output_path)
             if provider == "dashscope_cosyvoice":

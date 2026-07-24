@@ -17,8 +17,11 @@
 - 当前部署前源提交：`4db089f2a8ea8cf6b61ec45b8fb4a710e3e6b84f`
 - 当前部署前源提交时间：`2026-07-25 00:04:13 +08:00`
 - 当前部署前源提交信息：`feat: add partner and stickman workflow UI`
-- 当前修复中提交基线：`51ccd96fcbb7d9028c5ee880a7423b38b3977e19`
-- 状态更新时间：`2026-07-25 00:36:44 +08:00`
+- 当前已部署提交：`8ef8e7628b61f65d16fc4b435ce41b2948bb5954`
+- 当前已部署提交时间：`2026-07-25T00:38:26+08:00`
+- 当前已部署提交信息：`fix: use render service urls for sc1 materials`
+- 当前待提交修复基线：`8ef8e7628b61f65d16fc4b435ce41b2948bb5954`
+- 状态更新时间：`2026-07-25 01:07:48 +08:00`
 
 ## 已完成
 - 已确认现有 3003 分支保持不动，3004 使用独立 git worktree。
@@ -68,10 +71,26 @@
   - `pytest backend/tests/test_ai_video_sc1_material_urls.py backend/tests/test_partner_models_import.py backend/tests/test_partner_program_service.py backend/tests/test_stickman_workflow_assets.py backend/tests/test_stickman_workflow_limits.py -q` 通过，结果 `8 passed`。
   - `python -m py_compile backend/app/services/ai_video.py backend/app/api/stickman_workflow.py backend/app/api/partner.py backend/app/api/admin.py backend/app/main.py` 通过。
   - `git diff --check` 通过，仅有 CRLF/LF 替换提示。
+- 已提交并部署 SC1 素材 URL 修复：`8ef8e7628b61f65d16fc4b435ce41b2948bb5954`（`fix: use render service urls for sc1 materials`）。
+- 3004 远程部署标记 `/opt/manim-v2-3004-snapshot/.deployed-ref` 已记录分支 `codex/3004-partner-stickman-platform-20260724`、提交 `8ef8e7628b61f65d16fc4b435ce41b2948bb5954`、部署时间 `2026-07-25 00:40:50 +0800`。
+- 已验证 3004 后端、worker、Remotion 渲染服务均为 active；`http://127.0.0.1:8004/health` 和 `http://127.0.0.1:18788/api/health` 正常。
+- 已定位并处理 3004 登录 500 的环境问题：远程根分区 40G 已满，SQLite 写入审计日志失败，报错 `sqlite3.OperationalError: database or disk is full`。
+- 已仅清理可再生临时文件和日志：`/tmp/3003-deploy-worktree.tar.gz`、`/tmp/sc1-outputs-20260713_233032.tar.gz`、`/tmp/manim-v2-3004-snapshot-*.tar`、`/tmp/remotion-webpack-bundle-*`、`/root/.npm/_cacache`、`/root/.cache/whisper`，并将 journal vacuum 到约 200M；未修改、重启或删除 3003 部署代码。
+- 清理后远程根分区恢复到约 1.2G 可用，3004 登录和 `/api/stickman-workflow/config` 恢复 200。
+- 已创建 3004 平台验证任务 `job_5`，标题为“为什么你越想证明自己，越容易陷入内耗”，使用 `dayun_manbo` 声音和 `sc1_outputs` 素材库。
+- `job_5` 失败根因已定位：Dayun Manbo TTS 接口返回 `HTTP Error 429: Too Many Requests`，任务在 `tts_generating` 阶段失败。
+- 当前待提交修复：`backend/app/services/ai_video.py` 在 `dayun_manbo` provider 遇到请求失败/限流时，自动降级到现有开源 CosyVoice zero-shot 参考音色路径继续生成音频，不再让整条任务失败。
+- 已新增回归测试：`backend/tests/test_ai_video_sc1_material_urls.py::test_dayun_manbo_tts_rate_limit_falls_back_to_open_source_cosyvoice`。
+- 当前待提交修复已通过本地验证：
+  - `PYTHONPATH=backend pytest backend/tests/test_ai_video_sc1_material_urls.py backend/tests/test_partner_models_import.py backend/tests/test_partner_program_service.py backend/tests/test_stickman_workflow_assets.py backend/tests/test_stickman_workflow_limits.py -q` 通过，结果 `9 passed`，仅有本地 ffmpeg path warning。
+  - `python -m py_compile backend/app/services/ai_video.py backend/app/api/stickman_workflow.py backend/app/api/partner.py backend/app/api/admin.py backend/app/main.py` 通过。
+  - `git diff --check` 通过。
 
 ## 当前问题
-- 3004 已部署，但第一次完整生成验证 `job_1` 因 SC1 素材 URL 解析错误失败；需要提交当前修复、重新部署 3004 并重新生成验证任务。
-- 3004 还没有完成“成功成片 + 下载 MP4 + 音视频流检查”的最终验收。
+- 3004 已部署到素材 URL 修复提交 `8ef8e7628b61f65d16fc4b435ce41b2948bb5954`，但新验证任务 `job_5` 因 Dayun Manbo TTS 429 限流失败。
+- Dayun 429 fallback 修复已本地验证通过，下一步需要提交、归档部署到 3004，并重新创建平台验证任务。
+- 3004 还没有完成“成功成片 + 下载 MP4 + 音视频流检查 + 抽帧确认”的最终验收。
+- 远程磁盘空间仍偏紧（清理后约 1.2G 可用），若 Remotion 渲染再次因空间不足失败，需要优先清理 3004 可再生构建缓存或旧备份，仍不能影响 3003 运行数据。
 - 参考图生成完整素材库的“两张样图确认 -> 批量生成”能力仍属于第二阶段，当前 MVP 先交付上传 zip 和选择素材库。
 
 ## 最近修改文件
@@ -126,6 +145,7 @@
 - 自定义文案和选择视频时长互斥：用户输入文案时由文案和 TTS 估算/校准时长；用户选择时长时只能 AI 生成文案。
 - 套餐能力区分素材库模式和实时生图模式；素材库模式下实时生图能力对用户透明且不可见。
 - 后台素材库生成采用“两张样图确认 -> 批量生成完整素材库 -> 生成 material.json -> 后台启用”的流程。
+- Dayun Manbo 是默认参考音色；如果 Dayun 接口 429 或不可用，3004 生成链路允许透明降级到现有开源 CosyVoice zero-shot 参考音色路径，优先保证平台一键成片完成。
 
 ## 不要重复做
 - 不要把 `/admin/stickman-v2/scene-style-libraries` 当作 `/stickman-workflow` 的后台素材库上传。
@@ -135,7 +155,7 @@
 - 不要在未更新 `PROJECT_STATE.md` 的情况下进行远程同步、部署或上下文交接。
 
 ## 下一步
-1. 提交 SC1 素材 URL 修复和本状态记录。
+1. 提交 Dayun 429 fallback 修复和本状态记录。
 2. 通过归档快照重新同步并仅重启 3004 服务。
 3. 重新创建 3004 `/stickman-workflow` 标题生成任务。
-4. 下载成功 MP4，使用 ffmpeg/ffprobe 检查音频流和视频流，并记录 job id、输出路径、验证结论。
+4. 下载成功 MP4，使用 ffmpeg/ffprobe 检查音频流和视频流，抽取关键帧确认场景图、字幕、总结和标签布局，并记录 job id、输出路径、验证结论。

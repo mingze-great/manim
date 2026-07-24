@@ -1,6 +1,7 @@
 import os
 import sys
 import types
+import wave
 
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 
@@ -39,3 +40,43 @@ def test_prepare_sc1_materials_uses_render_service_public_url(tmp_path, monkeypa
 
     assert (render_material_root / "sample.png").exists()
     assert scenes[0]["assetImages"][0]["src"] == "http://127.0.0.1:18788/sc1-materials/sample.png"
+
+
+def test_dayun_manbo_tts_rate_limit_falls_back_to_open_source_cosyvoice(tmp_path, monkeypatch):
+    service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
+    service.render_audio_root = tmp_path / "render-audio"
+    service.render_service_url = "http://127.0.0.1:18787"
+    service.cosyvoice_sample_rate = 22050
+    service._append_log = lambda *_args, **_kwargs: None
+    service._resolve_cosyvoice_voice = lambda _voice: "中文女"
+
+    def fail_dayun(_text, _output_path):
+        raise RuntimeError("Dayun Manbo TTS request failed: HTTP Error 429: Too Many Requests")
+
+    fallback_calls = []
+
+    def fallback_open_source(text, _voice, output_path):
+        fallback_calls.append((text, _voice))
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with wave.open(str(output_path), "wb") as wav:
+            wav.setnchannels(1)
+            wav.setsampwidth(2)
+            wav.setframerate(22050)
+            wav.writeframes(b"\x01\x00" * 22050)
+        return 1.0
+
+    monkeypatch.setattr(service, "_generate_dayun_manbo_audio", fail_dayun)
+    monkeypatch.setattr(service, "_generate_open_source_cosyvoice_audio", fallback_open_source)
+
+    project_json = {"scenes": [{"voiceText": "先别急着证明自己", "duration": 1.2}]}
+    audio_scenes = service._generate_cosyvoice_audio(
+        project_json,
+        tmp_path / "job_42",
+        None,
+        {"voiceProvider": "dayun_manbo", "voiceId": "dayun_manbo"},
+    )
+
+    assert fallback_calls == [("先别急着证明自己", "中文女")]
+    assert audio_scenes[0]["provider"] == "open_source_cosyvoice"
+    assert audio_scenes[0]["src"] == "http://127.0.0.1:18787/generated-audio/job_42/scene-01.wav"
+    assert (tmp_path / "job_42" / "audio" / "scene-01.wav").exists()
