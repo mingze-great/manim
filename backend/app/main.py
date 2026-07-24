@@ -27,6 +27,7 @@ async def lifespan(app: FastAPI):
     from app.models.template import Template
     from app.models.user import User
     from app.models.subscription import Order, Subscription
+    from app.models.partner import CommissionLedger, InviteCode, PartnerProfile, ReferralCode
     
     Base.metadata.create_all(bind=engine)
     
@@ -170,6 +171,37 @@ async def lifespan(app: FastAPI):
             conn.execute(text("ALTER TABLE users ADD COLUMN phone VARCHAR(20)"))
             conn.commit()
             print("Added phone column to users")
+        if 'role' not in user_columns:
+            conn.execute(text("ALTER TABLE users ADD COLUMN role VARCHAR(20) DEFAULT 'user'"))
+            conn.commit()
+            print("Added role column to users")
+        if 'referred_by_partner_id' not in user_columns:
+            conn.execute(text("ALTER TABLE users ADD COLUMN referred_by_partner_id INTEGER"))
+            conn.commit()
+            print("Added referred_by_partner_id column to users")
+        if 'referral_code' not in user_columns:
+            conn.execute(text("ALTER TABLE users ADD COLUMN referral_code VARCHAR(40)"))
+            conn.commit()
+            print("Added referral_code column to users")
+
+        result = conn.execute(text("PRAGMA table_info(orders)"))
+        order_columns = [row[1] for row in result.fetchall()]
+        if 'partner_id' not in order_columns:
+            conn.execute(text("ALTER TABLE orders ADD COLUMN partner_id INTEGER"))
+            conn.commit()
+            print("Added partner_id column to orders")
+        if 'referral_code' not in order_columns:
+            conn.execute(text("ALTER TABLE orders ADD COLUMN referral_code VARCHAR(40)"))
+            conn.commit()
+            print("Added referral_code column to orders")
+        if 'commission_amount' not in order_columns:
+            conn.execute(text("ALTER TABLE orders ADD COLUMN commission_amount INTEGER DEFAULT 0"))
+            conn.commit()
+            print("Added commission_amount column to orders")
+        if 'commission_status' not in order_columns:
+            conn.execute(text("ALTER TABLE orders ADD COLUMN commission_status VARCHAR(20) DEFAULT 'none'"))
+            conn.commit()
+            print("Added commission_status column to orders")
 
         if 'generation_mode' not in project_columns:
             conn.execute(text("ALTER TABLE projects ADD COLUMN generation_mode VARCHAR(20) DEFAULT 'one_click'"))

@@ -16,6 +16,10 @@ class Order(Base):
     
     plan = Column(String(32), nullable=False)  # free, basic, pro, enterprise
     amount = Column(Integer, nullable=False)  # 金额，单位：分
+    partner_id = Column(Integer, ForeignKey("partner_profiles.id"), nullable=True, index=True)
+    referral_code = Column(String(40), nullable=True, index=True)
+    commission_amount = Column(Integer, default=0, nullable=False)
+    commission_status = Column(String(20), default="none", nullable=False)
     
     status = Column(String(32), default="pending")  # pending, paid, cancelled, refunded
     

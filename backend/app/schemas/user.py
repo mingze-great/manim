@@ -33,6 +33,9 @@ class UserResponse(UserBase):
     id: int
     is_active: bool
     is_admin: bool = False
+    role: str = "user"
+    referred_by_partner_id: Optional[int] = None
+    referral_code: Optional[str] = None
     frontend_version: str = "legacy"
     is_approved: bool = True
     expires_at: Optional[datetime] = None
@@ -145,6 +148,9 @@ class UserDetail(BaseModel):
     phone: Optional[str] = None
     is_active: bool
     is_admin: bool = False
+    role: str = "user"
+    referred_by_partner_id: Optional[int] = None
+    referral_code: Optional[str] = None
     frontend_version: str = "legacy"
     is_approved: bool = True
     expires_at: Optional[datetime] = None

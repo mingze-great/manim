@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, Date
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, Date, ForeignKey
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import json
@@ -15,6 +15,9 @@ class User(Base):
     hashed_password = Column(String(255), nullable=False)
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
+    role = Column(String(20), default="user", nullable=False, comment="账号角色: user/partner/admin")
+    referred_by_partner_id = Column(Integer, ForeignKey("partner_profiles.id"), nullable=True, index=True)
+    referral_code = Column(String(40), nullable=True, index=True)
     frontend_version = Column(String(20), default="legacy", nullable=False, comment="前端版本: legacy/v2")
     is_approved = Column(Boolean, default=False, comment="是否审核通过")
     expires_at = Column(DateTime, nullable=True, comment="账号有效期")
@@ -227,6 +230,9 @@ class User(Base):
             "phone": self.phone,
             "is_active": self.is_active,
             "is_admin": self.is_admin,
+            "role": self.role or ("admin" if self.is_admin else "user"),
+            "referred_by_partner_id": self.referred_by_partner_id,
+            "referral_code": self.referral_code,
             "frontend_version": self.frontend_version,
             "is_approved": self.is_approved,
             "expires_at": self.expires_at.isoformat() if self.expires_at else None,

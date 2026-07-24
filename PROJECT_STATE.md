@@ -14,7 +14,7 @@
 - 3004 目标后端端口：`8004`
 - 3004 目标 Remotion 渲染端口：`18788`
 - 3004 目标 Celery 队列：`manim_v2_3004`
-- 状态更新时间：`2026-07-24 23:15:00 +08:00`
+- 状态更新时间：`2026-07-24 23:26:00 +08:00`
 
 ## 已完成
 - 已确认现有 3003 分支保持不动，3004 使用独立 git worktree。
@@ -24,6 +24,10 @@
 - 已决定新增 `stickman-workflow` 专用素材库管理，不混用 `stickman_v2` 配置。
 - 已完成新 worktree 基线检查：`python -m py_compile backend/app/api/stickman_workflow.py backend/app/services/stickman_v2_assets.py backend/app/models/user.py backend/app/models/subscription.py` 通过，`git diff --check` 通过。
 - 已新增 3004 专用 nginx、systemd、环境示例和部署脚本，目标路径和服务均指向 3004。
+- 已新增合作者、推荐码、邀请码和佣金台账基础模型。
+- 已扩展用户和订单模型，支持推荐归因与佣金状态。
+- 已为新增用户/订单字段补充启动迁移逻辑。
+- 已通过 TDD 验证：`pytest backend/tests/test_partner_models_import.py -q` 通过。
 
 ## 当前问题
 - 还没有实现 3004 部署配置、合作者分佣、邀请码开通、火柴人高级参数、专用素材库上传或平台验证。
@@ -41,6 +45,13 @@
 - `deploy/env.backend.3004.example`
 - `deploy/env.frontend.3004.example`
 - `deploy/deploy-v2-3004.sh`
+- `backend/app/models/partner.py`
+- `backend/app/models/user.py`
+- `backend/app/models/subscription.py`
+- `backend/app/models/__init__.py`
+- `backend/app/schemas/user.py`
+- `backend/app/main.py`
+- `backend/tests/test_partner_models_import.py`
 
 ## 重要技术决策
 - 3004 必须隔离部署，不能修改或重启现有 3003 服务。
@@ -59,6 +70,6 @@
 - 不要在未更新 `PROJECT_STATE.md` 的情况下进行远程同步、部署或上下文交接。
 
 ## 下一步
-1. 验证并提交 3004 隔离部署配置。
-2. 开始实现合作者、邀请码和佣金基础模型。
+1. 提交合作者、邀请码和佣金基础模型。
+2. 开始实现合作者工作台 API、后台 partner API 和兑换码开通接口。
 3. 按计划实现并验证，最后部署到 3004。
