@@ -17,7 +17,8 @@
 - 当前部署前源提交：`4db089f2a8ea8cf6b61ec45b8fb4a710e3e6b84f`
 - 当前部署前源提交时间：`2026-07-25 00:04:13 +08:00`
 - 当前部署前源提交信息：`feat: add partner and stickman workflow UI`
-- 状态更新时间：`2026-07-25 00:05:36 +08:00`
+- 当前修复中提交基线：`51ccd96fcbb7d9028c5ee880a7423b38b3977e19`
+- 状态更新时间：`2026-07-25 00:36:44 +08:00`
 
 ## 已完成
 - 已确认现有 3003 分支保持不动，3004 使用独立 git worktree。
@@ -55,10 +56,22 @@
   - `git diff --check` 通过，仅有 CRLF/LF 替换提示。
 - 已提交前端阶段：`4db089f2a8ea8cf6b61ec45b8fb4a710e3e6b84f`（`feat: add partner and stickman workflow UI`）。
 - 部署前准备：下一步推送 `codex/3004-partner-stickman-platform-20260724` 到远程，并执行 3004 专用部署脚本。
+- 已提交部署前状态记录：`51ccd96fcbb7d9028c5ee880a7423b38b3977e19`（`docs: record 3004 deployment preflight`）。
+- 已通过归档快照方式部署到 `/opt/manim-v2-3004-snapshot`，部署标记文件 `.deployed-ref` 记录分支 `codex/3004-partner-stickman-platform-20260724` 和提交 `51ccd96fcbb7d9028c5ee880a7423b38b3977e19`。
+- 已验证 3004 三个服务 active：`manim-v2-3004-backend.service`、`manim-v2-3004-worker.service`、`manim-v2-3004-ai-video-render.service`；`http://127.0.0.1:8004/health` 返回 healthy；`http://127.0.0.1:3004/` 返回 200。
+- 已验证 3003 前端仍返回 200，3003 backend/worker active；3003 render 服务当时为 `activating`，未修改或重启 3003。
+- 已创建 3004 平台验证任务 `job_1`，标题为“为什么你越想证明自己，越容易陷入内耗”。
+- `job_1` 失败根因已定位：SC1 场景图传给 Remotion 的 URL 为相对 `/sc1-materials/...`，被 Remotion 解析为 `http://localhost:3000/public/sc1-materials/...`，导致渲染取图失败。
+- 当前修复：`backend/app/services/ai_video.py` 改为用 `SC1_MATERIAL_PUBLIC_BASE_URL` 生成绝对素材 URL，并让默认值跟随 `AI_VIDEO_RENDER_SERVICE_URL`；3004 backend/worker service 显式设置到 `http://127.0.0.1:18788`。
+- 当前修复已通过本地验证：
+  - 新增回归测试 `backend/tests/test_ai_video_sc1_material_urls.py`，先复现失败，再修复通过。
+  - `pytest backend/tests/test_ai_video_sc1_material_urls.py backend/tests/test_partner_models_import.py backend/tests/test_partner_program_service.py backend/tests/test_stickman_workflow_assets.py backend/tests/test_stickman_workflow_limits.py -q` 通过，结果 `8 passed`。
+  - `python -m py_compile backend/app/services/ai_video.py backend/app/api/stickman_workflow.py backend/app/api/partner.py backend/app/api/admin.py backend/app/main.py` 通过。
+  - `git diff --check` 通过，仅有 CRLF/LF 替换提示。
 
 ## 当前问题
-- 还没有远程部署 3004。
-- 还没有 3004 平台生成任务验证。
+- 3004 已部署，但第一次完整生成验证 `job_1` 因 SC1 素材 URL 解析错误失败；需要提交当前修复、重新部署 3004 并重新生成验证任务。
+- 3004 还没有完成“成功成片 + 下载 MP4 + 音视频流检查”的最终验收。
 - 参考图生成完整素材库的“两张样图确认 -> 批量生成”能力仍属于第二阶段，当前 MVP 先交付上传 zip 和选择素材库。
 
 ## 最近修改文件
@@ -102,6 +115,8 @@
 - `frontend/src/pages/admin/AdminStickmanWorkflowLibraries.tsx`
 - `frontend/src/pages/StickmanWorkflow/index.tsx`
 - `frontend/src/pages/StickmanWorkflow/StickmanWorkflow.css`
+- `backend/app/services/ai_video.py`
+- `backend/tests/test_ai_video_sc1_material_urls.py`
 
 ## 重要技术决策
 - 3004 必须隔离部署，不能修改或重启现有 3003 服务。
@@ -120,7 +135,7 @@
 - 不要在未更新 `PROJECT_STATE.md` 的情况下进行远程同步、部署或上下文交接。
 
 ## 下一步
-1. 提交本文件的部署前状态记录。
-2. 推送 `codex/3004-partner-stickman-platform-20260724` 到远程。
-3. 仅部署到 3004：`/opt/manim-v2-3004-snapshot`，前端 `3004`，后端 `8004`，渲染服务 `18788`，不重启或覆盖 3003。
-4. 验证 3004 服务状态、3003 仍可用、`/stickman-workflow` 可创建任务，并记录 job id、输出 MP4、音视频流检查结果。
+1. 提交 SC1 素材 URL 修复和本状态记录。
+2. 通过归档快照重新同步并仅重启 3004 服务。
+3. 重新创建 3004 `/stickman-workflow` 标题生成任务。
+4. 下载成功 MP4，使用 ffmpeg/ffprobe 检查音频流和视频流，并记录 job id、输出路径、验证结论。

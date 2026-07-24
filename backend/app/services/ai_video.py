@@ -40,7 +40,8 @@ STAGE_MESSAGES = {
 ACTIVE_JOB_STATUSES = {"pending", "scripting", "scene_planning", "tts_generating", "audio_processing", "rendering", "uploading"}
 AI_VIDEO_STORAGE_ROOT = Path(os.getenv("AI_VIDEO_STORAGE_ROOT", Path(__file__).resolve().parents[2] / "storage" / "ai-video" / "tasks")).resolve()
 REPO_ROOT = Path(__file__).resolve().parents[3]
-SC1_MATERIAL_PUBLIC_BASE_URL = os.getenv("SC1_MATERIAL_PUBLIC_BASE_URL", "http://127.0.0.1:18787/sc1-materials").rstrip("/")
+SC1_RENDER_SERVICE_URL = os.getenv("AI_VIDEO_RENDER_SERVICE_URL", "http://127.0.0.1:18787").rstrip("/")
+SC1_MATERIAL_PUBLIC_BASE_URL = os.getenv("SC1_MATERIAL_PUBLIC_BASE_URL", f"{SC1_RENDER_SERVICE_URL}/sc1-materials").rstrip("/")
 SC1_MATERIAL_IMAGE_COUNT = int(os.getenv("SC1_MATERIAL_IMAGE_COUNT", "56"))
 default_sc1_material_library_path = (
     r"E:\ai\火柴人工作流\outputs"
@@ -1860,7 +1861,7 @@ class AiVideoService:
                                 rgba.save(target)
                     except Exception:
                         shutil.copyfile(source, target)
-                image["src"] = f"/sc1-materials/{file_name}"
+                image["src"] = f"{SC1_MATERIAL_PUBLIC_BASE_URL}/{file_name}"
         return target_dir
 
     def _scene_for_render(self, scene: dict[str, Any]) -> dict[str, Any]:

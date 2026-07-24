@@ -10,6 +10,8 @@ ExecStart=/root/miniconda3/envs/manim311/bin/python3.11 -m uvicorn app.main:app 
 Restart=always
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1
+Environment=AI_VIDEO_RENDER_SERVICE_URL=http://127.0.0.1:18788
+Environment=SC1_MATERIAL_PUBLIC_BASE_URL=http://127.0.0.1:18788/sc1-materials
 
 [Install]
 WantedBy=multi-user.target
