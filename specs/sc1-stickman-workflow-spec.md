@@ -1,108 +1,109 @@
-# SC1 Psychology Stickman Workflow Spec
+# SC1 心理学火柴人工作流规格
 
-## Goal
-The 3003 platform must support one-click generation of SC1 psychology stickman videos. A user enters a topic and receives a finished video that matches the reference style closely enough for creator collaboration and promotion.
+## 目标
+3003 平台必须支持一键生成 SC1 心理学火柴人成片。用户输入一个主题后，应得到一条足够贴近参考视频、可用于博主合作推广的完整视频。
 
-## Reference
-- Reference video: `E:\ai\火柴人工作流\SC1全赛道高级版火柴人\20250901-10a36ef4-5593-478f-a2f6-5b28301f4a7e.mov`
-- Local material library: `E:\ai\火柴人工作流\outputs`
-- Remote material library: `/opt/manim_assets/sc1-outputs`
-- Remote platform: `http://152.136.218.74:3003`
-- Remote deploy root: `/opt/manim-v2-3003-snapshot`
+## 参考资产
+- 参考视频：`E:\ai\火柴人工作流\SC1全赛道高级版火柴人\20250901-10a36ef4-5593-478f-a2f6-5b28301f4a7e.mov`
+- 本地素材库：`E:\ai\火柴人工作流\outputs`
+- 远程素材库：`/opt/manim_assets/sc1-outputs`
+- 远程平台：`http://152.136.218.74:3003`
+- 远程部署目录：`/opt/manim-v2-3003-snapshot`
 
-## User Flow
-1. User opens the 3003 platform.
-2. User enters a topic.
-3. User optionally selects voice and material library.
-4. Platform generates a reference-style viral script from the topic.
-5. Platform splits the script into semantic segments and caption cues.
-6. Platform matches each segment to SC1 material-library images.
-7. Platform synthesizes emotional continuous narration.
-8. Platform renders the finished video.
-9. Platform shows detailed progress throughout generation.
-10. Platform returns a playable MP4 and cover.
+## 用户流程
+1. 用户打开 3003 平台。
+2. 用户输入主题。
+3. 用户可选择声音和素材库。
+4. 平台根据主题生成参考风格爆款文案。
+5. 平台把文案拆成语义分段和字幕 cue。
+6. 平台根据语义分段匹配 SC1 素材库图片。
+7. 平台生成连续、有情绪的配音。
+8. 平台渲染最终视频。
+9. 平台展示清晰的生成进度。
+10. 平台返回可播放 MP4 和封面。
 
-## Pipeline Requirements
+## 生成链路要求
 
-### Script Generation
-- Generate punchy psychology-style copy based on the topic.
-- The copy should feel close to the reference video: direct, emotional, and insight-driven.
-- Avoid placeholder-only scenes such as `?`.
-- Preserve enough script detail for all narration to appear in subtitles.
+### 文案生成
+- 根据主题生成直接、有情绪、有洞察感的心理学口播文案。
+- 文案风格要贴近参考视频，而不是普通科普。
+- 不允许出现只有 `?` 的占位场景。
+- 所有旁白内容必须能通过字幕完整展示。
 
-### Semantic Segmentation
-- Segment by meaning, not blindly one scene per sentence.
-- One semantic segment may contain 1-3 caption cues.
-- A segment may reuse one scene image across 2-3 related caption cues.
-- No semantic segment should exceed 3 cues.
-- Subtitles still change cue-by-cue even when the scene image stays the same.
+### 语义分段
+- 按语义分段，不按句子机械切分。
+- 一个语义分段包含 1-3 个字幕 cue。
+- 2-3 个语义相近的 cue 可以共用一张场景图。
+- 单个语义分段不能超过 3 个 cue。
+- 即使共用同一张场景图，字幕仍必须逐 cue 变化。
 
-### Material Matching
-- Use one centered scene image only.
-- Use the SC1 material library, not unrelated generated placeholders, unless the selected mode explicitly requests live image generation.
-- Match material by semantic meaning of the segment.
-- Penalize materials that are half-cut, bottom-clipped, too close-up, or visually likely to look blocked.
-- Remove white backgrounds and repack foregrounds into transparent canvases before rendering.
+### 素材匹配
+- 同一时间只使用一张居中场景图。
+- 默认使用 SC1 素材库，不使用无关占位图。
+- 除非用户选择实时生成图片模式，否则不要跳过素材库。
+- 按语义匹配素材，而不是只按文件顺序。
+- 降低半截、贴底、过度近景、容易被误认为遮挡的素材优先级。
+- 渲染前要清理白底，并把前景重新放入透明画布。
 
-### Layout
-- Background is stable white paper style.
-- Left-top title stays stable and must not flicker.
-- Right-top label is `心理分享 | 认知突破`.
-- No `@Sc1火柴人` watermark.
-- Scene image stays centered, fully visible, and proportionally smaller than the subtitle area.
-- The scene image must not be blocked by the horizontal floor line, subtitle area, masks, panels, or preview crop.
-- Scene image entrance should use subtle varied slide/rise effects.
-- Do not continuously zoom the scene image after it appears.
+### 版式
+- 背景保持稳定白纸风格。
+- 左上标题稳定，不闪烁。
+- 右上角固定文案：`心理分享 | 认知突破`。
+- 禁止出现 `@Sc1火柴人`。
+- 场景图居中、完整、尺寸适中。
+- 场景图不能被横线、字幕区、遮罩、面板或预览裁切挡住。
+- 场景图入场使用轻微滑入、上浮等变化，不要僵硬硬切。
+- 场景图出现后不能持续缩放。
 
-### Subtitles
-- Chinese subtitles are centered.
-- Chinese subtitle cue endings should remove final punctuation.
-- English subtitle, when present, follows the same cue timing.
-- Subtitles must cover the full narration.
-- Subtitles must not lag behind the audio because of TTS silence or scene-level averaging.
+### 字幕
+- 中文字幕居中。
+- 中文字幕 cue 末尾去掉句号、逗号、问号、感叹号等收尾标点。
+- 英文字幕如存在，必须跟同一 cue 时间线一致。
+- 字幕必须覆盖完整旁白。
+- 字幕不能因为 TTS 静音或场景平均分配而明显晚于音频。
 
-### Summary Keywords
-- Summary keywords are emotional Chinese labels, usually 2-4 characters.
-- They should summarize the currently spoken cue, not copy a substring from it.
-- Examples: `内耗`, `别急`, `警报`, `边界`, `自责`, `先看`, `结论`.
-- Keywords appear one by one as their cue starts.
-- Previous keywords remain visible until the current semantic segment ends.
-- Keywords clear together when the segment changes.
-- Layout may reveal keywords top-to-bottom, left-to-right, or around the scene image, but the composition must stay balanced and readable.
+### 方框总结关键词
+- 总结关键词一般为 2-4 个中文字符。
+- 总结的是当前正在说的 cue，不是截取字幕长句。
+- 关键词要有情绪共鸣，例如：`内耗`、`别急`、`警报`、`边界`、`自责`、`先看`、`结论`。
+- 每个关键词在对应 cue 开始时依次出现。
+- 同一语义分段内，前面出现过的关键词继续保留。
+- 语义分段结束时，该段关键词一起消失。
+- 展开方式可从上到下、从左到右，或围绕场景图分布，但画面必须均衡。
 
-### Voice And Audio
-- Default/reference voice is `dayun_manbo` unless the user selects another voice.
-- Audio should be continuous and emotional, not choppy.
-- Cue-level TTS audio should be trimmed for excessive leading/trailing silence before concatenation.
-- Cue timing must drive audio, subtitle, English subtitle, scene image, and summary keyword sync.
-- The final MP4 must contain an audio stream.
+### 声音与音频
+- 默认参考音色为 `dayun_manbo`，除非用户选择其他声音。
+- 配音要连续、有情绪，不能像机械拼接。
+- 多 cue TTS 拼接前要裁掉过长头尾静音。
+- cue 时间线必须驱动音频、中文字幕、英文字幕、场景图和总结关键词。
+- 最终 MP4 必须包含音频流。
 
-### Progress UX
-- Progress should expose meaningful stages: script understanding, scene planning, material matching, TTS generation, audio processing, rendering, saving, completed.
-- The platform should not stay on a vague progress state when a more precise stage is known.
-- Failure messages should name the failed provider or stage, such as TTS, render service, network, or material lookup.
+### 进度体验
+- 进度要展示有意义的阶段：理解文案、拆分场景、匹配素材、生成配音、处理音频、渲染视频、保存结果、生成完成。
+- 不要长时间停在模糊进度。
+- 失败信息要说明失败阶段，例如 TTS、渲染服务、网络、素材查找。
 
-## Acceptance Criteria
-- A new platform job completes from topic-only input.
-- The result is an MP4 with video and audio streams.
-- Representative extracted frames show the scene image fully visible.
-- Subtitle text changes at every cue and covers the complete narration.
-- Cue timeline shows audio frames and caption frames aligned.
-- Summary keywords reveal cumulatively within each segment.
-- Right-top label is visible.
-- No `@Sc1火柴人` watermark appears.
-- Material source is the configured SC1 library.
-- `PROJECT_STATE.md` records branch, commit, deploy root, validation job id, and output path before any remote sync or handoff.
+## 验收标准
+- 只输入主题即可创建并完成平台任务。
+- 输出为包含视频流和音频流的 MP4。
+- 抽帧能看到场景图完整展示。
+- 字幕逐 cue 变化，覆盖完整旁白。
+- cue 时间线显示音频帧和字幕帧对齐。
+- 总结关键词在分段内依次累计展示。
+- 右上角标签可见。
+- 无 `@Sc1火柴人` 水印。
+- 素材来源为配置的 SC1 素材库。
+- 远程同步或交接前，`PROJECT_STATE.md` 记录分支、提交、部署目录、验证 job id 和输出路径。
 
-## Validation Commands
-Use equivalent commands if paths differ.
+## 验证命令
+路径不同时可用等价命令。
 
 ```powershell
 python -m py_compile backend/app/services/ai_video.py
 git diff --check
 ```
 
-Create a platform job through `http://152.136.218.74:3003`, download the output MP4, then inspect:
+通过 `http://152.136.218.74:3003` 创建平台任务，下载 MP4 后检查：
 
 ```powershell
 $ff='E:\anaconda3\Lib\site-packages\imageio_ffmpeg\binaries\ffmpeg-win-x86_64-v7.1.exe'

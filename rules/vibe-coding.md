@@ -1,57 +1,70 @@
-# Vibe Coding Rules
+# Vibe Coding 过程约束
 
-## Purpose
-These rules keep fast AI-assisted development useful without letting the project drift. The goal is to move quickly while preserving reproducibility, deploy safety, and the SC1 reference-video quality bar.
+## 目标
+允许快速用 AI 协作开发，但不允许项目失控。每次改动都必须可追溯、可验证、可回滚，并继续贴近 SC1 参考视频。
 
-## Read Before Editing
-- Read `AGENTS.md` and `PROJECT_STATE.md` at the start of a new context.
-- Search for existing implementation before creating a new module.
-- Prefer modifying the current workflow over building parallel one-off scripts.
-- Treat existing user-approved requirements as source of truth, especially video layout, timing, material library, and deployment branch.
+## 编码前必须做
+- 读取 `AGENTS.md`、`PROJECT_STATE.md`、`rules/quality-gates.md`、`rules/skill-usage.md`。
+- 如果是产品行为、成片效果或生成链路变化，同时读取 `specs/sc1-stickman-workflow-spec.md`。
+- 先搜索现有实现，再决定修改位置。
+- 优先修现有平台链路，不新增一次性脚本替代平台能力。
+- 明确本次变更属于哪一类：文档、前端、后端、TTS、Remotion、部署、验证。
 
-## State Discipline
-- Update `PROJECT_STATE.md` before remote sync, deployment, or context handoff.
-- Record branch, commit, remote deploy root, changed files, validation job id, output file path, and next steps.
-- Never rely on chat memory alone for project state.
-- If a context is about to be compressed, summarize the current task, completed work, current problem, changed files, next action, decisions, and do-not-repeat items into `PROJECT_STATE.md`.
+## 状态管理
+- 不依赖聊天上下文保存项目记忆。
+- 远程同步、部署、上下文压缩或交接前，必须更新 `PROJECT_STATE.md`。
+- `PROJECT_STATE.md` 至少记录：
+  - 当前任务
+  - 已完成内容
+  - 当前问题
+  - 最近修改文件
+  - 下一步计划
+  - 重要技术决策
+  - 不要重复做的事情
+  - 当前分支、提交、部署目录、验证 job id 和输出路径
 
-## Change Scope
-- Make the smallest change that fixes the observed issue.
-- Do not rewrite the workflow when a localized backend, frontend, or Remotion patch is sufficient.
-- Do not touch generated media, storage folders, build caches, or deployment archives unless the task explicitly requires it.
-- Do not commit secrets, tokens, passwords, `.env` secrets, or transient generated files.
-- Do not mask video defects with hardcoded fallback zeros, placeholder text, or fake success states.
+## 改动范围
+- 优先做最小修复。
+- 不为一个局部问题重写整条工作流。
+- 不新增重复的“临时生成流程”来绕过平台。
+- 不提交密钥、token、密码、`.env` 私密配置、上传文件、缓存、生成媒体或部署压缩包。
+- 不用硬编码兜底假装成功。
+- 不用占位文案、空字幕、静音音频或伪造状态掩盖问题。
 
-## Video Quality Rules
-- Validate video behavior with actual rendered frames.
-- Use the platform full flow for final validation whenever the user asks whether 3003 is usable.
-- Confirm subtitles, audio, scene image, and summary keywords share the same cue timeline.
-- Check first, middle, last, and previously failing cue boundaries.
-- Confirm the scene image is centered, fully visible, and not visually blocked by white background remnants, floor lines, subtitle panels, or preview crop.
-- Confirm summary keywords are emotional 2-4 character labels and are not repeated subtitle fragments.
+## 视频质量约束
+- 最终判断必须看实际成片或抽帧。
+- 用户问“平台是否可用”时，必须尽量通过 3003 平台完整生成验证。
+- 检查首段、中段、尾段和之前失败过的 cue 边界。
+- 检查音频、中文字幕、英文字幕、场景图、总结关键词是否共用同一套 cue 时间线。
+- 检查场景图是否居中、完整、无白底框、无被横线/字幕/面板遮挡。
+- 检查总结关键词是否为 2-4 个字情绪标签，而不是字幕截取。
 
-## Coding Style
-- Follow existing Python, TypeScript, CSS, and Remotion patterns.
-- Keep backend orchestration in `backend/app/services/ai_video.py` unless a local pattern clearly supports splitting.
-- Keep final render behavior in `Sc1StickmanVideo.jsx`.
-- Use clear names that reflect SC1 concepts: `captionCues`, `summaryLabel`, `assetImages`, `durationFrames`, `audioScenes`.
-- Add comments only for non-obvious timing, sync, material-cleaning, or deployment decisions.
+## 编码风格
+- 遵循现有 Python、TypeScript、CSS、Remotion 写法。
+- 后端编排优先放在 `backend/app/services/ai_video.py`，除非已有清晰拆分点。
+- 最终视频表现优先放在 `Sc1StickmanVideo.jsx`。
+- 命名要贴近 SC1 领域：`captionCues`、`summaryLabel`、`assetImages`、`durationFrames`、`audioScenes`。
+- 只在非显而易见的时间线、素材清理、同步或部署逻辑旁加简短注释。
 
-## Testing And Verification
-- Run syntax checks for modified Python files: `python -m py_compile backend/app/services/ai_video.py`.
-- Run `git diff --check` before committing.
-- For render changes, generate a fresh platform job and extract frames.
-- Confirm the MP4 has an audio stream.
-- Keep validation artifacts in `outputs/` only when they are user-facing; use `work/` for scratch files.
+## 测试与验证
+- Python 修改后至少运行：`python -m py_compile backend/app/services/ai_video.py`。
+- 提交前运行：`git diff --check`。
+- 渲染相关修改后，必须生成新平台任务并抽帧。
+- 成片必须确认存在音频流。
+- 面向用户的结果放 `outputs/`；临时分析和脚本放 `work/`。
 
-## Commit And Sync
-- Commit after a coherent fix or documentation update.
-- Use concise commit messages, such as `fix: align sc1 cue timing` or `docs: add sc1 workflow rules`.
-- Before remote deployment, update `PROJECT_STATE.md` first.
-- After remote deployment, record the deployed branch, commit, service restart result, job id, and output path.
+## 提交与同步
+- 一个提交只做一组相关事情。
+- 推荐提交信息：
+  - `fix: align sc1 cue timing`
+  - `fix: prevent scene image clipping`
+  - `docs: update sc1 workflow rules`
+  - `chore: record 3003 deploy state`
+- 远程部署前必须先更新并提交 `PROJECT_STATE.md`。
+- 远程部署后必须记录服务状态、部署提交、平台 job id 和成片路径。
 
-## When Unsure
-- Preserve the reference video requirements.
-- Preserve the material library paths.
-- Preserve the single centered scene-image design.
-- Ask only if the missing answer changes the user-visible output, target deployment, or irreversible operation.
+## 不确定时
+- 保留参考视频要求。
+- 保留素材库路径。
+- 保留单张居中场景图设计。
+- 只在缺失信息会改变用户可见输出、部署目标或不可逆操作时询问用户。
