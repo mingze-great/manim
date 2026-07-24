@@ -21,8 +21,10 @@
 3. `rules/vibe-coding.md`
 4. `rules/quality-gates.md`
 5. `rules/skill-usage.md`
-6. `specs/sc1-stickman-workflow-spec.md`
-7. `specs/development-control-spec.md`
+6. `rules/agent-orchestration.md`
+7. `specs/sc1-stickman-workflow-spec.md`
+8. `specs/development-control-spec.md`
+9. `specs/master-agent-workflow-spec.md`
 
 如果是远程部署、上下文交接或长任务压缩前，还必须先更新 `PROJECT_STATE.md`。
 
@@ -62,8 +64,10 @@
 - `rules/vibe-coding.md`：日常 AI 编码约束。
 - `rules/quality-gates.md`：编码、提交、部署、验收门禁。
 - `rules/skill-usage.md`：技能使用规范。
+- `rules/agent-orchestration.md`：master agent 分发、review、整合规则。
 - `specs/sc1-stickman-workflow-spec.md`：产品和技术规格。
 - `specs/development-control-spec.md`：开发流程控制规格。
+- `specs/master-agent-workflow-spec.md`：多需求并行开发的 master agent 工作流规格。
 
 ## 验证清单
 在声明视频工作流修复完成前，必须尽量通过平台完整流程验证，而不是只跑本地脚本：
@@ -94,7 +98,9 @@
 3. 读取 `rules/vibe-coding.md`。
 4. 读取 `rules/quality-gates.md`。
 5. 读取 `rules/skill-usage.md`。
-6. 读取 `specs/sc1-stickman-workflow-spec.md`。
-7. 读取 `specs/development-control-spec.md`。
-8. 按最新记录的分支、提交、部署目录和验证结果继续。
-9. 不要重新规划整个项目，除非用户明确要求重做。
+6. 读取 `rules/agent-orchestration.md`。
+7. 读取 `specs/sc1-stickman-workflow-spec.md`。
+8. 读取 `specs/development-control-spec.md`。
+9. 读取 `specs/master-agent-workflow-spec.md`。
+10. 按最新记录的分支、提交、部署目录和验证结果继续。
+11. 不要重新规划整个项目，除非用户明确要求重做。

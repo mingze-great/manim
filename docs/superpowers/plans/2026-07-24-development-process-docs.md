@@ -142,15 +142,64 @@
 
 规定新 agent 能否恢复、部署能否追溯、成片修复是否有证据、复杂任务是否有计划。
 
-### 任务 7：验证文档集合
+### 任务 7：安装开发流程 skills
+
+**文件：**
+- 修改：`rules/skill-usage.md`
+- 修改：`PROJECT_STATE.md`
+
+**接口：**
+- 输入：网络上可安装的 Codex skills 和本项目开发流程需求。
+- 输出：已安装的需求分析、计划执行、并行 agent、代码 review、浏览器验证、安全审查 skills，以及项目内使用规则。
+
+- [x] **步骤 1：安装官方 curated skills**
+
+安装 `notion-spec-to-implementation`、`playwright`、`screenshot`、`security-best-practices`、`security-threat-model`。
+
+- [x] **步骤 2：安装 Superpowers 流程 skills**
+
+安装 `brainstorming`、`executing-plans`、`subagent-driven-development`、`requesting-code-review`、`receiving-code-review`、`verification-before-completion`、`dispatching-parallel-agents`、`using-git-worktrees`、`systematic-debugging`、`test-driven-development`、`finishing-a-development-branch`、`using-superpowers`。
+
+- [x] **步骤 3：写入使用规范**
+
+在 `rules/skill-usage.md` 中写清每个 skill 什么时候必须用、什么时候可选、什么时候禁止替代项目默认链路。
+
+### 任务 8：补充 master agent 编排规则
+
+**文件：**
+- 新增：`rules/agent-orchestration.md`
+- 新增：`specs/master-agent-workflow-spec.md`
+- 修改：`AGENTS.md`
+- 修改：`specs/development-control-spec.md`
+- 修改：`PROJECT_STATE.md`
+
+**接口：**
+- 输入：用户希望一个 master agent 分发多个需求、多个 worker 并行开发、逐项验收、最终整合验收。
+- 输出：master agent、worker agent、reviewer agent 的职责、任务模板、汇报模板和三种实现方案。
+
+- [x] **步骤 1：写入编排规则**
+
+在 `rules/agent-orchestration.md` 中定义 master/worker/reviewer 分工、可并行判断、标准流程、任务分发模板、汇报模板。
+
+- [x] **步骤 2：写入工作流规格**
+
+在 `specs/master-agent-workflow-spec.md` 中定义需求澄清、任务拆分、隔离工作区、并行执行、逐项验收、统一整合、最终验收。
+
+- [x] **步骤 3：写入三种实现方案**
+
+记录方案 A：当前 Codex 单窗口 master + subagents；方案 B：多个 Codex thread/worktree；方案 C：项目专属编排 skill。
+
+### 任务 9：验证文档集合
 
 **文件：**
 - 读取：`AGENTS.md`
 - 读取：`rules/vibe-coding.md`
 - 读取：`rules/quality-gates.md`
 - 读取：`rules/skill-usage.md`
+- 读取：`rules/agent-orchestration.md`
 - 读取：`specs/sc1-stickman-workflow-spec.md`
 - 读取：`specs/development-control-spec.md`
+- 读取：`specs/master-agent-workflow-spec.md`
 
 **接口：**
 - 输入：已完成的文档文件。
