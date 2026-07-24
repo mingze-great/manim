@@ -14,7 +14,9 @@
 - 3004 目标后端端口：`8004`
 - 3004 目标 Remotion 渲染端口：`18788`
 - 3004 目标 Celery 队列：`manim_v2_3004`
-- 状态更新时间：`2026-07-25 00:08:00 +08:00`
+- 当前本地 HEAD：`4f726b7e82db7a671afac7949b53a2578bd661b9`
+- 当前本地 HEAD 信息：`feat: add stickman workflow generation controls`
+- 状态更新时间：`2026-07-25 00:01:10 +08:00`
 
 ## 已完成
 - 已确认现有 3003 分支保持不动，3004 使用独立 git worktree。
@@ -40,11 +42,21 @@
 - 已扩展 `/stickman-workflow/jobs` 支持 `scriptMode`、`customScript`、`targetSeconds`、`backgroundMode`、`backgroundTemplate`、`uploadedBackgroundUrl` 和 `imageMode`。
 - 已强制自定义文案和目标时长互斥，并限制普通用户默认不能使用实时生图模式。
 - 已通过 TDD 验证：`pytest backend/tests/test_stickman_workflow_limits.py backend/tests/test_stickman_workflow_assets.py backend/tests/test_partner_program_service.py backend/tests/test_partner_models_import.py -q` 通过。
+- 已新增前端 `/partner` 合作者工作台入口，合作者和管理员可查看推荐用户、订单、佣金，并生成兑换码。
+- 已新增后台 `/admin/partners` 合作者管理页，支持创建合作者、筛选推荐用户、查看佣金台账、生成后台兑换码。
+- 已新增后台 `/admin/stickman-workflow-libraries`，专门管理 `/stickman-workflow` 素材库 zip，明确不使用 `stickman-v2` 的素材库接口。
+- 已扩展 `/stickman-workflow` 前端高级控制：自定义文案、目标时长、画面模式、背景模式、声音和专用素材库选择；默认仍可只输入标题生成。
+- 已修正合作者 profile 返回真实 `referral_code`，前端复制推广链接时不再用 profile id 拼假码。
+- 已完成本地验证：
+  - `npm run build` 通过，Vite 仅提示既有大 chunk 警告。
+  - `pytest backend/tests/test_partner_models_import.py backend/tests/test_partner_program_service.py backend/tests/test_stickman_workflow_assets.py backend/tests/test_stickman_workflow_limits.py -q` 通过，结果 `7 passed`。
+  - `python -m py_compile backend/app/models/partner.py backend/app/services/partner_program.py backend/app/services/stickman_workflow_assets.py backend/app/services/stickman_workflow_limits.py backend/app/api/partner.py backend/app/api/stickman_workflow.py backend/app/api/admin.py backend/app/api/payment.py backend/app/main.py` 通过。
+  - `git diff --check` 通过，仅有 CRLF/LF 替换提示。
 
 ## 当前问题
-- 还没有实现 3004 部署配置、合作者分佣、邀请码开通、火柴人高级参数、专用素材库上传或平台验证。
 - 还没有远程部署 3004。
 - 还没有 3004 平台生成任务验证。
+- 参考图生成完整素材库的“两张样图确认 -> 批量生成”能力仍属于第二阶段，当前 MVP 先交付上传 zip 和选择素材库。
 
 ## 最近修改文件
 - `PROJECT_STATE.md`
@@ -75,6 +87,18 @@
 - `backend/tests/test_stickman_workflow_assets.py`
 - `backend/app/services/stickman_workflow_limits.py`
 - `backend/tests/test_stickman_workflow_limits.py`
+- `frontend/src/services/partner.ts`
+- `frontend/src/services/admin.ts`
+- `frontend/src/services/stickmanWorkflow.ts`
+- `frontend/src/stores/authStore.ts`
+- `frontend/src/App.tsx`
+- `frontend/src/components/Layout/MainLayout.tsx`
+- `frontend/src/components/Layout/AdminLayout.tsx`
+- `frontend/src/pages/PartnerDashboard.tsx`
+- `frontend/src/pages/admin/AdminPartners.tsx`
+- `frontend/src/pages/admin/AdminStickmanWorkflowLibraries.tsx`
+- `frontend/src/pages/StickmanWorkflow/index.tsx`
+- `frontend/src/pages/StickmanWorkflow/StickmanWorkflow.css`
 
 ## 重要技术决策
 - 3004 必须隔离部署，不能修改或重启现有 3003 服务。
@@ -93,6 +117,7 @@
 - 不要在未更新 `PROJECT_STATE.md` 的情况下进行远程同步、部署或上下文交接。
 
 ## 下一步
-1. 提交火柴人生成高级控制后端改动。
-2. 开始实现前端合作者工作台、后台素材库管理入口和 `/stickman-workflow` 高级选项 UI。
-3. 按计划实现并验证，最后部署到 3004。
+1. 提交前端合作者工作台、后台管理页和 `/stickman-workflow` 高级选项 UI。
+2. 部署前再次更新 `PROJECT_STATE.md`，记录提交后的本地 HEAD、分支、远程目录和待重启的 3004 服务。
+3. 仅部署到 3004：`/opt/manim-v2-3004-snapshot`，前端 `3004`，后端 `8004`，渲染服务 `18788`，不重启或覆盖 3003。
+4. 验证 3004 服务状态、3003 仍可用、`/stickman-workflow` 可创建任务，并记录 job id、输出 MP4、音视频流检查结果。

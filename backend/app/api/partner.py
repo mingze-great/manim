@@ -9,7 +9,7 @@ from app.database import get_db
 from app.models.partner import CommissionLedger, InviteCode, PartnerProfile
 from app.models.subscription import Order
 from app.models.user import User
-from app.services.partner_program import generate_invite_code, get_partner_profile_for_user
+from app.services.partner_program import ensure_referral_code, generate_invite_code, get_partner_profile_for_user
 
 router = APIRouter(prefix="/partner", tags=["partner"])
 
@@ -37,11 +37,14 @@ def get_partner_profile(
     current_user: Annotated[User, Depends(get_current_partner_user)],
 ):
     profile = _require_partner_profile(db, current_user)
+    referral = ensure_referral_code(db, profile)
+    db.commit()
     return {
         "id": profile.id,
         "display_name": profile.display_name,
         "commission_rate_bps": profile.commission_rate_bps,
         "status": profile.status,
+        "referral_code": referral.code,
     }
 
 

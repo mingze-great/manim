@@ -1,4 +1,4 @@
-import { create } from 'zustand'
+﻿import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { AUTH_STORAGE_KEY, LOGOUT_MARKER_KEY } from '@/utils/authSync'
 
@@ -8,6 +8,9 @@ interface User {
   email: string
   phone?: string | null
   is_admin?: boolean
+  role?: 'user' | 'partner' | 'admin'
+  referred_by_partner_id?: number | null
+  referral_code?: string | null
   frontend_version?: 'legacy' | 'v2'
   is_approved?: boolean
   expires_at?: string | null

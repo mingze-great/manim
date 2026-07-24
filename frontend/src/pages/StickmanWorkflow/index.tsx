@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Button, Input, Progress, Select, Space, Typography, message } from 'antd'
+﻿import { useEffect, useMemo, useState } from 'react'
+import { Alert, Button, Collapse, Input, InputNumber, Progress, Radio, Select, Space, Typography, message } from 'antd'
 import { DownloadOutlined, FolderOpenOutlined, PlayCircleOutlined, RocketOutlined, SoundOutlined } from '@ant-design/icons'
 import { resolveBackendUrl } from '@/services/api'
 import { stickmanWorkflowApi } from '@/services/stickmanWorkflow'
+import type { StickmanWorkflowConfig } from '@/services/stickmanWorkflow'
 import type { AiVideoJob } from '@/services/aiVideo'
 import './StickmanWorkflow.css'
 
@@ -36,6 +37,12 @@ export default function StickmanWorkflow() {
   const [title, setTitle] = useState('为什么你总是在关系里想太多')
   const [voiceId, setVoiceId] = useState('dayun_manbo')
   const [materialLibrary, setMaterialLibrary] = useState('sc1_outputs')
+  const [scriptMode, setScriptMode] = useState<'ai' | 'custom'>('ai')
+  const [customScript, setCustomScript] = useState('')
+  const [targetSeconds, setTargetSeconds] = useState<number | undefined>(undefined)
+  const [imageMode, setImageMode] = useState<'material_only' | 'ai_image' | 'hybrid'>('material_only')
+  const [backgroundMode, setBackgroundMode] = useState('default')
+  const [config, setConfig] = useState<StickmanWorkflowConfig | null>(null)
   const [job, setJob] = useState<AiVideoJob | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
@@ -44,6 +51,17 @@ export default function StickmanWorkflow() {
     () => progressSteps.slice().reverse().find((step) => job ? job.progress >= step.at || job.status === step.key : false) || progressSteps[0],
     [job],
   )
+
+  useEffect(() => {
+    stickmanWorkflowApi.getConfig()
+      .then(({ data }) => {
+        setConfig(data)
+        setVoiceId(data.defaults.voiceId || 'dayun_manbo')
+        setMaterialLibrary(data.defaults.materialLibrary || 'sc1_outputs')
+        setImageMode((data.defaults.imageMode || 'material_only') as 'material_only' | 'ai_image' | 'hybrid')
+      })
+      .catch(() => message.error('加载火柴人配置失败'))
+  }, [])
 
   useEffect(() => {
     if (!job?.jobId || ['completed', 'failed', 'cancelled'].includes(job.status)) return
@@ -60,8 +78,13 @@ export default function StickmanWorkflow() {
 
   const createVideo = async () => {
     const cleanTitle = title.trim()
+    const cleanScript = customScript.trim()
     if (cleanTitle.length < 2) {
       message.warning('请输入一个更具体的主题')
+      return
+    }
+    if (scriptMode === 'custom' && cleanScript.length < 10) {
+      message.warning('自定义文案至少输入 10 个字')
       return
     }
     setSubmitting(true)
@@ -74,6 +97,11 @@ export default function StickmanWorkflow() {
         tone: 'sharp',
         pace: 'medium',
         targetPlatform: 'douyin',
+        scriptMode,
+        customScript: scriptMode === 'custom' ? cleanScript : undefined,
+        targetSeconds: scriptMode === 'ai' ? targetSeconds : undefined,
+        imageMode,
+        backgroundMode,
       })
       const jobRes = await stickmanWorkflowApi.getJob(data.jobId)
       setJob(jobRes.data)
@@ -85,13 +113,27 @@ export default function StickmanWorkflow() {
     }
   }
 
+  const maxVideoSeconds = config?.capabilities.maxVideoSeconds || 60
+  const materialOptions = (config?.materialLibraries || [{ key: 'sc1_outputs', name: 'SC1 火柴人素材库' }]).map((item) => ({
+    label: `${item.name}${item.material_count ? ` · ${item.material_count}条` : ''}`,
+    value: item.key,
+  }))
+  const voiceOptions = (config?.voices || [{ label: '曼波参考音色', value: 'dayun_manbo' }]).map((item) => ({ label: item.label, value: item.value }))
+  const imageModeOptions = [
+    { label: '素材库匹配', value: 'material_only' },
+    ...(config?.capabilities.canUseAiImages ? [
+      { label: '实时生图', value: 'ai_image' },
+      { label: '混合补图', value: 'hybrid' },
+    ] : []),
+  ]
+
   return (
     <div className="stickman-workflow-page">
       <div className="stickman-workflow-header">
         <div>
           <Typography.Title level={2}>火柴人工作流</Typography.Title>
           <Typography.Paragraph>
-            输入一个主题，系统会自动生成文案、拆分分镜、调用声音模型、同步字幕并渲染成片。
+            默认输入一个主题即可生成成片；高级选项支持自定义文案、时长、背景和素材库控制。
           </Typography.Paragraph>
         </div>
         <div className="workflow-badge">SC1 独立模块</div>
@@ -103,47 +145,99 @@ export default function StickmanWorkflow() {
           <TextArea
             value={title}
             onChange={(event) => setTitle(event.target.value)}
-            rows={5}
+            rows={4}
             maxLength={120}
             showCount
             placeholder="例如：为什么你总是在关系里想太多"
           />
 
+          <Collapse
+            className="workflow-advanced"
+            items={[{
+              key: 'advanced',
+              label: '高级控制',
+              children: (
+                <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+                  <label className="workflow-field">
+                    <span>生成方式</span>
+                    <Radio.Group
+                      value={scriptMode}
+                      onChange={(event) => {
+                        setScriptMode(event.target.value)
+                        if (event.target.value === 'custom') setTargetSeconds(undefined)
+                      }}
+                      optionType="button"
+                      buttonStyle="solid"
+                      options={[
+                        { label: 'AI 按标题生成', value: 'ai' },
+                        { label: '使用自定义文案', value: 'custom' },
+                      ]}
+                    />
+                  </label>
+
+                  {scriptMode === 'custom' ? (
+                    <label className="workflow-field">
+                      <span>自定义文案</span>
+                      <TextArea
+                        value={customScript}
+                        onChange={(event) => setCustomScript(event.target.value)}
+                        rows={6}
+                        maxLength={1200}
+                        showCount
+                        placeholder="粘贴完整口播文案。系统会根据配音实际时长同步字幕、场景图和总结关键词。"
+                      />
+                      <Alert type="info" showIcon message="自定义文案会自动决定视频时长，因此不能同时选择目标时长。" />
+                    </label>
+                  ) : (
+                    <label className="workflow-field">
+                      <span>目标时长</span>
+                      <InputNumber
+                        min={15}
+                        max={maxVideoSeconds}
+                        step={15}
+                        value={targetSeconds}
+                        onChange={(value) => setTargetSeconds(value || undefined)}
+                        addonAfter="秒"
+                        placeholder="不限制"
+                        style={{ width: '100%' }}
+                      />
+                    </label>
+                  )}
+
+                  <label className="workflow-field">
+                    <span>画面模式</span>
+                    <Select value={imageMode} onChange={setImageMode} options={imageModeOptions} />
+                  </label>
+
+                  <label className="workflow-field">
+                    <span>背景模式</span>
+                    <Select
+                      value={backgroundMode}
+                      onChange={setBackgroundMode}
+                      options={[
+                        { label: '默认白纸背景', value: 'default' },
+                        { label: '后台背景风格', value: 'template' },
+                        { label: '用户上传背景', value: 'upload' },
+                      ]}
+                    />
+                  </label>
+                </Space>
+              ),
+            }]}
+          />
+
           <div className="workflow-controls">
             <label>
               <span>声音</span>
-              <Select
-                value={voiceId}
-                onChange={setVoiceId}
-                suffixIcon={<SoundOutlined />}
-                options={[
-                  { label: '曼波参考音色', value: 'dayun_manbo' },
-                  { label: '中文女', value: '中文女' },
-                  { label: '中文男', value: '中文男' },
-                ]}
-              />
+              <Select value={voiceId} onChange={setVoiceId} suffixIcon={<SoundOutlined />} options={voiceOptions} />
             </label>
             <label>
               <span>素材库</span>
-              <Select
-                value={materialLibrary}
-                onChange={setMaterialLibrary}
-                suffixIcon={<FolderOpenOutlined />}
-                options={[
-                  { label: 'SC1 火柴人素材库', value: 'sc1_outputs' },
-                ]}
-              />
+              <Select value={materialLibrary} onChange={setMaterialLibrary} suffixIcon={<FolderOpenOutlined />} options={materialOptions} />
             </label>
           </div>
 
-          <Button
-            type="primary"
-            size="large"
-            icon={<RocketOutlined />}
-            loading={submitting}
-            onClick={createVideo}
-            block
-          >
+          <Button type="primary" size="large" icon={<RocketOutlined />} loading={submitting} onClick={createVideo} block>
             生成火柴人成片
           </Button>
         </section>
@@ -156,10 +250,7 @@ export default function StickmanWorkflow() {
                 <span>{statusText[job.status] || job.message || job.status}</span>
                 <strong>{job.progress}%</strong>
               </div>
-              <Progress
-                percent={job.progress}
-                status={job.status === 'failed' ? 'exception' : job.status === 'completed' ? 'success' : 'active'}
-              />
+              <Progress percent={job.progress} status={job.status === 'failed' ? 'exception' : job.status === 'completed' ? 'success' : 'active'} />
 
               <div className="workflow-current-step">
                 <span>当前阶段</span>

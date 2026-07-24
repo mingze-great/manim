@@ -14,6 +14,7 @@ import History from './pages/History'
 import Profile from './pages/Profile'
 import Docs from './pages/Docs'
 import KnowledgeIp from './pages/KnowledgeIp'
+import PartnerDashboard from './pages/PartnerDashboard'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import ProjectChat from './pages/ProjectChat'
@@ -45,6 +46,8 @@ import AdminArticleCategories from './pages/admin/AdminArticleCategories'
 import AdminModuleStats from './pages/admin/AdminModuleStats'
 import AdminChatStyles from './pages/admin/AdminChatStyles'
 import AdminVideoSettings from './pages/admin/AdminVideoSettings'
+import AdminPartners from './pages/admin/AdminPartners'
+import AdminStickmanWorkflowLibraries from './pages/admin/AdminStickmanWorkflowLibraries'
 import { useState, useEffect, useRef } from 'react'
 import { buildLegacyEntryUrl } from './utils/authSync'
 
@@ -57,6 +60,13 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   const { user, token } = useAuthStore()
   if (!token) return <Navigate to="/login" />
   if (!user?.is_admin) return <Navigate to="/" />
+  return <>{children}</>
+}
+
+function PartnerRoute({ children }: { children: React.ReactNode }) {
+  const { user, token } = useAuthStore()
+  if (!token) return <Navigate to="/login" />
+  if (!user?.is_admin && user?.role !== 'partner') return <Navigate to="/" />
   return <>{children}</>
 }
 
@@ -173,6 +183,7 @@ function AppContent() {
         <Route path="/knowledge-ip" element={<KnowledgeIp />} />
         <Route path="/history" element={<History />} />
         <Route path="/profile" element={<Profile />} />
+        <Route path="/partner" element={<PartnerRoute><PartnerDashboard /></PartnerRoute>} />
       </Route>
 
       <Route element={<AdminRoute><AdminLayout /></AdminRoute>}>
@@ -184,6 +195,8 @@ function AppContent() {
         <Route path="/admin/chat-styles" element={<AdminChatStyles />} />
         <Route path="/admin/article-categories" element={<AdminArticleCategories />} />
         <Route path="/admin/video-settings" element={<AdminVideoSettings />} />
+        <Route path="/admin/partners" element={<AdminPartners />} />
+        <Route path="/admin/stickman-workflow-libraries" element={<AdminStickmanWorkflowLibraries />} />
         <Route path="/admin/module-stats" element={<AdminModuleStats />} />
         <Route path="/admin/statistics" element={<AdminStatistics />} />
         <Route path="/admin/token-usage" element={<AdminTokenUsage />} />

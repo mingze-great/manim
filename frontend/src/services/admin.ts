@@ -35,6 +35,9 @@ export interface User {
   phone?: string | null
   is_active: boolean
   is_admin: boolean
+  role?: 'user' | 'partner' | 'admin'
+  referred_by_partner_id?: number | null
+  referral_code?: string | null
   frontend_version?: 'legacy' | 'v2'
   is_approved: boolean
   expires_at?: string
@@ -116,6 +119,62 @@ export interface ModuleStatsResponse {
   stickman: ModuleStatsItem
   explainer: ModuleStatsItem
   article: ModuleStatsItem
+}
+
+export interface AdminPartner {
+  id: number
+  user_id: number
+  display_name: string
+  commission_rate_bps: number
+  status: string
+  referral_code?: string
+  created_at?: string | null
+}
+
+export interface AdminReferral {
+  id: number
+  username: string
+  phone?: string | null
+  partner_id: number
+  referral_code?: string | null
+  is_approved: boolean
+  created_at?: string | null
+}
+
+export interface AdminCommission {
+  id: number
+  partner_id: number
+  user_id: number
+  order_id?: number | null
+  amount: number
+  commission_amount: number
+  status: string
+  source: string
+  created_at?: string | null
+}
+
+export interface AdminInviteCode {
+  id: number
+  code: string
+  partner_id?: number | null
+  plan_key: string
+  material_mode: string
+  status: string
+}
+
+export interface StickmanWorkflowMaterialLibrary {
+  key: string
+  name: string
+  description?: string
+  is_active?: boolean
+  is_visible?: boolean
+  sort_order?: number
+  base_path?: string
+  material_json_path?: string
+  image_url?: string | null
+  image_count?: number
+  material_count?: number
+  source?: string
 }
 
 export const adminApi = {
@@ -205,6 +264,44 @@ export const adminApi = {
     api.get<TokenUsageResponse>('/admin/token-usage', { params: { period } }),
 
   getModuleStats: () => api.get<ModuleStatsResponse>('/admin/module-stats'),
+
+  getPartners: () => api.get<AdminPartner[]>('/admin/partners'),
+
+  createPartner: (data: { user_id: number; display_name: string; commission_rate_bps: number }) =>
+    api.post<AdminPartner>('/admin/partners', data),
+
+  getReferrals: (partnerId?: number) =>
+    api.get<AdminReferral[]>('/admin/referrals', { params: partnerId ? { partner_id: partnerId } : undefined }),
+
+  getCommissions: (partnerId?: number) =>
+    api.get<AdminCommission[]>('/admin/commissions', { params: partnerId ? { partner_id: partnerId } : undefined }),
+
+  createInviteCode: (data: {
+    partner_id?: number
+    plan_key: string
+    material_mode: string
+    quota_limit: number
+    quota_period: string
+    max_video_seconds: number
+    max_uses: number
+  }) => api.post<AdminInviteCode>('/admin/invite-codes', data),
+
+  getStickmanWorkflowMaterialLibraries: () =>
+    api.get<{ libraries: StickmanWorkflowMaterialLibrary[] }>('/admin/stickman-workflow/material-libraries'),
+
+  saveStickmanWorkflowMaterialLibraries: (libraries: StickmanWorkflowMaterialLibrary[]) =>
+    api.post<{ libraries: StickmanWorkflowMaterialLibrary[] }>('/admin/stickman-workflow/material-libraries', { libraries }),
+
+  uploadStickmanWorkflowMaterialLibraryPackage: (libraryKey: string, file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post<{
+      message: string
+      image_url?: string | null
+      image_count: number
+      material_count: number
+    }>(`/admin/stickman-workflow/material-libraries/${libraryKey}/package`, formData)
+  },
 }
 
 export default api

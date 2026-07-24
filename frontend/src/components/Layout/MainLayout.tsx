@@ -3,7 +3,7 @@ import { Layout, Menu, Avatar, Dropdown, Space, Button, Drawer } from 'antd'
 import type { MenuProps } from 'antd'
 import {
   PlusOutlined, HistoryOutlined, UserOutlined,
-  LogoutOutlined, MenuOutlined, BookOutlined, SafetyOutlined, HomeOutlined, VideoCameraOutlined, FileProtectOutlined
+  LogoutOutlined, MenuOutlined, BookOutlined, SafetyOutlined, HomeOutlined, VideoCameraOutlined, FileProtectOutlined, TeamOutlined
 } from '@ant-design/icons'
 import { useAuthStore } from '@/stores/authStore'
 import { clearAuthArtifacts, syncCrossSiteLogout } from '@/utils/authSync'
@@ -26,6 +26,7 @@ export default function MainLayout() {
 
   const menuItems: MenuProps['items'] = [
     { key: '/stickman-workflow', icon: <VideoCameraOutlined />, label: '火柴人工作流' },
+    ...((user?.role === 'partner' || user?.is_admin) ? [{ key: '/partner', icon: <TeamOutlined />, label: '合作者工作台' }] : []),
     { key: '/creator', icon: <PlusOutlined />, label: '开始创作' },
     { key: '/ai-video/dashboard', icon: <VideoCameraOutlined />, label: 'AI 视频导演' },
     { key: '/knowledge-ip', icon: <FileProtectOutlined />, label: '知识IP包装' },
@@ -65,6 +66,7 @@ export default function MainLayout() {
 
   const getPageTitle = () => {
     if (location.pathname.startsWith('/stickman-workflow')) return '火柴人工作流'
+    if (location.pathname.startsWith('/partner')) return '合作者工作台'
     const item = menuItems.find(m => m && 'key' in m && m.key === location.pathname)
     if (item && 'label' in item) return item.label as string
     if (location.pathname.startsWith('/creator')) return '创作工作台'

@@ -4,7 +4,7 @@ import type { MenuProps } from 'antd'
 import {
   DashboardOutlined, UserOutlined, LogoutOutlined, SafetyOutlined,
   TeamOutlined, FileTextOutlined, SettingOutlined, 
-  MenuOutlined, SwapOutlined, HomeOutlined, CodeOutlined, BarChartOutlined, ThunderboltOutlined, EditOutlined, MessageOutlined
+  MenuOutlined, SwapOutlined, HomeOutlined, CodeOutlined, BarChartOutlined, ThunderboltOutlined, EditOutlined, MessageOutlined, FolderOpenOutlined, GiftOutlined
 } from '@ant-design/icons'
 import { useAuthStore } from '@/stores/authStore'
 import { clearAuthArtifacts, syncCrossSiteLogout } from '@/utils/authSync'
@@ -31,9 +31,11 @@ export default function AdminLayout() {
     { key: '/admin/statistics', icon: <BarChartOutlined />, label: '数据统计' },
     { key: '/admin/token-usage', icon: <ThunderboltOutlined />, label: 'Token统计' },
     { key: '/admin/users', icon: <TeamOutlined />, label: '用户管理' },
+    { key: '/admin/partners', icon: <GiftOutlined />, label: '合作者管理' },
     { key: '/admin/templates', icon: <CodeOutlined />, label: '脚本模板' },
     { key: '/admin/chat-styles', icon: <MessageOutlined />, label: '对话风格' },
     { key: '/admin/article-categories', icon: <EditOutlined />, label: '公众号配置' },
+    { key: '/admin/stickman-workflow-libraries', icon: <FolderOpenOutlined />, label: '火柴人工作流素材库' },
     { key: '/admin/module-stats', icon: <BarChartOutlined />, label: '模块看板' },
     { key: '/admin/logs', icon: <FileTextOutlined />, label: '操作日志' },
     { type: 'divider' as const },
