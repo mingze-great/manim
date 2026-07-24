@@ -1,0 +1,16 @@
+[Unit]
+Description=Manim V2 3004 AI Video Remotion Renderer
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/manim-v2-3004-snapshot/video-render-service/remotion-mind-video
+Environment=NODE_ENV=production
+Environment=PORT=18788
+ExecStart=/usr/bin/env node server.js
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
