@@ -1,4 +1,4 @@
-﻿# 项目状态
+# 项目状态
 
 ## 当前任务
 在不影响现有 3003 服务和 `codex/3003-standalone-stickman-workflow-20260712` 分支的前提下，基于独立 3004 工作区开发合作者分佣、邀请码自动开通、`/stickman-workflow` 专用素材库管理、火柴人生成高级控制和 3004 隔离部署能力。
@@ -17,11 +17,11 @@
 - 当前部署前源提交：`4db089f2a8ea8cf6b61ec45b8fb4a710e3e6b84f`
 - 当前部署前源提交时间：`2026-07-25 00:04:13 +08:00`
 - 当前部署前源提交信息：`feat: add partner and stickman workflow UI`
-- 当前已部署提交：`8ef8e7628b61f65d16fc4b435ce41b2948bb5954`
-- 当前已部署提交时间：`2026-07-25T00:38:26+08:00`
-- 当前已部署提交信息：`fix: use render service urls for sc1 materials`
-- 当前待提交修复基线：`8ef8e7628b61f65d16fc4b435ce41b2948bb5954`
-- 状态更新时间：`2026-07-25 01:07:48 +08:00`
+- 当前已部署提交：`c696bd4633c2e07c57a785833508e7f47a6033ac`
+- 当前已部署提交时间：`2026-07-25 01:13:50 +08:00`
+- 当前已部署提交信息：`fix: fallback when dayun tts is rate limited`
+- 当前待部署配置：3004 backend/worker 增加 `AI_VIDEO_COSYVOICE_TIMEOUT=180` 和 `SC1_COSYVOICE_PROMPT_WAV=/opt/manim-v2-3004-snapshot/outputs/dayun_tools_manbo_tts_test.mp3`
+- 状态更新时间：`2026-07-25 01:58:00 +08:00`
 
 ## 已完成
 - 已确认现有 3003 分支保持不动，3004 使用独立 git worktree。
@@ -85,10 +85,14 @@
   - `PYTHONPATH=backend pytest backend/tests/test_ai_video_sc1_material_urls.py backend/tests/test_partner_models_import.py backend/tests/test_partner_program_service.py backend/tests/test_stickman_workflow_assets.py backend/tests/test_stickman_workflow_limits.py -q` 通过，结果 `9 passed`，仅有本地 ffmpeg path warning。
   - `python -m py_compile backend/app/services/ai_video.py backend/app/api/stickman_workflow.py backend/app/api/partner.py backend/app/api/admin.py backend/app/main.py` 通过。
   - `git diff --check` 通过。
+- 已确认远程 3004 部署标记为 `codex/3004-partner-stickman-platform-20260724@c696bd4633c2e07c57a785833508e7f47a6033ac`，3004 backend、worker、Remotion 服务 active，3003 未修改、未重启。
+- 已定位 `job_6` 后续 TTS 失败链路：Dayun 远程请求仍 429；开源 CosyVoice SFT 因无 speaker 不可用；zero-shot 依赖参考音频和较长生成时间。
+- 已用远程 CosyVoice zero-shot 直接验证 `dayun_tools_manbo_tts_test.mp3` 可作为 prompt 产出音频，探针输出 `/tmp/cosy_dayun_probe_py.pcm` 为 `158720` 字节。
+- 当前待同步配置修复：3004 systemd backend/worker 显式设置 `AI_VIDEO_COSYVOICE_TIMEOUT=180`，并将 zero-shot prompt 固定为 `/opt/manim-v2-3004-snapshot/outputs/dayun_tools_manbo_tts_test.mp3`，避免长句 zero-shot 被 45 秒默认超时截断。
 
 ## 当前问题
-- 3004 已部署到素材 URL 修复提交 `8ef8e7628b61f65d16fc4b435ce41b2948bb5954`，但新验证任务 `job_5` 因 Dayun Manbo TTS 429 限流失败。
-- Dayun 429 fallback 修复已本地验证通过，下一步需要提交、归档部署到 3004，并重新创建平台验证任务。
+- 3004 已部署到 `c696bd4633c2e07c57a785833508e7f47a6033ac`；`job_5` 因 Dayun Manbo TTS 429 失败，`job_6` 已进入开源 CosyVoice fallback 但在参考音频/timeout 配置完善前未产出有效音频。
+- Dayun 429 fallback 代码已本地验证并部署到 3004；下一步需要同步 3004 CosyVoice timeout/prompt 配置，并重新创建平台验证任务。
 - 3004 还没有完成“成功成片 + 下载 MP4 + 音视频流检查 + 抽帧确认”的最终验收。
 - 远程磁盘空间仍偏紧（清理后约 1.2G 可用），若 Remotion 渲染再次因空间不足失败，需要优先清理 3004 可再生构建缓存或旧备份，仍不能影响 3003 运行数据。
 - 参考图生成完整素材库的“两张样图确认 -> 批量生成”能力仍属于第二阶段，当前 MVP 先交付上传 zip 和选择素材库。
@@ -136,6 +140,9 @@
 - `frontend/src/pages/StickmanWorkflow/StickmanWorkflow.css`
 - `backend/app/services/ai_video.py`
 - `backend/tests/test_ai_video_sc1_material_urls.py`
+- `deploy/manim-v2-3004-backend.service`
+- `deploy/manim-v2-3004-worker.service`
+- `deploy/env.backend.3004.example`
 
 ## 重要技术决策
 - 3004 必须隔离部署，不能修改或重启现有 3003 服务。
@@ -155,7 +162,7 @@
 - 不要在未更新 `PROJECT_STATE.md` 的情况下进行远程同步、部署或上下文交接。
 
 ## 下一步
-1. 提交 Dayun 429 fallback 修复和本状态记录。
-2. 通过归档快照重新同步并仅重启 3004 服务。
-3. 重新创建 3004 `/stickman-workflow` 标题生成任务。
+1. 提交 3004 CosyVoice timeout/prompt 配置修复和本状态记录。
+2. 只同步 3004 systemd/backend 相关文件，执行 `systemctl daemon-reload`，仅重启 `manim-v2-3004-backend.service` 和 `manim-v2-3004-worker.service`。
+3. 重新创建 3004 `/stickman-workflow` 标题生成任务，优先使用 `dayun_manbo` 声音和 `sc1_outputs` 素材库。
 4. 下载成功 MP4，使用 ffmpeg/ffprobe 检查音频流和视频流，抽取关键帧确认场景图、字幕、总结和标签布局，并记录 job id、输出路径、验证结论。
