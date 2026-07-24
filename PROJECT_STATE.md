@@ -1,4 +1,4 @@
-# 项目状态
+﻿# 项目状态
 
 ## 当前任务
 在不影响现有 3003 服务和 `codex/3003-standalone-stickman-workflow-20260712` 分支的前提下，基于独立 3004 工作区开发合作者分佣、邀请码自动开通、`/stickman-workflow` 专用素材库管理、火柴人生成高级控制和 3004 隔离部署能力。
@@ -14,7 +14,7 @@
 - 3004 目标后端端口：`8004`
 - 3004 目标 Remotion 渲染端口：`18788`
 - 3004 目标 Celery 队列：`manim_v2_3004`
-- 状态更新时间：`2026-07-24 23:58:00 +08:00`
+- 状态更新时间：`2026-07-25 00:08:00 +08:00`
 
 ## 已完成
 - 已确认现有 3003 分支保持不动，3004 使用独立 git worktree。
@@ -36,6 +36,10 @@
 - 已新增用户端 `/stickman-workflow/config`，返回素材库、声音和能力配置。
 - 已将 `/stickman-workflow/jobs` 的素材库选择改为先校验专用素材库，再传递素材库路径和 manifest。
 - 已通过 TDD 验证：`pytest backend/tests/test_stickman_workflow_assets.py backend/tests/test_partner_program_service.py backend/tests/test_partner_models_import.py -q` 通过。
+- 已新增火柴人工作流时长预估和互斥校验服务。
+- 已扩展 `/stickman-workflow/jobs` 支持 `scriptMode`、`customScript`、`targetSeconds`、`backgroundMode`、`backgroundTemplate`、`uploadedBackgroundUrl` 和 `imageMode`。
+- 已强制自定义文案和目标时长互斥，并限制普通用户默认不能使用实时生图模式。
+- 已通过 TDD 验证：`pytest backend/tests/test_stickman_workflow_limits.py backend/tests/test_stickman_workflow_assets.py backend/tests/test_partner_program_service.py backend/tests/test_partner_models_import.py -q` 通过。
 
 ## 当前问题
 - 还没有实现 3004 部署配置、合作者分佣、邀请码开通、火柴人高级参数、专用素材库上传或平台验证。
@@ -69,6 +73,8 @@
 - `backend/app/services/stickman_workflow_assets.py`
 - `backend/app/api/stickman_workflow.py`
 - `backend/tests/test_stickman_workflow_assets.py`
+- `backend/app/services/stickman_workflow_limits.py`
+- `backend/tests/test_stickman_workflow_limits.py`
 
 ## 重要技术决策
 - 3004 必须隔离部署，不能修改或重启现有 3003 服务。
@@ -87,6 +93,6 @@
 - 不要在未更新 `PROJECT_STATE.md` 的情况下进行远程同步、部署或上下文交接。
 
 ## 下一步
-1. 提交 `/stickman-workflow` 专用素材库服务和接口。
-2. 开始实现火柴人生成高级控制：自定义文案、目标时长互斥、时长预估和素材/生图模式限制。
+1. 提交火柴人生成高级控制后端改动。
+2. 开始实现前端合作者工作台、后台素材库管理入口和 `/stickman-workflow` 高级选项 UI。
 3. 按计划实现并验证，最后部署到 3004。
