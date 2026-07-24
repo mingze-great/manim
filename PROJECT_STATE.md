@@ -14,9 +14,10 @@
 - 3004 目标后端端口：`8004`
 - 3004 目标 Remotion 渲染端口：`18788`
 - 3004 目标 Celery 队列：`manim_v2_3004`
-- 当前本地 HEAD：`4f726b7e82db7a671afac7949b53a2578bd661b9`
-- 当前本地 HEAD 信息：`feat: add stickman workflow generation controls`
-- 状态更新时间：`2026-07-25 00:01:10 +08:00`
+- 当前部署前源提交：`4db089f2a8ea8cf6b61ec45b8fb4a710e3e6b84f`
+- 当前部署前源提交时间：`2026-07-25 00:04:13 +08:00`
+- 当前部署前源提交信息：`feat: add partner and stickman workflow UI`
+- 状态更新时间：`2026-07-25 00:05:36 +08:00`
 
 ## 已完成
 - 已确认现有 3003 分支保持不动，3004 使用独立 git worktree。
@@ -52,6 +53,8 @@
   - `pytest backend/tests/test_partner_models_import.py backend/tests/test_partner_program_service.py backend/tests/test_stickman_workflow_assets.py backend/tests/test_stickman_workflow_limits.py -q` 通过，结果 `7 passed`。
   - `python -m py_compile backend/app/models/partner.py backend/app/services/partner_program.py backend/app/services/stickman_workflow_assets.py backend/app/services/stickman_workflow_limits.py backend/app/api/partner.py backend/app/api/stickman_workflow.py backend/app/api/admin.py backend/app/api/payment.py backend/app/main.py` 通过。
   - `git diff --check` 通过，仅有 CRLF/LF 替换提示。
+- 已提交前端阶段：`4db089f2a8ea8cf6b61ec45b8fb4a710e3e6b84f`（`feat: add partner and stickman workflow UI`）。
+- 部署前准备：下一步推送 `codex/3004-partner-stickman-platform-20260724` 到远程，并执行 3004 专用部署脚本。
 
 ## 当前问题
 - 还没有远程部署 3004。
@@ -117,7 +120,7 @@
 - 不要在未更新 `PROJECT_STATE.md` 的情况下进行远程同步、部署或上下文交接。
 
 ## 下一步
-1. 提交前端合作者工作台、后台管理页和 `/stickman-workflow` 高级选项 UI。
-2. 部署前再次更新 `PROJECT_STATE.md`，记录提交后的本地 HEAD、分支、远程目录和待重启的 3004 服务。
+1. 提交本文件的部署前状态记录。
+2. 推送 `codex/3004-partner-stickman-platform-20260724` 到远程。
 3. 仅部署到 3004：`/opt/manim-v2-3004-snapshot`，前端 `3004`，后端 `8004`，渲染服务 `18788`，不重启或覆盖 3003。
 4. 验证 3004 服务状态、3003 仍可用、`/stickman-workflow` 可创建任务，并记录 job id、输出 MP4、音视频流检查结果。
