@@ -24,6 +24,12 @@ from app.schemas.user import UserResponse, UserUpdate, UserStats, AuditLogRespon
 from app.api.auth import get_current_user, get_current_admin_user
 from app.config import get_settings
 from app.services.partner_program import ensure_referral_code, generate_invite_code
+from app.services.stickman_workflow_assets import (
+    find_material_library_asset,
+    list_material_libraries,
+    save_material_libraries,
+    save_material_library_package,
+)
 import psutil
 from app.services.stickman_v2_assets import (
     save_background_templates,
@@ -54,6 +60,17 @@ def _with_image_urls(items: list[dict], kind: str):
         image_path = str(clone.get(key) or "").strip()
         explicit_url = str(clone.get(url_key) or "").strip()
         clone["image_url"] = f"/api/admin/stickman-v2/assets/{kind}/{Path(image_path).name}" if image_path else (explicit_url or None)
+        payload.append(clone)
+    return payload
+
+
+def _with_workflow_library_urls(items: list[dict]):
+    payload = []
+    for item in items:
+        clone = dict(item)
+        image_path = str(clone.get("cover_image_path") or "").strip()
+        explicit_url = str(clone.get("cover_image_url") or "").strip()
+        clone["image_url"] = f"/api/admin/stickman-workflow/assets/material-libraries/{Path(image_path).name}" if image_path else (explicit_url or None)
         payload.append(clone)
     return payload
 
@@ -285,6 +302,61 @@ async def create_invite_code(
         "material_mode": invite.material_mode,
         "status": invite.status,
     }
+
+
+@router.get("/stickman-workflow/material-libraries")
+async def get_stickman_workflow_material_libraries(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    return {"libraries": _with_workflow_library_urls(list_material_libraries(db))}
+
+
+@router.post("/stickman-workflow/material-libraries")
+async def set_stickman_workflow_material_libraries(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    libraries = payload.get("libraries") or []
+    return {"libraries": _with_workflow_library_urls(save_material_libraries(db, libraries))}
+
+
+@router.post("/stickman-workflow/material-libraries/{library_key}/package")
+async def upload_stickman_workflow_material_library_package(
+    library_key: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    libraries = list_material_libraries(db)
+    index = next((i for i, item in enumerate(libraries) if item.get("key") == library_key), -1)
+    if index < 0:
+        raise HTTPException(status_code=404, detail="火柴人工作流素材库不存在")
+    try:
+        package_info = await save_material_library_package(file, library_key=library_key)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    libraries[index].update(package_info)
+    saved = save_material_libraries(db, libraries)
+    current = next((item for item in saved if item.get("key") == library_key), None) or libraries[index]
+    return {
+        "message": "火柴人工作流素材库已上传",
+        "image_url": f"/api/admin/stickman-workflow/assets/material-libraries/{Path(current.get('cover_image_path') or '').name}" if current.get("cover_image_path") else (current.get("cover_image_url") or None),
+        "image_count": int(current.get("image_count") or 0),
+        "material_count": int(current.get("material_count") or 0),
+    }
+
+
+@router.get("/stickman-workflow/assets/material-libraries/{filename}")
+async def get_stickman_workflow_material_library_asset(
+    filename: str,
+    db: Session = Depends(get_db),
+):
+    asset_path = find_material_library_asset(db, filename)
+    if not asset_path or not asset_path.exists():
+        raise HTTPException(status_code=404, detail="资源不存在")
+    return FileResponse(asset_path)
 
 
 @router.get("/available-models")

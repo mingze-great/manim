@@ -10,6 +10,7 @@ from app.database import get_db
 from app.models.ai_video import AiVideoJob
 from app.models.user import User
 from app.schemas.ai_video import AiVideoJobCreated, AiVideoJobResponse
+from app.services.stickman_workflow_assets import public_material_libraries, resolve_material_library
 
 
 router = APIRouter(prefix="/stickman-workflow", tags=["stickman-workflow"])
@@ -33,6 +34,31 @@ def _numeric_job_id(job_id: str) -> int:
         raise HTTPException(status_code=400, detail="Invalid job id") from exc
 
 
+@router.get("/config")
+def get_stickman_workflow_config(
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    return {
+        "materialLibraries": public_material_libraries(db),
+        "voices": [
+            {"label": "曼波参考音色", "value": "dayun_manbo", "provider": "dayun_tools"},
+            {"label": "中文女", "value": "中文女", "provider": "dashscope_cosyvoice"},
+            {"label": "中文男", "value": "中文男", "provider": "dashscope_cosyvoice"},
+        ],
+        "defaults": {
+            "voiceId": "dayun_manbo",
+            "materialLibrary": "sc1_outputs",
+            "imageMode": "material_only",
+        },
+        "capabilities": {
+            "canUseAiImages": bool(current_user.is_admin),
+            "canUploadBackground": True,
+            "maxVideoSeconds": 60 if not current_user.is_admin else 180,
+        },
+    }
+
+
 @router.post("/jobs", response_model=AiVideoJobCreated)
 def create_stickman_job(
     payload: StickmanWorkflowJobCreate,
@@ -42,6 +68,9 @@ def create_stickman_job(
     title = payload.title.strip()
     voice_id = payload.voiceId.strip() or "dayun_manbo"
     voice_provider = "dayun_manbo" if voice_id in {"dayun_manbo", "manbo"} else "dashscope_cosyvoice"
+    material_library = resolve_material_library(db, payload.materialLibrary)
+    if not material_library:
+        raise HTTPException(status_code=400, detail="素材库不可用")
     job_payload = {
         "title": title,
         "prompt": title,
@@ -55,7 +84,10 @@ def create_stickman_job(
         "aspectRatio": "16:9",
         "voiceProvider": voice_provider,
         "voiceId": voice_id,
-        "materialLibrary": payload.materialLibrary or "sc1_outputs",
+        "materialLibrary": material_library.get("key") or "sc1_outputs",
+        "materialLibraryPath": material_library.get("base_path") or "",
+        "materialLibraryManifest": material_library.get("material_json_path") or "",
+        "materialLibraryName": material_library.get("name") or "",
         "subtitleMode": "keywords",
         "targetPlatform": payload.targetPlatform,
         "tone": payload.tone,
