@@ -117,4 +117,4 @@ def test_open_source_cosyvoice_accepts_valid_pcm_when_stream_times_out(tmp_path,
     assert output_path.exists()
     assert calls
     assert "--max-time" in calls[0]
-    assert "180" in calls[0]
+    assert "75" in calls[0]

@@ -1692,6 +1692,8 @@ class AiVideoService:
     def _request_cosyvoice_zero_shot_pcm(self, text: str, prompt_text: str, prompt_source: Path, output_pcm_path: Path) -> bytes:
         output_pcm_path.parent.mkdir(parents=True, exist_ok=True)
         output_pcm_path.unlink(missing_ok=True)
+        stream_max_time = int(os.getenv("AI_VIDEO_COSYVOICE_STREAM_MAX_TIME", "75"))
+        stream_max_time = max(20, min(self.cosyvoice_timeout, stream_max_time))
         command = [
             "curl",
             "--silent",
@@ -1700,7 +1702,7 @@ class AiVideoService:
             "--connect-timeout",
             str(min(15, max(5, self.cosyvoice_timeout // 6))),
             "--max-time",
-            str(self.cosyvoice_timeout),
+            str(stream_max_time),
             "-X",
             "POST",
             f"{self.cosyvoice_url}/inference_zero_shot",
@@ -1719,7 +1721,7 @@ class AiVideoService:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                timeout=self.cosyvoice_timeout + 20,
+                timeout=stream_max_time + 15,
             )
         except FileNotFoundError:
             return self._request_cosyvoice_zero_shot_pcm_with_requests(text, prompt_text, prompt_source)

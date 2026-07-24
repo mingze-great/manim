@@ -20,8 +20,9 @@
 - 当前已部署提交：`8e776f5bb7fa79a33710910b759476f9822ad08d`
 - 当前已部署提交时间：`2026-07-25T01:59:59+08:00`
 - 当前已部署提交信息：`chore: tune 3004 cosyvoice fallback config`
+- 当前待部署客户端修复提交：`2afc707db4994aba5cde21c2c8ee5987f8e9a107`
 - 当前待部署客户端修复：`backend/app/services/ai_video.py` 将开源 CosyVoice zero-shot 改为受控 `curl --max-time` 下载 PCM，避免 Python `requests` 等待流关闭导致 worker 卡住。
-- 状态更新时间：`2026-07-25 02:07:30 +08:00`
+- 状态更新时间：`2026-07-25 02:12:30 +08:00`
 
 ## 已完成
 - 已确认现有 3003 分支保持不动，3004 使用独立 git worktree。
