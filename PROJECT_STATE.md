@@ -342,4 +342,5 @@
 - 抽帧文件：`C:\Users\Administrator\Documents\Codex\2026-07-18\300\outputs\3004_job_92_validation\frame_01s.png`、`frame_08s.png`、`frame_16s.png`。
 - 抽帧结论：左上角标题不再乱码，显示 `心理火柴人`；右上角 `心理分享 | 认知突破` 可见；场景图单张居中完整，未被横线/字幕/白色面板遮挡；字幕居中且无首尾多余引号/标点；总结关键词为 2-4 字短词并在分段内累计展示；无 `@Sc1火柴人`。
 - 已验证的本轮平台能力：手机号/用户名兼容登录；合作者邀请码链路；素材库 zip 上传持久化；工作流首页入口；AI 助手知识库；火柴人标题一键生成成片。
+- 远程同步：3004 服务器部署目录已同步；`git push origin codex/3004-partner-stickman-platform-20260724` 失败，错误为 `Recv failure: Connection was reset`，GitHub 远程分支不能确认已更新。
 - 不要重复做：不要碰 3003；不要重启或重新启用 `manim-v2-3003-cosyvoice.service`；不要把 3004 的素材库后台接口与旧 `/admin/stickman-v2/scene-style-libraries` 混用。
