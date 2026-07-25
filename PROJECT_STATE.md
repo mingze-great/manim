@@ -377,4 +377,7 @@
 - 浏览器复验：合作者搜索与素材库新增草稿仍通过，React #31 已消失；剩余发现为旧素材库封面 `/api/admin/stickman-workflow/assets/material-libraries/codex_verify_library_bom/scene.png` 经过公网 3004 返回 nginx 404。
 - nginx 根因：3004 nginx `location /api` 会被后面的静态图片正则 location 抢走，导致 `/api/.../*.png` 未代理到 backend；backend 本地 `127.0.0.1:8004` 对同一路径返回 `200`。
 - 本地修复：`deploy/manim-v2-3004.conf` 将 `location /api` 改为 `location ^~ /api`，确保 `/api` 下图片资源优先代理到 3004 backend；该修复只用于 3004。
-- 下一步：提交 nginx 配置修复，部署到 3004 并 reload nginx；验证公网素材库封面 URL 返回 200，再做最终浏览器 UI 检查。
+- 已部署 nginx 配置修复：提交 `50fcf0933d29fcfb0fcec0010f44ddf2bcfa6790` 已同步 3004，`nginx -t` 通过并 reload；公网 3004 素材库封面 URL 返回 `200`；3004 health 正常；3003 health 返回 `200`。
+- 最终 UI 复验又发现：`/admin/partners` 初始化调用 `/api/admin/users?limit=500`，但后端 `limit` 最大为 `100`，导致 422；这是创建合作者弹窗 no data 的直接原因之一。
+- 本地修复：`AdminPartners.tsx` 初始化用户列表改为 `limit=100`，远程搜索仍按用户名/手机号查询；本地 `npm run build` 通过，`git diff --check` 通过。
+- 下一步：提交并部署最终前端修复到 3004，再用浏览器确认合作者搜索、素材库新增草稿、素材封面和控制台错误均正常。

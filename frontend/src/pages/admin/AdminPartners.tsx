@@ -58,7 +58,7 @@ export default function AdminPartners() {
         adminApi.getPartners(),
         adminApi.getReferrals(partnerId),
         adminApi.getCommissions(partnerId),
-        adminApi.getUsers({ limit: 500 }),
+        adminApi.getUsers({ limit: 100 }),
         adminApi.getStickmanWorkflowMaterialLibraries(),
       ])
       setPartners(partnerRes.data || [])
