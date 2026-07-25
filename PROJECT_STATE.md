@@ -381,3 +381,15 @@
 - 最终 UI 复验又发现：`/admin/partners` 初始化调用 `/api/admin/users?limit=500`，但后端 `limit` 最大为 `100`，导致 422；这是创建合作者弹窗 no data 的直接原因之一。
 - 本地修复：`AdminPartners.tsx` 初始化用户列表改为 `limit=100`，远程搜索仍按用户名/手机号查询；本地 `npm run build` 通过，`git diff --check` 通过。
 - 下一步：提交并部署最终前端修复到 3004，再用浏览器确认合作者搜索、素材库新增草稿、素材封面和控制台错误均正常。
+
+## 2026-07-26 01:25 3004 后台素材库与合作者最终验收
+- 最终部署提交：`7e2b486aab7d6a9666247ae27e3e6332e9628f8d`（`fix: keep admin user lookup within api limits`）。
+- 3004 部署标记：`/opt/manim-v2-3004-snapshot/.deployed-ref` 已记录 `commit=7e2b486aab7d6a9666247ae27e3e6332e9628f8d`，部署时间 `2026-07-26T01:23:00+08:00`。
+- 远程构建：3004 前端 `npm run build` 通过，仅有既有 chunk size warning。
+- 服务验证：3004 backend/worker/render 均 active；`http://127.0.0.1:8004/health` 正常；3003 health 返回 `200`，未部署或重启 3003。
+- 素材库上传验证：3004 API 已验证新增素材库 zip 上传成功，支持 `materials.generated.json` 和 `fileName/imagePath`；刷新后素材库仍存在并有 `image_count=1`、`material_count=1`。
+- 素材库预览验证：3004 nginx 已修复 `/api/.../*.png` 代理优先级，公网素材库封面 URL 返回 `200`。
+- 合作者验证：浏览器登录 3004 admin 后进入 `/admin/partners`，点击“创建合作者”，输入手机号 `13990040002`，下拉可见 `codex3004_partner_phone · 13990040002`。
+- 素材库 UI 验证：浏览器进入 `/admin/stickman-workflow-libraries`，点击“新增素材库”，新增草稿卡片可见且“上传素材库 zip”按钮仍存在，不再消失。
+- 浏览器控制台验证：最终 Playwright 复验 `badResponses=[]`，`meaningfulConsoleErrors=[]`；截图保存到 `C:\Users\Administrator\Documents\Codex\2026-07-18\300\outputs\3004_admin_fix_ui_final_clean.png`。
+- 注意：验证用 `codex_probe_generated_*` 素材库已清理；保留原 `codex_verify_library_bom` 测试库。
