@@ -1499,13 +1499,14 @@ class AiVideoService:
                 try:
                     return self._generate_dayun_manbo_audio(synth_text, output_path)
                 except Exception as exc:
-                    fallback_voice = self._resolve_cosyvoice_voice(
-                        str(payload.get("voiceId") or project_json.get("voice", {}).get("speaker") or "中文女")
+                    self._append_log(log_path, f"Dayun Manbo fallback to Edge TTS {label} error={exc}")
+                    seconds_value, fallback_provider, fallback_voice = self._generate_safe_tts_fallback_audio(
+                        synth_text,
+                        output_path,
+                        str(payload.get("voiceId") or project_json.get("voice", {}).get("speaker") or "中文女"),
                     )
-                    self._append_log(log_path, f"Dayun Manbo fallback to open-source CosyVoice {label} error={exc}")
-                    seconds_value = self._generate_open_source_cosyvoice_audio(synth_text, fallback_voice, output_path)
                     voice = fallback_voice
-                    provider = "open_source_cosyvoice"
+                    provider = fallback_provider
                     return seconds_value
             if provider == "edge_tts":
                 return self._generate_edge_tts_audio(synth_text, voice, output_path)
@@ -1513,11 +1514,14 @@ class AiVideoService:
                 try:
                     return self._generate_dashscope_cosyvoice_audio(synth_text, voice, output_path)
                 except Exception as exc:
-                    fallback_voice = self._resolve_cosyvoice_voice(str(payload.get("voiceId") or project_json.get("voice", {}).get("speaker") or "中文女"))
-                    self._append_log(log_path, f"DashScope CosyVoice fallback to open-source {label} error={exc}")
-                    seconds_value = self._generate_open_source_cosyvoice_audio(synth_text, fallback_voice, output_path)
+                    self._append_log(log_path, f"DashScope CosyVoice fallback to Edge TTS {label} error={exc}")
+                    seconds_value, fallback_provider, fallback_voice = self._generate_safe_tts_fallback_audio(
+                        synth_text,
+                        output_path,
+                        str(payload.get("voiceId") or project_json.get("voice", {}).get("speaker") or "中文女"),
+                    )
                     voice = fallback_voice
-                    provider = "open_source_cosyvoice"
+                    provider = fallback_provider
                     return seconds_value
             return self._generate_open_source_cosyvoice_audio(synth_text, voice, output_path)
 
@@ -1611,6 +1615,23 @@ class AiVideoService:
         project_json.setdefault("voice", {})["speaker"] = voice
         return audio_scenes
 
+    def _generate_safe_tts_fallback_audio(self, text: str, output_path: Path, requested_voice: str) -> tuple[float, str, str]:
+        edge_voice = self._resolve_edge_tts_voice(requested_voice)
+        edge_error: Exception | None = None
+        try:
+            return self._generate_edge_tts_audio(text, edge_voice, output_path), "edge_tts", edge_voice
+        except Exception as exc:
+            edge_error = exc
+
+        cosy_voice = self._resolve_cosyvoice_voice(requested_voice)
+        try:
+            return self._generate_open_source_cosyvoice_audio(text, cosy_voice, output_path), "open_source_cosyvoice", cosy_voice
+        except Exception as exc:
+            raise RuntimeError(
+                f"TTS fallback unavailable: Edge TTS failed: {edge_error}; "
+                f"Open-source CosyVoice failed or unhealthy: {exc}"
+            ) from exc
+
     def _generate_dayun_manbo_audio(self, text: str, output_path: Path) -> float:
         cleaned_chars = []
         for ch in text:
@@ -1664,10 +1685,12 @@ class AiVideoService:
     def _generate_edge_tts_audio(self, text: str, voice: str, output_path: Path) -> float:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         resolved_voice = self._resolve_edge_tts_voice(voice)
+        temp_path = output_path.with_suffix(".edge.mp3")
+        temp_path.unlink(missing_ok=True)
 
         async def _save() -> None:
             communicate = edge_tts.Communicate(text=text, voice=resolved_voice)
-            await communicate.save(str(output_path))
+            await communicate.save(str(temp_path))
 
         try:
             asyncio.run(_save())
@@ -1683,9 +1706,13 @@ class AiVideoService:
         except Exception as exc:
             raise RuntimeError(f"Edge TTS failed: {exc}") from exc
 
-        audio = AudioSegment.from_file(output_path)
+        audio = AudioSegment.from_file(temp_path)
         if len(audio.raw_data) < 1024 or audio.rms <= 0:
             raise RuntimeError("Edge TTS returned silent audio")
+        audio = audio.set_channels(1).set_frame_rate(self.cosyvoice_sample_rate)
+        audio = self._trim_audio_segment_silence(audio)
+        audio.export(output_path, format="wav")
+        temp_path.unlink(missing_ok=True)
         return max(len(audio) / 1000.0, 0.01)
 
     def _generate_dashscope_cosyvoice_audio(self, text: str, voice: str, output_path: Path) -> float:

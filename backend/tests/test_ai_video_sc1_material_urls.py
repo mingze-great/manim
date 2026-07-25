@@ -204,21 +204,22 @@ def test_ai_image_mode_generates_scene_asset(monkeypatch):
     assert asset["slot"] == "center"
 
 
-def test_dayun_manbo_tts_rate_limit_falls_back_to_open_source_cosyvoice(tmp_path, monkeypatch):
+def test_dayun_manbo_tts_rate_limit_falls_back_to_edge_tts_before_local_cosyvoice(tmp_path, monkeypatch):
     service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
     service.render_audio_root = tmp_path / "render-audio"
     service.render_service_url = "http://127.0.0.1:18787"
     service.cosyvoice_sample_rate = 22050
     service._append_log = lambda *_args, **_kwargs: None
     service._resolve_cosyvoice_voice = lambda _voice: "中文女"
+    service._resolve_edge_tts_voice = lambda _voice: "zh-CN-XiaoxiaoNeural"
 
     def fail_dayun(_text, _output_path):
         raise RuntimeError("Dayun Manbo TTS request failed: HTTP Error 429: Too Many Requests")
 
-    fallback_calls = []
+    edge_calls = []
 
-    def fallback_open_source(text, _voice, output_path):
-        fallback_calls.append((text, _voice))
+    def fallback_edge(text, _voice, output_path):
+        edge_calls.append((text, _voice))
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with wave.open(str(output_path), "wb") as wav:
             wav.setnchannels(1)
@@ -228,7 +229,12 @@ def test_dayun_manbo_tts_rate_limit_falls_back_to_open_source_cosyvoice(tmp_path
         return 1.0
 
     monkeypatch.setattr(service, "_generate_dayun_manbo_audio", fail_dayun)
-    monkeypatch.setattr(service, "_generate_open_source_cosyvoice_audio", fallback_open_source)
+    monkeypatch.setattr(service, "_generate_edge_tts_audio", fallback_edge)
+    monkeypatch.setattr(
+        service,
+        "_generate_open_source_cosyvoice_audio",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("local CosyVoice should not run when Edge TTS works")),
+    )
 
     project_json = {"scenes": [{"voiceText": "先别急着证明自己", "duration": 1.2}]}
     audio_scenes = service._generate_cosyvoice_audio(
@@ -238,10 +244,33 @@ def test_dayun_manbo_tts_rate_limit_falls_back_to_open_source_cosyvoice(tmp_path
         {"voiceProvider": "dayun_manbo", "voiceId": "dayun_manbo"},
     )
 
-    assert fallback_calls == [("先别急着证明自己", "中文女")]
-    assert audio_scenes[0]["provider"] == "open_source_cosyvoice"
+    assert edge_calls == [("先别急着证明自己", "zh-CN-XiaoxiaoNeural")]
+    assert audio_scenes[0]["provider"] == "edge_tts"
     assert audio_scenes[0]["src"] == "http://127.0.0.1:18787/generated-audio/job_42/scene-01.wav"
     assert (tmp_path / "job_42" / "audio" / "scene-01.wav").exists()
+
+
+def test_safe_tts_fallback_uses_local_cosyvoice_only_after_edge_tts_failure(tmp_path, monkeypatch):
+    service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
+    service._resolve_edge_tts_voice = lambda _voice: "zh-CN-XiaoxiaoNeural"
+    service._resolve_cosyvoice_voice = lambda _voice: "中文女"
+
+    calls = []
+    monkeypatch.setattr(service, "_generate_edge_tts_audio", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("edge unavailable")))
+
+    def fallback_open_source(text, voice, output_path):
+        calls.append((text, voice))
+        output_path.write_bytes(b"fake")
+        return 1.5
+
+    monkeypatch.setattr(service, "_generate_open_source_cosyvoice_audio", fallback_open_source)
+
+    seconds, provider, voice = service._generate_safe_tts_fallback_audio("先别急着证明自己", tmp_path / "scene.wav", "中文女")
+
+    assert seconds == 1.5
+    assert provider == "open_source_cosyvoice"
+    assert voice == "中文女"
+    assert calls == [("先别急着证明自己", "中文女")]
 
 
 def test_open_source_cosyvoice_accepts_valid_pcm_when_stream_times_out(tmp_path, monkeypatch):

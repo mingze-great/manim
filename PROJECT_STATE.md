@@ -187,8 +187,9 @@
   3. `dayun_manbo` 失败时，3004 应优先使用轻量、外部、可超时的 TTS fallback；如果无可用 TTS，任务要快速失败并提示“音频服务不可用”，不能触发大模型本地服务导致整机不可用。
   4. CosyVoice 如后续继续使用，必须独立 3004 服务名、独立端口、`Restart=on-failure` 限制重启频率、`StartLimitBurst`、`MemoryMax`、健康检查和完整模型文件校验。
 - 本地防护实现：`backend/app/services/ai_video.py` 已新增 open-source CosyVoice 健康闸门，任何 SFT/zero-shot 调用前先请求 `/docs`，默认 2 秒超时；不健康时快速失败，避免触发本机重型 TTS fallback。
-- 本地回归测试：`backend/tests/test_ai_video_sc1_material_urls.py` 已新增健康失败用例，并让既有 zero-shot 测试显式模拟健康服务。
-- 本地验证：`PYTHONPATH=backend pytest backend/tests/test_ai_video_sc1_material_urls.py -q` -> `15 passed`；`python -m py_compile backend/app/services/ai_video.py` 通过；`git diff --check` 通过，仅有 PROJECT_STATE 换行提示。
+- 本地防护实现：`dayun_manbo` 或 DashScope 失败后优先降级到轻量 `edge_tts` 并输出真实 wav；只有 Edge TTS 也失败时才尝试经过健康闸门的本机 open-source CosyVoice。
+- 本地回归测试：`backend/tests/test_ai_video_sc1_material_urls.py` 已新增健康失败用例、Edge 优先 fallback 用例、Edge 失败后才尝试本机 CosyVoice 用例。
+- 本地验证：`PYTHONPATH=backend pytest backend/tests/test_ai_video_sc1_material_urls.py -q` -> `16 passed`；`python -m py_compile backend/app/services/ai_video.py` 通过；`git diff --check` 通过。
 - 下一步恢复顺序：
   1. 等腾讯云 SSH banner 恢复或由控制台强制关机开机。
   2. 先确认 `manim-v2-3003-cosyvoice.service` disabled/inactive，杀掉所有 `cosyvoice3003` 残留进程。
