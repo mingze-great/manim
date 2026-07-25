@@ -218,3 +218,4 @@
 - 部署后必须完成：确认 Celery 注册 `app.tasks.generate_material_library_celery`；平台登录后验证助手、时长估算、合作者和邀请码；从 `/stickman-workflow` 创建新成片并完成 ffprobe 与关键帧验收。
 - 代码审查修复：渲染素材按 job 子目录隔离，避免同名图片跨素材库覆盖；素材库封面 URL 按 library key 隔离；生成样图接口增加管理员鉴权和样图白名单；120 张串行生成任务时限提高为 soft 15000 秒、hard 15600 秒；总结关键词不再从旁白任意截取，改用情绪短词及唯一组合池。
 - 本地清理：已删除工作树 `work/` 下旧部署 zip/tar 和一次性探针脚本，并在 `.gitignore` 增加 `/work/`；这些包含环境快照的临时文件未进入提交。
+- 本次功能源码提交：`a30bd440e00ec3d27273447cf05281fd27fdd475`（`feat: complete 3004 stickman platform workflow`）。该提交包含成片同步修复、素材库自动生成、动态时长、助手知识和审查整改，是本轮 3004 部署的源码锚点。
