@@ -25,6 +25,7 @@ export default function AdminPartners() {
   const [createPartnerOpen, setCreatePartnerOpen] = useState(false)
   const [inviteOpen, setInviteOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [userSearchLoading, setUserSearchLoading] = useState(false)
 
   const partnerNameMap = useMemo(
     () => Object.fromEntries(partners.map((item) => [item.id, item.display_name])),
@@ -60,6 +61,19 @@ export default function AdminPartners() {
       message.error(error?.response?.data?.detail || '加载合作者数据失败')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadPartnerCandidateUsers = async (search = '') => {
+    setUserSearchLoading(true)
+    try {
+      const { data } = await adminApi.getUsers({ limit: 50, search: search.trim() || undefined })
+      const payload: any = data
+      setUsers(Array.isArray(payload) ? payload : (payload?.users || []))
+    } catch (error: any) {
+      message.error(error?.response?.data?.detail || '搜索用户失败')
+    } finally {
+      setUserSearchLoading(false)
     }
   }
 
@@ -159,7 +173,7 @@ export default function AdminPartners() {
           <Button icon={<ReloadOutlined />} loading={loading} onClick={() => loadData()}>
             刷新
           </Button>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreatePartnerOpen(true)}>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => { setCreatePartnerOpen(true); loadPartnerCandidateUsers() }}>
             创建合作者
           </Button>
           <Button icon={<GiftOutlined />} onClick={() => setInviteOpen(true)}>
@@ -245,7 +259,16 @@ export default function AdminPartners() {
       >
         <Form layout="vertical" onFinish={createPartner} initialValues={{ commission_rate_bps: 3000 }}>
           <Form.Item name="user_id" label="选择用户" rules={[{ required: true, message: '请选择用户' }]}>
-            <Select showSearch optionFilterProp="label" options={userOptions} placeholder="选择要升级为合作者的账号" />
+            <Select
+              showSearch
+              filterOption={false}
+              loading={userSearchLoading}
+              onSearch={loadPartnerCandidateUsers}
+              optionFilterProp="label"
+              options={userOptions}
+              placeholder="输入用户名或手机号搜索已有用户"
+              notFoundContent={userSearchLoading ? '搜索中...' : '暂无用户，请输入用户名或手机号搜索'}
+            />
           </Form.Item>
           <Form.Item name="display_name" label="合作者名称" rules={[{ required: true, message: '请输入合作者名称' }]}>
             <Input placeholder="例如：小红书心理博主 A" />

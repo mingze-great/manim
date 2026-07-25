@@ -116,13 +116,18 @@ export default function AdminStickmanWorkflowLibraries() {
   const uploadPackage = async (library: StickmanWorkflowMaterialLibrary, file: File) => {
     const key = String(library.key || '').trim()
     if (!key) {
-      message.warning('请先填写素材库 key 并保存')
+      message.warning('请先填写素材库 key')
       return false
     }
     setUploadingKeys((prev) => ({ ...prev, [key]: true }))
     try {
-      await saveLibraries()
-      const { data } = await adminApi.uploadStickmanWorkflowMaterialLibraryPackage({ ...library, key }, file)
+      const uploadLibrary = {
+        ...library,
+        key,
+        name: String(library.name || '').trim() || key,
+        sort_order: library.sort_order || libraries.findIndex((item) => item.key === library.key) + 1 || 100,
+      }
+      const { data } = await adminApi.uploadStickmanWorkflowMaterialLibraryPackage(uploadLibrary, file)
       message.success(data.message || '素材库 zip 已上传')
       if (data.libraries?.length) {
         setLibraries(data.libraries)

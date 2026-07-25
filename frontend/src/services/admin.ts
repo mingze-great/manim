@@ -193,7 +193,7 @@ export interface StickmanWorkflowMaterialGeneration {
 
 export const adminApi = {
   getUsers: (params?: { skip?: number; limit?: number; search?: string }) =>
-    api.get<{ users: User[]; total: number }>('/admin/users', { params }),
+    api.get<User[] | { users: User[]; total: number }>('/admin/users', { params }),
 
   getUserCount: () => api.get<{ total: number; active: number }>('/admin/users/count'),
 

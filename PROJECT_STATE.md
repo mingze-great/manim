@@ -344,3 +344,21 @@
 - 已验证的本轮平台能力：手机号/用户名兼容登录；合作者邀请码链路；素材库 zip 上传持久化；工作流首页入口；AI 助手知识库；火柴人标题一键生成成片。
 - 远程同步：3004 服务器部署目录已同步；`git push origin codex/3004-partner-stickman-platform-20260724` 失败，错误为 `Recv failure: Connection was reset`，GitHub 远程分支不能确认已更新。
 - 不要重复做：不要碰 3003；不要重启或重新启用 `manim-v2-3003-cosyvoice.service`；不要把 3004 的素材库后台接口与旧 `/admin/stickman-v2/scene-style-libraries` 混用。
+
+## 2026-07-26 3004 后台素材库上传与合作者用户选择修复记录
+- 当前任务：修复 3004 后台 `/admin/stickman-workflow-libraries` 新增素材库后上传 zip 卡片消失、已有素材库上传不更新，以及 `/admin/partners` 创建合作者时用户选择列表 no data、不能按用户名/手机号搜索的问题。
+- 当前分支：`codex/3004-partner-stickman-platform-20260724`
+- 修复前本地 HEAD：`8b99ff87d4ce38a082650131a042f4fd51c70a5d`
+- 3004 部署前锚点：`/opt/manim-v2-3004-snapshot/.deployed-ref` 记录代码提交 `032fb939382d7a05d01ea87f52e1c10f45d50f6b`，状态提交 `8b99ff87d4ce38a082650131a042f4fd51c70a5d`。
+- 根因 1：前端上传素材库 zip 前先调用保存配置；后端规范化素材库配置时会丢弃 `name` 为空的新素材库草稿，如果 zip 随后解析失败，页面会被后端旧列表覆盖，看起来“新增素材库消失”。
+- 根因 2：素材库 zip 解析只识别 `material.json/materials.json` 和 `file_name/image_path`，不兼容常见的 `materials.generated.json`、`materials.normalized.json`、`fileName/imagePath` 或包裹在 `materials/items/data` 字段里的清单。
+- 根因 3：合作者创建弹窗只依赖初次加载的用户列表，没有远程搜索；在列表为空、加载失败或用户不在前 500 条时，选择框显示 no data。
+- 本地修复：`backend/app/services/stickman_workflow_assets.py` 允许空名称草稿以 key 作为名称保存；上传 zip 支持 `materials.generated.json`、`materials.normalized.json`、驼峰字段和对象包裹清单。
+- 本地修复：`frontend/src/pages/admin/AdminStickmanWorkflowLibraries.tsx` 上传 zip 不再先保存并覆盖当前列表；上传成功后使用接口返回的完整列表刷新，失败时保留新增草稿。
+- 本地修复：`frontend/src/pages/admin/AdminPartners.tsx` 创建合作者弹窗打开时加载候选用户，选择框支持按用户名/手机号远程搜索；`frontend/src/services/admin.ts` 修正用户列表返回类型兼容数组和包装对象。
+- 本地验证：`PYTHONPATH=backend pytest backend/tests/test_stickman_workflow_upload_persistence.py -q` -> `4 passed`。
+- 本地验证：`python -m py_compile backend/app/services/stickman_workflow_assets.py backend/app/api/admin.py` -> 通过。
+- 本地验证：`npm run build` in `frontend` -> 通过，仅有既有 Vite chunk size warning。
+- 本地验证：`git diff --check` -> 通过。
+- 部署边界：只同步到 `/opt/manim-v2-3004-snapshot`，只重启 3004 backend；如前端 dist 更新由 nginx 静态文件直接生效，不重启 3003。
+- 下一步：提交本轮修复，部署 3004，平台验证素材库新增 zip 上传刷新后仍存在、已有库上传计数更新、合作者创建弹窗搜索手机号/用户名有候选用户。

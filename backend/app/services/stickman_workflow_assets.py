@@ -80,8 +80,8 @@ def normalize_material_library_items(items: list[dict]) -> list[dict]:
         if not isinstance(raw, dict):
             continue
         key = str(raw.get("key") or "").strip()
-        name = str(raw.get("name") or "").strip()
-        if not key or not name:
+        name = str(raw.get("name") or "").strip() or key
+        if not key:
             continue
         item = {
             "key": key,
@@ -211,6 +211,8 @@ def _resolve_image(package_dir: Path, raw_path: str, file_name: str) -> Optional
 
 def _normalize_manifest(package_dir: Path, manifest_path: Path) -> tuple[Path, int, int, Optional[Path]]:
     payload = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
+    if isinstance(payload, dict):
+        payload = payload.get("materials") or payload.get("items") or payload.get("data") or []
     if not isinstance(payload, list) or not payload:
         raise ValueError("material.json 内容无效，必须是数组")
     normalized: list[dict] = []
@@ -218,8 +220,9 @@ def _normalize_manifest(package_dir: Path, manifest_path: Path) -> tuple[Path, i
         if not isinstance(raw, dict):
             continue
         clone = dict(raw)
-        file_name = str(clone.get("file_name") or "").strip()
-        image_path = _resolve_image(package_dir, str(clone.get("image_path") or "").strip(), file_name)
+        file_name = str(clone.get("file_name") or clone.get("fileName") or clone.get("filename") or "").strip()
+        raw_image_path = str(clone.get("image_path") or clone.get("imagePath") or clone.get("path") or "").strip()
+        image_path = _resolve_image(package_dir, raw_image_path, file_name)
         if not image_path:
             continue
         clone["file_name"] = file_name or image_path.name
@@ -254,11 +257,16 @@ async def save_material_library_package(file: UploadFile, *, library_key: str) -
         if zip_path.exists():
             zip_path.unlink()
 
-    manifest_candidates = list(package_dir.rglob("material.json")) + list(package_dir.rglob("materials.json"))
+    manifest_candidates = (
+        list(package_dir.rglob("material.json"))
+        + list(package_dir.rglob("materials.json"))
+        + list(package_dir.rglob("materials.generated.json"))
+        + list(package_dir.rglob("materials.normalized.json"))
+    )
     manifest_path = manifest_candidates[0] if manifest_candidates else None
     if not manifest_path:
         shutil.rmtree(package_dir, ignore_errors=True)
-        raise ValueError("压缩包内缺少 material.json 或 materials.json")
+        raise ValueError("压缩包内缺少 material.json、materials.json 或 materials.generated.json")
     try:
         normalized_manifest_path, material_count, image_count, cover_image = _normalize_manifest(package_dir, manifest_path)
     except Exception as exc:
