@@ -307,3 +307,19 @@
 - 差异检查：`git diff --check` -> 通过，仅提示 `PROJECT_STATE.md` CRLF 将转 LF。
 - 密钥检查：`rg` 仅命中测试用假密钥 `sk-secret` 和 env example 空字段，未发现真实密钥进入本轮 diff。
 - 下一步：提交本地改动；部署前备份 3004 SQLite 和代码快照；只同步并重启 3004；在 3004 平台验证登录、合作者兑换码、素材库上传和 `/stickman-workflow` 成片。
+
+## 2026-07-26 00:18 3004 job_91 成片复验与渲染小修
+- 当前任务：继续 3004 平台闭环验收；通过真实 `/stickman-workflow` 平台接口创建成片，并修复验收发现的可见问题。
+- 当前分支：`codex/3004-partner-stickman-platform-20260724`
+- 修复前本地 HEAD：`31b95f9140c59392d2247de682f121e41d0438bf`（`fix: accept bom material manifests`）
+- 3004 部署锚点：远程 `/opt/manim-v2-3004-snapshot/.deployed-ref` 记录 `codex/3004-partner-stickman-platform-20260724@31b95f93abf7f97b422ec5f7bbd4632a7c6ed629`，部署时间 `2026-07-26T00:07:33+08:00`。
+- 远程状态：3004 backend/worker/render 均 `active`；`http://127.0.0.1:8004/health` 与 `http://127.0.0.1:18788/api/health` 正常；3003 health 返回 `200`，未修改、未重启 3003；根分区约 4.0G 可用。
+- 平台任务：使用 3004 用户手机号 `13990040003` 创建 `/stickman-workflow` 任务 `job_91`，标题生成模式、`dayun_manbo`、`sc1_outputs`、`material_only`、目标约 20 秒。
+- 平台结果：`job_91` 状态 `completed`，输出 URL `/api/ai-video/files/91/output/video.mp4`，远程路径 `/opt/manim-v2-3004-snapshot/backend/storage/ai-video/tasks/job_91/output/video.mp4`。
+- 本地下载：`C:\Users\Administrator\Documents\Codex\2026-07-18\300\outputs\3004_job_91_validation\job_91.mp4`，大小 `1469346` 字节。
+- ffprobe：视频 H.264，1920x1080，30fps；音频 AAC，48000Hz，2 声道；时长 `19.179` 秒。
+- 抽帧：`frame_01s.png`、`frame_08s.png`、`frame_16s.png`。场景图单张居中完整，未被横线/字幕/白色面板遮挡；右上角 `心理分享 | 认知突破` 可见；无 `@Sc1火柴人`；总结关键词为 2-4 字短词并在分段内累计展示。
+- 验收发现：左上角标题显示为 `???????????`，初步判断为本次 PowerShell API 请求体中文编码导致标题入库异常，但渲染层也应兜底；字幕 cue 首尾清洗漏掉中文/英文引号，`job_91` 中段字幕出现前导引号。
+- 本地修复：`video-render-service/remotion-mind-video/src/remotion/Sc1StickmanVideo.jsx` 新增字幕首尾引号/标点清洗；左上标题对明显问号乱码使用 `心理火柴人` 兜底，避免平台输出出现乱码。
+- 本地验证：`git diff --check` 通过；本地 Remotion 子项目缺 `node_modules`，`npm run build` 失败于 `vite` 不存在，需在 3004 远程部署目录用现有依赖验证构建。
+- 下一步：提交本渲染小修，部署到 3004 render 服务，重新创建平台任务并抽帧确认标题不再乱码、字幕无首尾引号。

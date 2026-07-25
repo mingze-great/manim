@@ -21,7 +21,19 @@ const colors = ['#c51cff', '#75421e', '#e02525', '#2458e6', '#f3d21b', '#21c928'
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const clean = (value) => String(value || '').replace(/\s+/g, ' ').trim();
-const cleanSubtitle = (value) => clean(value).replace(/[。！？!?；;，,、：:.]+$/g, '');
+const cleanSubtitle = (value) => clean(value)
+  .replace(/^[。！？!?；;，,、：:."'“”‘’]+/g, '')
+  .replace(/[。！？!?；;，,、：:."'“”‘’]+$/g, '');
+const isLikelyGarbled = (value) => {
+  const text = clean(value);
+  if (!text) return false;
+  const questionMarks = (text.match(/\?/g) || []).length;
+  return questionMarks >= 4 && questionMarks / text.length > 0.45;
+};
+const displayHeaderTitle = (value) => {
+  const text = clean(value);
+  return isLikelyGarbled(text) ? '心理火柴人' : text;
+};
 const mediaSource = (value) => {
   const source = String(value || '').trim();
   if (!source) return '';
@@ -332,7 +344,7 @@ const Header = ({title}) => (
     <div style={{width: 30, height: 30, borderRadius: '50%', border: '4px solid #62a9df', display: 'grid', placeItems: 'center', flex: '0 0 auto'}}>
       <div style={{width: 11, height: 11, borderRadius: '50%', background: '#62a9df'}} />
     </div>
-    <span>{title}</span>
+    <span>{displayHeaderTitle(title)}</span>
   </div>
 );
 
