@@ -363,6 +363,24 @@ def test_open_source_cosyvoice_health_failure_prevents_local_tts_call(tmp_path, 
         service._generate_open_source_cosyvoice_audio("先别急着证明自己", "中文女", tmp_path / "scene.wav")
 
 
+def test_sc1_material_paths_falls_back_when_configured_manifest_is_missing(tmp_path):
+    service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
+    root = tmp_path / "materials"
+    root.mkdir()
+    generated_manifest = root / "materials.generated.json"
+    generated_manifest.write_text("[]", encoding="utf-8")
+
+    material_root, manifest_path = service._sc1_material_paths(
+        {
+            "materialLibraryPath": str(root),
+            "materialLibraryManifest": str(root / "material.json"),
+        }
+    )
+
+    assert material_root == root.resolve()
+    assert manifest_path == generated_manifest.resolve()
+
+
 def test_build_srt_contains_every_caption_cue_with_absolute_timing():
     service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
     scenes = [

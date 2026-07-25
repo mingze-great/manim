@@ -1166,6 +1166,13 @@ class AiVideoService:
         if manifest_value:
             manifest_path = Path(manifest_value).expanduser().resolve()
             material_root = Path(root_value).expanduser().resolve() if root_value else manifest_path.parent
+            if not manifest_path.exists():
+                candidates = [
+                    material_root / "materials.generated.json",
+                    material_root / "materials.json",
+                    material_root / "material.json",
+                ]
+                manifest_path = next((candidate for candidate in candidates if candidate.exists()), manifest_path)
             return material_root, manifest_path
         if root_value:
             configured_path = Path(root_value).expanduser().resolve()

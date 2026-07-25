@@ -197,6 +197,10 @@
 - 平台任务 `job_11` 创建成功但失败于 TTS：Dayun 不可用、Edge TTS 返回 403、本机 CosyVoice 被健康闸门拒绝。此失败没有拖垮服务器，证明健康闸门有效。
 - 本地新增修复：安全 TTS fallback 顺序改为 `DashScope CosyVoice -> Edge TTS -> 健康的本机 CosyVoice`。DashScope 使用服务器环境变量，不写代码、不提交密钥。
 - 本地验证：`PYTHONPATH=backend pytest backend/tests/test_ai_video_sc1_material_urls.py -q` -> `16 passed`；`python -m py_compile backend/app/services/ai_video.py` 通过；`git diff --check` 通过。
+- 3004 已配置 DashScope TTS 环境变量到 systemd drop-in，只在服务器环境保存，代码和提交不包含密钥；已部署 `b4c2d6c1d43d663e3d07e4c402c1ac2860db3f7b`。
+- 平台任务 `job_12` 已推进到渲染前素材预检，失败原因为远程素材库实际存在 `materials.generated.json` 和 `psychology-stickman-18-*.png` 命名文件，但配置传入缺失的 `material.json`，导致代码回退到 `18.png` 等兜底文件名。
+- 本地新增修复：`_sc1_material_paths` 在显式 manifest 不存在时，会回退同目录 `materials.generated.json`、`materials.json`、`material.json`；新增回归测试覆盖该路径。
+- 本地验证：`PYTHONPATH=backend pytest backend/tests/test_ai_video_sc1_material_urls.py -q` -> `17 passed`；`python -m py_compile backend/app/services/ai_video.py` 通过；`git diff --check` 通过。
 - 下一步恢复顺序：
   1. 等腾讯云 SSH banner 恢复或由控制台强制关机开机。
   2. 先确认 `manim-v2-3003-cosyvoice.service` disabled/inactive，杀掉所有 `cosyvoice3003` 残留进程。
