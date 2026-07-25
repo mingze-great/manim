@@ -257,6 +257,7 @@ def test_open_source_cosyvoice_accepts_valid_pcm_when_stream_times_out(tmp_path,
         wav.setframerate(22050)
         wav.writeframes(b"\x01\x00" * 22050)
     monkeypatch.setenv("SC1_COSYVOICE_PROMPT_WAV", str(prompt))
+    monkeypatch.setattr(ai_video.requests, "get", lambda *_args, **_kwargs: types.SimpleNamespace(status_code=200))
     monkeypatch.setattr(ai_video.urllib.request, "urlopen", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("sft unavailable")))
     monkeypatch.setattr(service, "_prepare_cosyvoice_prompt_audio", lambda path: path)
     monkeypatch.setattr(ai_video.requests, "post", lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("requests fallback should not be used")))
@@ -295,6 +296,7 @@ def test_open_source_cosyvoice_rejects_implausibly_short_partial_pcm(tmp_path, m
         wav.setframerate(22050)
         wav.writeframes(b"\x01\x00" * 22050)
     monkeypatch.setenv("SC1_COSYVOICE_PROMPT_WAV", str(prompt))
+    monkeypatch.setattr(ai_video.requests, "get", lambda *_args, **_kwargs: types.SimpleNamespace(status_code=200))
     monkeypatch.setattr(ai_video.urllib.request, "urlopen", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("sft unavailable")))
     monkeypatch.setattr(service, "_prepare_cosyvoice_prompt_audio", lambda path: path)
 
@@ -308,6 +310,20 @@ def test_open_source_cosyvoice_rejects_implausibly_short_partial_pcm(tmp_path, m
 
     with pytest.raises(RuntimeError, match="CosyVoice"):
         service._generate_open_source_cosyvoice_audio("来挑战一下你的脑洞", "中文女", tmp_path / "scene.wav")
+
+
+def test_open_source_cosyvoice_health_failure_prevents_local_tts_call(tmp_path, monkeypatch):
+    service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
+    service.cosyvoice_url = "http://127.0.0.1:50000"
+    service.cosyvoice_timeout = 180
+    service.cosyvoice_sample_rate = 22050
+
+    monkeypatch.setattr(ai_video.requests, "get", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("connection refused")))
+    monkeypatch.setattr(ai_video.urllib.request, "urlopen", lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("SFT request should not run")))
+    monkeypatch.setattr(ai_video.subprocess, "run", lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("zero-shot curl should not run")))
+
+    with pytest.raises(RuntimeError, match="not healthy"):
+        service._generate_open_source_cosyvoice_audio("先别急着证明自己", "中文女", tmp_path / "scene.wav")
 
 
 def test_build_srt_contains_every_caption_cue_with_absolute_timing():

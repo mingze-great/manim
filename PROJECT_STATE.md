@@ -170,6 +170,32 @@
 3. 重新创建 3004 `/stickman-workflow` 标题生成任务 `job_8`，优先使用 `dayun_manbo` 声音和 `sc1_outputs` 素材库。
 4. 下载成功 MP4，使用 ffmpeg/ffprobe 检查音频流和视频流，抽取关键帧确认场景图、字幕、总结和标签布局，并记录 job id、输出路径、验证结论。
 
+## 2026-07-25 20:05 CosyVoice 事故复盘与预防
+- 当前分支：`codex/3004-partner-stickman-platform-20260724`
+- 当前本地 HEAD：`b37e1bbcc67d9767766efac809f6bd1c9a199bb3`（`docs: record interrupted 3004 deployment`）
+- 3004 当前部署标记：远程 `.deployed-ref` 曾确认 `codex/3004-partner-stickman-platform-20260724@e8683916d7b386cbac2629b28ca42a15fe970d9c`，`source_commit=a30bd440e00ec3d27273447cf05281fd27fdd475`。
+- 已完成平台验证：3004 登录、`/api/stickman-workflow/config`、`/api/stickman-workflow/duration-estimate`、`/api/platform-assistant/chat` 均已在平台真实接口验证通过；助手回答能引导用户进入 `/stickman-workflow`。
+- 新建 3004 验收用户：`codex_3004_verify_193716`，仅用于 3004 平台闭环测试；已在 3004 SQLite 标记审核通过。
+- 新建平台任务：`job_10`，由 3004 `/stickman-workflow/jobs` 创建，任务失败于 `tts_generating`。
+- 根因：`job_10` 使用 `dayun_manbo` 时 Dayun 接口不可用/限流后降级到本机 open-source CosyVoice；服务器重启后 `manim-v2-3003-cosyvoice.service` 未可用，随后发现其配置模型目录 `/opt/cosyvoice-3003/pretrained_models/CosyVoice-300M` 缺少 `llm.pt`。
+- 事故放大原因：CosyVoice systemd 配置为失败自动重启，启动时反复加载大模型并访问 ModelScope/wetext，导致腾讯云小规格主机出现高 I/O/CPU/用户态卡顿；表现为 ICMP 和 TCP 端口可达，但 SSH 卡在 banner exchange，3003/3004 HTTP 应用层无响应。
+- 已尝试恢复动作：向远程发送 `systemctl disable --now manim-v2-3003-cosyvoice.service` 与 `pkill -9` 残留进程命令；由于当时 SSH stdout 不可靠，不能确认完全生效。
+- 当前阻塞：用户重启后，公网 `3003` 和 `3004` 仍 HTTP 超时；`22` 与 `3004` TCP 握手成功，但 SSH banner exchange 仍超时。说明系统仍处于用户态/I/O 卡住或重启未完全恢复状态，暂不能继续部署或创建生成任务。
+- 必须预防：
+  1. 服务器恢复后第一步确认并禁用 `manim-v2-3003-cosyvoice.service` 自动启动，除非模型文件完整且健康检查稳定。
+  2. 3004 平台代码不得在生成任务中隐式拉起或依赖这个本机 CosyVoice 服务；调用前必须做短超时健康检查。
+  3. `dayun_manbo` 失败时，3004 应优先使用轻量、外部、可超时的 TTS fallback；如果无可用 TTS，任务要快速失败并提示“音频服务不可用”，不能触发大模型本地服务导致整机不可用。
+  4. CosyVoice 如后续继续使用，必须独立 3004 服务名、独立端口、`Restart=on-failure` 限制重启频率、`StartLimitBurst`、`MemoryMax`、健康检查和完整模型文件校验。
+- 本地防护实现：`backend/app/services/ai_video.py` 已新增 open-source CosyVoice 健康闸门，任何 SFT/zero-shot 调用前先请求 `/docs`，默认 2 秒超时；不健康时快速失败，避免触发本机重型 TTS fallback。
+- 本地回归测试：`backend/tests/test_ai_video_sc1_material_urls.py` 已新增健康失败用例，并让既有 zero-shot 测试显式模拟健康服务。
+- 本地验证：`PYTHONPATH=backend pytest backend/tests/test_ai_video_sc1_material_urls.py -q` -> `15 passed`；`python -m py_compile backend/app/services/ai_video.py` 通过；`git diff --check` 通过，仅有 PROJECT_STATE 换行提示。
+- 下一步恢复顺序：
+  1. 等腾讯云 SSH banner 恢复或由控制台强制关机开机。
+  2. 先确认 `manim-v2-3003-cosyvoice.service` disabled/inactive，杀掉所有 `cosyvoice3003` 残留进程。
+  3. 确认 3003/3004 HTTP 恢复，且 3003 不做业务部署。
+  4. 提交本地防护代码并部署到 3004。
+  5. 部署到 3004 后重新创建平台任务，完成 MP4 下载、ffprobe 和抽帧验收。
+
 ## 2026-07-25 16:10 远程卡顿排查与清理
 - 当前分支：`codex/3004-partner-stickman-platform-20260724`
 - 当前本地 HEAD：`7c3c74bdaef302d8794d727602d74bd97928fe7a`

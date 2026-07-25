@@ -1727,6 +1727,7 @@ class AiVideoService:
         return ordered
 
     def _generate_open_source_cosyvoice_audio(self, text: str, voice: str, output_path: Path) -> float:
+        self._ensure_open_source_cosyvoice_available()
         sft_error: Exception | None = None
         data = urllib.parse.urlencode({"tts_text": text, "spk_id": voice}).encode("utf-8")
         request = urllib.request.Request(
@@ -1794,6 +1795,25 @@ class AiVideoService:
             wav.setframerate(self.cosyvoice_sample_rate)
             wav.writeframes(pcm)
         return len(pcm) / (self.cosyvoice_sample_rate * 2)
+
+    def _ensure_open_source_cosyvoice_available(self) -> None:
+        if str(os.getenv("AI_VIDEO_COSYVOICE_REQUIRE_HEALTH", "1")).strip().lower() in {"0", "false", "no"}:
+            return
+        timeout = float(os.getenv("AI_VIDEO_COSYVOICE_HEALTH_TIMEOUT", "2"))
+        health_url = f"{str(self.cosyvoice_url).rstrip('/')}/docs"
+        try:
+            response = requests.get(health_url, timeout=timeout)
+            if response.status_code < 500:
+                return
+        except Exception as exc:
+            raise RuntimeError(
+                "Open-source CosyVoice is not healthy; refusing to call local TTS fallback. "
+                "Check the CosyVoice service/model files or choose another voice provider."
+            ) from exc
+        raise RuntimeError(
+            f"Open-source CosyVoice health check failed with HTTP {response.status_code}; "
+            "refusing to call local TTS fallback."
+        )
 
     def _request_cosyvoice_zero_shot_pcm(self, text: str, prompt_text: str, prompt_source: Path, output_pcm_path: Path) -> bytes:
         output_pcm_path.parent.mkdir(parents=True, exist_ok=True)
