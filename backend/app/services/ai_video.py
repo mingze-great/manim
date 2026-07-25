@@ -1616,6 +1616,13 @@ class AiVideoService:
         return audio_scenes
 
     def _generate_safe_tts_fallback_audio(self, text: str, output_path: Path, requested_voice: str) -> tuple[float, str, str]:
+        dashscope_voice = self._resolve_dashscope_voice(requested_voice)
+        dashscope_error: Exception | None = None
+        try:
+            return self._generate_dashscope_cosyvoice_audio(text, dashscope_voice, output_path), "dashscope_cosyvoice", dashscope_voice
+        except Exception as exc:
+            dashscope_error = exc
+
         edge_voice = self._resolve_edge_tts_voice(requested_voice)
         edge_error: Exception | None = None
         try:
@@ -1628,7 +1635,7 @@ class AiVideoService:
             return self._generate_open_source_cosyvoice_audio(text, cosy_voice, output_path), "open_source_cosyvoice", cosy_voice
         except Exception as exc:
             raise RuntimeError(
-                f"TTS fallback unavailable: Edge TTS failed: {edge_error}; "
+                f"TTS fallback unavailable: DashScope failed: {dashscope_error}; Edge TTS failed: {edge_error}; "
                 f"Open-source CosyVoice failed or unhealthy: {exc}"
             ) from exc
 

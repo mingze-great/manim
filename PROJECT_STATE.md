@@ -193,6 +193,10 @@
 - 本地扩展验证：`PYTHONPATH=backend pytest backend/tests/test_platform_assistant.py backend/tests/test_image_gen_service.py backend/tests/test_material_library_generation.py backend/tests/test_ai_video_sc1_material_urls.py backend/tests/test_partner_models_import.py backend/tests/test_partner_program_service.py backend/tests/test_stickman_workflow_assets.py backend/tests/test_stickman_workflow_limits.py -q` -> `39 passed`。
 - 本地提交：`0bd033d`（`fix: guard local cosyvoice fallback health`）、`555a829`（`fix: prefer edge tts fallback before local cosyvoice`）、`90d3872`（`docs: record cosyvoice fallback safeguards`）。
 - GitHub 同步：`git push origin codex/3004-partner-stickman-platform-20260724` 在 180 秒后超时，不能确认远程分支已更新；服务器恢复后优先使用 `git archive`/SFTP 方式同步到 3004 部署目录。
+- 2026-07-25 22:20 恢复后已确认：`manim-v2-3003-cosyvoice.service` 为 `disabled/inactive`，50000 未监听；3003/3004 主服务均 active；3004 已部署到 `be28bd759066e45c8a2aa981259483f9aad9de8d`。
+- 平台任务 `job_11` 创建成功但失败于 TTS：Dayun 不可用、Edge TTS 返回 403、本机 CosyVoice 被健康闸门拒绝。此失败没有拖垮服务器，证明健康闸门有效。
+- 本地新增修复：安全 TTS fallback 顺序改为 `DashScope CosyVoice -> Edge TTS -> 健康的本机 CosyVoice`。DashScope 使用服务器环境变量，不写代码、不提交密钥。
+- 本地验证：`PYTHONPATH=backend pytest backend/tests/test_ai_video_sc1_material_urls.py -q` -> `16 passed`；`python -m py_compile backend/app/services/ai_video.py` 通过；`git diff --check` 通过。
 - 下一步恢复顺序：
   1. 等腾讯云 SSH banner 恢复或由控制台强制关机开机。
   2. 先确认 `manim-v2-3003-cosyvoice.service` disabled/inactive，杀掉所有 `cosyvoice3003` 残留进程。
