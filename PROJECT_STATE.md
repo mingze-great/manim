@@ -323,3 +323,23 @@
 - 本地修复：`video-render-service/remotion-mind-video/src/remotion/Sc1StickmanVideo.jsx` 新增字幕首尾引号/标点清洗；左上标题对明显问号乱码使用 `心理火柴人` 兜底，避免平台输出出现乱码。
 - 本地验证：`git diff --check` 通过；本地 Remotion 子项目缺 `node_modules`，`npm run build` 失败于 `vite` 不存在，需在 3004 远程部署目录用现有依赖验证构建。
 - 下一步：提交本渲染小修，部署到 3004 render 服务，重新创建平台任务并抽帧确认标题不再乱码、字幕无首尾引号。
+
+## 2026-07-26 00:25 3004 job_92 最终平台闭环记录
+- 当前任务：完成手机号登录、合作者链路、素材库上传、工作流首页、AI 助手知识库和 SC1 火柴人成片能力在 3004 的平台闭环验收。
+- 当前分支：`codex/3004-partner-stickman-platform-20260724`
+- 渲染热修提交：`032fb939382d7a05d01ea87f52e1c10f45d50f6b`（`fix: clean sc1 header and subtitle text`）
+- 3004 部署目录：`/opt/manim-v2-3004-snapshot`
+- 3004 部署标记：`/opt/manim-v2-3004-snapshot/.deployed-ref` 已记录 `branch=codex/3004-partner-stickman-platform-20260724`、`commit=032fb939382d7a05d01ea87f52e1c10f45d50f6b`、`deployed_at=2026-07-26T00:20:00+08:00`。
+- 部署动作：只同步 `video-render-service/remotion-mind-video/src/remotion/Sc1StickmanVideo.jsx` 和 `PROJECT_STATE.md` 到 3004；仅重启 `manim-v2-3004-ai-video-render.service`；未修改、未重启 3003。
+- 远程构建：在 3004 部署目录执行 `npm run build` 通过，仅有既有 Vite chunk size warning。
+- 服务状态：3004 backend/worker/render 均 `active`；`http://127.0.0.1:8004/health` 正常；`http://127.0.0.1:18788/api/health` 正常；3003 health 返回 `200`。
+- 磁盘状态：`/` 分区约 3.9G 可用，使用率约 90%，后续批量渲染前仍建议继续清理旧生成物和缓存。
+- AI 助手复验：使用 3004 admin 手机号 `13990040001` 登录后调用 `/api/platform-assistant/chat`，问题“我怎么生成心理学火柴人视频”，返回成功并带 `3` 个来源。
+- 平台成片任务：使用 3004 用户手机号 `13990040003` 创建 `/stickman-workflow` 任务 `job_92`，标题生成模式、`dayun_manbo`、`sc1_outputs`、`material_only`、目标约 20 秒。
+- 任务结果：`job_92` 状态 `completed`，输出 URL `/api/ai-video/files/92/output/video.mp4`，远程路径 `/opt/manim-v2-3004-snapshot/backend/storage/ai-video/tasks/job_92/output/video.mp4`。
+- 本地交付文件：`C:\Users\Administrator\Documents\Codex\2026-07-18\300\outputs\3004_job_92_validation\job_92.mp4`，大小 `1466671` 字节。
+- ffprobe：视频 H.264，1920x1080，30fps；音频 AAC，48000Hz，2 声道；时长 `19.179` 秒。
+- 抽帧文件：`C:\Users\Administrator\Documents\Codex\2026-07-18\300\outputs\3004_job_92_validation\frame_01s.png`、`frame_08s.png`、`frame_16s.png`。
+- 抽帧结论：左上角标题不再乱码，显示 `心理火柴人`；右上角 `心理分享 | 认知突破` 可见；场景图单张居中完整，未被横线/字幕/白色面板遮挡；字幕居中且无首尾多余引号/标点；总结关键词为 2-4 字短词并在分段内累计展示；无 `@Sc1火柴人`。
+- 已验证的本轮平台能力：手机号/用户名兼容登录；合作者邀请码链路；素材库 zip 上传持久化；工作流首页入口；AI 助手知识库；火柴人标题一键生成成片。
+- 不要重复做：不要碰 3003；不要重启或重新启用 `manim-v2-3003-cosyvoice.service`；不要把 3004 的素材库后台接口与旧 `/admin/stickman-v2/scene-style-libraries` 混用。
