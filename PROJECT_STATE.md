@@ -191,6 +191,8 @@
 - 本地回归测试：`backend/tests/test_ai_video_sc1_material_urls.py` 已新增健康失败用例、Edge 优先 fallback 用例、Edge 失败后才尝试本机 CosyVoice 用例。
 - 本地验证：`PYTHONPATH=backend pytest backend/tests/test_ai_video_sc1_material_urls.py -q` -> `16 passed`；`python -m py_compile backend/app/services/ai_video.py` 通过；`git diff --check` 通过。
 - 本地扩展验证：`PYTHONPATH=backend pytest backend/tests/test_platform_assistant.py backend/tests/test_image_gen_service.py backend/tests/test_material_library_generation.py backend/tests/test_ai_video_sc1_material_urls.py backend/tests/test_partner_models_import.py backend/tests/test_partner_program_service.py backend/tests/test_stickman_workflow_assets.py backend/tests/test_stickman_workflow_limits.py -q` -> `39 passed`。
+- 本地提交：`0bd033d`（`fix: guard local cosyvoice fallback health`）、`555a829`（`fix: prefer edge tts fallback before local cosyvoice`）、`90d3872`（`docs: record cosyvoice fallback safeguards`）。
+- GitHub 同步：`git push origin codex/3004-partner-stickman-platform-20260724` 在 180 秒后超时，不能确认远程分支已更新；服务器恢复后优先使用 `git archive`/SFTP 方式同步到 3004 部署目录。
 - 下一步恢复顺序：
   1. 等腾讯云 SSH banner 恢复或由控制台强制关机开机。
   2. 先确认 `manim-v2-3003-cosyvoice.service` disabled/inactive，杀掉所有 `cosyvoice3003` 残留进程。
