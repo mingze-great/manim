@@ -18,6 +18,16 @@ const emptyLibrary = (): StickmanWorkflowMaterialLibrary => ({
   source: 'uploaded_package',
 })
 
+const getErrorMessage = (error: any, fallback: string) => {
+  const detail = error?.response?.data?.detail
+  if (typeof detail === 'string') return detail
+  if (Array.isArray(detail)) {
+    return detail.map((item) => item?.msg || item?.message || JSON.stringify(item)).join('；') || fallback
+  }
+  if (detail && typeof detail === 'object') return detail.msg || detail.message || JSON.stringify(detail)
+  return fallback
+}
+
 export default function AdminStickmanWorkflowLibraries() {
   const [libraries, setLibraries] = useState<StickmanWorkflowMaterialLibrary[]>([])
   const [loading, setLoading] = useState(false)
@@ -37,7 +47,7 @@ export default function AdminStickmanWorkflowLibraries() {
       const { data } = await adminApi.getStickmanWorkflowMaterialLibraries()
       setLibraries(data.libraries || [])
     } catch (error: any) {
-      message.error(error?.response?.data?.detail || '加载火柴人工作流素材库失败')
+      message.error(getErrorMessage(error, '加载火柴人工作流素材库失败'))
     } finally {
       setLoading(false)
     }
@@ -107,7 +117,7 @@ export default function AdminStickmanWorkflowLibraries() {
       setLibraries(data.libraries || [])
       message.success('火柴人工作流素材库配置已保存')
     } catch (error: any) {
-      message.error(error?.response?.data?.detail || '保存素材库失败')
+      message.error(getErrorMessage(error, '保存素材库失败'))
     } finally {
       setSaving(false)
     }
@@ -135,7 +145,7 @@ export default function AdminStickmanWorkflowLibraries() {
         await loadLibraries()
       }
     } catch (error: any) {
-      message.error(error?.response?.data?.detail || '上传素材库 zip 失败')
+      message.error(getErrorMessage(error, '上传素材库 zip 失败'))
     } finally {
       setUploadingKeys((prev) => ({ ...prev, [key]: false }))
     }
@@ -158,7 +168,7 @@ export default function AdminStickmanWorkflowLibraries() {
       setGeneration(data)
       message.success('已开始生成两张风格样图')
     } catch (error: any) {
-      message.error(error?.response?.data?.detail || '创建样图任务失败')
+      message.error(getErrorMessage(error, '创建样图任务失败'))
     } finally {
       setGenerationLoading(false)
     }
@@ -173,7 +183,7 @@ export default function AdminStickmanWorkflowLibraries() {
       setGeneration(data)
       message.success('已确认样图，开始批量生成')
     } catch (error: any) {
-      message.error(error?.response?.data?.detail || '确认样图失败')
+      message.error(getErrorMessage(error, '确认样图失败'))
     } finally {
       setGenerationLoading(false)
     }
@@ -187,7 +197,7 @@ export default function AdminStickmanWorkflowLibraries() {
       setGeneration(data)
       message.success('正在重新生成样图')
     } catch (error: any) {
-      message.error(error?.response?.data?.detail || '重新生成样图失败')
+      message.error(getErrorMessage(error, '重新生成样图失败'))
     } finally {
       setGenerationLoading(false)
     }

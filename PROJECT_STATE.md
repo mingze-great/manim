@@ -362,3 +362,15 @@
 - 本地验证：`git diff --check` -> 通过。
 - 部署边界：只同步到 `/opt/manim-v2-3004-snapshot`，只重启 3004 backend；如前端 dist 更新由 nginx 静态文件直接生效，不重启 3003。
 - 下一步：提交本轮修复，部署 3004，平台验证素材库新增 zip 上传刷新后仍存在、已有库上传计数更新、合作者创建弹窗搜索手机号/用户名有候选用户。
+
+## 2026-07-26 3004 后台修复部署与 UI 验证补充
+- 部署提交：`d663b62e1d84311680a2d44054fb3231e20b5d33` 已同步到 `/opt/manim-v2-3004-snapshot`；远程前端 `npm run build` 通过；3004 backend/worker/render 均 active；3004 health 正常；3003 health 返回 `200`。
+- 3004 API 验证：上传包含 `materials.generated.json` 和 `fileName/imagePath` 的 zip 到新增素材库 `codex_probe_generated_260058` 返回 `200`，刷新 `/admin/stickman-workflow/material-libraries` 后能查到该素材库，`image_count=1`、`material_count=1`。
+- 清理动作：验证用 `codex_probe_generated_*` 素材库已从 3004 配置中移除，避免污染后台列表。
+- 3004 API 验证：`/api/admin/users?limit=50&search=13990040002` 和 `/api/admin/users?limit=50&search=codex3004_partner` 均能返回 `codex3004_partner_phone`。
+- 浏览器 UI 验证：Playwright 登录 `http://152.136.218.74:3004`，进入 `/admin/partners`，点击“创建合作者”，输入手机号 `13990040002`，下拉可见 `codex3004_partner_phone · 13990040002`。
+- 浏览器 UI 验证：进入 `/admin/stickman-workflow-libraries`，点击“新增素材库”，页面出现新的素材库草稿卡片，上传 zip 按钮仍存在；截图保存到 `C:\Users\Administrator\Documents\Codex\2026-07-18\300\outputs\3004_admin_fix_ui.png`。
+- 额外发现：浏览器控制台出现 React #31，根因为部分后台接口错误 `detail` 可能是对象/数组，前端直接传给 `message.error` 渲染。
+- 本地补充修复：`AdminStickmanWorkflowLibraries.tsx` 和 `AdminPartners.tsx` 新增错误消息格式化，保证对象/数组型错误被转成中文字符串。
+- 本地验证：补充修复后 `npm run build` in `frontend` -> 通过，仅有既有 Vite chunk size warning；`git diff --check` -> 通过。
+- 下一步：提交补充前端修复并同步 3004 前端构建，不触碰 3003；重新跑浏览器 UI 验证确认无 React #31。

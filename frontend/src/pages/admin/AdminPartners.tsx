@@ -14,6 +14,16 @@ const formatDate = (value?: string | null) => {
   }
 }
 
+const getErrorMessage = (error: any, fallback: string) => {
+  const detail = error?.response?.data?.detail
+  if (typeof detail === 'string') return detail
+  if (Array.isArray(detail)) {
+    return detail.map((item) => item?.msg || item?.message || JSON.stringify(item)).join('；') || fallback
+  }
+  if (detail && typeof detail === 'object') return detail.msg || detail.message || JSON.stringify(detail)
+  return fallback
+}
+
 export default function AdminPartners() {
   const [partners, setPartners] = useState<AdminPartner[]>([])
   const [referrals, setReferrals] = useState<AdminReferral[]>([])
@@ -58,7 +68,7 @@ export default function AdminPartners() {
       setUsers(Array.isArray(userPayload) ? userPayload : (userPayload?.users || []))
       setMaterialLibraries(libraryRes.data?.libraries || [])
     } catch (error: any) {
-      message.error(error?.response?.data?.detail || '加载合作者数据失败')
+      message.error(getErrorMessage(error, '加载合作者数据失败'))
     } finally {
       setLoading(false)
     }
@@ -71,7 +81,7 @@ export default function AdminPartners() {
       const payload: any = data
       setUsers(Array.isArray(payload) ? payload : (payload?.users || []))
     } catch (error: any) {
-      message.error(error?.response?.data?.detail || '搜索用户失败')
+      message.error(getErrorMessage(error, '搜索用户失败'))
     } finally {
       setUserSearchLoading(false)
     }
@@ -94,7 +104,7 @@ export default function AdminPartners() {
       setCreatePartnerOpen(false)
       loadData()
     } catch (error: any) {
-      message.error(error?.response?.data?.detail || '创建合作者失败')
+      message.error(getErrorMessage(error, '创建合作者失败'))
     } finally {
       setSubmitting(false)
     }
@@ -116,7 +126,7 @@ export default function AdminPartners() {
       message.success(`兑换码已生成：${data.code}`)
       setInviteOpen(false)
     } catch (error: any) {
-      message.error(error?.response?.data?.detail || '生成兑换码失败')
+      message.error(getErrorMessage(error, '生成兑换码失败'))
     } finally {
       setSubmitting(false)
     }
