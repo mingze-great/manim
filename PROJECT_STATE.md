@@ -373,4 +373,8 @@
 - 额外发现：浏览器控制台出现 React #31，根因为部分后台接口错误 `detail` 可能是对象/数组，前端直接传给 `message.error` 渲染。
 - 本地补充修复：`AdminStickmanWorkflowLibraries.tsx` 和 `AdminPartners.tsx` 新增错误消息格式化，保证对象/数组型错误被转成中文字符串。
 - 本地验证：补充修复后 `npm run build` in `frontend` -> 通过，仅有既有 Vite chunk size warning；`git diff --check` -> 通过。
-- 下一步：提交补充前端修复并同步 3004 前端构建，不触碰 3003；重新跑浏览器 UI 验证确认无 React #31。
+- 已部署补充前端修复：提交 `2e98a26bced0544ad31652c6b84da66075c13250` 已同步到 3004；远程前端 `npm run build` 通过；3004 health 正常；3003 health 返回 `200`。
+- 浏览器复验：合作者搜索与素材库新增草稿仍通过，React #31 已消失；剩余发现为旧素材库封面 `/api/admin/stickman-workflow/assets/material-libraries/codex_verify_library_bom/scene.png` 经过公网 3004 返回 nginx 404。
+- nginx 根因：3004 nginx `location /api` 会被后面的静态图片正则 location 抢走，导致 `/api/.../*.png` 未代理到 backend；backend 本地 `127.0.0.1:8004` 对同一路径返回 `200`。
+- 本地修复：`deploy/manim-v2-3004.conf` 将 `location /api` 改为 `location ^~ /api`，确保 `/api` 下图片资源优先代理到 3004 backend；该修复只用于 3004。
+- 下一步：提交 nginx 配置修复，部署到 3004 并 reload nginx；验证公网素材库封面 URL 返回 200，再做最终浏览器 UI 检查。
