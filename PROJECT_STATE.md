@@ -201,6 +201,12 @@
 - 平台任务 `job_12` 已推进到渲染前素材预检，失败原因为远程素材库实际存在 `materials.generated.json` 和 `psychology-stickman-18-*.png` 命名文件，但配置传入缺失的 `material.json`，导致代码回退到 `18.png` 等兜底文件名。
 - 本地新增修复：`_sc1_material_paths` 在显式 manifest 不存在时，会回退同目录 `materials.generated.json`、`materials.json`、`material.json`；新增回归测试覆盖该路径。
 - 本地验证：`PYTHONPATH=backend pytest backend/tests/test_ai_video_sc1_material_urls.py -q` -> `17 passed`；`python -m py_compile backend/app/services/ai_video.py` 通过；`git diff --check` 通过。
+- 3004 已部署素材 manifest 修复提交：`a4598d0e22fbb36552d491220b9579219163539a`，部署时间 `2026-07-25T22:35:19+08:00`，只重启 3004 backend/worker，3003 未重启。
+- 平台闭环成功任务：`job_13`，状态 `completed`，输出 URL `/api/ai-video/files/13/output/video.mp4`。
+- 本地下载成片：`C:\Users\Administrator\Documents\Codex\2026-07-18\300\outputs\3004_job_13_validation\job_13.mp4`，大小 `1806529` 字节。
+- ffmpeg 验证：视频时长 `00:00:24.68`；视频流 H.264 1920x1080 30fps；音频流 AAC 48000Hz stereo，确认有视频流和音频流。
+- 抽帧验证：`frame_01s.png`、`frame_08s.png`、`frame_16s.png`、`frame_24s.png` 均显示单张居中完整场景图，没有被横线/字幕/白色面板遮挡；右上角 `心理分享 | 认知突破` 可见；无 `@Sc1火柴人`；字幕居中；总结为 2-4 字短词并在段内累计展示。
+- 当前可访问平台：`http://152.136.218.74:3004`；3003 验证仍返回 200，未做 3003 部署。
 - 下一步恢复顺序：
   1. 等腾讯云 SSH banner 恢复或由控制台强制关机开机。
   2. 先确认 `manim-v2-3003-cosyvoice.service` disabled/inactive，杀掉所有 `cosyvoice3003` 残留进程。
