@@ -190,6 +190,7 @@
 - 本地防护实现：`dayun_manbo` 或 DashScope 失败后优先降级到轻量 `edge_tts` 并输出真实 wav；只有 Edge TTS 也失败时才尝试经过健康闸门的本机 open-source CosyVoice。
 - 本地回归测试：`backend/tests/test_ai_video_sc1_material_urls.py` 已新增健康失败用例、Edge 优先 fallback 用例、Edge 失败后才尝试本机 CosyVoice 用例。
 - 本地验证：`PYTHONPATH=backend pytest backend/tests/test_ai_video_sc1_material_urls.py -q` -> `16 passed`；`python -m py_compile backend/app/services/ai_video.py` 通过；`git diff --check` 通过。
+- 本地扩展验证：`PYTHONPATH=backend pytest backend/tests/test_platform_assistant.py backend/tests/test_image_gen_service.py backend/tests/test_material_library_generation.py backend/tests/test_ai_video_sc1_material_urls.py backend/tests/test_partner_models_import.py backend/tests/test_partner_program_service.py backend/tests/test_stickman_workflow_assets.py backend/tests/test_stickman_workflow_limits.py -q` -> `39 passed`。
 - 下一步恢复顺序：
   1. 等腾讯云 SSH banner 恢复或由控制台强制关机开机。
   2. 先确认 `manim-v2-3003-cosyvoice.service` disabled/inactive，杀掉所有 `cosyvoice3003` 残留进程。
