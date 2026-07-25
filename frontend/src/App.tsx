@@ -66,7 +66,7 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
 function PartnerRoute({ children }: { children: React.ReactNode }) {
   const { user, token } = useAuthStore()
   if (!token) return <Navigate to="/login" />
-  if (!user?.is_admin && user?.role !== 'partner') return <Navigate to="/" />
+  if (user?.role !== 'partner') return <Navigate to="/" />
   return <>{children}</>
 }
 

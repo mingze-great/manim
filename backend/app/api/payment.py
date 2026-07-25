@@ -11,6 +11,7 @@ from app.models.user import User
 from app.models.project import Project, ProjectStatus
 from app.models.subscription import Order, Subscription, SUBSCRIPTION_PLANS
 from app.api.auth import get_current_user
+from app.services.notifications import notify_admin_event
 from app.services.partner_program import apply_invite_code_to_user, record_commission_for_order
 from app.services.wechat_pay import get_wechat_pay_service
 
@@ -39,6 +40,16 @@ class SubscriptionResponse(BaseModel):
 
 class RedeemCodeRequest(BaseModel):
     code: str
+
+
+def _record_commission_and_notify(db: Session, order: Order):
+    ledger = record_commission_for_order(db, order)
+    if ledger:
+        notify_admin_event(
+            "推荐用户支付成功",
+            f"订单 {order.order_id} 支付成功，合作者 {ledger.partner_id}，用户 {order.user_id}，佣金 {ledger.commission_amount / 100:.2f} 元。",
+        )
+    return ledger
 
 
 def generate_order_id() -> str:
@@ -136,7 +147,7 @@ async def wechat_pay_notify(
         db.commit()
         
         update_user_subscription(order.user_id, order.plan, db)
-        record_commission_for_order(db, order)
+        _record_commission_and_notify(db, order)
         
         return "<xml><return_code><![CDATA[SUCCESS]]></return_code></xml>"
     
@@ -264,7 +275,7 @@ async def query_order_status(
             order.paid_at = datetime.utcnow()
             db.commit()
             update_user_subscription(order.user_id, order.plan, db)
-            record_commission_for_order(db, order)
+            _record_commission_and_notify(db, order)
             return {"status": "paid", "message": "支付成功"}
         elif trade_state == "NOTPAY":
             return {"status": "pending", "message": "等待支付"}
@@ -288,6 +299,10 @@ async def redeem_invite_code(
         invite = apply_invite_code_to_user(db, current_user, payload.code)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    notify_admin_event(
+        "用户兑换码开通",
+        f"用户 {current_user.username} 使用兑换码 {invite.code} 开通套餐 {invite.plan_key}。",
+    )
     return {
         "message": "兑换成功",
         "code": invite.code,

@@ -14,6 +14,7 @@ from app.database import get_db
 from app.config import get_settings
 from app.models.user import User, AuditLog
 from app.schemas.user import UserCreate, UserResponse, Token, ChangePasswordRequest
+from app.services.notifications import notify_admin_event
 from app.services.partner_program import apply_invite_code_to_user, get_partner_by_referral_code
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -90,8 +91,21 @@ def log_audit(db: Session, user_id: Optional[int], username: Optional[str],
     db.commit()
 
 
+def _find_login_user(db: Session, identifier: str):
+    login_id = str(identifier or "").strip()
+    if re.fullmatch(r"1\d{10}", login_id):
+        matches = db.query(User).filter(User.phone == login_id).all()
+        if len(matches) > 1:
+            return None, "手机号绑定了多个账号，请使用用户名登录"
+        if matches:
+            return matches[0], None
+    return db.query(User).filter(User.username == login_id).first(), None
+
+
 def authenticate_user(db: Session, username: str, password: str):
-    user = db.query(User).filter(User.username == username).first()
+    user, lookup_error = _find_login_user(db, username)
+    if lookup_error:
+        return None, lookup_error
     if not user:
         return None, "用户不存在"
     if not verify_password(password, user.hashed_password):
@@ -170,7 +184,7 @@ async def get_current_admin_user(
 async def get_current_partner_user(
     current_user: Annotated[User, Depends(get_current_user)]
 ):
-    if current_user.is_admin or current_user.role == "partner":
+    if current_user.role == "partner":
         return current_user
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
@@ -229,6 +243,10 @@ def register(
         try:
             apply_invite_code_to_user(db, new_user, invite_code)
             db.refresh(new_user)
+            notify_admin_event(
+                "用户兑换码自动开通",
+                f"用户 {new_user.username} 使用兑换码 {invite_code} 注册并自动开通，手机号 {new_user.phone or '-'}。",
+            )
         except ValueError as exc:
             db.delete(new_user)
             db.commit()

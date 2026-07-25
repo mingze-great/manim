@@ -47,8 +47,10 @@ export default function Login() {
       login(token, { 
         id: userData.id, 
         username: userData.username, 
-        email: userData.email, 
+        email: userData.email,
+        phone: userData.phone,
         is_admin: userData.is_admin,
+        role: userData.role,
         frontend_version: userData.frontend_version || 'legacy',
         is_approved: userData.is_approved,
         expires_at: userData.expires_at,
@@ -120,11 +122,12 @@ export default function Login() {
           >
             <Form.Item
               name="username"
-              rules={[{ required: true, message: '请输入用户名' }]}
+              label="手机号 / 用户名"
+              rules={[{ required: true, message: '请输入手机号或用户名' }]}
             >
               <Input 
                 prefix={<UserOutlined className="text-gray-400" />} 
-                placeholder="用户名"
+                placeholder="手机号 / 用户名"
                 className="rounded-lg"
               />
             </Form.Item>

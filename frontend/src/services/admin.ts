@@ -307,15 +307,22 @@ export const adminApi = {
   saveStickmanWorkflowMaterialLibraries: (libraries: StickmanWorkflowMaterialLibrary[]) =>
     api.post<{ libraries: StickmanWorkflowMaterialLibrary[] }>('/admin/stickman-workflow/material-libraries', { libraries }),
 
-  uploadStickmanWorkflowMaterialLibraryPackage: (libraryKey: string, file: File) => {
+  uploadStickmanWorkflowMaterialLibraryPackage: (library: StickmanWorkflowMaterialLibrary, file: File) => {
     const formData = new FormData()
     formData.append('file', file)
+    formData.append('name', library.name || library.key)
+    formData.append('description', library.description || '')
+    formData.append('sort_order', String(library.sort_order || 100))
+    formData.append('is_active', String(library.is_active !== false))
+    formData.append('is_visible', String(library.is_visible !== false))
     return api.post<{
       message: string
+      library?: StickmanWorkflowMaterialLibrary
+      libraries?: StickmanWorkflowMaterialLibrary[]
       image_url?: string | null
       image_count: number
       material_count: number
-    }>(`/admin/stickman-workflow/material-libraries/${libraryKey}/package`, formData)
+    }>(`/admin/stickman-workflow/material-libraries/${library.key}/package`, formData)
   },
 
   createStickmanWorkflowMaterialSamples: (data: { libraryKey: string; libraryName: string; targetCount: number; referenceImage: File }) => {

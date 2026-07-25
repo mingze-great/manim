@@ -25,6 +25,7 @@ from app.schemas.article import ArticleCategoryCreate, ArticleCategoryUpdate
 from app.schemas.user import UserResponse, UserUpdate, UserStats, AuditLogResponse, SystemStats, UserDetail, ProjectStatus, RecentProject, TaskLog, TokenUsageItem, TokenUsageResponse
 from app.api.auth import get_current_user, get_current_admin_user
 from app.config import get_settings
+from app.services.notifications import notify_admin_event
 from app.services.partner_program import ensure_referral_code, generate_invite_code
 from app.services.stickman_workflow_assets import (
     find_material_library_asset,
@@ -304,6 +305,10 @@ async def create_invite_code(
     db.add(invite)
     db.commit()
     db.refresh(invite)
+    notify_admin_event(
+        "后台生成兑换码",
+        f"管理员 {current_user.username} 生成兑换码 {invite.code}，绑定合作者 {invite.partner_id or '无'}，套餐 {invite.plan_key}。",
+    )
     return {
         "id": invite.id,
         "code": invite.code,
@@ -337,11 +342,36 @@ async def set_stickman_workflow_material_libraries(
 async def upload_stickman_workflow_material_library_package(
     library_key: str,
     file: UploadFile = File(...),
+    name: Optional[str] = Form(None),
+    description: Optional[str] = Form(None),
+    sort_order: Optional[int] = Form(None),
+    is_active: bool = Form(True),
+    is_visible: bool = Form(True),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
 ):
+    library_key = str(library_key or "").strip()
+    if not library_key:
+        raise HTTPException(status_code=400, detail="素材库 key 不能为空")
     libraries = list_material_libraries(db)
     index = next((i for i, item in enumerate(libraries) if item.get("key") == library_key), -1)
+    if index < 0:
+        libraries.append({
+            "key": library_key,
+            "name": str(name or library_key).strip() or library_key,
+            "description": str(description or "").strip(),
+            "sort_order": int(sort_order or len(libraries) + 1),
+            "is_active": bool(is_active),
+            "is_visible": bool(is_visible),
+            "source": "uploaded_package",
+        })
+        index = len(libraries) - 1
+    else:
+        libraries[index]["name"] = str(name or libraries[index].get("name") or library_key).strip() or library_key
+        libraries[index]["description"] = str(description if description is not None else libraries[index].get("description") or "").strip()
+        libraries[index]["sort_order"] = int(sort_order or libraries[index].get("sort_order") or index + 1)
+        libraries[index]["is_active"] = bool(is_active)
+        libraries[index]["is_visible"] = bool(is_visible)
     if index < 0:
         raise HTTPException(status_code=404, detail="火柴人工作流素材库不存在")
     try:
@@ -353,6 +383,8 @@ async def upload_stickman_workflow_material_library_package(
     current = next((item for item in saved if item.get("key") == library_key), None) or libraries[index]
     return {
         "message": "火柴人工作流素材库已上传",
+        "library": _with_workflow_library_urls([current])[0],
+        "libraries": _with_workflow_library_urls(saved),
         "image_url": f"/api/admin/stickman-workflow/assets/material-libraries/{library_key}/{Path(current.get('cover_image_path') or '').name}" if current.get("cover_image_path") else (current.get("cover_image_url") or None),
         "image_count": int(current.get("image_count") or 0),
         "material_count": int(current.get("material_count") or 0),

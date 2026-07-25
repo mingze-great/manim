@@ -113,8 +113,8 @@ export default function AdminStickmanWorkflowLibraries() {
     }
   }
 
-  const uploadPackage = async (libraryKey: string, file: File) => {
-    const key = String(libraryKey || '').trim()
+  const uploadPackage = async (library: StickmanWorkflowMaterialLibrary, file: File) => {
+    const key = String(library.key || '').trim()
     if (!key) {
       message.warning('请先填写素材库 key 并保存')
       return false
@@ -122,9 +122,13 @@ export default function AdminStickmanWorkflowLibraries() {
     setUploadingKeys((prev) => ({ ...prev, [key]: true }))
     try {
       await saveLibraries()
-      const { data } = await adminApi.uploadStickmanWorkflowMaterialLibraryPackage(key, file)
+      const { data } = await adminApi.uploadStickmanWorkflowMaterialLibraryPackage({ ...library, key }, file)
       message.success(data.message || '素材库 zip 已上传')
-      await loadLibraries()
+      if (data.libraries?.length) {
+        setLibraries(data.libraries)
+      } else {
+        await loadLibraries()
+      }
     } catch (error: any) {
       message.error(error?.response?.data?.detail || '上传素材库 zip 失败')
     } finally {
@@ -319,7 +323,7 @@ export default function AdminStickmanWorkflowLibraries() {
                         暂无预览图
                       </div>
                     )}
-                    <Upload beforeUpload={(file) => uploadPackage(item.key, file)} showUploadList={false} accept=".zip">
+                    <Upload beforeUpload={(file) => uploadPackage(item, file)} showUploadList={false} accept=".zip">
                       <Button icon={<UploadOutlined />} loading={!!uploadingKeys[item.key]} block>
                         上传素材库 zip
                       </Button>

@@ -285,3 +285,25 @@
 - 阿里云控制台浏览器没有登录会话，本机没有阿里云 CLI 或实例控制凭据。未经用户明确允许不能重启整台实例，因为会影响 3003。
 - 恢复后第一步：检查 `/opt/manim-v2-3004-snapshot/.deployed-ref`、进程/内存/I/O、构建进程和三个 3004 服务；同时确认 3003 健康。若部署未完成，先终止残留 3004 构建进程，再按提交 `e868391` 重部署。
 - 仍未完成：3004 合作者/邀请码真实数据验收、参考图两张样图闭环、AI 助手页面验收、平台创建成片、ffprobe 和抽帧验收。
+
+## 2026-07-25 3004 手机登录、合作者链路、素材库上传与工作流首页优化编码前记录
+- 当前任务：只在 3004 分支实现手机号/用户名兼容登录、合作者权限链路收紧、素材库 zip 上传持久化修复、首页/工作流入口结构优化，并完成 3004 平台闭环验收。
+- 本地工作区：`C:\Users\Administrator\Documents\Codex\2026-07-18\300\work\3004-partner-stickman-worktree`
+- 当前分支：`codex/3004-partner-stickman-platform-20260724`
+- 编码前本地 HEAD：`04f0e91d34b6afd972f28c8b330415c43dd95db9`（`docs: record 3004 database migration`，提交时间 `2026-07-25T22:53:32+08:00`）
+- 编码前 3004 部署锚点：`/opt/manim-v2-3004-snapshot/.deployed-ref` 记录 `codex/3004-partner-stickman-platform-20260724@a4598d0e22fbb36552d491220b9579219163539a`，部署时间 `2026-07-25T22:35:19+08:00`。
+- 编码前远程状态：`/` 分区约 5.5G 可用，3004 backend/worker/render active，3003 backend/worker/render active。
+- 部署边界：本轮只同步 `/opt/manim-v2-3004-snapshot`，只允许重启 `manim-v2-3004-backend.service`、`manim-v2-3004-worker.service`、`manim-v2-3004-ai-video-render.service`；不修改、不重启 3003。
+- 回退要求：部署前必须备份 3004 SQLite 为 `manim_platform_3004.pre-phone-partner-ui.<timestamp>.db`，并保留上一版 3004 代码快照或 `.deployed-ref` 可恢复锚点。
+- 本轮验收必须记录：本地测试/构建结果、部署提交、3004 服务状态、手机号登录验证、合作者授权与兑换码验证、素材库上传刷新验证、`/stickman-workflow` 平台成片 job id、MP4 输出路径和音视频流检查结果。
+
+## 2026-07-25 3004 手机登录、合作者链路、素材库上传与工作流首页优化本地验证记录
+- 当前分支：`codex/3004-partner-stickman-platform-20260724`
+- 本地验证前 HEAD：`04f0e91d34b6afd972f28c8b330415c43dd95db9`
+- 已完成本地改动：手机号/用户名兼容登录；重复手机号登录明确报错；admin 不再通过 partner API 或普通布局进入合作者工作台；合作者工作台仅 partner 角色可见；后台素材库 zip 上传支持自动创建/持久化并返回完整列表；首页新增工作流入口卡片；可选 SMTP 管理员通知服务。
+- 本地测试：`PYTHONPATH=backend pytest backend/tests/test_platform_assistant.py backend/tests/test_image_gen_service.py backend/tests/test_material_library_generation.py backend/tests/test_ai_video_sc1_material_urls.py backend/tests/test_auth_partner_access.py backend/tests/test_partner_models_import.py backend/tests/test_partner_program_service.py backend/tests/test_stickman_workflow_assets.py backend/tests/test_stickman_workflow_limits.py backend/tests/test_stickman_workflow_upload_persistence.py -q` -> `45 passed`。
+- 本地编译：`python -m py_compile backend/app/api/auth.py backend/app/api/partner.py backend/app/api/admin.py backend/app/api/payment.py backend/app/services/notifications.py` -> 通过。
+- 前端构建：`npm run build` in `frontend` -> 通过，仅保留既有 Vite chunk size warning。
+- 差异检查：`git diff --check` -> 通过，仅提示 `PROJECT_STATE.md` CRLF 将转 LF。
+- 密钥检查：`rg` 仅命中测试用假密钥 `sk-secret` 和 env example 空字段，未发现真实密钥进入本轮 diff。
+- 下一步：提交本地改动；部署前备份 3004 SQLite 和代码快照；只同步并重启 3004；在 3004 平台验证登录、合作者兑换码、素材库上传和 `/stickman-workflow` 成片。

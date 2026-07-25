@@ -51,6 +51,15 @@ const steps = [
   { num: '04', title: '生成视频成片', desc: '云端生成并交付可下载的视频素材。' },
 ]
 
+const workflowCards = [
+  { title: '心理火柴人成片', desc: '输入主题或文案，一键生成心理学火柴人成片。', path: '/stickman-workflow', tag: '推荐', icon: <PlaySquareOutlined /> },
+  { title: '工作流中心', desc: '按视频、文章、知识 IP 分类找到全部制作入口。', path: '/creator', tag: '全部入口', icon: <RobotOutlined /> },
+  { title: 'AI 视频导演', desc: '管理脚本、镜头、素材和导出流程。', path: '/ai-video/dashboard', tag: '视频', icon: <PlayCircleOutlined /> },
+  { title: '文章内容工作流', desc: '生成公众号、小红书、长文内容并管理历史。', path: '/article', tag: '图文', icon: <MessageOutlined /> },
+  { title: '知识 IP 包装', desc: '围绕账号定位整理内容结构和表达方式。', path: '/knowledge-ip', tag: '定位', icon: <SafetyCertificateOutlined /> },
+  { title: '我的作品', desc: '查看生成记录、下载视频和继续编辑。', path: '/history', tag: '管理', icon: <DownloadOutlined /> },
+]
+
 function inferTemplateCategory(template: PublicTemplatePreview) {
   const category = String(template.category || '').toLowerCase()
   const text = `${template.name || ''} ${template.description || ''}`
@@ -85,6 +94,14 @@ export default function Landing() {
     } else {
       scrollToContact()
     }
+  }
+
+  const openWorkflow = (path: string) => {
+    if (!token) {
+      navigate('/login')
+      return
+    }
+    navigate(path)
   }
 
   useEffect(() => {
@@ -209,6 +226,27 @@ export default function Landing() {
           </div>
         </div>
         <div className="hero-bg"><div className="gradient-orb orb-1" /><div className="gradient-orb orb-2" /><div className="grid-pattern" /></div>
+      </section>
+
+      <section className="workflow-entry-section">
+        <div className="container">
+          <div className="section-header">
+            <h2>选择一个工作流，直接开始制作</h2>
+            <p>把平台能力按制作任务重新组织：先选工作流，再进入对应制作页，原有模块逻辑保持不变。</p>
+          </div>
+          <div className="workflow-entry-grid">
+            {workflowCards.map(item => (
+              <button className="workflow-entry-card" key={item.path} type="button" onClick={() => openWorkflow(item.path)}>
+                <span className="workflow-entry-icon">{item.icon}</span>
+                <span className="workflow-entry-copy">
+                  <strong>{item.title}</strong>
+                  <em>{item.desc}</em>
+                </span>
+                <Tag color={item.tag === '推荐' ? 'blue' : 'default'}>{item.tag}</Tag>
+              </button>
+            ))}
+          </div>
+        </div>
       </section>
 
       <section className="features-section" id="features">

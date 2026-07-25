@@ -10,6 +10,7 @@ from app.database import get_db
 from app.models.partner import CommissionLedger, InviteCode, PartnerProfile
 from app.models.subscription import Order
 from app.models.user import User
+from app.services.notifications import notify_admin_event
 from app.services.partner_program import ensure_referral_code, generate_invite_code, get_partner_profile_for_user
 
 router = APIRouter(prefix="/partner", tags=["partner"])
@@ -26,8 +27,6 @@ class PartnerInviteCodeCreate(BaseModel):
 
 def _require_partner_profile(db: Session, user: User) -> PartnerProfile:
     profile = get_partner_profile_for_user(db, user)
-    if not profile and user.is_admin:
-        profile = db.query(PartnerProfile).first()
     if not profile:
         raise HTTPException(status_code=403, detail="当前账号不是合作者")
     return profile
@@ -137,6 +136,10 @@ def create_partner_invite_code(
     db.add(invite)
     db.commit()
     db.refresh(invite)
+    notify_admin_event(
+        "合作者生成兑换码",
+        f"合作者 {profile.display_name} 生成兑换码 {invite.code}，套餐 {invite.plan_key}，每日额度 {invite.quota_limit}，视频时长 {invite.max_video_seconds} 秒。",
+    )
     return {
         "code": invite.code,
         "plan_key": invite.plan_key,

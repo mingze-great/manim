@@ -35,6 +35,33 @@ export default function MainLayout() {
     { key: '/docs', icon: <BookOutlined />, label: '帮助中心' },
   ]
 
+  const workflowMenuOrder = ['/creator', '/stickman-workflow', '/ai-video/dashboard', '/knowledge-ip', '/history', '/docs', '/partner']
+  const workflowMenuLabels: Record<string, string> = {
+    '/creator': '工作流中心',
+    '/stickman-workflow': '心理火柴人成片',
+    '/ai-video/dashboard': 'AI 视频导演',
+    '/knowledge-ip': '知识 IP 包装',
+    '/history': '我的作品',
+    '/docs': '帮助中心',
+    '/partner': '合作者工作台',
+  }
+  const visibleMenuItems = menuItems
+    .filter((item) => {
+      if (!item || !('key' in item)) return true
+      if (item.key === '/partner') return user?.role === 'partner' && !user?.is_admin
+      return true
+    })
+    .map((item) => {
+      if (!item || !('key' in item)) return item
+      const key = String(item.key)
+      return workflowMenuLabels[key] ? { ...item, label: workflowMenuLabels[key] } : item
+    })
+    .sort((a, b) => {
+      const left = a && 'key' in a ? workflowMenuOrder.indexOf(String(a.key)) : 999
+      const right = b && 'key' in b ? workflowMenuOrder.indexOf(String(b.key)) : 999
+      return (left < 0 ? 999 : left) - (right < 0 ? 999 : right)
+    })
+
   const userMenuItems = [
     {
       key: 'profile',
@@ -68,7 +95,7 @@ export default function MainLayout() {
   const getPageTitle = () => {
     if (location.pathname.startsWith('/stickman-workflow')) return '火柴人工作流'
     if (location.pathname.startsWith('/partner')) return '合作者工作台'
-    const item = menuItems.find(m => m && 'key' in m && m.key === location.pathname)
+    const item = visibleMenuItems.find(m => m && 'key' in m && m.key === location.pathname)
     if (item && 'label' in item) return item.label as string
     if (location.pathname.startsWith('/creator')) return '创作工作台'
     if (location.pathname.startsWith('/ai-video')) return 'AI 视频导演工作台'
@@ -98,7 +125,7 @@ export default function MainLayout() {
         <Menu
           mode="inline"
           selectedKeys={[location.pathname]}
-          items={menuItems}
+          items={visibleMenuItems}
           onClick={({ key }) => handleMenuClick(key)}
           className="main-menu"
         />
@@ -141,7 +168,7 @@ export default function MainLayout() {
         <Menu
           mode="inline"
           selectedKeys={[location.pathname]}
-          items={menuItems}
+          items={visibleMenuItems}
           onClick={({ key }) => handleMenuClick(key)}
         />
         <div className="px-4 pb-4 pt-2">
