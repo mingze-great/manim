@@ -224,6 +224,7 @@ class AiVideoService:
     def __init__(self) -> None:
         self.storage_root = AI_VIDEO_STORAGE_ROOT
         self.render_service_url = os.getenv("AI_VIDEO_RENDER_SERVICE_URL", "http://127.0.0.1:18787").rstrip("/")
+        self.backend_public_url = os.getenv("AI_VIDEO_BACKEND_PUBLIC_URL", "http://127.0.0.1:8000").rstrip("/")
         self.render_audio_root = Path(
             os.getenv(
                 "AI_VIDEO_RENDER_AUDIO_ROOT",
@@ -282,7 +283,7 @@ class AiVideoService:
         dashscope.base_http_api_url = self.dashscope_http_url
         self._running_jobs: set[int] = set()
         self._lock = threading.Lock()
-        self._sc1_material_cache: tuple[tuple[str, float, int] | None, list[dict[str, Any]]] = (None, [])
+        self._sc1_material_cache: tuple[tuple[str, str, float, int] | None, list[dict[str, Any]]] = (None, [])
 
     def create_generation_job(self, db: Session, user_id: int, payload: dict[str, Any]) -> AiVideoJob:
         payload = self._normalize_prompt_payload(payload)
@@ -726,8 +727,15 @@ class AiVideoService:
             target_seconds = int(payload.get("targetSeconds") or 0)
             min_scene_seconds = max(0, target_seconds // scene_count) if target_seconds else 0
             media = self._media_for_scene(content_type, visual_style, text, index)
-            sc1_segments = self._sc1_segments_for_scene(text, index) if content_type == "knowledge_ip_stickman" or visual_style == "sc1_stickman" else []
-            material_images = self._sc1_material_images_for_scene(payload, text, index, sc1_segments, sc1_selected_materials) if content_type == "knowledge_ip_stickman" or visual_style == "sc1_stickman" else []
+            is_sc1_video = content_type == "knowledge_ip_stickman" or visual_style == "sc1_stickman"
+            sc1_segments = self._sc1_segments_for_scene(text, index) if is_sc1_video else []
+            image_mode = str(payload.get("imageMode") or ("material_only" if payload.get("useMaterialLibrary", True) else "ai_image")).strip()
+            material_images: list[dict[str, Any]] = []
+            if is_sc1_video:
+                if image_mode in {"ai_image", "hybrid"}:
+                    material_images = self._sc1_generated_images_for_scene(payload, text, index, sc1_segments)
+                if not material_images and image_mode in {"material_only", "hybrid"}:
+                    material_images = self._sc1_material_images_for_scene(payload, text, index, sc1_segments, sc1_selected_materials)
             layout_variant = self._layout_variant_for_scene(content_type, visual_style, scene_type, text, index, edit_directive)
             energy_pattern = self._energy_pattern_for_scene(scene_type, layout_variant, text, index)
             english_text = " ".join(segment.get("englishText", "") for segment in sc1_segments).strip()
@@ -761,6 +769,72 @@ class AiVideoService:
             )
         return scenes
 
+    def _sc1_generated_images_for_scene(
+        self,
+        payload: dict[str, Any],
+        text: str,
+        index: int,
+        segments: list[dict[str, Any]] | None = None,
+    ) -> list[dict[str, Any]]:
+        segment_items = segments or self._sc1_segments_for_scene(text, index)
+        segment = segment_items[0] if segment_items else {}
+        cue_texts = [
+            str(cue.get("text") or "").strip()
+            for cue in (segment.get("captionCues") if isinstance(segment.get("captionCues"), list) else [])
+            if str(cue.get("text") or "").strip()
+        ]
+        segment_text = " ".join(cue_texts[:3]).strip() or text
+        layout_mode = str(segment.get("layoutMode") or self._sc1_layout_mode_for_scene(index, text)).strip()
+        prompt = self._sc1_generated_image_prompt(payload, segment_text, index)
+        try:
+            generator = globals().get("image_gen_service")
+            if generator is None:
+                from app.services.image_gen import image_gen_service as generator
+
+            local_url, public_url, _storage = self._run_async_image_generation(generator.generate_image(prompt))
+        except Exception:
+            return []
+        src = self._backend_asset_url(str(public_url or local_url or ""))
+        if not src:
+            return []
+        return [
+            {
+                "src": src,
+                "generated": True,
+                "slot": "center",
+                "segmentIndex": 0,
+                "segmentText": segment_text,
+                "englishText": self._sc1_english_for_segment(segment_text, index, 0),
+                "summaryLabel": self._sc1_summary_label(segment_text, 0),
+                "enterDirection": self._sc1_enter_direction(index, 0),
+                "startRatio": 0,
+                "endRatio": 1,
+                "visibleFromRatio": 0,
+                "layoutMode": layout_mode,
+                "prompt": prompt,
+            }
+        ]
+
+    def _run_async_image_generation(self, coroutine: Any) -> tuple[str, str, str]:
+        try:
+            return asyncio.run(coroutine)
+        except RuntimeError as exc:
+            if "asyncio.run()" not in str(exc):
+                raise
+            loop = asyncio.new_event_loop()
+            try:
+                return loop.run_until_complete(coroutine)
+            finally:
+                loop.close()
+
+    def _sc1_generated_image_prompt(self, payload: dict[str, Any], text: str, index: int) -> str:
+        topic = str(payload.get("prompt") or payload.get("title") or payload.get("requirements") or "心理成长").strip()
+        return (
+            "SC1心理学火柴人视频中间场景图，白纸背景可抠图，黑色简洁火柴人线稿，"
+            "只生成一个完整居中的场景，不要文字，不要水印，不要边框，不要复杂背景。"
+            f"主题：{topic}。当前文案：{text}。分镜编号：{index + 1}。"
+        )
+
     def _sc1_material_images_for_scene(
         self,
         payload: dict[str, Any],
@@ -779,7 +853,7 @@ class AiVideoService:
         layout_mode = str(segment.get("layoutMode") or self._sc1_layout_mode_for_scene(index, text)).strip()
         slot_hints = ["center"]
         image_texts = [" ".join(cue_texts[:3]).strip() or text]
-        materials = self._load_sc1_materials()
+        materials = self._load_sc1_materials(payload)
         selected: set[str] = selected_materials if selected_materials is not None else set()
         images: list[dict[str, Any]] = []
         for offset in range(per_scene):
@@ -791,6 +865,7 @@ class AiVideoService:
                 {
                     "src": f"/sc1-materials/{file_name}",
                     "fileName": file_name,
+                    "relativePath": material.get("relativePath") or file_name,
                     "slot": slot_hints[offset] if offset < len(slot_hints) else ("right" if offset else "center"),
                     "segmentIndex": offset,
                     "segmentText": segment_text,
@@ -1072,8 +1147,17 @@ class AiVideoService:
         pairs = [("left", "right"), ("right", "left"), ("top", "bottom"), ("bottom", "top")]
         return pairs[scene_index % len(pairs)][segment_index % 2]
 
-    def _load_sc1_materials(self) -> list[dict[str, Any]]:
-        configured_path = SC1_MATERIAL_LIBRARY_PATH
+    def _sc1_material_paths(self, payload: dict[str, Any] | None = None) -> tuple[Path, Path]:
+        manifest_value = str((payload or {}).get("materialLibraryManifest") or "").strip()
+        root_value = str((payload or {}).get("materialLibraryPath") or "").strip()
+        if manifest_value:
+            manifest_path = Path(manifest_value).expanduser().resolve()
+            material_root = Path(root_value).expanduser().resolve() if root_value else manifest_path.parent
+            return material_root, manifest_path
+        if root_value:
+            configured_path = Path(root_value).expanduser().resolve()
+        else:
+            configured_path = SC1_MATERIAL_LIBRARY_PATH
         if configured_path.is_file():
             path = configured_path
             material_root = configured_path.parent
@@ -1084,11 +1168,15 @@ class AiVideoService:
                 configured_path / "materials.json",
             ]
             path = next((candidate for candidate in candidates if candidate.exists()), candidates[0])
+        return material_root, path
+
+    def _load_sc1_materials(self, payload: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+        material_root, path = self._sc1_material_paths(payload)
         try:
             stat = path.stat()
-            key = (str(material_root), stat.st_mtime, stat.st_size)
+            key = (str(material_root), str(path), stat.st_mtime, stat.st_size)
         except OSError:
-            key = (str(material_root), 0.0, 0)
+            key = (str(material_root), str(path), 0.0, 0)
         if self._sc1_material_cache[0] == key:
             return self._sc1_material_cache[1]
         raw = ""
@@ -1125,7 +1213,9 @@ class AiVideoService:
         return items
 
     def _normalize_sc1_material(self, item: dict[str, Any]) -> dict[str, Any]:
-        file_name = Path(str(item.get("file_name") or item.get("fileName") or "")).name
+        raw_file = str(item.get("file_name") or item.get("fileName") or item.get("image_path") or "")
+        file_name = Path(raw_file).name
+        relative_path = raw_file.replace("\\", "/").lstrip("/")
         fields = [
             "primary_subject",
             "pose_action",
@@ -1149,6 +1239,7 @@ class AiVideoService:
         search_text = " ".join(parts).lower()
         return {
             "fileName": file_name,
+            "relativePath": relative_path or file_name,
             "searchText": search_text,
             "hasMetadata": bool(search_text.strip()),
         }
@@ -1806,7 +1897,8 @@ class AiVideoService:
         render_scenes = [self._scene_for_render(scene) for scene in scenes]
         material_stage_dir: Path | None = None
         if content_type == "knowledge_ip_stickman" or visual_style == "sc1_stickman":
-            material_stage_dir = self._prepare_sc1_materials_for_render(render_scenes, output_path.parent.parent.name)
+            material_stage_dir = self._prepare_sc1_materials_for_render(render_scenes, output_path.parent.parent.name, payload)
+        background_src = self._backend_asset_url(str(payload.get("uploadedBackgroundUrl") or ""))
         request_payload = {
             "title": payload.get("title") or "",
             "script": payload.get("script") or "",
@@ -1820,6 +1912,10 @@ class AiVideoService:
             "audioScenes": audio_scenes,
             "scenes": render_scenes,
             "bgmSrc": None,
+            "backgroundMode": payload.get("backgroundMode") or "default",
+            "backgroundTemplate": payload.get("backgroundTemplate") or "",
+            "uploadedBackgroundUrl": background_src,
+            "backgroundSrc": background_src,
             "renderComposition": render_composition,
         }
         body = json.dumps(request_payload, ensure_ascii=False).encode("utf-8")
@@ -1860,8 +1956,8 @@ class AiVideoService:
             if material_stage_dir:
                 shutil.rmtree(material_stage_dir, ignore_errors=True)
 
-    def _prepare_sc1_materials_for_render(self, scenes: list[dict[str, Any]], task_name: str) -> Path:
-        material_root = SC1_MATERIAL_LIBRARY_PATH.parent if SC1_MATERIAL_LIBRARY_PATH.is_file() else SC1_MATERIAL_LIBRARY_PATH
+    def _prepare_sc1_materials_for_render(self, scenes: list[dict[str, Any]], task_name: str, payload: dict[str, Any] | None = None) -> Path:
+        material_root, _manifest_path = self._sc1_material_paths(payload)
         target_dir = self.render_material_root
         target_dir.mkdir(parents=True, exist_ok=True)
         for scene in scenes:
@@ -1869,11 +1965,24 @@ class AiVideoService:
             for image in images:
                 if not isinstance(image, dict):
                     continue
+                raw_src = str(image.get("src") or "").strip()
+                if image.get("generated") or (re.match(r"^(https?:|file:)//", raw_src, re.I) and not image.get("fileName") and not image.get("relativePath")):
+                    continue
                 file_name = Path(str(image.get("fileName") or Path(str(image.get("src") or "")).name)).name
                 if not file_name:
                     continue
-                source = material_root / file_name
-                if source.exists() and source.is_file():
+                relative_path = str(image.get("relativePath") or "").strip().replace("\\", "/").lstrip("/")
+                source_candidates = []
+                if relative_path:
+                    source_candidates.append(material_root / relative_path)
+                source_candidates.append(material_root / file_name)
+                source = next((candidate for candidate in source_candidates if candidate.exists() and candidate.is_file()), None)
+                if source is None:
+                    try:
+                        source = next(candidate for candidate in material_root.rglob(file_name) if candidate.is_file())
+                    except StopIteration:
+                        source = None
+                if source and source.exists() and source.is_file():
                     target = target_dir / file_name
                     try:
                         from PIL import Image
@@ -1969,6 +2078,16 @@ class AiVideoService:
     def _download_file(self, source_url: str, output_path: Path) -> None:
         with urllib.request.urlopen(source_url, timeout=120) as response:
             output_path.write_bytes(response.read())
+
+    def _backend_asset_url(self, value: str) -> str:
+        source = str(value or "").strip()
+        if not source:
+            return ""
+        if re.match(r"^(https?:|file:)//", source, re.I):
+            return source
+        if source.startswith("/"):
+            return f"{self.backend_public_url}{source}"
+        return source
 
     def _probe_render_service(self) -> dict[str, Any]:
         try:

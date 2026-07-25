@@ -1,7 +1,8 @@
+import base64
 import httpx
 import uuid
 from pathlib import Path
-from typing import List
+from typing import Any, List
 from app.config import get_settings
 from app.utils.cos_storage import cos_storage
 
@@ -16,6 +17,8 @@ class ImageGenService:
         self.model_chain = [item.strip() for item in (settings.STICKMAN_IMAGE_MODELS or self.model).split(",") if item.strip()]
         if self.model and self.model not in self.model_chain:
             self.model_chain.insert(0, self.model)
+        self.image_size = settings.STICKMAN_IMAGE_SIZE or "1024x1024"
+        self.reply_type = getattr(settings, "STICKMAN_IMAGE_REPLY_TYPE", "json") or "json"
 
     async def generate_image(self, prompt: str) -> tuple[str, str, str]:
         """生成单张图片"""
@@ -29,29 +32,16 @@ class ImageGenService:
                             "Authorization": f"Bearer {self.api_key}",
                             "Content-Type": "application/json"
                         },
-                        json={
-                            "model": model,
-                            "input": {
-                                "messages": [
-                                    {
-                                        "role": "user",
-                                        "content": [{"text": prompt}]
-                                    }
-                                ]
-                            },
-                            "parameters": {
-                                "size": "1024*1024",
-                                "watermark": False,
-                                "prompt_extend": True
-                            }
-                        }
+                        json=self._build_payload(model, prompt),
                     )
                     response.raise_for_status()
                     data = response.json()
-                    image_url = self._extract_image_url(data)
-                    if not image_url:
+                    source_type, image_source = self._extract_image_source(data)
+                    if not image_source:
                         raise Exception(f"图片生成未返回有效的URL: {data}")
-                    image_resp = await client.get(image_url)
+                    if source_type == "base64":
+                        return self._save_image(self._decode_base64_image(image_source))
+                    image_resp = await client.get(image_source)
                     image_resp.raise_for_status()
                     return self._save_image(image_resp.content)
                 except Exception as exc:
@@ -59,7 +49,65 @@ class ImageGenService:
                     continue
         raise Exception(f"图片生成失败: {last_error}")
 
+    def _build_payload(self, model: str, prompt: str) -> dict[str, Any]:
+        if self._uses_generate_api(model):
+            return {
+                "model": model,
+                "prompt": prompt,
+                "images": [],
+                "aspectRatio": self.image_size,
+                "replyType": self.reply_type,
+            }
+        return {
+            "model": model,
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [{"text": prompt}],
+                    }
+                ]
+            },
+            "parameters": {
+                "size": self.image_size.replace("x", "*"),
+                "watermark": False,
+                "prompt_extend": True,
+            },
+        }
+
+    def _uses_generate_api(self, model: str) -> bool:
+        return self.base_url.rstrip("/").endswith("/api/generate") or model in {"gpt-image-2", "nano-banana-2"}
+
     def _extract_image_url(self, data: dict) -> str:
+        source_type, source = self._extract_image_source(data)
+        return source if source_type == "url" else ""
+
+    def _extract_image_source(self, data: Any) -> tuple[str, str]:
+        if isinstance(data, dict):
+            for key in ("url", "image", "image_url"):
+                value = data.get(key)
+                if isinstance(value, str) and value.strip():
+                    return "url", value.strip()
+            for key in ("b64_json", "base64", "image_base64"):
+                value = data.get(key)
+                if isinstance(value, str) and value.strip():
+                    return "base64", value.strip()
+            for value in data.values():
+                source_type, source = self._extract_image_source(value)
+                if source:
+                    return source_type, source
+        if isinstance(data, list):
+            for item in data:
+                source_type, source = self._extract_image_source(item)
+                if source:
+                    return source_type, source
+        return "", ""
+
+    def _decode_base64_image(self, value: str) -> bytes:
+        payload = value.split(",", 1)[1] if value.startswith("data:") and "," in value else value
+        return base64.b64decode(payload)
+
+    def _extract_dashscope_image_url(self, data: dict) -> str:
         output = data.get("output") or {}
         choices = output.get("choices") or []
         if choices:

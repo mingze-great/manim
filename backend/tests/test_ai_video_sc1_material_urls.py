@@ -1,4 +1,5 @@
 import os
+import json
 import subprocess
 import sys
 import types
@@ -41,6 +42,120 @@ def test_prepare_sc1_materials_uses_render_service_public_url(tmp_path, monkeypa
 
     assert (render_material_root / "sample.png").exists()
     assert scenes[0]["assetImages"][0]["src"] == "http://127.0.0.1:18788/sc1-materials/sample.png"
+
+
+def test_sc1_material_selection_uses_job_material_manifest(tmp_path, monkeypatch):
+    selected_root = tmp_path / "selected-library"
+    selected_root.mkdir()
+    manifest = selected_root / "materials.json"
+    manifest.write_text(
+        json.dumps(
+            [
+                {
+                    "file_name": "selected.png",
+                    "primary_subject": "关系证明",
+                    "emotion_primary": "内耗",
+                    "storyboard_roles": ["hook", "problem"],
+                    "search_keywords": ["证明", "关系", "内耗"],
+                }
+            ],
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (selected_root / "selected.png").write_bytes(b"selected image bytes")
+
+    fallback_root = tmp_path / "fallback-library"
+    fallback_root.mkdir()
+    (fallback_root / "materials.json").write_text("[]", encoding="utf-8")
+    monkeypatch.setattr(ai_video, "SC1_MATERIAL_LIBRARY_PATH", fallback_root)
+
+    service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
+    service._sc1_material_cache = (None, [])
+
+    images = service._sc1_material_images_for_scene(
+        {
+            "prompt": "为什么你越想证明自己越容易内耗",
+            "materialLibraryPath": str(selected_root),
+            "materialLibraryManifest": str(manifest),
+        },
+        "你越想证明自己，越容易在关系里内耗",
+        0,
+    )
+
+    assert images[0]["fileName"] == "selected.png"
+
+
+def test_prepare_sc1_materials_uses_job_material_root(tmp_path, monkeypatch):
+    selected_root = tmp_path / "selected-library"
+    selected_root.mkdir()
+    (selected_root / "selected.png").write_bytes(b"selected image bytes")
+
+    fallback_root = tmp_path / "fallback-library"
+    fallback_root.mkdir()
+    monkeypatch.setattr(ai_video, "SC1_MATERIAL_LIBRARY_PATH", fallback_root)
+    monkeypatch.setattr(ai_video, "SC1_MATERIAL_PUBLIC_BASE_URL", "http://127.0.0.1:18788/sc1-materials")
+
+    render_material_root = tmp_path / "render-public" / "sc1-materials"
+    service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
+    service.render_material_root = render_material_root
+    scenes = [{"assetImages": [{"fileName": "selected.png"}]}]
+
+    service._prepare_sc1_materials_for_render(
+        scenes,
+        "job_2",
+        {"materialLibraryPath": str(selected_root)},
+    )
+
+    assert (render_material_root / "selected.png").exists()
+    assert scenes[0]["assetImages"][0]["src"] == "http://127.0.0.1:18788/sc1-materials/selected.png"
+
+
+def test_prepare_sc1_materials_keeps_generated_http_images(tmp_path, monkeypatch):
+    fallback_root = tmp_path / "fallback-library"
+    fallback_root.mkdir()
+    monkeypatch.setattr(ai_video, "SC1_MATERIAL_LIBRARY_PATH", fallback_root)
+
+    render_material_root = tmp_path / "render-public" / "sc1-materials"
+    service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
+    service.render_material_root = render_material_root
+    scenes = [{"assetImages": [{"src": "http://127.0.0.1:8004/api/article-images/generated.png", "generated": True}]}]
+
+    service._prepare_sc1_materials_for_render(scenes, "job_3", {})
+
+    assert scenes[0]["assetImages"][0]["src"] == "http://127.0.0.1:8004/api/article-images/generated.png"
+
+
+def test_ai_image_mode_generates_scene_asset(monkeypatch):
+    service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
+    service.backend_public_url = "http://127.0.0.1:8004"
+    service._sc1_material_cache = (None, [])
+    service._media_for_scene = lambda *_args, **_kwargs: []
+    service._infer_scene_count = lambda *_args, **_kwargs: 1
+
+    calls = []
+
+    async def fake_generate_image(prompt):
+        calls.append(prompt)
+        return "/api/article-images/generated.png", "/api/article-images/generated.png", "local"
+
+    fake_service = types.SimpleNamespace(generate_image=fake_generate_image)
+    monkeypatch.setattr(ai_video, "image_gen_service", fake_service, raising=False)
+
+    scenes = service._build_scenes(
+        "你越想证明自己，越容易在关系里内耗。",
+        {"prompt": "关系内耗", "imageMode": "ai_image", "useMaterialLibrary": False},
+        "knowledge_ip_stickman",
+        "sc1_stickman",
+        "medium",
+    )
+
+    asset = scenes[0]["visual"]["assetImages"][0]
+    assert calls
+    assert "SC1心理学火柴人" in calls[0]
+    assert asset["generated"] is True
+    assert asset["src"] == "http://127.0.0.1:8004/api/article-images/generated.png"
+    assert asset["slot"] == "center"
 
 
 def test_dayun_manbo_tts_rate_limit_falls_back_to_open_source_cosyvoice(tmp_path, monkeypatch):

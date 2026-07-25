@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { Form, Input, Button, message, Space } from 'antd'
 import { UserOutlined, LockOutlined, PhoneOutlined, RocketOutlined, ReloadOutlined } from '@ant-design/icons'
 import { authApi } from '@/services/auth'
@@ -9,14 +9,17 @@ const randomUsername = () => `user${Math.floor(100000 + Math.random() * 900000)}
 
 export default function Register() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [loading, setLoading] = useState(false)
   const [form] = Form.useForm()
+  const referralCode = searchParams.get('ref') || searchParams.get('referral_code') || ''
+  const initialInviteCode = searchParams.get('invite') || searchParams.get('code') || ''
 
-  const onFinish = async (values: { username: string; phone: string; password: string }) => {
+  const onFinish = async (values: { username: string; phone: string; password: string; referral_code?: string; invite_code?: string }) => {
     setLoading(true)
     try {
       await authApi.register(values)
-      message.success('注册成功，请等待管理员审核后登录')
+      message.success(values.invite_code ? '注册并开通成功，可直接登录' : '注册成功，请等待管理员审核后登录')
       navigate('/login')
     } catch (error: any) {
       message.error(error.response?.data?.detail || '注册失败')
@@ -63,8 +66,11 @@ export default function Register() {
             size="large"
             className="input-glow"
             form={form}
-            initialValues={{ username: randomUsername() }}
+            initialValues={{ username: randomUsername(), referral_code: referralCode, invite_code: initialInviteCode }}
           >
+            <Form.Item name="referral_code" hidden>
+              <Input />
+            </Form.Item>
             <Form.Item
               name="username"
               rules={[{ required: true, message: '请输入用户名' }]}
@@ -107,6 +113,13 @@ export default function Register() {
                 className="rounded-lg"
               />
             </Form.Item>
+            <Form.Item
+              name="invite_code"
+              label="兑换码"
+              extra="已付款用户可输入兑换码，注册后直接开通；没有兑换码可留空等待审核。"
+            >
+              <Input placeholder="例如：SC1-XXXXXX" allowClear />
+            </Form.Item>
             <div className="text-xs text-gray-500 mb-4">
               <Space direction="vertical" size={2}>
                 <span>用户名支持一键随机生成，也可以手动修改。</span>
@@ -127,7 +140,7 @@ export default function Register() {
           </Form>
 
           <div className="text-center text-gray-500 dark:text-gray-400">
-            <p className="text-xs mb-2">注册后需管理员审核才能使用</p>
+            <p className="text-xs mb-2">有兑换码可直接开通；没有兑换码则注册后等待管理员审核</p>
             已有账号？{' '}
             <Link 
               to="/login" 

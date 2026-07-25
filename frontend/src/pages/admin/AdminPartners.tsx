@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Card, Col, Form, Input, InputNumber, Modal, Row, Select, Space, Statistic, Table, Tabs, Tag, Typography, message } from 'antd'
 import { GiftOutlined, PlusOutlined, ReloadOutlined, TeamOutlined, WalletOutlined } from '@ant-design/icons'
-import { adminApi, AdminCommission, AdminPartner, AdminReferral, User } from '@/services/admin'
+import { adminApi, AdminCommission, AdminPartner, AdminReferral, StickmanWorkflowMaterialLibrary, User } from '@/services/admin'
 
 const formatMoney = (value?: number | null) => `¥${(((value || 0) as number) / 100).toFixed(2)}`
 
@@ -19,6 +19,7 @@ export default function AdminPartners() {
   const [referrals, setReferrals] = useState<AdminReferral[]>([])
   const [commissions, setCommissions] = useState<AdminCommission[]>([])
   const [users, setUsers] = useState<User[]>([])
+  const [materialLibraries, setMaterialLibraries] = useState<StickmanWorkflowMaterialLibrary[]>([])
   const [selectedPartnerId, setSelectedPartnerId] = useState<number | undefined>()
   const [loading, setLoading] = useState(false)
   const [createPartnerOpen, setCreatePartnerOpen] = useState(false)
@@ -42,17 +43,19 @@ export default function AdminPartners() {
   const loadData = async (partnerId = selectedPartnerId) => {
     setLoading(true)
     try {
-      const [partnerRes, referralRes, commissionRes, userRes] = await Promise.all([
+      const [partnerRes, referralRes, commissionRes, userRes, libraryRes] = await Promise.all([
         adminApi.getPartners(),
         adminApi.getReferrals(partnerId),
         adminApi.getCommissions(partnerId),
         adminApi.getUsers({ limit: 500 }),
+        adminApi.getStickmanWorkflowMaterialLibraries(),
       ])
       setPartners(partnerRes.data || [])
       setReferrals(referralRes.data || [])
       setCommissions(commissionRes.data || [])
       const userPayload: any = userRes.data
       setUsers(Array.isArray(userPayload) ? userPayload : (userPayload?.users || []))
+      setMaterialLibraries(libraryRes.data?.libraries || [])
     } catch (error: any) {
       message.error(error?.response?.data?.detail || '加载合作者数据失败')
     } finally {
@@ -91,6 +94,7 @@ export default function AdminPartners() {
     quota_period: string
     max_video_seconds: number
     max_uses: number
+    allowed_libraries?: string[]
   }) => {
     setSubmitting(true)
     try {
@@ -105,6 +109,9 @@ export default function AdminPartners() {
   }
 
   const partnerOptions = partners.map((item) => ({ label: item.display_name, value: item.id }))
+  const materialLibraryOptions = materialLibraries
+    .filter((item) => item.is_active !== false && item.is_visible !== false)
+    .map((item) => ({ label: item.name || item.key, value: item.key }))
   const userOptions = users
     .filter((user) => !user.is_admin)
     .map((user) => ({
@@ -264,6 +271,7 @@ export default function AdminPartners() {
             quota_period: 'daily',
             max_video_seconds: 60,
             max_uses: 1,
+            allowed_libraries: ['sc1_outputs'],
           }}
         >
           <Form.Item name="partner_id" label="绑定合作者">
@@ -274,6 +282,9 @@ export default function AdminPartners() {
           </Form.Item>
           <Form.Item name="material_mode" label="成本模式">
             <Select options={[{ label: '素材库模式', value: 'material_only' }, { label: '实时生图模式', value: 'ai_image' }, { label: '混合模式', value: 'hybrid' }]} />
+          </Form.Item>
+          <Form.Item name="allowed_libraries" label="可用素材库" extra="留空表示不限制；素材库套餐建议至少选择默认 SC1 素材库。">
+            <Select mode="multiple" allowClear options={materialLibraryOptions} placeholder="选择用户可使用的素材库" />
           </Form.Item>
           <Row gutter={12}>
             <Col span={8}>

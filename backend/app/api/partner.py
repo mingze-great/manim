@@ -1,3 +1,4 @@
+import json
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -20,6 +21,7 @@ class PartnerInviteCodeCreate(BaseModel):
     quota_period: str = "daily"
     max_video_seconds: int = 60
     max_uses: int = 1
+    allowed_libraries: list[str] = []
 
 
 def _require_partner_profile(db: Session, user: User) -> PartnerProfile:
@@ -116,6 +118,7 @@ def create_partner_invite_code(
     current_user: Annotated[User, Depends(get_current_partner_user)],
 ):
     profile = _require_partner_profile(db, current_user)
+    allowed_libraries = [str(item).strip() for item in payload.allowed_libraries if str(item).strip()] or ["sc1_outputs"]
     code = generate_invite_code("SC1")
     while db.query(InviteCode).filter(InviteCode.code == code).first():
         code = generate_invite_code("SC1")
@@ -123,13 +126,21 @@ def create_partner_invite_code(
         code=code,
         partner_id=profile.id,
         plan_key=payload.plan_key,
+        material_mode="material_only",
         quota_limit=payload.quota_limit,
         quota_period=payload.quota_period,
         max_video_seconds=payload.max_video_seconds,
+        allowed_libraries_json=json.dumps(allowed_libraries, ensure_ascii=False),
         max_uses=payload.max_uses,
         created_by_user_id=current_user.id,
     )
     db.add(invite)
     db.commit()
     db.refresh(invite)
-    return {"code": invite.code, "plan_key": invite.plan_key, "status": invite.status}
+    return {
+        "code": invite.code,
+        "plan_key": invite.plan_key,
+        "material_mode": invite.material_mode,
+        "allowed_libraries": json.loads(invite.allowed_libraries_json or "[]"),
+        "status": invite.status,
+    }

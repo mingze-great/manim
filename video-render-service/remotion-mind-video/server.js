@@ -18,6 +18,16 @@ const sc1MaterialLibraryPath = process.env.SC1_MATERIAL_LIBRARY_PATH || (
 );
 
 app.use(express.json({limit: '20mb'}));
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(204);
+    return;
+  }
+  next();
+});
 app.use('/renders', express.static(path.join(__dirname, 'renders')));
 app.use('/generated-audio', express.static(path.join(__dirname, 'public', 'generated-audio')));
 app.use('/sc1-materials', express.static(sc1MaterialLibraryPath));
@@ -120,6 +130,10 @@ app.post('/api/render-project', async (req, res) => {
       density: Number(req.body?.density ?? 1),
       audioScenes: Array.isArray(req.body?.audioScenes) ? req.body.audioScenes : [],
       bgmSrc: req.body?.bgmSrc ?? null,
+      backgroundMode: String(req.body?.backgroundMode ?? 'default'),
+      backgroundTemplate: String(req.body?.backgroundTemplate ?? ''),
+      uploadedBackgroundUrl: String(req.body?.uploadedBackgroundUrl ?? req.body?.backgroundSrc ?? ''),
+      backgroundSrc: String(req.body?.backgroundSrc ?? req.body?.uploadedBackgroundUrl ?? ''),
       title: String(req.body?.title ?? '')
     };
     if (!inputProps.audioScenes.length) {

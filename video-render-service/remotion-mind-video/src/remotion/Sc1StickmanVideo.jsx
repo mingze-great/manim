@@ -285,13 +285,35 @@ const AudioTrack = ({story, bgmSrc = null}) => (
   </>
 );
 
-const Paper = () => (
+const paperTexture = (template) => {
+  if (template === 'warm_paper') {
+    return 'linear-gradient(180deg, rgba(255,247,228,.62), rgba(255,255,255,.92)), radial-gradient(circle at 16% 18%, rgba(227,174,95,.08), transparent 28%)';
+  }
+  if (template === 'cool_grid') {
+    return 'linear-gradient(rgba(50,82,120,.045) 1px, transparent 1px), linear-gradient(90deg, rgba(50,82,120,.045) 1px, transparent 1px), #fff';
+  }
+  if (template === 'soft_gradient') {
+    return 'linear-gradient(135deg, rgba(240,247,255,.72), rgba(255,255,255,.94) 48%, rgba(255,244,238,.58))';
+  }
+  return 'radial-gradient(circle at 18% 12%, rgba(0,0,0,.018), transparent 26%), radial-gradient(circle at 76% 78%, rgba(0,0,0,.018), transparent 30%)';
+};
+
+const Paper = ({backgroundMode = 'default', backgroundTemplate = '', backgroundSrc = ''}) => {
+  const imageSrc = backgroundMode === 'upload' ? mediaSource(backgroundSrc) : '';
+  return (
   <AbsoluteFill style={{background: '#ffffff'}}>
-    <div style={{
-      position: 'absolute',
-      inset: 0,
-      background: 'radial-gradient(circle at 18% 12%, rgba(0,0,0,.018), transparent 26%), radial-gradient(circle at 76% 78%, rgba(0,0,0,.018), transparent 30%)'
-    }} />
+    {imageSrc ? (
+      <>
+        <Img src={imageSrc} style={{position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0.22}} />
+        <div style={{position: 'absolute', inset: 0, background: 'rgba(255,255,255,.72)'}} />
+      </>
+    ) : (
+      <div style={{
+        position: 'absolute',
+        inset: 0,
+        background: paperTexture(backgroundMode === 'template' ? backgroundTemplate : '')
+      }} />
+    )}
     <div style={{
       position: 'absolute',
       left: -10,
@@ -302,7 +324,8 @@ const Paper = () => (
       borderRadius: 6
     }} />
   </AbsoluteFill>
-);
+  );
+};
 
 const Header = ({title}) => (
   <div style={{position: 'absolute', left: 28, top: 20, display: 'flex', alignItems: 'center', gap: 12, color: '#111', fontSize: 34, fontWeight: 900, lineHeight: 1}}>
@@ -622,7 +645,11 @@ export const Sc1StickmanVideo = (props) => {
 
   return (
     <AbsoluteFill style={{fontFamily: FONT, background: '#fff', overflow: 'hidden'}}>
-      <Paper />
+      <Paper
+        backgroundMode={clean(props.backgroundMode || 'default')}
+        backgroundTemplate={clean(props.backgroundTemplate || '')}
+        backgroundSrc={clean(props.backgroundSrc || props.uploadedBackgroundUrl || '')}
+      />
       <Header title={title} />
       <TopRightTag text={clean(props.topRightTag || props.categoryTag || '心理分享 | 认知突破')} />
       <SceneLayer scene={active} local={local} />

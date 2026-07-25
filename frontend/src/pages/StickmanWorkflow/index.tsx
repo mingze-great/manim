@@ -1,6 +1,6 @@
 ﻿import { useEffect, useMemo, useState } from 'react'
-import { Alert, Button, Collapse, Input, InputNumber, Progress, Radio, Select, Space, Typography, message } from 'antd'
-import { DownloadOutlined, FolderOpenOutlined, PlayCircleOutlined, RocketOutlined, SoundOutlined } from '@ant-design/icons'
+import { Alert, Button, Collapse, Input, InputNumber, Progress, Radio, Select, Space, Typography, Upload, message } from 'antd'
+import { DownloadOutlined, FolderOpenOutlined, PlayCircleOutlined, RocketOutlined, SoundOutlined, UploadOutlined } from '@ant-design/icons'
 import { resolveBackendUrl } from '@/services/api'
 import { stickmanWorkflowApi } from '@/services/stickmanWorkflow'
 import type { StickmanWorkflowConfig } from '@/services/stickmanWorkflow'
@@ -42,9 +42,12 @@ export default function StickmanWorkflow() {
   const [targetSeconds, setTargetSeconds] = useState<number | undefined>(undefined)
   const [imageMode, setImageMode] = useState<'material_only' | 'ai_image' | 'hybrid'>('material_only')
   const [backgroundMode, setBackgroundMode] = useState('default')
+  const [backgroundTemplate, setBackgroundTemplate] = useState('default')
+  const [uploadedBackgroundUrl, setUploadedBackgroundUrl] = useState('')
   const [config, setConfig] = useState<StickmanWorkflowConfig | null>(null)
   const [job, setJob] = useState<AiVideoJob | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [uploadingBackground, setUploadingBackground] = useState(false)
 
   const outputUrl = useMemo(() => resolveBackendUrl(job?.outputUrl), [job?.outputUrl])
   const currentStep = useMemo(
@@ -58,7 +61,8 @@ export default function StickmanWorkflow() {
         setConfig(data)
         setVoiceId(data.defaults.voiceId || 'dayun_manbo')
         setMaterialLibrary(data.defaults.materialLibrary || 'sc1_outputs')
-        setImageMode((data.defaults.imageMode || 'material_only') as 'material_only' | 'ai_image' | 'hybrid')
+        setImageMode(data.capabilities.canUseAiImages ? (data.defaults.imageMode || 'material_only') as 'material_only' | 'ai_image' | 'hybrid' : 'material_only')
+        setBackgroundTemplate(data.backgroundTemplates?.[0]?.key || 'default')
       })
       .catch(() => message.error('加载火柴人配置失败'))
   }, [])
@@ -90,6 +94,10 @@ export default function StickmanWorkflow() {
     setSubmitting(true)
     setJob(null)
     try {
+      if (backgroundMode === 'upload' && !uploadedBackgroundUrl) {
+        message.warning('请先上传背景图，或切换为默认/模板背景')
+        return
+      }
       const { data } = await stickmanWorkflowApi.createJob({
         title: cleanTitle,
         voiceId,
@@ -102,6 +110,8 @@ export default function StickmanWorkflow() {
         targetSeconds: scriptMode === 'ai' ? targetSeconds : undefined,
         imageMode,
         backgroundMode,
+        backgroundTemplate: backgroundMode === 'template' ? backgroundTemplate : undefined,
+        uploadedBackgroundUrl: backgroundMode === 'upload' ? uploadedBackgroundUrl : undefined,
       })
       const jobRes = await stickmanWorkflowApi.getJob(data.jobId)
       setJob(jobRes.data)
@@ -113,12 +123,31 @@ export default function StickmanWorkflow() {
     }
   }
 
+  const uploadBackground = async (file: File) => {
+    setUploadingBackground(true)
+    try {
+      const { data } = await stickmanWorkflowApi.uploadBackground(file)
+      setUploadedBackgroundUrl(data.url)
+      setBackgroundMode('upload')
+      message.success('背景图已上传')
+    } catch (error: any) {
+      message.error(error?.response?.data?.detail || '上传背景图失败')
+    } finally {
+      setUploadingBackground(false)
+    }
+    return false
+  }
+
   const maxVideoSeconds = config?.capabilities.maxVideoSeconds || 60
   const materialOptions = (config?.materialLibraries || [{ key: 'sc1_outputs', name: 'SC1 火柴人素材库' }]).map((item) => ({
     label: `${item.name}${item.material_count ? ` · ${item.material_count}条` : ''}`,
     value: item.key,
   }))
   const voiceOptions = (config?.voices || [{ label: '曼波参考音色', value: 'dayun_manbo' }]).map((item) => ({ label: item.label, value: item.value }))
+  const backgroundTemplateOptions = (config?.backgroundTemplates || [{ key: 'default', name: '默认白纸' }]).map((item) => ({
+    label: item.description ? `${item.name} · ${item.description}` : item.name,
+    value: item.key,
+  }))
   const imageModeOptions = [
     { label: '素材库匹配', value: 'material_only' },
     ...(config?.capabilities.canUseAiImages ? [
@@ -213,14 +242,33 @@ export default function StickmanWorkflow() {
                     <span>背景模式</span>
                     <Select
                       value={backgroundMode}
-                      onChange={setBackgroundMode}
+                      onChange={(value) => setBackgroundMode(value)}
                       options={[
                         { label: '默认白纸背景', value: 'default' },
                         { label: '后台背景风格', value: 'template' },
-                        { label: '用户上传背景', value: 'upload' },
+                        { label: '用户上传背景', value: 'upload', disabled: config?.capabilities.canUploadBackground === false },
                       ]}
                     />
                   </label>
+
+                  {backgroundMode === 'template' ? (
+                    <label className="workflow-field">
+                      <span>背景风格</span>
+                      <Select value={backgroundTemplate} onChange={setBackgroundTemplate} options={backgroundTemplateOptions} />
+                    </label>
+                  ) : null}
+
+                  {backgroundMode === 'upload' ? (
+                    <label className="workflow-field">
+                      <span>上传背景图</span>
+                      <Space direction="vertical" style={{ width: '100%' }}>
+                        <Upload beforeUpload={uploadBackground} showUploadList={false} accept=".png,.jpg,.jpeg,.webp">
+                          <Button icon={<UploadOutlined />} loading={uploadingBackground}>选择背景图</Button>
+                        </Upload>
+                        {uploadedBackgroundUrl ? <Typography.Text type="secondary">已上传：{uploadedBackgroundUrl}</Typography.Text> : null}
+                      </Space>
+                    </label>
+                  ) : null}
                 </Space>
               ),
             }]}

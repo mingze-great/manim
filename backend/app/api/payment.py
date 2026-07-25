@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from datetime import datetime, timedelta
+import json
 import time
 
 from app.database import get_db
@@ -292,6 +293,7 @@ async def redeem_invite_code(
         "code": invite.code,
         "plan": invite.plan_key,
         "material_mode": invite.material_mode,
+        "allowed_libraries": json.loads(invite.allowed_libraries_json or "[]"),
         "quota_limit": invite.quota_limit,
         "quota_period": invite.quota_period,
         "max_video_seconds": invite.max_video_seconds,

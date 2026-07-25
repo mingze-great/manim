@@ -12,6 +12,10 @@ export interface RegisterRequest {
   username: string
   phone: string
   password: string
+  referral_code?: string
+  referralCode?: string
+  invite_code?: string
+  inviteCode?: string
 }
 
 export interface ChangePasswordRequest {

@@ -20,9 +20,9 @@
 - 当前已部署提交：`8e776f5bb7fa79a33710910b759476f9822ad08d`
 - 当前已部署提交时间：`2026-07-25T01:59:59+08:00`
 - 当前已部署提交信息：`chore: tune 3004 cosyvoice fallback config`
-- 当前待部署客户端修复提交：`2afc707db4994aba5cde21c2c8ee5987f8e9a107`
+- 当前待部署客户端修复提交：`7c3c74bdaef302d8794d727602d74bd97928fe7a`
 - 当前待部署客户端修复：`backend/app/services/ai_video.py` 将开源 CosyVoice zero-shot 改为受控 `curl --max-time` 下载 PCM，避免 Python `requests` 等待流关闭导致 worker 卡住。
-- 状态更新时间：`2026-07-25 02:12:30 +08:00`
+- 状态更新时间：`2026-07-25 02:21:40 +08:00`
 
 ## 已完成
 - 已确认现有 3003 分支保持不动，3004 使用独立 git worktree。
@@ -89,7 +89,7 @@
 - 已确认远程 3004 部署标记为 `codex/3004-partner-stickman-platform-20260724@c696bd4633c2e07c57a785833508e7f47a6033ac`，3004 backend、worker、Remotion 服务 active，3003 未修改、未重启。
 - 已定位 `job_6` 后续 TTS 失败链路：Dayun 远程请求仍 429；开源 CosyVoice SFT 因无 speaker 不可用；zero-shot 依赖参考音频和较长生成时间。
 - 已用远程 CosyVoice zero-shot 直接验证 `dayun_tools_manbo_tts_test.mp3` 可作为 prompt 产出音频，探针输出 `/tmp/cosy_dayun_probe_py.pcm` 为 `158720` 字节。
-- 已同步并部署 3004 配置提交 `8e776f5bb7fa79a33710910b759476f9822ad08d`：backend/worker 显式设置 `AI_VIDEO_COSYVOICE_TIMEOUT=180`，并将 zero-shot prompt 固定为 `/opt/manim-v2-3004-snapshot/outputs/dayun_tools_manbo_tts_test.mp3`。
+- 已同步并部署 3004 配置提交 `8e776f5bb7fa79a33710910b759476f9822ad08d`：backend/worker 显式设置 `AI_VIDEO_COSYVOICE_TIMEOUT=180`，并将 zero-shot prompt 固定为 `/opt/manim-v2-3004-snapshot/outputs/cosyvoice_zero_shot_sample.wav`。
 - 已创建 3004 平台验证任务 `job_7`；任务进入第一个 cue 的 open-source CosyVoice fallback 后未推进。CosyVoice 日志显示 `POST /inference_zero_shot HTTP/1.1 200 OK` 且后续吐出音频 blob，但 job 目录未写入音频文件，根因进一步收敛为 Python 客户端等待流关闭。
 - 已新增回归测试 `test_open_source_cosyvoice_accepts_valid_pcm_when_stream_times_out`，覆盖 curl 返回 timeout 但已写出有效 PCM 时仍接受音频，避免任务卡死；相关测试 `10 passed`。
 
@@ -169,3 +169,38 @@
 2. 同步 `backend/app/services/ai_video.py`、`backend/tests/test_ai_video_sc1_material_urls.py`、`PROJECT_STATE.md` 到 3004，并仅重启 3004 backend/worker。
 3. 重新创建 3004 `/stickman-workflow` 标题生成任务 `job_8`，优先使用 `dayun_manbo` 声音和 `sc1_outputs` 素材库。
 4. 下载成功 MP4，使用 ffmpeg/ffprobe 检查音频流和视频流，抽取关键帧确认场景图、字幕、总结和标签布局，并记录 job id、输出路径、验证结论。
+
+## 2026-07-25 16:10 远程卡顿排查与清理
+- 当前分支：`codex/3004-partner-stickman-platform-20260724`
+- 当前本地 HEAD：`7c3c74bdaef302d8794d727602d74bd97928fe7a`
+- 远程排查：`/` 分区 40GB 中已用 37GB，最初仅剩 832MB，确认接近满盘，是任务生成、Remotion 渲染和构建卡住的高风险原因。
+- 已清理：`/tmp` 旧 `pymp-*`、Remotion 临时包、旧 frame 目录、apt/pip/npm/conda/journal 缓存、`/var/lib/snapd/cache`。
+- 已清理：旧服务 `/opt/manim-v2/backend/videos` 中 7 天前历史生成视频 1020 个，释放约 3166.0MB；保留最近 7 天 16 个视频。
+- 清理后验证：`/` 分区可用空间提升到 5.6GB，使用率降到 86%，inode 使用率 25%。
+- 服务验证：3004 backend、worker、ai-video-render 均为 active；`http://127.0.0.1:8004/health` 和 `http://127.0.0.1:18788/api/health` 正常。
+- 3003 保护验证：3003 backend、worker 正常；3003 render 健康接口正常。未修改 3003 部署代码。
+- 发现问题：3004 render 的 `/sc1-materials/*` 响应缺少 CORS 头，日志存在 Remotion 加载素材图被 CORS 拦截，可能导致成片场景图缺失或任务卡住。
+- 本地修复：`video-render-service/remotion-mind-video/server.js` 新增全局 CORS 中间件，准备同步到 3004，不触碰 3003 部署逻辑。
+
+## 2026-07-25 16:25 3004 CORS 热修同步验证
+- 已同步到远程：`/opt/manim-v2-3004-snapshot/video-render-service/remotion-mind-video/server.js`
+- 已重启服务：`manim-v2-3004-ai-video-render.service`
+- 验证结果：3004 render service 为 `active`，`/api/health` 正常。
+- 验证结果：`/sc1-materials/psychology-stickman-14-digital-overload.png` 已返回 `Access-Control-Allow-Origin: *`、`Access-Control-Allow-Methods: GET,POST,OPTIONS`、`Access-Control-Allow-Headers: Content-Type, Authorization`。
+- 验证结果：3004 backend、worker、render 均为 `active`；公网 `http://152.136.218.74:3004` 返回 200。
+- 当前磁盘：`/` 分区 40GB，已用 32GB，可用 5.6GB，使用率 86%。
+- 注意：本次只热修 3004 render CORS 和清理服务器空间；未重启 3003，未删除 3003/3004 部署目录或素材库。
+
+## 2026-07-25 16:45 3004 平台助手与本地验证
+- 当前分支：`codex/3004-partner-stickman-platform-20260724`
+- 提交前 HEAD：`7c3c74bdaef302d8794d727602d74bd97928fe7a`
+- 已完成：新增后端平台助手接口 `/api/platform-assistant/chat` 与文档知识库检索服务。
+- 已完成：新增登录后全局悬浮 AI 助手，支持当前页面 path、快捷问题、来源标签、平台入口按钮和兜底回答。
+- 已完成：补充 `rules/quality-gates.md` 与 `rules/vibe-coding.md`，明确面向用户需求必须通过平台闭环验证，不能只用本地脚本替代。
+- 已完成：保留 3004 火柴人高级控制、合作者/邀请码、素材库、背景、AI 生图 payload、CORS 热修等改动，不触碰 3003。
+- 本地验证：`pytest backend/tests/test_platform_assistant.py backend/tests/test_image_gen_service.py backend/tests/test_ai_video_sc1_material_urls.py backend/tests/test_partner_models_import.py backend/tests/test_partner_program_service.py backend/tests/test_stickman_workflow_assets.py backend/tests/test_stickman_workflow_limits.py -q` -> 21 passed, 7 warnings。
+- 本地验证：`python -m py_compile ...` 覆盖新增后端与相关 API/service 文件 -> 通过。
+- 本地验证：`npm run build` in `frontend` -> 通过；仅 Vite chunk size warning。
+- 本地验证：`git diff --check` -> 通过；仅换行符提示。
+- 密钥检查：提交 diff 未发现 `sk-` 形式密钥；`work/` 临时目录不提交。
+- 下一步：提交本地改动，同步 3004 部署目录，只重启 3004 backend/worker/render，随后验证助手问答与 `/stickman-workflow` 平台成片。

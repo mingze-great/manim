@@ -4,6 +4,7 @@ import secrets
 import string
 from datetime import datetime, timedelta
 from typing import Optional
+import json
 
 from sqlalchemy.orm import Session
 
@@ -88,6 +89,39 @@ def upsert_module_permission(
     return record
 
 
+def _update_user_permission_json(user: User, module_key: str, extras: dict) -> None:
+    permissions = user.get_module_permissions()
+    current = permissions.get(module_key) or {}
+    current.update(extras)
+    permissions[module_key] = current
+    user.set_module_permissions(permissions)
+
+
+def stickman_entitlement_from_user(user: User) -> dict:
+    permission = user.get_module_permission("stickman_v2") if user else {}
+    material_mode = str(permission.get("material_mode") or "material_only").strip() or "material_only"
+    if material_mode not in {"material_only", "ai_image", "hybrid"}:
+        material_mode = "material_only"
+    try:
+        max_video_seconds = int(permission.get("max_video_seconds") or 60)
+    except Exception:
+        max_video_seconds = 60
+    allowed_libraries = permission.get("allowed_libraries")
+    if isinstance(allowed_libraries, str):
+        try:
+            allowed_libraries = json.loads(allowed_libraries)
+        except Exception:
+            allowed_libraries = []
+    if not isinstance(allowed_libraries, list):
+        allowed_libraries = []
+    return {
+        "material_mode": material_mode,
+        "can_use_ai_images": material_mode in {"ai_image", "hybrid"},
+        "max_video_seconds": max(15, min(300, max_video_seconds)),
+        "allowed_libraries": [str(item).strip() for item in allowed_libraries if str(item).strip()],
+    }
+
+
 def apply_invite_code_to_user(db: Session, user: User, raw_code: str) -> InviteCode:
     code = normalize_invite_code(raw_code)
     invite = db.query(InviteCode).filter(InviteCode.code == code).first()
@@ -112,7 +146,7 @@ def apply_invite_code_to_user(db: Session, user: User, raw_code: str) -> InviteC
 
     user.is_approved = True
     user.expires_at = expires_at
-    if invite.partner_id and not user.referred_by_partner_id:
+    if invite.partner_id:
         user.referred_by_partner_id = invite.partner_id
         referral = db.query(ReferralCode).filter(ReferralCode.partner_id == invite.partner_id, ReferralCode.status == "active").first()
         user.referral_code = referral.code if referral else None
@@ -125,6 +159,23 @@ def apply_invite_code_to_user(db: Session, user: User, raw_code: str) -> InviteC
         quota_limit=invite.quota_limit,
         period=invite.quota_period,
         expires_at=expires_at,
+    )
+    allowed_libraries: list[str] = []
+    if invite.allowed_libraries_json:
+        try:
+            raw_libraries = json.loads(invite.allowed_libraries_json)
+            if isinstance(raw_libraries, list):
+                allowed_libraries = [str(item).strip() for item in raw_libraries if str(item).strip()]
+        except Exception:
+            allowed_libraries = []
+    _update_user_permission_json(
+        user,
+        "stickman_v2",
+        {
+            "material_mode": invite.material_mode or "material_only",
+            "max_video_seconds": int(invite.max_video_seconds or 60),
+            "allowed_libraries": allowed_libraries,
+        },
     )
 
     invite.used_count += 1

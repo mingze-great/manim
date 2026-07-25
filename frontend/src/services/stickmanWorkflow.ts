@@ -14,6 +14,7 @@ export interface StickmanWorkflowMaterialLibrary {
 
 export interface StickmanWorkflowConfig {
   materialLibraries: StickmanWorkflowMaterialLibrary[]
+  backgroundTemplates: Array<{ key: string; name: string; description?: string }>
   voices: Array<{ label: string; value: string; provider?: string }>
   defaults: {
     voiceId: string
@@ -24,6 +25,7 @@ export interface StickmanWorkflowConfig {
   capabilities: {
     canUseAiImages: boolean
     canUploadBackground: boolean
+    materialMode?: 'material_only' | 'ai_image' | 'hybrid'
     maxVideoSeconds: number
   }
 }
@@ -47,6 +49,11 @@ export interface StickmanWorkflowJobCreate {
 
 export const stickmanWorkflowApi = {
   getConfig: () => api.get<StickmanWorkflowConfig>('/stickman-workflow/config'),
+  uploadBackground: (file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post<{ url: string; filename: string }>('/stickman-workflow/backgrounds', formData)
+  },
   createJob: (payload: StickmanWorkflowJobCreate) =>
     api.post<{ jobId: string; projectId: number; status: string }>('/stickman-workflow/jobs', payload),
   getJob: (jobId: string) => api.get<AiVideoJob>(`/stickman-workflow/jobs/${jobId}`),

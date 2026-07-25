@@ -8,6 +8,7 @@ import {
 import { useAuthStore } from '@/stores/authStore'
 import { clearAuthArtifacts, syncCrossSiteLogout } from '@/utils/authSync'
 import { useState, useEffect } from 'react'
+import PlatformAssistantWidget from '@/components/PlatformAssistant/PlatformAssistantWidget'
 import './Layout.css'
 
 const { Header, Sider, Content } = Layout
@@ -183,6 +184,7 @@ export default function MainLayout() {
         <Content className="main-content">
           <Outlet />
         </Content>
+        <PlatformAssistantWidget />
       </Layout>
     </Layout>
   )

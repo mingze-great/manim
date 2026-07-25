@@ -94,6 +94,7 @@ class InviteCodeCreateRequest(BaseModel):
     quota_period: str = "daily"
     max_video_seconds: int = 60
     max_uses: int = 1
+    allowed_libraries: List[str] = []
 
 
 def _normalize_module_permissions(payload: dict, user: User) -> dict:
@@ -288,6 +289,10 @@ async def create_invite_code(
         quota_limit=payload.quota_limit,
         quota_period=payload.quota_period,
         max_video_seconds=payload.max_video_seconds,
+        allowed_libraries_json=json.dumps(
+            [str(item).strip() for item in payload.allowed_libraries if str(item).strip()],
+            ensure_ascii=False,
+        ) if payload.allowed_libraries else None,
         max_uses=payload.max_uses,
         created_by_user_id=current_user.id,
     )
@@ -300,6 +305,7 @@ async def create_invite_code(
         "partner_id": invite.partner_id,
         "plan_key": invite.plan_key,
         "material_mode": invite.material_mode,
+        "allowed_libraries": json.loads(invite.allowed_libraries_json or "[]"),
         "status": invite.status,
     }
 

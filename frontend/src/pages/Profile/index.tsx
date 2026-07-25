@@ -1,6 +1,6 @@
 import { Card, Button, Avatar, Space, Tag, Typography, Divider, Descriptions, Modal, Form, Input, message } from 'antd'
 import { 
-  UserOutlined, LogoutOutlined, LockOutlined
+  UserOutlined, LogoutOutlined, LockOutlined, GiftOutlined
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
@@ -19,24 +19,28 @@ export default function Profile() {
   const [loading, setLoading] = useState(true)
   const [passwordModalOpen, setPasswordModalOpen] = useState(false)
   const [passwordLoading, setPasswordLoading] = useState(false)
+  const [redeemCode, setRedeemCode] = useState('')
+  const [redeeming, setRedeeming] = useState(false)
   const [form] = Form.useForm()
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [subRes, usageRes] = await Promise.all([
-          paymentApi.getMySubscription(),
-          paymentApi.getUsageStats()
-        ])
-        setSubscription(subRes.data)
-        setUsageStats(usageRes.data)
-      } catch (err) {
-        console.error('Failed to fetch profile data:', err)
-      } finally {
-        setLoading(false)
-      }
+  const loadProfileData = async () => {
+    setLoading(true)
+    try {
+      const [subRes, usageRes] = await Promise.all([
+        paymentApi.getMySubscription(),
+        paymentApi.getUsageStats()
+      ])
+      setSubscription(subRes.data)
+      setUsageStats(usageRes.data)
+    } catch (err) {
+      console.error('Failed to fetch profile data:', err)
+    } finally {
+      setLoading(false)
     }
-    fetchData()
+  }
+
+  useEffect(() => {
+    loadProfileData()
   }, [])
 
   const handleLogout = () => {
@@ -62,6 +66,30 @@ export default function Profile() {
       message.error(err.response?.data?.detail || '密码修改失败')
     } finally {
       setPasswordLoading(false)
+    }
+  }
+
+  const handleRedeemCode = async () => {
+    const code = redeemCode.trim()
+    if (!code) {
+      message.warning('请输入兑换码')
+      return
+    }
+    setRedeeming(true)
+    try {
+      const { data } = await paymentApi.redeemCode(code)
+      message.success(`兑换成功，已开通 ${data.plan}`)
+      setRedeemCode('')
+      await loadProfileData()
+      const token = useAuthStore.getState().token
+      if (token) {
+        const me = await authApi.me(token)
+        useAuthStore.getState().setUser(me.data)
+      }
+    } catch (err: any) {
+      message.error(err.response?.data?.detail || '兑换失败')
+    } finally {
+      setRedeeming(false)
     }
   }
 
@@ -100,6 +128,24 @@ export default function Profile() {
             <Descriptions.Item label="今日使用量">{usageStats?.used_today ?? '-'}</Descriptions.Item>
             <Descriptions.Item label="总使用量">{usageStats?.total_usage?.toLocaleString?.() ?? '-'}</Descriptions.Item>
           </Descriptions>
+        </Card>
+
+        <Card>
+          <Title level={5}>兑换码开通</Title>
+          <Space.Compact style={{ width: '100%' }}>
+            <Input
+              value={redeemCode}
+              onChange={(event) => setRedeemCode(event.target.value)}
+              placeholder="输入付款后获得的兑换码"
+              allowClear
+            />
+            <Button type="primary" icon={<GiftOutlined />} loading={redeeming} onClick={handleRedeemCode}>
+              立即兑换
+            </Button>
+          </Space.Compact>
+          <Text type="secondary" className="block mt-2">
+            兑换成功后会立即刷新套餐、额度和火柴人生成权限。
+          </Text>
         </Card>
 
         <Card>

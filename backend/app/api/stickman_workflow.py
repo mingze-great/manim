@@ -1,6 +1,9 @@
-﻿from typing import Annotated, Optional
+﻿import re
+import uuid
+from pathlib import Path
+from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -10,6 +13,7 @@ from app.database import get_db
 from app.models.ai_video import AiVideoJob
 from app.models.user import User
 from app.schemas.ai_video import AiVideoJobCreated, AiVideoJobResponse
+from app.services.partner_program import stickman_entitlement_from_user
 from app.services.stickman_workflow_assets import public_material_libraries, resolve_material_library
 from app.services.stickman_workflow_limits import validate_image_mode, validate_script_duration_request
 
@@ -43,7 +47,44 @@ def _numeric_job_id(job_id: str) -> int:
 
 
 def _max_video_seconds(user: User) -> int:
-    return 180 if user.is_admin else 60
+    if user.is_admin:
+        return 300
+    return stickman_entitlement_from_user(user)["max_video_seconds"]
+
+
+def _stickman_entitlement(user: User) -> dict:
+    if user.is_admin:
+        return {
+            "material_mode": "hybrid",
+            "can_use_ai_images": True,
+            "max_video_seconds": 300,
+            "allowed_libraries": [],
+        }
+    return stickman_entitlement_from_user(user)
+
+
+def _visible_libraries_for_user(db: Session, user: User) -> list[dict]:
+    libraries = public_material_libraries(db)
+    entitlement = _stickman_entitlement(user)
+    allowed = set(entitlement.get("allowed_libraries") or [])
+    if allowed:
+        libraries = [item for item in libraries if item.get("key") in allowed]
+    return libraries
+
+
+def _ensure_material_library_allowed(material_library: dict, entitlement: dict) -> None:
+    allowed = {str(item).strip() for item in entitlement.get("allowed_libraries") or [] if str(item).strip()}
+    if allowed and str(material_library.get("key") or "") not in allowed:
+        raise HTTPException(status_code=400, detail="当前套餐不支持该素材库")
+
+
+def _background_templates() -> list[dict[str, str]]:
+    return [
+        {"key": "default", "name": "默认白纸", "description": "接近参考视频的简洁白底"},
+        {"key": "warm_paper", "name": "暖色纸感", "description": "偏温暖的纸面背景"},
+        {"key": "cool_grid", "name": "冷静网格", "description": "偏理性的浅色网格"},
+        {"key": "soft_gradient", "name": "柔和渐变", "description": "轻微渐变的低干扰背景"},
+    ]
 
 
 @router.get("/config")
@@ -51,8 +92,10 @@ def get_stickman_workflow_config(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ):
+    entitlement = _stickman_entitlement(current_user)
     return {
-        "materialLibraries": public_material_libraries(db),
+        "materialLibraries": _visible_libraries_for_user(db, current_user),
+        "backgroundTemplates": _background_templates(),
         "voices": [
             {"label": "曼波参考音色", "value": "dayun_manbo", "provider": "dayun_tools"},
             {"label": "中文女", "value": "中文女", "provider": "dashscope_cosyvoice"},
@@ -65,11 +108,35 @@ def get_stickman_workflow_config(
             "scriptMode": "ai",
         },
         "capabilities": {
-            "canUseAiImages": bool(current_user.is_admin),
+            "canUseAiImages": bool(entitlement.get("can_use_ai_images")),
             "canUploadBackground": True,
+            "materialMode": entitlement.get("material_mode") or "material_only",
             "maxVideoSeconds": _max_video_seconds(current_user),
         },
     }
+
+
+@router.post("/backgrounds")
+async def upload_stickman_background(
+    current_user: Annotated[User, Depends(get_current_user)],
+    file: UploadFile = File(...),
+):
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in {".png", ".jpg", ".jpeg", ".webp"}:
+        raise HTTPException(status_code=400, detail="仅支持 png、jpg、jpeg、webp 图片")
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="上传文件为空")
+    if len(content) > 8 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="背景图不能超过 8MB")
+    safe_suffix = ".jpg" if suffix == ".jpeg" else suffix
+    filename = f"stickman_bg_u{current_user.id}_{uuid.uuid4().hex[:12]}{safe_suffix}"
+    if not re.fullmatch(r"[\w.-]+", filename):
+        raise HTTPException(status_code=400, detail="文件名不安全")
+    upload_dir = Path(__file__).resolve().parents[2] / "uploads" / "background_images"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    (upload_dir / filename).write_bytes(content)
+    return {"url": f"/api/background-images/{filename}", "filename": filename}
 
 
 @router.post("/jobs", response_model=AiVideoJobCreated)
@@ -78,12 +145,17 @@ def create_stickman_job(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ):
+    can_use, reason = current_user.can_use_module_new(db, "stickman_v2")
+    if not can_use:
+        raise HTTPException(status_code=403, detail=reason or "当前账号暂未开通火柴人工作流")
+
     title = payload.title.strip()
     custom_script = str(payload.customScript or "").strip()
     max_seconds = _max_video_seconds(current_user)
+    entitlement = _stickman_entitlement(current_user)
     try:
         resolved_seconds = validate_script_duration_request(custom_script, payload.targetSeconds, max_seconds)
-        image_mode = validate_image_mode(payload.imageMode, bool(current_user.is_admin))
+        image_mode = validate_image_mode(payload.imageMode, bool(entitlement.get("can_use_ai_images")))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -92,6 +164,7 @@ def create_stickman_job(
     material_library = resolve_material_library(db, payload.materialLibrary)
     if not material_library:
         raise HTTPException(status_code=400, detail="素材库不可用")
+    _ensure_material_library_allowed(material_library, entitlement)
 
     script_source = "user" if custom_script else "generated"
     script_text = custom_script if custom_script else ""
@@ -130,7 +203,7 @@ def create_stickman_job(
         "goal": "standalone_sc1_stickman_workflow",
         "customPrompt": custom_prompt,
         "workflowSource": "standalone_stickman_workflow",
-        "useMaterialLibrary": image_mode == "material_only",
+        "useMaterialLibrary": image_mode in {"material_only", "hybrid"},
         "imageMode": image_mode,
         "backgroundMode": payload.backgroundMode,
         "backgroundTemplate": payload.backgroundTemplate,
@@ -140,6 +213,8 @@ def create_stickman_job(
     if payload.sceneCount is not None:
         job_payload["sceneCount"] = payload.sceneCount
     job = service.create_generation_job(db, current_user.id, job_payload)
+    current_user.increment_module_usage_new(db, "stickman_v2")
+    db.commit()
     return AiVideoJobCreated(jobId=f"job_{job.id}", projectId=job.project_id, status=job.status)
 
 

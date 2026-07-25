@@ -41,6 +41,6 @@ export const partnerApi = {
   getReferrals: () => api.get<PartnerReferral[]>('/partner/referrals'),
   getOrders: () => api.get<PartnerOrder[]>('/partner/orders'),
   getCommissions: () => api.get<PartnerCommission[]>('/partner/commissions'),
-  createInviteCode: (payload: { plan_key: string; quota_limit: number; quota_period: string; max_video_seconds: number; max_uses: number }) =>
-    api.post<{ code: string; plan_key: string; status: string }>('/partner/invite-codes', payload),
+  createInviteCode: (payload: { plan_key: string; quota_limit: number; quota_period: string; max_video_seconds: number; max_uses: number; allowed_libraries?: string[] }) =>
+    api.post<{ code: string; plan_key: string; material_mode: string; allowed_libraries?: string[]; status: string }>('/partner/invite-codes', payload),
 }

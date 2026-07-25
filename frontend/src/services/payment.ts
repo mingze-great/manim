@@ -32,6 +32,17 @@ export interface Order {
   paid_at: string | null
 }
 
+export interface RedeemCodeResponse {
+  message: string
+  code: string
+  plan: string
+  material_mode: string
+  allowed_libraries?: string[]
+  quota_limit: number
+  quota_period: string
+  max_video_seconds: number
+}
+
 export const paymentApi = {
   getPlans: () => api.get<Record<string, SubscriptionPlan>>('/payment/plans'),
   
@@ -53,4 +64,6 @@ export const paymentApi = {
   }>(`/payment/query/${orderId}`),
   
   getOrders: () => api.get<Order[]>('/payment/orders'),
+
+  redeemCode: (code: string) => api.post<RedeemCodeResponse>('/payment/redeem-code', { code }),
 }

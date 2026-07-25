@@ -159,6 +159,7 @@ export interface AdminInviteCode {
   partner_id?: number | null
   plan_key: string
   material_mode: string
+  allowed_libraries?: string[]
   status: string
 }
 
@@ -284,6 +285,7 @@ export const adminApi = {
     quota_period: string
     max_video_seconds: number
     max_uses: number
+    allowed_libraries?: string[]
   }) => api.post<AdminInviteCode>('/admin/invite-codes', data),
 
   getStickmanWorkflowMaterialLibraries: () =>

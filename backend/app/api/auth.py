@@ -14,7 +14,7 @@ from app.database import get_db
 from app.config import get_settings
 from app.models.user import User, AuditLog
 from app.schemas.user import UserCreate, UserResponse, Token, ChangePasswordRequest
-from app.services.partner_program import get_partner_by_referral_code
+from app.services.partner_program import apply_invite_code_to_user, get_partner_by_referral_code
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -188,6 +188,7 @@ def register(
     phone = str(user_data.get("phone") or "").strip()
     password = user_data.get("password")
     referral_code = str(user_data.get("referral_code") or user_data.get("referralCode") or user_data.get("ref") or "").strip()
+    invite_code = str(user_data.get("invite_code") or user_data.get("inviteCode") or "").strip()
     
     if not all([username, phone, password]):
         raise HTTPException(status_code=400, detail="缺少必填信息：用户名、手机号、密码")
@@ -223,9 +224,19 @@ def register(
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
+
+    if invite_code:
+        try:
+            apply_invite_code_to_user(db, new_user, invite_code)
+            db.refresh(new_user)
+        except ValueError as exc:
+            db.delete(new_user)
+            db.commit()
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     
+    status_text = "兑换码注册并自动开通" if invite_code else "新用户注册，等待管理员审批"
     log_audit(db, new_user.id, new_user.username, "USER_REGISTER", 
-              details=f"新用户注册，等待管理员审批", request=request)
+              details=status_text, request=request)
     
     return new_user
 

@@ -1,0 +1,147 @@
+.platform-assistant-fab {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 220;
+  height: 44px;
+  border-radius: 22px;
+  padding: 0 18px;
+  box-shadow: 0 12px 28px rgba(37, 99, 235, 0.22);
+}
+
+.platform-assistant-drawer .ant-drawer-body {
+  padding: 0;
+}
+
+.platform-assistant-shell {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #f8fafc;
+}
+
+.platform-assistant-quick {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #fff;
+}
+
+.platform-assistant-quick .ant-btn {
+  border-radius: 16px;
+  max-width: 100%;
+}
+
+.platform-assistant-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 16px 12px;
+}
+
+.platform-assistant-message {
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+.platform-assistant-message.user {
+  align-items: flex-end;
+}
+
+.platform-assistant-message.assistant {
+  align-items: flex-start;
+}
+
+.platform-assistant-bubble {
+  max-width: 88%;
+  border-radius: 16px;
+  padding: 12px 14px;
+  line-height: 1.65;
+  font-size: 14px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.platform-assistant-bubble p {
+  margin: 0 0 6px;
+}
+
+.platform-assistant-bubble p:last-child {
+  margin-bottom: 0;
+}
+
+.platform-assistant-message.user .platform-assistant-bubble {
+  color: #fff;
+  background: #2563eb;
+  border-bottom-right-radius: 6px;
+}
+
+.platform-assistant-message.assistant .platform-assistant-bubble {
+  color: #111827;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-bottom-left-radius: 6px;
+}
+
+.platform-assistant-bubble.loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.platform-assistant-sources,
+.platform-assistant-actions {
+  max-width: 88%;
+  margin-top: 8px;
+}
+
+.platform-assistant-sources .ant-tag {
+  max-width: 100%;
+  margin-inline-end: 6px;
+  margin-bottom: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.platform-assistant-actions .ant-btn {
+  padding-left: 0;
+}
+
+.platform-assistant-input {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: flex-end;
+  padding: 14px 16px 16px;
+  border-top: 1px solid #e5e7eb;
+  background: #fff;
+}
+
+.platform-assistant-input .ant-input {
+  border-radius: 12px;
+}
+
+.platform-assistant-input .ant-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+}
+
+@media (max-width: 768px) {
+  .platform-assistant-fab {
+    right: 16px;
+    bottom: 16px;
+  }
+
+  .platform-assistant-drawer .ant-drawer-content-wrapper {
+    width: 100% !important;
+  }
+
+  .platform-assistant-bubble,
+  .platform-assistant-sources,
+  .platform-assistant-actions {
+    max-width: 94%;
+  }
+}
