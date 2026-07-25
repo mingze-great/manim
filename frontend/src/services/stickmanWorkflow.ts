@@ -47,8 +47,16 @@ export interface StickmanWorkflowJobCreate {
   imageMode?: 'material_only' | 'ai_image' | 'hybrid'
 }
 
+export interface StickmanWorkflowDurationEstimate {
+  estimatedSeconds: number
+  maxVideoSeconds: number
+  allowed: boolean
+}
+
 export const stickmanWorkflowApi = {
   getConfig: () => api.get<StickmanWorkflowConfig>('/stickman-workflow/config'),
+  estimateDuration: (script: string) =>
+    api.post<StickmanWorkflowDurationEstimate>('/stickman-workflow/duration-estimate', { script }),
   uploadBackground: (file: File) => {
     const formData = new FormData()
     formData.append('file', file)

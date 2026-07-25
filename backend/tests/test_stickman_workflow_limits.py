@@ -1,6 +1,8 @@
 ﻿import os
 import sys
 import types
+import inspect
+from types import SimpleNamespace
 
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 
@@ -51,3 +53,25 @@ def test_material_library_entitlement_allows_empty_scope():
         {"key": "premium_sc1"},
         {"allowed_libraries": []},
     )
+
+
+def test_duration_estimate_returns_plan_limit_and_allowed_state():
+    response = stickman_workflow.estimate_stickman_script_duration(
+        stickman_workflow.StickmanWorkflowDurationEstimateRequest(
+            script="你不需要为所有人的情绪负责。先分清对象，再承担属于自己的后果。",
+        ),
+        current_user=SimpleNamespace(is_admin=True),
+    )
+
+    assert response["estimatedSeconds"] > 0
+    assert response["maxVideoSeconds"] == 300
+    assert response["allowed"] is True
+
+
+def test_material_generation_asset_endpoint_requires_admin_dependency():
+    from app.api import admin
+    from app.api.auth import get_current_admin_user
+
+    parameter = inspect.signature(admin.get_material_library_generation_asset).parameters["current_user"]
+
+    assert parameter.default.dependency is get_current_admin_user

@@ -79,3 +79,23 @@ def test_generate_image_uses_gpt_image_generate_payload(monkeypatch):
     }
     assert _FakeClient.requests[1]["get"] == "https://example.test/generated.png"
     assert result == ("/api/article-images/test.png", "/api/article-images/test.png", "local")
+
+
+def test_generate_image_includes_reference_image_for_style_consistency(monkeypatch):
+    from app.services import image_gen
+
+    _FakeClient.requests = []
+    monkeypatch.setattr(image_gen.httpx, "AsyncClient", _FakeClient)
+
+    service = ImageGenService.__new__(ImageGenService)
+    service.api_key = "test-key"
+    service.base_url = "https://v1/api/generate"
+    service.model = "gpt-image-2"
+    service.model_chain = ["gpt-image-2"]
+    service.image_size = "1024x1024"
+    service.reply_type = "json"
+    service._save_image = lambda content: ("/api/article-images/test.png", "/api/article-images/test.png", "local")
+
+    asyncio.run(service.generate_image("保持参考图风格", reference_images=["data:image/png;base64,AAAA"]))
+
+    assert _FakeClient.requests[0]["json"]["images"] == ["data:image/png;base64,AAAA"]

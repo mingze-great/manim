@@ -5,6 +5,8 @@ import sys
 import types
 import wave
 
+import pytest
+
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 
 dashscope_stub = types.ModuleType("dashscope")
@@ -40,8 +42,8 @@ def test_prepare_sc1_materials_uses_render_service_public_url(tmp_path, monkeypa
 
     service._prepare_sc1_materials_for_render(scenes, "job_1")
 
-    assert (render_material_root / "sample.png").exists()
-    assert scenes[0]["assetImages"][0]["src"] == "http://127.0.0.1:18788/sc1-materials/sample.png"
+    assert (render_material_root / "job_1" / "sample.png").exists()
+    assert scenes[0]["assetImages"][0]["src"] == "http://127.0.0.1:18788/sc1-materials/job_1/sample.png"
 
 
 def test_sc1_material_selection_uses_job_material_manifest(tmp_path, monkeypatch):
@@ -107,8 +109,8 @@ def test_prepare_sc1_materials_uses_job_material_root(tmp_path, monkeypatch):
         {"materialLibraryPath": str(selected_root)},
     )
 
-    assert (render_material_root / "selected.png").exists()
-    assert scenes[0]["assetImages"][0]["src"] == "http://127.0.0.1:18788/sc1-materials/selected.png"
+    assert (render_material_root / "job_2" / "selected.png").exists()
+    assert scenes[0]["assetImages"][0]["src"] == "http://127.0.0.1:18788/sc1-materials/job_2/selected.png"
 
 
 def test_prepare_sc1_materials_keeps_generated_http_images(tmp_path, monkeypatch):
@@ -124,6 +126,50 @@ def test_prepare_sc1_materials_keeps_generated_http_images(tmp_path, monkeypatch
     service._prepare_sc1_materials_for_render(scenes, "job_3", {})
 
     assert scenes[0]["assetImages"][0]["src"] == "http://127.0.0.1:8004/api/article-images/generated.png"
+
+
+def test_prepare_sc1_materials_rejects_missing_scene_image(tmp_path, monkeypatch):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    monkeypatch.setattr(ai_video, "SC1_MATERIAL_LIBRARY_PATH", source_dir)
+
+    service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
+    service.render_material_root = tmp_path / "render-public" / "sc1-materials"
+    scenes = [{"assetImages": [{"fileName": "missing.png", "src": "/sc1-materials/missing.png"}]}]
+
+    with pytest.raises(RuntimeError, match="missing.png"):
+        service._prepare_sc1_materials_for_render(scenes, "job_missing")
+
+
+def test_prepare_sc1_materials_namespaces_same_filename_per_job(tmp_path):
+    first_root = tmp_path / "first"
+    second_root = tmp_path / "second"
+    first_root.mkdir()
+    second_root.mkdir()
+    (first_root / "1.png").write_bytes(b"first")
+    (second_root / "1.png").write_bytes(b"second")
+
+    service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
+    service.render_material_root = tmp_path / "render-public" / "sc1-materials"
+    first_scenes = [{"assetImages": [{"fileName": "1.png", "src": "/sc1-materials/1.png"}]}]
+    second_scenes = [{"assetImages": [{"fileName": "1.png", "src": "/sc1-materials/1.png"}]}]
+
+    first_stage = service._prepare_sc1_materials_for_render(
+        first_scenes,
+        "job_1",
+        {"materialLibraryPath": str(first_root)},
+    )
+    second_stage = service._prepare_sc1_materials_for_render(
+        second_scenes,
+        "job_2",
+        {"materialLibraryPath": str(second_root)},
+    )
+
+    assert first_stage != second_stage
+    assert first_scenes[0]["assetImages"][0]["src"].endswith("/job_1/1.png")
+    assert second_scenes[0]["assetImages"][0]["src"].endswith("/job_2/1.png")
+    assert (first_stage / "1.png").read_bytes() == b"first"
+    assert (second_stage / "1.png").read_bytes() == b"second"
 
 
 def test_ai_image_mode_generates_scene_asset(monkeypatch):
@@ -212,6 +258,7 @@ def test_open_source_cosyvoice_accepts_valid_pcm_when_stream_times_out(tmp_path,
         wav.writeframes(b"\x01\x00" * 22050)
     monkeypatch.setenv("SC1_COSYVOICE_PROMPT_WAV", str(prompt))
     monkeypatch.setattr(ai_video.urllib.request, "urlopen", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("sft unavailable")))
+    monkeypatch.setattr(service, "_prepare_cosyvoice_prompt_audio", lambda path: path)
     monkeypatch.setattr(ai_video.requests, "post", lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("requests fallback should not be used")))
 
     calls = []
@@ -233,3 +280,109 @@ def test_open_source_cosyvoice_accepts_valid_pcm_when_stream_times_out(tmp_path,
     assert calls
     assert "--max-time" in calls[0]
     assert "75" in calls[0]
+
+
+def test_open_source_cosyvoice_rejects_implausibly_short_partial_pcm(tmp_path, monkeypatch):
+    service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
+    service.cosyvoice_url = "http://127.0.0.1:50000"
+    service.cosyvoice_timeout = 180
+    service.cosyvoice_sample_rate = 22050
+
+    prompt = tmp_path / "prompt.wav"
+    with wave.open(str(prompt), "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(22050)
+        wav.writeframes(b"\x01\x00" * 22050)
+    monkeypatch.setenv("SC1_COSYVOICE_PROMPT_WAV", str(prompt))
+    monkeypatch.setattr(ai_video.urllib.request, "urlopen", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("sft unavailable")))
+    monkeypatch.setattr(service, "_prepare_cosyvoice_prompt_audio", lambda path: path)
+
+    def fake_run(command, **_kwargs):
+        output_path = command[command.index("-o") + 1]
+        with open(output_path, "wb") as file:
+            file.write((1000).to_bytes(2, "little", signed=True) * 2000)
+        return subprocess.CompletedProcess(command, 28, stdout="", stderr="Operation timed out")
+
+    monkeypatch.setattr(ai_video.subprocess, "run", fake_run)
+
+    with pytest.raises(RuntimeError, match="CosyVoice"):
+        service._generate_open_source_cosyvoice_audio("来挑战一下你的脑洞", "中文女", tmp_path / "scene.wav")
+
+
+def test_build_srt_contains_every_caption_cue_with_absolute_timing():
+    service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
+    scenes = [
+        {
+            "duration": 2.0,
+            "subtitleText": "不应只显示这一句",
+            "segments": [{"captionCues": [
+                {"text": "第一句", "startFrame": 0, "endFrame": 30},
+                {"text": "第二句", "startFrame": 30, "endFrame": 60},
+            ]}],
+        },
+        {
+            "duration": 1.0,
+            "segments": [{"captionCues": [
+                {"text": "第三句", "startFrame": 0, "endFrame": 30},
+            ]}],
+        },
+    ]
+
+    srt = service._build_srt(scenes)
+
+    assert "第一句" in srt
+    assert "第二句" in srt
+    assert "第三句" in srt
+    assert "00:00:01,000 --> 00:00:02,000" in srt
+    assert "00:00:02,000 --> 00:00:03,000" in srt
+    assert srt.count("-->") == 3
+
+
+def test_sc1_summary_labels_are_unique_across_the_video(monkeypatch):
+    service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
+    service._sc1_material_cache = (None, [])
+    service._infer_scene_count = lambda *_args, **_kwargs: 2
+    monkeypatch.setattr(service, "_media_for_scene", lambda *_args, **_kwargs: {})
+
+    scenes = service._build_scenes(
+        "别急着下结论，先看清关系。别急着下结论，先看清关系。",
+        {"sceneCount": 2, "scriptSource": "user", "imageMode": "material_only"},
+        "knowledge_ip_stickman",
+        "sc1_stickman",
+        "medium",
+        script_source="user",
+    )
+    labels = [
+        cue["summaryLabel"]
+        for scene in scenes
+        for segment in scene["segments"]
+        for cue in segment["captionCues"]
+    ]
+
+    assert labels
+    assert len(labels) == len(set(labels))
+    assert all(2 <= len(label) <= 4 for label in labels)
+
+
+def test_sc1_summary_labels_remain_unique_for_twenty_four_repeated_cues():
+    service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
+    used = set()
+
+    for index in range(24):
+        label = service._sc1_make_unique_label("反复内耗", index, used)
+        assert label not in used
+        assert 2 <= len(label) <= 4
+        used.add(label)
+
+    assert len(used) == 24
+
+
+def test_sc1_summary_label_does_not_fall_back_to_arbitrary_script_slice():
+    service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
+    used = {"被戳中", "别慌", "看清", "松绑", "稳住", "破防", "醒醒", "自救", "释怀"}
+
+    label = service._sc1_make_unique_label("你不需要为所有人的情绪负责", 0, used)
+
+    assert label not in {"你不需要", "不需要为", "需要为所", "要为所有", "为所有人", "所有人的"}
+    assert label in {"觉察", "转念", "清醒", "破局", "重启", "自省", "看见"} or len(label) == 4

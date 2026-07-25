@@ -15,7 +15,11 @@ from app.models.user import User
 from app.schemas.ai_video import AiVideoJobCreated, AiVideoJobResponse
 from app.services.partner_program import stickman_entitlement_from_user
 from app.services.stickman_workflow_assets import public_material_libraries, resolve_material_library
-from app.services.stickman_workflow_limits import validate_image_mode, validate_script_duration_request
+from app.services.stickman_workflow_limits import (
+    estimate_script_duration_seconds,
+    validate_image_mode,
+    validate_script_duration_request,
+)
 
 
 router = APIRouter(prefix="/stickman-workflow", tags=["stickman-workflow"])
@@ -37,6 +41,10 @@ class StickmanWorkflowJobCreate(BaseModel):
     backgroundTemplate: Optional[str] = None
     uploadedBackgroundUrl: Optional[str] = None
     imageMode: str = "material_only"
+
+
+class StickmanWorkflowDurationEstimateRequest(BaseModel):
+    script: str = Field(..., min_length=1, max_length=1200)
 
 
 def _numeric_job_id(job_id: str) -> int:
@@ -113,6 +121,20 @@ def get_stickman_workflow_config(
             "materialMode": entitlement.get("material_mode") or "material_only",
             "maxVideoSeconds": _max_video_seconds(current_user),
         },
+    }
+
+
+@router.post("/duration-estimate")
+def estimate_stickman_script_duration(
+    payload: StickmanWorkflowDurationEstimateRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    estimated_seconds = estimate_script_duration_seconds(payload.script)
+    max_video_seconds = _max_video_seconds(current_user)
+    return {
+        "estimatedSeconds": estimated_seconds,
+        "maxVideoSeconds": max_video_seconds,
+        "allowed": estimated_seconds <= max_video_seconds,
     }
 
 

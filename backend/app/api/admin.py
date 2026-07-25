@@ -2,12 +2,13 @@ from typing import Optional, List
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 import json
+import re
 
 from app.database import get_db
 from app.models.article_category import ArticleCategory
@@ -18,6 +19,7 @@ from app.models.task import Task
 from app.models.subscription import Order, Subscription
 from app.models.partner import CommissionLedger, InviteCode, PartnerProfile, ReferralCode
 from app.models.favorite_topic import FavoriteTopic
+from app.models.material_library_generation import MaterialLibraryGeneration
 from app.models.user_module_permission import UserModulePermission
 from app.schemas.article import ArticleCategoryCreate, ArticleCategoryUpdate
 from app.schemas.user import UserResponse, UserUpdate, UserStats, AuditLogResponse, SystemStats, UserDetail, ProjectStatus, RecentProject, TaskLog, TokenUsageItem, TokenUsageResponse
@@ -29,7 +31,9 @@ from app.services.stickman_workflow_assets import (
     list_material_libraries,
     save_material_libraries,
     save_material_library_package,
+    material_library_asset_root,
 )
+from app.tasks.celery_tasks import generate_material_library_celery
 import psutil
 from app.services.stickman_v2_assets import (
     save_background_templates,
@@ -70,7 +74,8 @@ def _with_workflow_library_urls(items: list[dict]):
         clone = dict(item)
         image_path = str(clone.get("cover_image_path") or "").strip()
         explicit_url = str(clone.get("cover_image_url") or "").strip()
-        clone["image_url"] = f"/api/admin/stickman-workflow/assets/material-libraries/{Path(image_path).name}" if image_path else (explicit_url or None)
+        library_key = str(clone.get("key") or "").strip()
+        clone["image_url"] = f"/api/admin/stickman-workflow/assets/material-libraries/{library_key}/{Path(image_path).name}" if image_path else (explicit_url or None)
         payload.append(clone)
     return payload
 
@@ -348,7 +353,7 @@ async def upload_stickman_workflow_material_library_package(
     current = next((item for item in saved if item.get("key") == library_key), None) or libraries[index]
     return {
         "message": "火柴人工作流素材库已上传",
-        "image_url": f"/api/admin/stickman-workflow/assets/material-libraries/{Path(current.get('cover_image_path') or '').name}" if current.get("cover_image_path") else (current.get("cover_image_url") or None),
+        "image_url": f"/api/admin/stickman-workflow/assets/material-libraries/{library_key}/{Path(current.get('cover_image_path') or '').name}" if current.get("cover_image_path") else (current.get("cover_image_url") or None),
         "image_count": int(current.get("image_count") or 0),
         "material_count": int(current.get("material_count") or 0),
     }
@@ -362,6 +367,164 @@ async def get_stickman_workflow_material_library_asset(
     asset_path = find_material_library_asset(db, filename)
     if not asset_path or not asset_path.exists():
         raise HTTPException(status_code=404, detail="资源不存在")
+    return FileResponse(asset_path)
+
+
+@router.get("/stickman-workflow/assets/material-libraries/{library_key}/{filename}")
+async def get_namespaced_stickman_workflow_material_library_asset(
+    library_key: str,
+    filename: str,
+    db: Session = Depends(get_db),
+):
+    asset_path = find_material_library_asset(db, filename, library_key=library_key)
+    if not asset_path or not asset_path.exists():
+        raise HTTPException(status_code=404, detail="资源不存在")
+    return FileResponse(asset_path)
+
+
+def _material_generation_payload(generation: MaterialLibraryGeneration) -> dict:
+    try:
+        sample_names = json.loads(generation.sample_images_json or "[]")
+    except Exception:
+        sample_names = []
+    return {
+        "id": generation.id,
+        "library_key": generation.library_key,
+        "library_name": generation.library_name,
+        "target_count": generation.target_count,
+        "status": generation.status,
+        "progress": generation.progress,
+        "message": generation.message,
+        "error": generation.error,
+        "sample_images": [
+            f"/api/admin/stickman-workflow/material-libraries/generations/{generation.id}/assets/{Path(name).name}"
+            for name in sample_names
+        ],
+        "manifest_path": generation.manifest_path if generation.status == "completed" else None,
+    }
+
+
+@router.post("/stickman-workflow/material-libraries/generations/samples")
+async def create_material_library_samples(
+    library_key: str = Form(...),
+    library_name: str = Form(...),
+    target_count: int = Form(100),
+    reference_image: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    clean_key = str(library_key or "").strip().lower()
+    clean_name = str(library_name or "").strip()
+    if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{1,79}", clean_key):
+        raise HTTPException(status_code=400, detail="素材库 Key 仅支持小写字母、数字、下划线和短横线")
+    if not clean_name:
+        raise HTTPException(status_code=400, detail="请输入素材库名称")
+    if target_count < 6 or target_count > 120:
+        raise HTTPException(status_code=400, detail="素材数量必须在 6-120 张之间")
+    suffix = Path(reference_image.filename or "reference.png").suffix.lower()
+    if suffix not in {".png", ".jpg", ".jpeg", ".webp"}:
+        raise HTTPException(status_code=400, detail="参考图仅支持 png、jpg、jpeg、webp")
+    content = await reference_image.read()
+    if not content or len(content) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="参考图不能为空且不能超过 10MB")
+
+    generation = MaterialLibraryGeneration(
+        user_id=current_user.id,
+        library_key=clean_key,
+        library_name=clean_name,
+        target_count=target_count,
+        status="sample_pending",
+        progress=0,
+        message="样图任务已创建",
+        reference_image_path="pending",
+        output_dir="pending",
+    )
+    db.add(generation)
+    db.flush()
+    output_dir = material_library_asset_root() / f"generated_{generation.id}_{clean_key}"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    reference_path = output_dir / f"reference{'.jpg' if suffix == '.jpeg' else suffix}"
+    reference_path.write_bytes(content)
+    generation.output_dir = str(output_dir)
+    generation.reference_image_path = str(reference_path)
+    db.commit()
+    db.refresh(generation)
+    generate_material_library_celery.delay(generation.id, "samples")
+    return _material_generation_payload(generation)
+
+
+@router.get("/stickman-workflow/material-libraries/generations/{generation_id}")
+async def get_material_library_generation(
+    generation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    generation = db.query(MaterialLibraryGeneration).filter(MaterialLibraryGeneration.id == generation_id).first()
+    if not generation:
+        raise HTTPException(status_code=404, detail="素材库生成任务不存在")
+    return _material_generation_payload(generation)
+
+
+@router.post("/stickman-workflow/material-libraries/generations/{generation_id}/confirm")
+async def confirm_material_library_generation(
+    generation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    generation = db.query(MaterialLibraryGeneration).filter(MaterialLibraryGeneration.id == generation_id).first()
+    if not generation:
+        raise HTTPException(status_code=404, detail="素材库生成任务不存在")
+    if generation.status != "samples_ready":
+        raise HTTPException(status_code=400, detail="样图尚未生成完成或已经确认")
+    generation.status = "batch_pending"
+    generation.message = "已确认样图，等待批量生成"
+    db.commit()
+    generate_material_library_celery.delay(generation.id, "batch")
+    return _material_generation_payload(generation)
+
+
+@router.post("/stickman-workflow/material-libraries/generations/{generation_id}/regenerate-samples")
+async def regenerate_material_library_samples(
+    generation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    generation = db.query(MaterialLibraryGeneration).filter(MaterialLibraryGeneration.id == generation_id).first()
+    if not generation:
+        raise HTTPException(status_code=404, detail="素材库生成任务不存在")
+    if generation.status not in {"samples_ready", "failed"}:
+        raise HTTPException(status_code=400, detail="当前状态不能重新生成样图")
+    for name in ("1.png", "2.png"):
+        (Path(generation.output_dir).resolve() / name).unlink(missing_ok=True)
+    generation.status = "sample_pending"
+    generation.progress = 0
+    generation.error = None
+    generation.message = "等待重新生成样图"
+    db.commit()
+    generate_material_library_celery.delay(generation.id, "samples")
+    return _material_generation_payload(generation)
+
+
+@router.get("/stickman-workflow/material-libraries/generations/{generation_id}/assets/{filename}")
+async def get_material_library_generation_asset(
+    generation_id: int,
+    filename: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    generation = db.query(MaterialLibraryGeneration).filter(MaterialLibraryGeneration.id == generation_id).first()
+    if not generation:
+        raise HTTPException(status_code=404, detail="素材库生成任务不存在")
+    try:
+        sample_names = {Path(name).name for name in json.loads(generation.sample_images_json or "[]")}
+    except Exception:
+        sample_names = set()
+    if Path(filename).name not in sample_names:
+        raise HTTPException(status_code=404, detail="样图不存在")
+    output_dir = Path(generation.output_dir).resolve()
+    asset_path = (output_dir / Path(filename).name).resolve()
+    if asset_path.parent != output_dir or not asset_path.exists() or not asset_path.is_file():
+        raise HTTPException(status_code=404, detail="样图不存在")
     return FileResponse(asset_path)
 
 

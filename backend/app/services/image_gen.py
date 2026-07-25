@@ -20,7 +20,7 @@ class ImageGenService:
         self.image_size = settings.STICKMAN_IMAGE_SIZE or "1024x1024"
         self.reply_type = getattr(settings, "STICKMAN_IMAGE_REPLY_TYPE", "json") or "json"
 
-    async def generate_image(self, prompt: str) -> tuple[str, str, str]:
+    async def generate_image(self, prompt: str, reference_images: list[str] | None = None) -> tuple[str, str, str]:
         """生成单张图片"""
         last_error = None
         async with httpx.AsyncClient(timeout=120.0) as client:
@@ -32,7 +32,7 @@ class ImageGenService:
                             "Authorization": f"Bearer {self.api_key}",
                             "Content-Type": "application/json"
                         },
-                        json=self._build_payload(model, prompt),
+                        json=self._build_payload(model, prompt, reference_images=reference_images),
                     )
                     response.raise_for_status()
                     data = response.json()
@@ -49,12 +49,12 @@ class ImageGenService:
                     continue
         raise Exception(f"图片生成失败: {last_error}")
 
-    def _build_payload(self, model: str, prompt: str) -> dict[str, Any]:
+    def _build_payload(self, model: str, prompt: str, reference_images: list[str] | None = None) -> dict[str, Any]:
         if self._uses_generate_api(model):
             return {
                 "model": model,
                 "prompt": prompt,
-                "images": [],
+                "images": [str(item) for item in (reference_images or []) if str(item).strip()],
                 "aspectRatio": self.image_size,
                 "replyType": self.reply_type,
             }

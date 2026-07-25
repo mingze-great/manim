@@ -154,3 +154,38 @@ def generate_chat_celery(self, task_id: int, project_id: int, user_message: str,
         return {"status": "failed", "error": str(e), "task_id": task_id}
     finally:
         db.close()
+
+
+@celery_app.task(
+    bind=True,
+    name="app.tasks.generate_material_library_celery",
+    max_retries=1,
+    default_retry_delay=30,
+    acks_late=True,
+    reject_on_worker_lost=True,
+    soft_time_limit=15000,
+    time_limit=15600,
+)
+def generate_material_library_celery(self, generation_id: int, phase: str):
+    from app.database import SessionLocal
+    from app.models.material_library_generation import MaterialLibraryGeneration
+    from app.services.material_library_generation import material_library_generation_service
+
+    db = SessionLocal()
+    try:
+        generation = db.query(MaterialLibraryGeneration).filter(MaterialLibraryGeneration.id == generation_id).first()
+        if not generation:
+            return {"status": "missing", "generation_id": generation_id}
+        if phase == "samples":
+            asyncio.run(material_library_generation_service.generate_samples(db, generation))
+        elif phase == "batch":
+            asyncio.run(material_library_generation_service.generate_batch(db, generation))
+        else:
+            raise ValueError(f"未知素材库生成阶段: {phase}")
+        return {"status": generation.status, "generation_id": generation_id}
+    except Exception as exc:
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc)
+        return {"status": "failed", "generation_id": generation_id, "error": str(exc)}
+    finally:
+        db.close()

@@ -28,6 +28,10 @@ def _asset_dir() -> Path:
     return target
 
 
+def material_library_asset_root() -> Path:
+    return _asset_dir()
+
+
 def _slug(text: str) -> str:
     cleaned = re.sub(r"[^0-9a-zA-Z\u4e00-\u9fff]+", "-", str(text or "").strip()).strip("-")
     return cleaned[:60] or uuid.uuid4().hex[:12]
@@ -139,10 +143,13 @@ def save_material_libraries(db: Session, items: list[dict]) -> list[dict]:
     return list_material_libraries(db)
 
 
-def _asset_public_url(local_path: str = "", explicit_url: str = "") -> Optional[str]:
+def _asset_public_url(local_path: str = "", explicit_url: str = "", library_key: str = "") -> Optional[str]:
     image_path = str(local_path or "").strip()
     if not image_path:
         return explicit_url or None
+    key = str(library_key or "").strip()
+    if key:
+        return f"/api/admin/stickman-workflow/assets/material-libraries/{key}/{Path(image_path).name}"
     return f"/api/admin/stickman-workflow/assets/material-libraries/{Path(image_path).name}"
 
 
@@ -151,6 +158,7 @@ def _public_payload(item: dict) -> dict:
     clone["image_url"] = _asset_public_url(
         str(clone.get("cover_image_path") or "").strip(),
         str(clone.get("cover_image_url") or "").strip(),
+        str(clone.get("key") or "").strip(),
     )
     return clone
 
@@ -164,9 +172,11 @@ def resolve_material_library(db: Session, library_key: str) -> Optional[dict]:
     return next((item for item in list_material_libraries(db, active_only=True) if item.get("key") == key), None)
 
 
-def find_material_library_asset(db: Session, filename: str) -> Optional[Path]:
+def find_material_library_asset(db: Session, filename: str, library_key: str = "") -> Optional[Path]:
     safe_name = Path(str(filename or "")).name
     for item in list_material_libraries(db):
+        if library_key and item.get("key") != library_key:
+            continue
         path = str(item.get("cover_image_path") or "").strip()
         if path and Path(path).name == safe_name and Path(path).exists():
             return Path(path)

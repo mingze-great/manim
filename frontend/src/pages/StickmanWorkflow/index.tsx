@@ -4,6 +4,7 @@ import { DownloadOutlined, FolderOpenOutlined, PlayCircleOutlined, RocketOutline
 import { resolveBackendUrl } from '@/services/api'
 import { stickmanWorkflowApi } from '@/services/stickmanWorkflow'
 import type { StickmanWorkflowConfig } from '@/services/stickmanWorkflow'
+import type { StickmanWorkflowDurationEstimate } from '@/services/stickmanWorkflow'
 import type { AiVideoJob } from '@/services/aiVideo'
 import './StickmanWorkflow.css'
 
@@ -48,6 +49,8 @@ export default function StickmanWorkflow() {
   const [job, setJob] = useState<AiVideoJob | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [uploadingBackground, setUploadingBackground] = useState(false)
+  const [durationEstimate, setDurationEstimate] = useState<StickmanWorkflowDurationEstimate | null>(null)
+  const [estimatingDuration, setEstimatingDuration] = useState(false)
 
   const outputUrl = useMemo(() => resolveBackendUrl(job?.outputUrl), [job?.outputUrl])
   const currentStep = useMemo(
@@ -79,6 +82,33 @@ export default function StickmanWorkflow() {
     }, 3000)
     return () => window.clearInterval(timer)
   }, [job?.jobId, job?.status])
+
+  useEffect(() => {
+    const script = customScript.trim()
+    if (scriptMode !== 'custom' || !script) {
+      setDurationEstimate(null)
+      setEstimatingDuration(false)
+      return
+    }
+
+    let active = true
+    setEstimatingDuration(true)
+    const timer = window.setTimeout(async () => {
+      try {
+        const { data } = await stickmanWorkflowApi.estimateDuration(script)
+        if (active) setDurationEstimate(data)
+      } catch {
+        if (active) setDurationEstimate(null)
+      } finally {
+        if (active) setEstimatingDuration(false)
+      }
+    }, 450)
+
+    return () => {
+      active = false
+      window.clearTimeout(timer)
+    }
+  }, [customScript, scriptMode])
 
   const createVideo = async () => {
     const cleanTitle = title.trim()
@@ -216,6 +246,16 @@ export default function StickmanWorkflow() {
                         placeholder="粘贴完整口播文案。系统会根据配音实际时长同步字幕、场景图和总结关键词。"
                       />
                       <Alert type="info" showIcon message="自定义文案会自动决定视频时长，因此不能同时选择目标时长。" />
+                      {estimatingDuration ? (
+                        <Typography.Text type="secondary">正在估算配音时长...</Typography.Text>
+                      ) : durationEstimate ? (
+                        <Alert
+                          type={durationEstimate.allowed ? 'success' : 'error'}
+                          showIcon
+                          message={`预计 ${durationEstimate.estimatedSeconds} 秒，当前套餐上限 ${durationEstimate.maxVideoSeconds} 秒`}
+                          description={durationEstimate.allowed ? '最终时长以实际配音为准。' : '请缩短文案后再生成。'}
+                        />
+                      ) : null}
                     </label>
                   ) : (
                     <label className="workflow-field">
@@ -285,7 +325,15 @@ export default function StickmanWorkflow() {
             </label>
           </div>
 
-          <Button type="primary" size="large" icon={<RocketOutlined />} loading={submitting} onClick={createVideo} block>
+          <Button
+            type="primary"
+            size="large"
+            icon={<RocketOutlined />}
+            loading={submitting}
+            disabled={scriptMode === 'custom' && durationEstimate?.allowed === false}
+            onClick={createVideo}
+            block
+          >
             生成火柴人成片
           </Button>
         </section>

@@ -49,6 +49,18 @@ def test_assistant_retrieval_hits_stickman_and_invite_topics():
     assert hits[0]["route"] == "/stickman-workflow"
 
 
+def test_assistant_default_knowledge_covers_partner_attribution_and_library_generation():
+    from app.services.platform_assistant import PlatformAssistantKnowledgeBase
+
+    kb = PlatformAssistantKnowledgeBase()
+
+    partner_hits = kb.search("合作者推荐的用户如何记录归属和分佣")
+    library_hits = kb.search("后台上传参考图先生成两张样图再批量生成素材库")
+
+    assert any(hit["title"] == "推荐归属与分佣" for hit in partner_hits)
+    assert any(hit["title"] == "参考图生成素材库" for hit in library_hits)
+
+
 def test_assistant_prompt_sanitizes_sensitive_paths_and_secrets():
     from app.services.platform_assistant import PlatformAssistantService
 

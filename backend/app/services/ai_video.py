@@ -717,6 +717,7 @@ class AiVideoService:
         visual_intensity = str(payload.get("visualIntensity") or self._default_visual_intensity(visual_style, pace))
         edit_directive = str(payload.get("editDirective") or payload.get("customPrompt") or payload.get("goal") or "")
         sc1_selected_materials: set[str] = set()
+        sc1_used_summary_labels: set[str] = set()
         for index in range(scene_count):
             text = chunks[index] if index < len(chunks) else self._fallback_sentence(index, content_type)
             text = self._ensure_scene_text(text, script or project_title or payload.get("prompt") or payload.get("creativeBrief") or payload.get("requirements") or "", content_type, index)
@@ -728,7 +729,7 @@ class AiVideoService:
             min_scene_seconds = max(0, target_seconds // scene_count) if target_seconds else 0
             media = self._media_for_scene(content_type, visual_style, text, index)
             is_sc1_video = content_type == "knowledge_ip_stickman" or visual_style == "sc1_stickman"
-            sc1_segments = self._sc1_segments_for_scene(text, index) if is_sc1_video else []
+            sc1_segments = self._sc1_segments_for_scene(text, index, sc1_used_summary_labels) if is_sc1_video else []
             image_mode = str(payload.get("imageMode") or ("material_only" if payload.get("useMaterialLibrary", True) else "ai_image")).strip()
             material_images: list[dict[str, Any]] = []
             if is_sc1_video:
@@ -886,14 +887,19 @@ class AiVideoService:
         number = (int(digest[:8], 16) % SC1_MATERIAL_IMAGE_COUNT) + 1
         return f"{number}.png"
 
-    def _sc1_segments_for_scene(self, text: str, scene_index: int) -> list[dict[str, Any]]:
+    def _sc1_segments_for_scene(
+        self,
+        text: str,
+        scene_index: int,
+        video_used_labels: set[str] | None = None,
+    ) -> list[dict[str, Any]]:
         cleaned = " ".join(str(text or "").replace("\n", " ").split()).strip() or "Scene point"
         cues = self._split_sc1_caption_cues(cleaned)[:3]
         layout_mode = self._sc1_layout_mode_for_scene(scene_index, cleaned)
         summary_labels: list[str] = []
-        used_labels: set[str] = set()
+        used_labels = video_used_labels if video_used_labels is not None else set()
         for cue_index, cue in enumerate(cues):
-            label = self._sc1_make_unique_label(cue, cue_index, used_labels)
+            label = self._sc1_make_unique_label(cue, scene_index * 3 + cue_index, used_labels)
             used_labels.add(label)
             summary_labels.append(label)
         return [
@@ -1097,7 +1103,14 @@ class AiVideoService:
             label = self._sc1_clip_label(candidate, segment_index)
             if label and label not in used_labels:
                 return label
-        return self._sc1_label_fallback_pool()[segment_index % len(self._sc1_label_fallback_pool())]
+        fallback_prefixes = ["直面", "放下", "看见", "停止", "接住", "告别", "重建", "穿越"]
+        fallback_suffixes = ["焦虑", "执念", "内耗", "恐惧", "讨好", "拉扯", "委屈", "迷雾"]
+        for prefix in fallback_prefixes:
+            for suffix in fallback_suffixes:
+                label = f"{prefix}{suffix}"[:4]
+                if label not in used_labels:
+                    return label
+        raise RuntimeError("SC1 summary label pool exhausted")
 
     def _sc1_label_alternatives(self, text: str, segment_index: int) -> list[str]:
         cleaned = " ".join(str(text or "").split()).strip()
@@ -1733,7 +1746,7 @@ class AiVideoService:
             sft_error = RuntimeError(f"Open-source CosyVoice SFT unavailable: {exc}")
             pcm = b""
 
-        if len(pcm) < 1024:
+        if not self._pcm_is_plausible_for_text(pcm, text):
             prompt_candidates = [
                 Path(os.getenv("SC1_COSYVOICE_PROMPT_WAV", "")).expanduser() if os.getenv("SC1_COSYVOICE_PROMPT_WAV") else None,
                 REPO_ROOT / "outputs" / "dayun_tools_manbo_tts_test.mp3",
@@ -1751,24 +1764,26 @@ class AiVideoService:
                 try:
                     zero_shot_path = output_path.with_suffix(f".zero-shot-{prompt_index + 1:02d}.pcm")
                     pcm = self._request_cosyvoice_zero_shot_pcm(text, prompt_text, prompt_source, zero_shot_path)
-                    if len(pcm) >= 1024:
+                    if self._pcm_is_plausible_for_text(pcm, text):
                         break
+                    zero_shot_error = RuntimeError("Open-source CosyVoice returned implausibly short audio")
+                    pcm = b""
                 except Exception as exc:
                     zero_shot_error = exc
                     pcm = b""
                 finally:
                     if prompt_source != prompt_wav and prompt_source.exists():
                         prompt_source.unlink(missing_ok=True)
-            if len(pcm) < 1024:
+            if not self._pcm_is_plausible_for_text(pcm, text):
                 if sft_error:
                     raise RuntimeError(f"Open-source CosyVoice zero-shot failed: {zero_shot_error}; SFT fallback also failed: {sft_error}") from zero_shot_error or sft_error
                 raise RuntimeError(f"Open-source CosyVoice failed: {zero_shot_error}")
 
         raw_pcm = pcm
         trimmed_pcm = self._trim_pcm_silence(raw_pcm)
-        pcm = trimmed_pcm if len(trimmed_pcm) >= 1024 else raw_pcm
-        if len(pcm) < 1024:
-            raise RuntimeError("Open-source CosyVoice returned empty audio")
+        pcm = trimmed_pcm if self._pcm_is_plausible_for_text(trimmed_pcm, text) else raw_pcm
+        if not self._pcm_is_plausible_for_text(pcm, text):
+            raise RuntimeError("Open-source CosyVoice returned invalid or incomplete audio")
         if len(pcm) % 2:
             pcm = pcm[:-1]
 
@@ -1818,16 +1833,38 @@ class AiVideoService:
             return self._request_cosyvoice_zero_shot_pcm_with_requests(text, prompt_text, prompt_source)
         except subprocess.TimeoutExpired as exc:
             pcm = output_pcm_path.read_bytes() if output_pcm_path.exists() else b""
-            if len(pcm) >= 1024:
+            if self._pcm_is_plausible_for_text(pcm, text):
                 output_pcm_path.unlink(missing_ok=True)
                 return pcm
             raise RuntimeError(f"Open-source CosyVoice zero-shot curl timed out: {exc}") from exc
 
         pcm = output_pcm_path.read_bytes() if output_pcm_path.exists() else b""
         output_pcm_path.unlink(missing_ok=True)
-        if result.returncode != 0 and len(pcm) < 1024:
+        if result.returncode != 0 and not self._pcm_is_plausible_for_text(pcm, text):
             raise RuntimeError(f"Open-source CosyVoice zero-shot curl failed {result.returncode}: {(result.stderr or result.stdout or '').strip()[:300]}")
         return pcm
+
+    def _pcm_is_plausible_for_text(self, pcm: bytes, text: str) -> bool:
+        if len(pcm) < 1024 or len(pcm) % 2:
+            return False
+        cjk_count = len(re.findall(r"[\u4e00-\u9fff]", str(text or "")))
+        latin_words = len(re.findall(r"[A-Za-z0-9]+", str(text or "")))
+        readable_units = cjk_count + latin_words * 1.8
+        minimum_seconds = max(0.5, min(6.0, readable_units / 10.0))
+        duration_seconds = len(pcm) / (self.cosyvoice_sample_rate * 2)
+        if duration_seconds < minimum_seconds:
+            return False
+        sample_count = len(pcm) // 2
+        check_step = max(1, sample_count // 4000)
+        checked = 0
+        audible = 0
+        view = memoryview(pcm)
+        for index in range(0, sample_count, check_step):
+            value = int.from_bytes(view[index * 2 : index * 2 + 2], "little", signed=True)
+            checked += 1
+            if abs(value) >= 80:
+                audible += 1
+        return checked > 0 and audible / checked >= 0.01
 
     def _request_cosyvoice_zero_shot_pcm_with_requests(self, text: str, prompt_text: str, prompt_source: Path) -> bytes:
         response = None
@@ -1958,8 +1995,10 @@ class AiVideoService:
 
     def _prepare_sc1_materials_for_render(self, scenes: list[dict[str, Any]], task_name: str, payload: dict[str, Any] | None = None) -> Path:
         material_root, _manifest_path = self._sc1_material_paths(payload)
-        target_dir = self.render_material_root
+        safe_task_name = re.sub(r"[^A-Za-z0-9_-]+", "-", str(task_name or "render")).strip("-") or "render"
+        target_dir = self.render_material_root / safe_task_name
         target_dir.mkdir(parents=True, exist_ok=True)
+        missing_assets: list[str] = []
         for scene in scenes:
             images = scene.get("assetImages") if isinstance(scene.get("assetImages"), list) else []
             for image in images:
@@ -1982,64 +2021,70 @@ class AiVideoService:
                         source = next(candidate for candidate in material_root.rglob(file_name) if candidate.is_file())
                     except StopIteration:
                         source = None
-                if source and source.exists() and source.is_file():
-                    target = target_dir / file_name
-                    try:
-                        from PIL import Image
+                if not source or not source.exists() or not source.is_file():
+                    missing_assets.append(file_name)
+                    continue
+                target = target_dir / file_name
+                try:
+                    from PIL import Image
 
-                        with Image.open(source) as opened:
-                            rgba = opened.convert("RGBA")
-                            pixels = rgba.load()
-                            width, height = rgba.size
-                            foreground_box: list[int] | None = None
-                            for x in range(width):
-                                for y in range(height):
-                                    red, green, blue, alpha = pixels[x, y]
-                                    if alpha == 0:
-                                        continue
-                                    if red > 245 and green > 245 and blue > 245:
-                                        pixels[x, y] = (255, 255, 255, 0)
-                                    elif red > 235 and green > 235 and blue > 235:
-                                        pixels[x, y] = (red, green, blue, max(0, int(alpha * 0.35)))
-                                    else:
-                                        if foreground_box is None:
-                                            foreground_box = [x, y, x + 1, y + 1]
-                                        else:
-                                            foreground_box[0] = min(foreground_box[0], x)
-                                            foreground_box[1] = min(foreground_box[1], y)
-                                            foreground_box[2] = max(foreground_box[2], x + 1)
-                                            foreground_box[3] = max(foreground_box[3], y + 1)
-                            bbox = tuple(foreground_box) if foreground_box else rgba.getchannel("A").getbbox()
-                            if bbox:
-                                pad_x = max(10, int((bbox[2] - bbox[0]) * 0.025))
-                                pad_y = max(10, int((bbox[3] - bbox[1]) * 0.025))
-                                crop_box = (
-                                    max(0, bbox[0] - pad_x),
-                                    max(0, bbox[1] - pad_y),
-                                    min(width, bbox[2] + pad_x),
-                                    min(height, bbox[3] + pad_y),
-                                )
-                                cropped = rgba.crop(crop_box)
-                                target_ratio = 500 / 350
-                                fill_ratio = 0.86
-                                canvas_width = max(cropped.width, int(cropped.height * target_ratio))
-                                canvas_height = max(cropped.height, int(canvas_width / target_ratio))
-                                canvas_width = max(canvas_width, int(cropped.width / fill_ratio))
-                                canvas_height = max(canvas_height, int(cropped.height / fill_ratio))
-                                if canvas_width / canvas_height < target_ratio:
-                                    canvas_width = int(canvas_height * target_ratio)
+                    with Image.open(source) as opened:
+                        rgba = opened.convert("RGBA")
+                        pixels = rgba.load()
+                        width, height = rgba.size
+                        foreground_box: list[int] | None = None
+                        for x in range(width):
+                            for y in range(height):
+                                red, green, blue, alpha = pixels[x, y]
+                                if alpha == 0:
+                                    continue
+                                if red > 245 and green > 245 and blue > 245:
+                                    pixels[x, y] = (255, 255, 255, 0)
+                                elif red > 235 and green > 235 and blue > 235:
+                                    pixels[x, y] = (red, green, blue, max(0, int(alpha * 0.35)))
                                 else:
-                                    canvas_height = int(canvas_width / target_ratio)
-                                canvas = Image.new("RGBA", (canvas_width, canvas_height), (255, 255, 255, 0))
-                                x_offset = (canvas_width - cropped.width) // 2
-                                y_offset = int((canvas_height - cropped.height) * 0.58)
-                                canvas.alpha_composite(cropped, (x_offset, max(0, y_offset)))
-                                canvas.save(target)
+                                    if foreground_box is None:
+                                        foreground_box = [x, y, x + 1, y + 1]
+                                    else:
+                                        foreground_box[0] = min(foreground_box[0], x)
+                                        foreground_box[1] = min(foreground_box[1], y)
+                                        foreground_box[2] = max(foreground_box[2], x + 1)
+                                        foreground_box[3] = max(foreground_box[3], y + 1)
+                        bbox = tuple(foreground_box) if foreground_box else rgba.getchannel("A").getbbox()
+                        if bbox:
+                            pad_x = max(10, int((bbox[2] - bbox[0]) * 0.025))
+                            pad_y = max(10, int((bbox[3] - bbox[1]) * 0.025))
+                            crop_box = (
+                                max(0, bbox[0] - pad_x),
+                                max(0, bbox[1] - pad_y),
+                                min(width, bbox[2] + pad_x),
+                                min(height, bbox[3] + pad_y),
+                            )
+                            cropped = rgba.crop(crop_box)
+                            target_ratio = 500 / 350
+                            fill_ratio = 0.86
+                            canvas_width = max(cropped.width, int(cropped.height * target_ratio))
+                            canvas_height = max(cropped.height, int(canvas_width / target_ratio))
+                            canvas_width = max(canvas_width, int(cropped.width / fill_ratio))
+                            canvas_height = max(canvas_height, int(cropped.height / fill_ratio))
+                            if canvas_width / canvas_height < target_ratio:
+                                canvas_width = int(canvas_height * target_ratio)
                             else:
-                                rgba.save(target)
-                    except Exception:
-                        shutil.copyfile(source, target)
-                image["src"] = f"{SC1_MATERIAL_PUBLIC_BASE_URL}/{file_name}"
+                                canvas_height = int(canvas_width / target_ratio)
+                            canvas = Image.new("RGBA", (canvas_width, canvas_height), (255, 255, 255, 0))
+                            x_offset = (canvas_width - cropped.width) // 2
+                            y_offset = int((canvas_height - cropped.height) * 0.58)
+                            canvas.alpha_composite(cropped, (x_offset, max(0, y_offset)))
+                            canvas.save(target)
+                        else:
+                            rgba.save(target)
+                except Exception:
+                    shutil.copyfile(source, target)
+                quoted_name = urllib.parse.quote(file_name)
+                image["src"] = f"{SC1_MATERIAL_PUBLIC_BASE_URL}/{safe_task_name}/{quoted_name}"
+        if missing_assets:
+            missing = ", ".join(sorted(set(missing_assets)))
+            raise RuntimeError(f"SC1 scene material missing before render: {missing}")
         return target_dir
 
     def _scene_for_render(self, scene: dict[str, Any]) -> dict[str, Any]:
@@ -2654,13 +2699,22 @@ class AiVideoService:
     def _build_srt(self, scenes: list[dict[str, Any]]) -> str:
         blocks: list[str] = []
         cursor = 0.0
-        for index, scene in enumerate(scenes, start=1):
-            start = cursor
-            end = cursor + float(scene.get("duration") or 3)
-            blocks.append(
-                f"{index}\n{self._srt_time(start)} --> {self._srt_time(end)}\n{scene.get('subtitleText') or ''}\n"
-            )
-            cursor = end
+        block_index = 1
+        for scene in scenes:
+            duration = float(scene.get("duration") or 3)
+            segments = scene.get("segments") if isinstance(scene.get("segments"), list) else []
+            primary = segments[0] if segments and isinstance(segments[0], dict) else {}
+            cues = primary.get("captionCues") if isinstance(primary.get("captionCues"), list) else []
+            valid_cues = [cue for cue in cues if isinstance(cue, dict) and str(cue.get("text") or "").strip()]
+            if not valid_cues:
+                valid_cues = [{"text": scene.get("subtitleText") or "", "startFrame": 0, "endFrame": round(duration * 30)}]
+            for cue in valid_cues:
+                start = cursor + max(0, int(cue.get("startFrame") or 0)) / 30
+                end_frame = int(cue.get("endFrame") or round(duration * 30))
+                end = min(cursor + duration, cursor + max(1, end_frame) / 30)
+                blocks.append(f"{block_index}\n{self._srt_time(start)} --> {self._srt_time(end)}\n{str(cue.get('text') or '').strip()}\n")
+                block_index += 1
+            cursor += duration
         return "\n".join(blocks)
 
     def _srt_time(self, seconds: float) -> str:

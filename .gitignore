@@ -92,6 +92,7 @@ ssh_err*.txt
 /update_categories.sql
 /upload_*.js
 /verify_v2_prod.js
+/work/
 
 # One-off shell helpers
 /scripts/check_*.sh

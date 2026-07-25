@@ -1,4 +1,4 @@
-from app.services.stickman_workflow_assets import normalize_material_library_items
+from app.services.stickman_workflow_assets import _asset_public_url, normalize_material_library_items
 
 
 def test_normalize_material_library_items_keeps_default_sc1():
@@ -18,3 +18,9 @@ def test_normalize_material_library_items_keeps_default_sc1():
 def test_normalize_material_library_items_rejects_blank_key():
     items = normalize_material_library_items([{"key": "", "name": ""}])
     assert items == []
+
+
+def test_material_library_cover_url_is_namespaced_by_library_key():
+    url = _asset_public_url("/tmp/generated/1.png", "", "therapy_style")
+
+    assert url == "/api/admin/stickman-workflow/assets/material-libraries/therapy_style/1.png"

@@ -204,3 +204,17 @@
 - 本地验证：`git diff --check` -> 通过；仅换行符提示。
 - 密钥检查：提交 diff 未发现 `sk-` 形式密钥；`work/` 临时目录不提交。
 - 下一步：提交本地改动，同步 3004 部署目录，只重启 3004 backend/worker/render，随后验证助手问答与 `/stickman-workflow` 平台成片。
+
+## 2026-07-25 3004 第二阶段部署前记录
+- 当前工作区：`C:\Users\Administrator\Documents\Codex\2026-07-18\300\work\3004-partner-stickman-worktree`
+- 当前分支：`codex/3004-partner-stickman-platform-20260724`
+- 提交前 HEAD：`00fa442502503ad2807db0cdc3518cccb66af264`
+- 3004 当前部署锚点：`codex/3004-partner-stickman-platform-20260724@00fa442502503ad2807db0cdc3518cccb66af264`，部署时间 `2026-07-25T16:38:00+08:00`。
+- 本次待部署：修复 CosyVoice 残缺 PCM 接受、输出全部字幕 cue、全片总结关键词去重、素材缺失预检；新增参考图生成两张样图、确认后批量生成素材库及 `materials.json`；新增自定义文案动态时长估算；补充 AI 助手对推荐归属、分佣、图片套餐和素材库生成流程的知识。
+- 本地测试：`pytest backend/tests/test_platform_assistant.py backend/tests/test_image_gen_service.py backend/tests/test_material_library_generation.py backend/tests/test_ai_video_sc1_material_urls.py backend/tests/test_partner_models_import.py backend/tests/test_partner_program_service.py backend/tests/test_stickman_workflow_assets.py backend/tests/test_stickman_workflow_limits.py -q` -> `37 passed`。
+- 本地检查：相关后端文件 `python -m py_compile` 通过；`frontend npm run build` 通过，仅有既有 Vite chunk size warning；`git diff --check` 通过；提交差异未发现密钥、服务器密码或用户提供的 API Key。
+- 远程部署前体检：根分区可用 5.6GB；3004 backend、worker、render 均为 active；8004 和 18788 健康接口正常。
+- 部署边界：只同步 `/opt/manim-v2-3004-snapshot`，只重启 `manim-v2-3004-backend.service`、`manim-v2-3004-worker.service`、`manim-v2-3004-ai-video-render.service`，不修改、不重启 3003。
+- 部署后必须完成：确认 Celery 注册 `app.tasks.generate_material_library_celery`；平台登录后验证助手、时长估算、合作者和邀请码；从 `/stickman-workflow` 创建新成片并完成 ffprobe 与关键帧验收。
+- 代码审查修复：渲染素材按 job 子目录隔离，避免同名图片跨素材库覆盖；素材库封面 URL 按 library key 隔离；生成样图接口增加管理员鉴权和样图白名单；120 张串行生成任务时限提高为 soft 15000 秒、hard 15600 秒；总结关键词不再从旁白任意截取，改用情绪短词及唯一组合池。
+- 本地清理：已删除工作树 `work/` 下旧部署 zip/tar 和一次性探针脚本，并在 `.gitignore` 增加 `/work/`；这些包含环境快照的临时文件未进入提交。

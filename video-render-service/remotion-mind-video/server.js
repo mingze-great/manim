@@ -16,6 +16,7 @@ const sc1MaterialLibraryPath = process.env.SC1_MATERIAL_LIBRARY_PATH || (
     ? 'C:\\Users\\Administrator\\Documents\\Codex\\2026-07-13\\e-ai-cankao-sucai\\outputs'
     : '/opt/manim_assets/sc1-outputs'
 );
+const sc1StagedMaterialPath = process.env.SC1_STAGED_MATERIAL_PATH || path.join(__dirname, 'public', 'sc1-materials');
 
 app.use(express.json({limit: '20mb'}));
 app.use((req, res, next) => {
@@ -30,6 +31,7 @@ app.use((req, res, next) => {
 });
 app.use('/renders', express.static(path.join(__dirname, 'renders')));
 app.use('/generated-audio', express.static(path.join(__dirname, 'public', 'generated-audio')));
+app.use('/sc1-materials', express.static(sc1StagedMaterialPath));
 app.use('/sc1-materials', express.static(sc1MaterialLibraryPath));
 
 const getBundle = async () => {

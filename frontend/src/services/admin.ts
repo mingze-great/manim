@@ -178,6 +178,19 @@ export interface StickmanWorkflowMaterialLibrary {
   source?: string
 }
 
+export interface StickmanWorkflowMaterialGeneration {
+  id: number
+  library_key: string
+  library_name: string
+  target_count: number
+  status: string
+  progress: number
+  message?: string | null
+  error?: string | null
+  sample_images: string[]
+  manifest_path?: string | null
+}
+
 export const adminApi = {
   getUsers: (params?: { skip?: number; limit?: number; search?: string }) =>
     api.get<{ users: User[]; total: number }>('/admin/users', { params }),
@@ -304,6 +317,27 @@ export const adminApi = {
       material_count: number
     }>(`/admin/stickman-workflow/material-libraries/${libraryKey}/package`, formData)
   },
+
+  createStickmanWorkflowMaterialSamples: (data: { libraryKey: string; libraryName: string; targetCount: number; referenceImage: File }) => {
+    const formData = new FormData()
+    formData.append('library_key', data.libraryKey)
+    formData.append('library_name', data.libraryName)
+    formData.append('target_count', String(data.targetCount))
+    formData.append('reference_image', data.referenceImage)
+    return api.post<StickmanWorkflowMaterialGeneration>('/admin/stickman-workflow/material-libraries/generations/samples', formData)
+  },
+
+  getStickmanWorkflowMaterialGeneration: (generationId: number) =>
+    api.get<StickmanWorkflowMaterialGeneration>(`/admin/stickman-workflow/material-libraries/generations/${generationId}`),
+
+  getStickmanWorkflowMaterialGenerationAsset: (assetUrl: string) =>
+    api.get<Blob>(assetUrl, { responseType: 'blob' }),
+
+  confirmStickmanWorkflowMaterialGeneration: (generationId: number) =>
+    api.post<StickmanWorkflowMaterialGeneration>(`/admin/stickman-workflow/material-libraries/generations/${generationId}/confirm`),
+
+  regenerateStickmanWorkflowMaterialSamples: (generationId: number) =>
+    api.post<StickmanWorkflowMaterialGeneration>(`/admin/stickman-workflow/material-libraries/generations/${generationId}/regenerate-samples`),
 }
 
 export default api

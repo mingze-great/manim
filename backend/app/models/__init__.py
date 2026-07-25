@@ -14,5 +14,6 @@ from .user_module_permission import UserModulePermission
 from .chat_style import ChatStyle
 from .ai_video import AiVideoAsset, AiVideoBrandKit, AiVideoJob, AiVideoProject, AiVideoVersion
 from .partner import CommissionLedger, InviteCode, PartnerProfile, ReferralCode
+from .material_library_generation import MaterialLibraryGeneration
 
-__all__ = ["User", "Project", "Conversation", "Task", "Template", "Order", "Subscription", "DailyStatistics", "BackgroundTask", "VideoTopicCategory", "Article", "ArticleCategory", "UserDailyUsage", "FavoriteTopic", "UserModulePermission", "ChatStyle", "AiVideoAsset", "AiVideoBrandKit", "AiVideoJob", "AiVideoProject", "AiVideoVersion", "CommissionLedger", "InviteCode", "PartnerProfile", "ReferralCode"]
+__all__ = ["User", "Project", "Conversation", "Task", "Template", "Order", "Subscription", "DailyStatistics", "BackgroundTask", "VideoTopicCategory", "Article", "ArticleCategory", "UserDailyUsage", "FavoriteTopic", "UserModulePermission", "ChatStyle", "AiVideoAsset", "AiVideoBrandKit", "AiVideoJob", "AiVideoProject", "AiVideoVersion", "CommissionLedger", "InviteCode", "PartnerProfile", "ReferralCode", "MaterialLibraryGeneration"]

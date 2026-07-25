@@ -33,6 +33,24 @@ DEFAULT_ENTRIES: list[dict[str, str]] = [
         "content": "合作者可以在合作者工作台查看自己推荐的用户，并创建非敏感的邀请码给推荐用户使用。",
     },
     {
+        "title": "推荐归属与分佣",
+        "source": "内置引导",
+        "route": "/partner",
+        "content": "用户通过合作者的推广链接注册，或兑换合作者创建的邀请码后，平台会记录推荐归属。合作者只能查看自己的推荐用户、订单和佣金，不能进入管理员后台；管理员可以统一查看和结算。",
+    },
+    {
+        "title": "图片模式与套餐权限",
+        "source": "内置引导",
+        "route": "/stickman-workflow",
+        "content": "火柴人视频支持素材库匹配、实时生成场景图和混合补图。页面只展示当前套餐允许的选项；素材库套餐用户保持默认素材匹配，不会看到不可用的实时生图能力。",
+    },
+    {
+        "title": "参考图生成素材库",
+        "source": "内置引导",
+        "route": "/docs",
+        "content": "管理员可以在火柴人工作流素材库页面上传一张参考图，先生成两张风格样图。确认风格后再批量生成覆盖常见情绪和场景的图片，并自动建立 materials.json；完成启用后用户即可选择该素材库。",
+    },
+    {
         "title": "我的作品",
         "source": "内置引导",
         "route": "/history",
@@ -139,7 +157,10 @@ class PlatformAssistantKnowledgeBase:
     def _tokenize(self, text: str) -> list[str]:
         words = re.findall(r"/[\w\-/]+|[A-Za-z0-9_\-]+|[\u4e00-\u9fff]{2,}", text)
         shortcuts = []
-        for keyword in ["火柴人", "素材库", "邀请码", "兑换码", "合作者", "分佣", "作品", "时长", "声音", "背景"]:
+        for keyword in [
+            "火柴人", "素材库", "邀请码", "兑换码", "合作者", "推荐归属", "分佣", "作品",
+            "时长", "声音", "背景", "参考图", "样图", "实时生图", "混合补图",
+        ]:
             if keyword in text:
                 shortcuts.append(keyword)
         return list(dict.fromkeys(words + shortcuts))
