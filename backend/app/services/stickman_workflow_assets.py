@@ -210,7 +210,7 @@ def _resolve_image(package_dir: Path, raw_path: str, file_name: str) -> Optional
 
 
 def _normalize_manifest(package_dir: Path, manifest_path: Path) -> tuple[Path, int, int, Optional[Path]]:
-    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    payload = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
     if not isinstance(payload, list) or not payload:
         raise ValueError("material.json 内容无效，必须是数组")
     normalized: list[dict] = []

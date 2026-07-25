@@ -7,7 +7,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.database import Base
 from app.models.system_config import SystemConfig
-from app.services.stickman_workflow_assets import list_material_libraries, save_material_libraries
+from app.services.stickman_workflow_assets import _normalize_manifest, list_material_libraries, save_material_libraries
 
 
 def _session():
@@ -49,3 +49,16 @@ def test_save_material_libraries_keeps_uploaded_package_fields_after_refresh(tmp
     assert uploaded["is_active"] is True
     assert uploaded["is_visible"] is True
 
+
+def test_normalize_manifest_accepts_utf8_bom_json(tmp_path):
+    image = tmp_path / "scene.png"
+    image.write_bytes(b"png")
+    manifest = tmp_path / "material.json"
+    manifest.write_text('[{"file_name":"scene.png","image_path":"scene.png"}]', encoding="utf-8-sig")
+
+    normalized_path, material_count, image_count, cover_image = _normalize_manifest(tmp_path, manifest)
+
+    assert normalized_path.exists()
+    assert material_count == 1
+    assert image_count == 1
+    assert cover_image == image
