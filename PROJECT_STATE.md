@@ -207,6 +207,8 @@
 - ffmpeg 验证：视频时长 `00:00:24.68`；视频流 H.264 1920x1080 30fps；音频流 AAC 48000Hz stereo，确认有视频流和音频流。
 - 抽帧验证：`frame_01s.png`、`frame_08s.png`、`frame_16s.png`、`frame_24s.png` 均显示单张居中完整场景图，没有被横线/字幕/白色面板遮挡；右上角 `心理分享 | 认知突破` 可见；无 `@Sc1火柴人`；字幕居中；总结为 2-4 字短词并在段内累计展示。
 - 当前可访问平台：`http://152.136.218.74:3004`；3003 验证仍返回 200，未做 3003 部署。
+- 当前本地状态提交：`589c467`（`docs: record 3004 job 13 validation`）。
+- GitHub 同步：再次执行 `git push origin codex/3004-partner-stickman-platform-20260724`，180 秒后超时，不能确认 GitHub 远程分支已更新；当前可复现锚点以本地 worktree 与 3004 `.deployed-ref` 为准。
 - 下一步恢复顺序：
   1. 等腾讯云 SSH banner 恢复或由控制台强制关机开机。
   2. 先确认 `manim-v2-3003-cosyvoice.service` disabled/inactive，杀掉所有 `cosyvoice3003` 残留进程。
