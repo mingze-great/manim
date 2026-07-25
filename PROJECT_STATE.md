@@ -393,3 +393,4 @@
 - 素材库 UI 验证：浏览器进入 `/admin/stickman-workflow-libraries`，点击“新增素材库”，新增草稿卡片可见且“上传素材库 zip”按钮仍存在，不再消失。
 - 浏览器控制台验证：最终 Playwright 复验 `badResponses=[]`，`meaningfulConsoleErrors=[]`；截图保存到 `C:\Users\Administrator\Documents\Codex\2026-07-18\300\outputs\3004_admin_fix_ui_final_clean.png`。
 - 注意：验证用 `codex_probe_generated_*` 素材库已清理；保留原 `codex_verify_library_bom` 测试库。
+- GitHub 同步：`git push origin codex/3004-partner-stickman-platform-20260724` 执行 180 秒后超时，不能确认 GitHub 远程分支已更新；当前可复现锚点以本地 worktree 与 3004 `.deployed-ref` 为准。
