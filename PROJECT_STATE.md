@@ -209,6 +209,16 @@
 - 当前可访问平台：`http://152.136.218.74:3004`；3003 验证仍返回 200，未做 3003 部署。
 - 当前本地状态提交：`589c467`（`docs: record 3004 job 13 validation`）。
 - GitHub 同步：再次执行 `git push origin codex/3004-partner-stickman-platform-20260724`，180 秒后超时，不能确认 GitHub 远程分支已更新；当前可复现锚点以本地 worktree 与 3004 `.deployed-ref` 为准。
+
+## 2026-07-25 3004 数据库迁移修复
+- 用户反馈：3004 登录不上，怀疑未迁移 3003 数据库。
+- 排查结论：3004 `.env` 指向 `/opt/manim-v2-3004-snapshot/backend/manim_platform_3004.db`，该库只有 3 个测试用户；3003 实际服务使用 `/opt/manim/backend/manim.db`，不是 3003 快照目录里的空库。
+- 3003 实际库用户数：`56`，包含原 `admin`、`myoung` 等账号。
+- 修复计划：只停止/重启 3004 backend 与 worker；备份当前 3004 SQLite；用 SQLite online backup 从 `/opt/manim/backend/manim.db` 复制到 3004 数据库路径；启动 3004 后由当前代码自动补齐合作者、邀请码、素材库、AI 助手、火柴人控制等新增表和字段；不修改、不重启 3003。
+- 已执行迁移：停止 3004 backend/worker，备份旧 3004 库为 `/opt/manim-v2-3004-snapshot/backend/manim_platform_3004.pre-3003-migration.20260725_225135.db`，使用 SQLite `.backup` 从 `/opt/manim/backend/manim.db` 复制到 `/opt/manim-v2-3004-snapshot/backend/manim_platform_3004.db`，再启动 3004 backend/worker。
+- 迁移后验证：3004 数据库用户数为 `56`；`users` 已补齐 `role`、`is_approved`、`module_permissions_json`、`referred_by_partner_id`、`referral_code` 等新字段；合作者/邀请码/佣金表 `partner_profiles`、`referral_codes`、`invite_codes`、`commission_ledgers` 存在；素材库生成表 `material_library_generations` 存在。
+- 服务验证：3004 backend/worker/render 均 `active`；`http://152.136.218.74:3004` 返回 200；`http://152.136.218.74:3003` 返回 200；3003 未部署、未重启。
+- 注意：3004 现在继承 3003 账号状态，只有 `is_active=1` 且 `is_approved=1` 的账号可登录；未审核账号仍会按平台规则被拦截。
 - 下一步恢复顺序：
   1. 等腾讯云 SSH banner 恢复或由控制台强制关机开机。
   2. 先确认 `manim-v2-3003-cosyvoice.service` disabled/inactive，杀掉所有 `cosyvoice3003` 残留进程。
