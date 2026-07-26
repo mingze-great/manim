@@ -47,11 +47,11 @@ def test_validate_script_duration_request_rejects_custom_script_with_target_seco
         validate_script_duration_request(custom_script="一段文案", target_seconds=30)
 
 
-def test_material_library_entitlement_rejects_unallowed_library():
+def test_material_library_entitlement_rejects_unallowed_library_when_enforced():
     with pytest.raises(HTTPException) as exc:
         stickman_workflow._ensure_material_library_allowed(
             {"key": "premium_sc1"},
-            {"allowed_libraries": ["sc1_outputs"]},
+            {"allowed_libraries": ["sc1_outputs"], "enforce_allowed_libraries": True},
         )
     assert exc.value.status_code == 400
     assert "素材库" in exc.value.detail
@@ -61,6 +61,13 @@ def test_material_library_entitlement_allows_empty_scope():
     stickman_workflow._ensure_material_library_allowed(
         {"key": "premium_sc1"},
         {"allowed_libraries": []},
+    )
+
+
+def test_material_library_entitlement_does_not_hide_visible_styles_by_default():
+    stickman_workflow._ensure_material_library_allowed(
+        {"key": "premium_sc1"},
+        {"allowed_libraries": ["sc1_outputs"]},
     )
 
 

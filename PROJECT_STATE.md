@@ -529,3 +529,12 @@
 - 本地验证：`PYTHONPATH=backend pytest backend/tests/test_stickman_workflow_upload_persistence.py backend/tests/test_stickman_workflow_limits.py backend/tests/test_partner_program_service.py backend/tests/test_ai_video_sc1_material_urls.py -q` -> `48 passed`；`python -m py_compile backend/app/services/stickman_workflow_plans.py backend/app/services/stickman_workflow_assets.py backend/app/api/stickman_workflow.py backend/app/services/ai_video.py` 通过；`npm run build` in `frontend` 通过，仅有既有 Vite chunk size warning；`git diff --check` 通过，仅有 CRLF/LF 换行提示。
 - 下一步：提交本地改动；部署前备份 3004 SQLite 和代码快照；同步到 `/opt/manim-v2-3004-snapshot`，重启 3004 backend/worker/render 或必要服务；平台验证 config 中新素材库封面 URL、用户端场景风格刷新/预览、声音试听、上传背景生成 payload/成片背景、合作者套餐三档、AI 助手机器人图标。
 - 不要重复做：不要修改、回滚、重启或覆盖 3003；不要把后台 `/api/admin/...` 资源 URL 暴露给普通用户端预览；不要只用本地测试替代 3004 平台闭环。
+## 2026-07-27 3004 场景图风格可见性二次修复记录
+
+- 当前任务：3004 部署后平台验证发现普通用户 `/api/stickman-workflow/config` 仍只返回 `sc1_outputs`，根因是历史用户权限里的 `allowed_libraries` 过滤了后台新上传且前台可见的素材库；同时默认 SC1 没有预览图。
+- 本地工作区：`C:\Users\Administrator\Documents\Codex\2026-07-18\300\work\3004-partner-stickman-worktree`。
+- 当前已部署提交：`9af98cbe9dcd07067be61c49ac5af16250be3e1a`，部署目录 `/opt/manim-v2-3004-snapshot`。
+- 本次补充改动：`backend/app/api/stickman_workflow.py` 改为用户端场景图风格展示所有后台启用且前台可见素材库，只有显式 `enforce_allowed_libraries` 时才限制；`backend/app/services/stickman_workflow_assets.py` 为默认 SC1 从 material.json 自动寻找第一张图作为预览；`backend/tests/test_stickman_workflow_limits.py` 更新并覆盖新行为。
+- 本地验证：`PYTHONPATH=backend pytest backend/tests/test_stickman_workflow_upload_persistence.py backend/tests/test_stickman_workflow_limits.py backend/tests/test_partner_program_service.py backend/tests/test_ai_video_sc1_material_urls.py -q` -> `49 passed`；`python -m py_compile backend/app/services/stickman_workflow_assets.py backend/app/api/stickman_workflow.py` 通过；`git diff --check` 通过，仅有 CRLF/LF 换行提示。
+- 下一步：提交并增量部署到 3004，重启 3004 backend/worker，重新验证普通用户 config 中 sceneStyles 数量和封面 URL。
+- 不要重复做：不要通过要求用户手动改套餐 allowed_libraries 来解决新素材库不可见；后台可见素材库应自动成为用户端场景图风格。

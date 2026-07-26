@@ -78,12 +78,7 @@ def _stickman_entitlement(user: User) -> dict:
 
 
 def _visible_libraries_for_user(db: Session, user: User) -> list[dict]:
-    libraries = public_material_libraries(db)
-    entitlement = _stickman_entitlement(user)
-    allowed = set(entitlement.get("allowed_libraries") or [])
-    if allowed:
-        libraries = [item for item in libraries if item.get("key") in allowed]
-    return libraries
+    return public_material_libraries(db)
 
 
 def _scene_styles_for_user(db: Session, user: User) -> list[dict]:
@@ -101,6 +96,8 @@ def _scene_styles_for_user(db: Session, user: User) -> list[dict]:
 
 
 def _ensure_material_library_allowed(material_library: dict, entitlement: dict) -> None:
+    if not entitlement.get("enforce_allowed_libraries"):
+        return
     allowed = {str(item).strip() for item in entitlement.get("allowed_libraries") or [] if str(item).strip()}
     if allowed and str(material_library.get("key") or "") not in allowed:
         raise HTTPException(status_code=400, detail="当前套餐不支持该素材库")

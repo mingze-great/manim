@@ -59,8 +59,36 @@ def _default_sc1_manifest_path(base_path: str) -> str:
     return str(Path(base_path) / "material.json")
 
 
+def _default_cover_image_path(base_path: str, manifest_path: str) -> str:
+    manifest = Path(str(manifest_path or ""))
+    root = Path(str(base_path or ""))
+    if not manifest.exists() or not manifest.is_file():
+        return ""
+    try:
+        payload = json.loads(manifest.read_text(encoding="utf-8-sig"))
+    except Exception:
+        return ""
+    if isinstance(payload, dict):
+        payload = payload.get("materials") or payload.get("items") or payload.get("data") or []
+    if not isinstance(payload, list):
+        return ""
+    for raw in payload:
+        if not isinstance(raw, dict):
+            continue
+        candidate = str(raw.get("image_path") or raw.get("imagePath") or raw.get("path") or raw.get("file_name") or raw.get("fileName") or "").strip()
+        if not candidate:
+            continue
+        path = Path(candidate)
+        if not path.is_absolute():
+            path = root / path
+        if path.exists() and path.is_file():
+            return str(path)
+    return ""
+
+
 def default_material_library() -> dict:
     base_path = _default_sc1_base_path()
+    manifest_path = _default_sc1_manifest_path(base_path)
     return {
         "key": "sc1_outputs",
         "name": "SC1 火柴人素材库",
@@ -69,8 +97,8 @@ def default_material_library() -> dict:
         "is_visible": True,
         "sort_order": 1,
         "base_path": base_path,
-        "material_json_path": _default_sc1_manifest_path(base_path),
-        "cover_image_path": "",
+        "material_json_path": manifest_path,
+        "cover_image_path": _default_cover_image_path(base_path, manifest_path),
         "cover_image_url": "",
         "image_count": 0,
         "material_count": 0,
