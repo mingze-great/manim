@@ -220,10 +220,15 @@ def preview_stickman_voice(
 ):
     candidates = [
         Path(str(Path.cwd())) / "outputs" / "dayun_tools_manbo_tts_test.mp3",
+        Path(str(Path.cwd())) / "storage" / "voice-references" / "dayun_tools_manbo_tts_test.mp3",
+        Path(str(Path.cwd())) / "backend" / "storage" / "voice-references" / "dayun_tools_manbo_tts_test.mp3",
         Path(__file__).resolve().parents[2] / "outputs" / "dayun_tools_manbo_tts_test.mp3",
         Path(__file__).resolve().parents[2].parent / "outputs" / "dayun_tools_manbo_tts_test.mp3",
+        Path(__file__).resolve().parents[2] / "storage" / "voice-references" / "dayun_tools_manbo_tts_test.mp3",
+        Path(__file__).resolve().parents[2].parent / "backend" / "storage" / "voice-references" / "dayun_tools_manbo_tts_test.mp3",
         Path(__file__).resolve().parents[2] / "outputs" / "cosyvoice_zero_shot_sample.wav",
         Path(__file__).resolve().parents[2].parent / "outputs" / "cosyvoice_zero_shot_sample.wav",
+        Path(__file__).resolve().parents[2] / "storage" / "voice-references" / "cosyvoice_zero_shot_sample.wav",
     ]
     for path in candidates:
         if path.exists() and path.is_file():

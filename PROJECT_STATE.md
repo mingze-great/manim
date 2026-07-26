@@ -538,3 +538,10 @@
 - 本地验证：`PYTHONPATH=backend pytest backend/tests/test_stickman_workflow_upload_persistence.py backend/tests/test_stickman_workflow_limits.py backend/tests/test_partner_program_service.py backend/tests/test_ai_video_sc1_material_urls.py -q` -> `49 passed`；`python -m py_compile backend/app/services/stickman_workflow_assets.py backend/app/api/stickman_workflow.py` 通过；`git diff --check` 通过，仅有 CRLF/LF 换行提示。
 - 下一步：提交并增量部署到 3004，重启 3004 backend/worker，重新验证普通用户 config 中 sceneStyles 数量和封面 URL。
 - 不要重复做：不要通过要求用户手动改套餐 allowed_libraries 来解决新素材库不可见；后台可见素材库应自动成为用户端场景图风格。
+## 2026-07-27 3004 默认场景预览和声音试听路径补充记录
+
+- 当前任务：继续只修 3004。平台验证发现普通用户已能看到上传素材库，但默认 SC1 风格仍无预览图，声音试听接口返回 404。
+- 根因：数据库中保存过 `sc1_outputs` 配置且 `cover_image_path` 为空，覆盖了代码默认库的自动封面；3004 试听文件实际在 `/opt/manim-v2-3004-snapshot/backend/storage/voice-references/`，试听接口候选路径未包含该目录。
+- 本次补充改动：`backend/app/services/stickman_workflow_assets.py` 合并素材库配置时保留默认库自动识别的 base/manifest/cover 字段；`backend/app/api/stickman_workflow.py` 声音试听接口增加 `backend/storage/voice-references` 候选路径；`backend/tests/test_stickman_workflow_upload_persistence.py` 增加默认库空 cover 不覆盖自动预览测试。
+- 本地验证：`PYTHONPATH=backend pytest backend/tests/test_stickman_workflow_upload_persistence.py backend/tests/test_stickman_workflow_limits.py -q` -> `23 passed`；`python -m py_compile backend/app/services/stickman_workflow_assets.py backend/app/api/stickman_workflow.py` 通过；`git diff --check` 通过，仅有 CRLF/LF 换行提示。
+- 下一步：提交并增量部署 3004，验证普通用户 config 中默认 SC1 和上传库都有预览 URL，声音试听接口返回音频。

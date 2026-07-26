@@ -145,6 +145,34 @@ def test_public_material_library_preview_uses_user_workflow_asset_route(tmp_path
     assert uploaded["image_url"] == "/api/stickman-workflow/assets/material-libraries/visible_style/cover.png"
 
 
+def test_saved_default_library_does_not_clear_detected_default_preview(tmp_path, monkeypatch):
+    base = tmp_path / "sc1"
+    base.mkdir()
+    image = base / "default.png"
+    image.write_bytes(b"png")
+    manifest = base / "material.json"
+    manifest.write_text('[{"image_path":"default.png"}]', encoding="utf-8")
+    monkeypatch.setenv("STICKMAN_MATERIAL_SOURCE_DIR", str(base))
+    monkeypatch.setenv("STICKMAN_MATERIAL_LIBRARY_PATH", str(manifest))
+    stickman_workflow_assets.get_settings.cache_clear()
+    db = _session()
+
+    save_material_libraries(db, [{
+        "key": "sc1_outputs",
+        "name": "传统火柴人",
+        "cover_image_path": "",
+        "is_active": True,
+        "is_visible": True,
+    }])
+
+    public = public_material_libraries(db)
+    default = next(item for item in public if item["key"] == "sc1_outputs")
+
+    assert default["name"] == "传统火柴人"
+    assert default["image_url"] == "/api/stickman-workflow/assets/material-libraries/sc1_outputs/default.png"
+    stickman_workflow_assets.get_settings.cache_clear()
+
+
 def test_default_count_package_plans_match_partner_sales_prices():
     plans = default_stickman_workflow_plans()
     count_plans = [item for item in plans if item["quota_mode"] == "count_package"]

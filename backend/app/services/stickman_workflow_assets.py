@@ -159,7 +159,12 @@ def _write_config(db: Session, value: list[dict]):
 def list_material_libraries(db: Session, active_only: bool = False, visible_only: bool = False) -> list[dict]:
     merged = {default_material_library()["key"]: default_material_library()}
     for item in normalize_material_library_items(_read_config(db)):
-        merged[item["key"]] = item
+        existing = merged.get(item["key"], {})
+        combined = {**existing, **item}
+        for key in ("base_path", "material_json_path", "cover_image_path", "cover_image_url"):
+            if not str(item.get(key) or "").strip() and str(existing.get(key) or "").strip():
+                combined[key] = existing[key]
+        merged[item["key"]] = combined
     libraries = list(merged.values())
     libraries.sort(key=lambda item: (int(item.get("sort_order") or 0), item.get("name") or ""))
     if active_only:
