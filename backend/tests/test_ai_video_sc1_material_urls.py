@@ -283,7 +283,7 @@ def test_safe_tts_fallback_uses_local_cosyvoice_only_after_edge_tts_failure(tmp_
     calls = []
     monkeypatch.setattr(service, "_generate_dashscope_cosyvoice_audio", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("dashscope unavailable")))
     monkeypatch.setattr(service, "_generate_edge_tts_audio", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("edge unavailable")))
-    monkeypatch.setattr(service, "_generate_google_translate_tts_audio", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("google unavailable")))
+    monkeypatch.setattr(service, "_generate_external_simple_tts_audio", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("external unavailable")))
 
     def fallback_open_source(text, voice, output_path):
         calls.append((text, voice))
@@ -300,7 +300,7 @@ def test_safe_tts_fallback_uses_local_cosyvoice_only_after_edge_tts_failure(tmp_
     assert calls == [("先别急着证明自己", "中文女")]
 
 
-def test_safe_tts_fallback_uses_google_tts_before_local_cosyvoice(tmp_path, monkeypatch):
+def test_safe_tts_fallback_uses_external_tts_before_local_cosyvoice(tmp_path, monkeypatch):
     service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
     service._resolve_edge_tts_voice = lambda _voice: "zh-CN-XiaoxiaoNeural"
     service._resolve_cosyvoice_voice = lambda _voice: "中文女"
@@ -310,12 +310,12 @@ def test_safe_tts_fallback_uses_google_tts_before_local_cosyvoice(tmp_path, monk
     monkeypatch.setattr(service, "_generate_dashscope_cosyvoice_audio", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("dashscope unavailable")))
     monkeypatch.setattr(service, "_generate_edge_tts_audio", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("edge unavailable")))
 
-    def fallback_google(text, output_path):
+    def fallback_external(text, output_path):
         calls.append(text)
         output_path.write_bytes(b"fake")
         return 1.25
 
-    monkeypatch.setattr(service, "_generate_google_translate_tts_audio", fallback_google)
+    monkeypatch.setattr(service, "_generate_external_simple_tts_audio", fallback_external)
     monkeypatch.setattr(
         service,
         "_generate_open_source_cosyvoice_audio",
@@ -325,7 +325,7 @@ def test_safe_tts_fallback_uses_google_tts_before_local_cosyvoice(tmp_path, monk
     seconds, provider, voice = service._generate_safe_tts_fallback_audio("先别急着证明自己", tmp_path / "scene.wav", "中文女")
 
     assert seconds == 1.25
-    assert provider == "google_translate_tts"
+    assert provider == "external_simple_tts"
     assert voice == "zh-CN"
     assert calls == ["先别急着证明自己"]
 

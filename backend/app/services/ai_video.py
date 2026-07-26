@@ -1666,11 +1666,11 @@ class AiVideoService:
         except Exception as exc:
             edge_error = exc
 
-        google_error: Exception | None = None
+        external_error: Exception | None = None
         try:
-            return self._generate_google_translate_tts_audio(text, output_path), "google_translate_tts", "zh-CN"
+            return self._generate_external_simple_tts_audio(text, output_path), "external_simple_tts", "zh-CN"
         except Exception as exc:
-            google_error = exc
+            external_error = exc
 
         cosy_voice = self._resolve_cosyvoice_voice(requested_voice)
         try:
@@ -1678,34 +1678,39 @@ class AiVideoService:
         except Exception as exc:
             raise RuntimeError(
                 f"TTS fallback unavailable: DashScope failed: {dashscope_error}; Edge TTS failed: {edge_error}; "
-                f"Google TTS failed: {google_error}; "
+                f"External simple TTS failed: {external_error}; "
                 f"Open-source CosyVoice failed or unhealthy: {exc}"
             ) from exc
 
-    def _generate_google_translate_tts_audio(self, text: str, output_path: Path) -> float:
+    def _generate_external_simple_tts_audio(self, text: str, output_path: Path) -> float:
         clean_text = re.sub(r"\s+", " ", str(text or "").strip())
         if not clean_text:
-            raise RuntimeError("Google TTS text is empty")
-        response = requests.get(
-            "https://translate.google.com/translate_tts",
-            params={
-                "ie": "UTF-8",
-                "client": "tw-ob",
-                "tl": "zh-CN",
-                "q": clean_text[:180],
-            },
-            headers={"User-Agent": "Mozilla/5.0"},
-            timeout=30,
-        )
-        response.raise_for_status()
+            raise RuntimeError("External TTS text is empty")
+        errors: list[str] = []
+        response = None
+        for url, params in [
+            ("https://dict.youdao.com/dictvoice", {"audio": clean_text[:180], "type": "2"}),
+            ("https://translate.google.com/translate_tts", {"ie": "UTF-8", "client": "tw-ob", "tl": "zh-CN", "q": clean_text[:180]}),
+        ]:
+            try:
+                response = requests.get(url, params=params, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
+                response.raise_for_status()
+                if len(response.content or b"") >= 1024:
+                    break
+                errors.append(f"{url} returned short audio")
+            except Exception as exc:
+                response = None
+                errors.append(f"{url}: {exc}")
+        if response is None:
+            raise RuntimeError("; ".join(errors) or "External TTS unavailable")
         if len(response.content or b"") < 1024:
-            raise RuntimeError("Google TTS returned empty audio")
+            raise RuntimeError("External TTS returned empty audio")
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        source_path = output_path.with_suffix(".google.mp3")
+        source_path = output_path.with_suffix(".external.mp3")
         source_path.write_bytes(response.content)
         audio = AudioSegment.from_file(source_path)
         if len(audio.raw_data) < 1024 or audio.rms <= 0:
-            raise RuntimeError("Google TTS returned silent audio")
+            raise RuntimeError("External TTS returned silent audio")
         audio = audio.set_channels(1).set_frame_rate(self.cosyvoice_sample_rate)
         audio = self._trim_audio_segment_silence(audio)
         audio.export(output_path, format="wav")
