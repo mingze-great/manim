@@ -1666,14 +1666,51 @@ class AiVideoService:
         except Exception as exc:
             edge_error = exc
 
+        google_error: Exception | None = None
+        try:
+            return self._generate_google_translate_tts_audio(text, output_path), "google_translate_tts", "zh-CN"
+        except Exception as exc:
+            google_error = exc
+
         cosy_voice = self._resolve_cosyvoice_voice(requested_voice)
         try:
             return self._generate_open_source_cosyvoice_audio(text, cosy_voice, output_path), "open_source_cosyvoice", cosy_voice
         except Exception as exc:
             raise RuntimeError(
                 f"TTS fallback unavailable: DashScope failed: {dashscope_error}; Edge TTS failed: {edge_error}; "
+                f"Google TTS failed: {google_error}; "
                 f"Open-source CosyVoice failed or unhealthy: {exc}"
             ) from exc
+
+    def _generate_google_translate_tts_audio(self, text: str, output_path: Path) -> float:
+        clean_text = re.sub(r"\s+", " ", str(text or "").strip())
+        if not clean_text:
+            raise RuntimeError("Google TTS text is empty")
+        response = requests.get(
+            "https://translate.google.com/translate_tts",
+            params={
+                "ie": "UTF-8",
+                "client": "tw-ob",
+                "tl": "zh-CN",
+                "q": clean_text[:180],
+            },
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=30,
+        )
+        response.raise_for_status()
+        if len(response.content or b"") < 1024:
+            raise RuntimeError("Google TTS returned empty audio")
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        source_path = output_path.with_suffix(".google.mp3")
+        source_path.write_bytes(response.content)
+        audio = AudioSegment.from_file(source_path)
+        if len(audio.raw_data) < 1024 or audio.rms <= 0:
+            raise RuntimeError("Google TTS returned silent audio")
+        audio = audio.set_channels(1).set_frame_rate(self.cosyvoice_sample_rate)
+        audio = self._trim_audio_segment_silence(audio)
+        audio.export(output_path, format="wav")
+        source_path.unlink(missing_ok=True)
+        return max(len(audio) / 1000.0, 0.01)
 
     def _generate_dayun_manbo_audio(self, text: str, output_path: Path) -> float:
         cleaned_chars = []

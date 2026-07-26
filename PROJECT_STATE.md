@@ -499,3 +499,13 @@
 - 本地验证：`python -m py_compile backend/app/services/partner_program.py backend/app/services/stickman_workflow_plans.py backend/app/api/stickman_workflow.py backend/app/api/partner.py backend/app/api/admin.py backend/app/services/ai_video.py` 通过；`PYTHONPATH=backend pytest backend/tests/test_partner_program_service.py backend/tests/test_stickman_workflow_limits.py backend/tests/test_ai_video_sc1_material_urls.py -q` -> `38 passed`；`npm run build` in `frontend` 通过，仅有既有 Vite chunk size warning；`git diff --check` 通过，仅有 CRLF/LF 换行提示。
 - 下一步：提交本地改动；部署前备份 3004 SQLite 和代码快照；同步到 `/opt/manim-v2-3004-snapshot`，构建前端并只重启 3004 backend/worker；平台验证 admin 设置用户图片模式、合作者发码继承/可选逻辑、长文案无 1200 字上限、历史作品列表可刷新后查看下载、生成成片关键词与当前字幕强相关。
 - 不要重复做：不要回滚、重启或覆盖 3003；不要把底层图片模式无条件暴露给普通用户；不要只用本地测试替代 3004 平台闭环验收。
+
+### 2026-07-26 3004 TTS 平台闭环补充
+
+- 3004 首次部署提交：`91ac13a97c7f6a456d6793119e3b31a60239769a`，已部署到 `/opt/manim-v2-3004-snapshot`，`.deployed-ref` 时间 `2026-07-26T22:26:57+0800`。
+- 部署前备份：代码快照 `/opt/manim-v2-3004-backups/manim-v2-3004.pre-image-modes-history.20260726_222413.tar.gz`；SQLite 备份 `/opt/manim-v2-3004-backups/manim_platform_3004.pre-image-modes-history.20260726_222504.db`。
+- 平台 API 验证已完成：admin 配置返回 `visibleImageModes=['material_only','ai_image']` 且可选择；普通用户 `13990049992` 已通过 admin 用户详情 API 设置为双模式，`/stickman-workflow/config` 返回双模式和 `materialMode=ai_image`；合作者 `13990049993` 当前只有素材模式，发码时即使请求 `ai_image`，后端生成兑换码仍强制 `material_only`，佣金按金额计算；长文案 `2700` 字符左右不再受 1200 字限制，估算 `293s/300s allowed=True`；火柴人历史列表返回 `job_96` 和 MP4 下载地址。
+- 平台成片验证发现问题：新建 `job_98`、`job_99` 均失败于 `tts_generating`。根因不是图片模式/历史逻辑，而是服务器 IP 调 dayun manbo 外部接口返回 `HTTP 429`；DashScope SDK fallback 返回空音频或连接关闭；Edge TTS 返回 `403`；本机 CosyVoice 健康闸门拒绝调用，这是为防止再次拖垮服务器的预防措施。
+- 本地补充修复：`backend/app/services/ai_video.py` 在 DashScope SDK 和 Edge TTS 失败后、进入本机 CosyVoice 前，新增轻量外部 `google_translate_tts` 兜底，不启动本机模型；如果 Google 也失败，仍保持本机 CosyVoice 健康闸门。
+- 本地补充测试：`PYTHONPATH=backend pytest backend/tests/test_partner_program_service.py backend/tests/test_stickman_workflow_limits.py backend/tests/test_ai_video_sc1_material_urls.py -q` -> `39 passed`；`python -m py_compile backend/app/services/partner_program.py backend/app/services/stickman_workflow_plans.py backend/app/api/stickman_workflow.py backend/app/api/partner.py backend/app/api/admin.py backend/app/services/ai_video.py` 通过；`npm run build` in `frontend` 通过；`git diff --check` 通过。
+- 下一步：提交 TTS 兜底修复并再次部署 3004，仅重启 3004 backend/worker；重新创建平台成片任务，下载 MP4 并用 ffprobe/抽帧验证音视频流、字幕/总结/场景图同步。
