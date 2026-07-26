@@ -418,3 +418,20 @@
 - 差异检查：`git diff --check` -> 通过，仅提示 `PROJECT_STATE.md` CRLF 将转 LF。
 - 待部署边界：只部署到 `/opt/manim-v2-3004-snapshot`；只允许重启 3004 backend 和更新 3004 前端静态构建；不修改、不重启 3003。
 - 部署前下一步：提交本地改动；备份 3004 SQLite 与代码快照；同步并部署 3004；平台验证用户详情设置合作者、素材库覆盖上传 `codex_verify_library_bom` 不再 422、普通用户看不到/进不去 admin-only 模块、AI 助手卡通入口可见可用。
+
+## 2026-07-26 12:40 3004 用户详情、AI 助手动效、素材库 422 与模块可见性优化部署验收记录
+
+- 功能提交：`33f27e6f9612ab2214bf3fbf15b9ab19eb82f6a0`（`feat: add admin user detail controls`）。
+- 3004 部署目录：`/opt/manim-v2-3004-snapshot`。
+- 3004 部署标记：`.deployed-ref` 已记录 `branch=codex/3004-partner-stickman-platform-20260724`、`commit=33f27e6f9612ab2214bf3fbf15b9ab19eb82f6a0`、`deployed_at=2026-07-26T12:34:12+08:00`。
+- 部署前备份：SQLite 备份 `/opt/manim-v2-3004-backups/manim_platform_3004.pre-user-detail-ai-fab.20260726_122855.db`；代码快照 `/opt/manim-v2-3004-backups/manim-v2-3004.pre-user-detail-ai-fab.20260726_122855.tar.gz`。
+- 部署动作：上传本地 git archive `/tmp/manim-3004-33f27e6.tar`，解包同步到 `/opt/manim-v2-3004-snapshot`；远程前端 `npm run build` 已生成 `frontend/dist/assets/main-C1KP00Vr.js`；仅重启 `manim-v2-3004-backend.service`，未修改、未重启 3003。
+- 服务验证：`manim-v2-3004-backend.service`、`manim-v2-3004-worker.service`、`manim-v2-3004-ai-video-render.service` 均为 `active`；`http://127.0.0.1:8004/health` 返回 `200`；`http://127.0.0.1:18788/api/health` 返回 `200`；`http://127.0.0.1:3004/` 返回 `200`；`http://127.0.0.1:3003/` 返回 `200`。
+- 验证账号：3004 专用测试账号 `13990049991 / Codex3004!`（admin）、`13990049992 / Codex3004!`（普通用户）、`13990049993 / Codex3004!`（合作者设置目标用户），均只用于 3004 验收。
+- API 验证：admin 与普通用户手机号登录均返回 token；`/api/auth/me` 分别返回 `codex_admin_ui_verify` admin 和 `codex_user_ui_verify` 普通用户；普通用户访问 `/api/admin/users?limit=1` 返回 `403`。
+- 用户详情合作者验证：admin 搜索手机号 `13990049993` 得到目标用户 `id=89`；调用 `PUT /api/admin/users/89/partner-profile` 返回 `enabled=true`、`commission_rate_bps=2500`、`status=active`、`referral_code=CODEXVER`，说明用户详情页对应的合作者设置 API 可用。
+- 素材库覆盖上传验证：上传包含 BOM `materials.generated.json` 与 `fileName` 字段的 zip 到 `/api/admin/stickman-workflow/material-libraries/codex_verify_library_bom/package` 返回 `200`；响应列表中 `codex_verify_library_bom` 存在，`image_count=1`、`material_count=1`、`is_visible=True`，未再出现 `422`。
+- 前端构建产物验证：`main-C1KP00Vr.js` 包含 `assistant-person`、`用户详情`、`合作者设置`；`main-CxirjtrL.css` 包含 `assistant-wave` 与 `assistant-float`，说明 AI 助手卡通入口和动效样式已进入 3004 静态包。
+- admin-only 可见性验证：源码与构建均已包含 `/ai-video/*` 和 `/knowledge-ip` 的 `AdminRoute` 包裹，主菜单和首页工作流卡片按 `user.is_admin` 过滤；普通用户 admin API 403 已复验。浏览器自动化因本机 Playwright 包不可用未完成截图验证，后续如需视觉截图可在装好 Playwright 后补跑 `work/verify_3004_ui.js`。
+- 磁盘状态：`/` 分区 40GB，已用约 34GB，可用约 3.8GB，使用率约 90%；后续批量渲染前仍建议清理旧任务与缓存。
+- 不要重复做：本轮只部署 3004，不要回滚或重启 3003；不要把 `codex_verify_library_bom` 当作正式素材库，它是覆盖上传验证库。
