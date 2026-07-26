@@ -37,6 +37,7 @@ import {
 } from './pages/AiVideo'
 import AdminDashboard from './pages/admin/AdminDashboard'
 import AdminUsers from './pages/admin/AdminUsers'
+import AdminUserDetail from './pages/admin/AdminUserDetail'
 import AdminLogs from './pages/admin/AdminLogs'
 import AdminSettings from './pages/admin/AdminSettings'
 import AdminTemplates from './pages/admin/AdminTemplates'
@@ -171,16 +172,16 @@ function AppContent() {
         <Route path="/article/studio" element={<ArticleStudio />} />
         <Route path="/article/:id" element={<ArticleStudio />} />
         <Route path="/article/history" element={<ArticleHistory />} />
-        <Route path="/ai-video" element={<AiVideoDashboard />} />
-        <Route path="/ai-video/dashboard" element={<AiVideoDashboard />} />
-        <Route path="/ai-video/create" element={<AiVideoCreate />} />
-        <Route path="/ai-video/editor/:id" element={<AiVideoEditor />} />
-        <Route path="/ai-video/templates" element={<AiVideoTemplates />} />
-        <Route path="/ai-video/assets" element={<AiVideoAssets />} />
-        <Route path="/ai-video/brand-kit" element={<AiVideoBrandKit />} />
-        <Route path="/ai-video/exports" element={<AiVideoExports />} />
-        <Route path="/ai-video/settings" element={<AiVideoSettings />} />
-        <Route path="/knowledge-ip" element={<KnowledgeIp />} />
+        <Route path="/ai-video" element={<AdminRoute><AiVideoDashboard /></AdminRoute>} />
+        <Route path="/ai-video/dashboard" element={<AdminRoute><AiVideoDashboard /></AdminRoute>} />
+        <Route path="/ai-video/create" element={<AdminRoute><AiVideoCreate /></AdminRoute>} />
+        <Route path="/ai-video/editor/:id" element={<AdminRoute><AiVideoEditor /></AdminRoute>} />
+        <Route path="/ai-video/templates" element={<AdminRoute><AiVideoTemplates /></AdminRoute>} />
+        <Route path="/ai-video/assets" element={<AdminRoute><AiVideoAssets /></AdminRoute>} />
+        <Route path="/ai-video/brand-kit" element={<AdminRoute><AiVideoBrandKit /></AdminRoute>} />
+        <Route path="/ai-video/exports" element={<AdminRoute><AiVideoExports /></AdminRoute>} />
+        <Route path="/ai-video/settings" element={<AdminRoute><AiVideoSettings /></AdminRoute>} />
+        <Route path="/knowledge-ip" element={<AdminRoute><KnowledgeIp /></AdminRoute>} />
         <Route path="/history" element={<History />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/partner" element={<PartnerRoute><PartnerDashboard /></PartnerRoute>} />
@@ -189,6 +190,7 @@ function AppContent() {
       <Route element={<AdminRoute><AdminLayout /></AdminRoute>}>
         <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/admin/users" element={<AdminUsers />} />
+        <Route path="/admin/users/:id" element={<AdminUserDetail />} />
         <Route path="/admin/logs" element={<AdminLogs />} />
         <Route path="/admin/settings" element={<AdminSettings />} />
         <Route path="/admin/templates" element={<AdminTemplates />} />

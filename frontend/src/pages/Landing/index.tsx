@@ -54,9 +54,9 @@ const steps = [
 const workflowCards = [
   { title: '心理火柴人成片', desc: '输入主题或文案，一键生成心理学火柴人成片。', path: '/stickman-workflow', tag: '推荐', icon: <PlaySquareOutlined /> },
   { title: '工作流中心', desc: '按视频、文章、知识 IP 分类找到全部制作入口。', path: '/creator', tag: '全部入口', icon: <RobotOutlined /> },
-  { title: 'AI 视频导演', desc: '管理脚本、镜头、素材和导出流程。', path: '/ai-video/dashboard', tag: '视频', icon: <PlayCircleOutlined /> },
+  { title: 'AI 视频导演', desc: '管理脚本、镜头、素材和导出流程。', path: '/ai-video/dashboard', tag: '视频', icon: <PlayCircleOutlined />, adminOnly: true },
   { title: '文章内容工作流', desc: '生成公众号、小红书、长文内容并管理历史。', path: '/article', tag: '图文', icon: <MessageOutlined /> },
-  { title: '知识 IP 包装', desc: '围绕账号定位整理内容结构和表达方式。', path: '/knowledge-ip', tag: '定位', icon: <SafetyCertificateOutlined /> },
+  { title: '知识 IP 包装', desc: '围绕账号定位整理内容结构和表达方式。', path: '/knowledge-ip', tag: '定位', icon: <SafetyCertificateOutlined />, adminOnly: true },
   { title: '我的作品', desc: '查看生成记录、下载视频和继续编辑。', path: '/history', tag: '管理', icon: <DownloadOutlined /> },
 ]
 
@@ -75,7 +75,7 @@ function getVideoUrl(template: PublicTemplatePreview | null) {
 
 export default function Landing() {
   const navigate = useNavigate()
-  const { token } = useAuthStore()
+  const { token, user } = useAuthStore()
   const [templates, setTemplates] = useState<PublicTemplatePreview[]>([])
   const [templatesLoading, setTemplatesLoading] = useState(true)
   const [previewTemplate, setPreviewTemplate] = useState<PublicTemplatePreview | null>(null)
@@ -133,6 +133,11 @@ export default function Landing() {
     }
     return groups
   }, [templates])
+
+  const visibleWorkflowCards = useMemo(
+    () => workflowCards.filter(item => !item.adminOnly || user?.is_admin),
+    [user?.is_admin],
+  )
 
   const tabs = [
     { key: 'all', label: `全部模板 ${groupedTemplates.all.length}`, items: groupedTemplates.all },
@@ -235,7 +240,7 @@ export default function Landing() {
             <p>把平台能力按制作任务重新组织：先选工作流，再进入对应制作页，原有模块逻辑保持不变。</p>
           </div>
           <div className="workflow-entry-grid">
-            {workflowCards.map(item => (
+            {visibleWorkflowCards.map(item => (
               <button className="workflow-entry-card" key={item.path} type="button" onClick={() => openWorkflow(item.path)}>
                 <span className="workflow-entry-icon">{item.icon}</span>
                 <span className="workflow-entry-copy">

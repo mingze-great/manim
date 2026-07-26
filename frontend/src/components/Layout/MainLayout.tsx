@@ -49,6 +49,7 @@ export default function MainLayout() {
     .filter((item) => {
       if (!item || !('key' in item)) return true
       if (item.key === '/partner') return user?.role === 'partner' && !user?.is_admin
+      if (item.key === '/ai-video/dashboard' || item.key === '/knowledge-ip') return !!user?.is_admin
       return true
     })
     .map((item) => {

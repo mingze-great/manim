@@ -125,15 +125,24 @@ export default function PlatformAssistantWidget() {
 
   return (
     <>
-      <Button
-        type="primary"
-        size="large"
-        icon={<RobotOutlined />}
-        className="platform-assistant-fab"
+      <button
+        type="button"
+        aria-label="打开 AI 助手"
+        className={`platform-assistant-fab ${open ? 'is-open' : ''}`}
         onClick={() => setOpen(true)}
       >
-        AI助手
-      </Button>
+        <span className="assistant-person" aria-hidden="true">
+          <span className="assistant-head">
+            <span className="assistant-hair" />
+            <span className="assistant-eye left" />
+            <span className="assistant-eye right" />
+            <span className="assistant-smile" />
+          </span>
+          <span className="assistant-body" />
+          <span className="assistant-hand" />
+        </span>
+        <span className="assistant-fab-label">AI助手</span>
+      </button>
 
       <Drawer
         title={

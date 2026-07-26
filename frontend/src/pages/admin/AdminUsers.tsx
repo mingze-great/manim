@@ -1,16 +1,17 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
-  Table, Card, Input, Button, Space, Tag, Popconfirm,
+  Table, Card, Input, Button, Space, Tag,
   Modal, Descriptions, message, Row, Col, Avatar, Badge, Radio, InputNumber, Statistic, Switch, Select
 } from 'antd'
 import {
-  ReloadOutlined, DeleteOutlined, SearchOutlined,
-  LockOutlined, UnlockOutlined, EyeOutlined, UserOutlined,
+  ReloadOutlined, SearchOutlined,
+  EyeOutlined, UserOutlined,
   ProjectOutlined, CheckCircleOutlined, CloseCircleOutlined,
-  EditOutlined, ClockCircleOutlined, TeamOutlined, CrownOutlined, HourglassOutlined, SettingOutlined
+  EditOutlined, TeamOutlined, CrownOutlined, HourglassOutlined
 } from '@ant-design/icons'
 import { adminApi, User, UserStats } from '../../services/admin'
 import { useIsMobile } from '@/hooks/useIsMobile'
+import { useNavigate } from 'react-router-dom'
 
 const formatDateTime = (dateStr: string | null | undefined, showTime: boolean = true) => {
     if (!dateStr) return '-'
@@ -33,6 +34,7 @@ const formatDateTime = (dateStr: string | null | undefined, showTime: boolean = 
 
 export default function AdminUsers() {
   const isMobile = useIsMobile()
+  const navigate = useNavigate()
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(false)
   const [searchText, setSearchText] = useState('')
@@ -308,61 +310,9 @@ export default function AdminUsers() {
 
   const renderUserActions = (record: User, compact = false) => (
     <Space wrap size={compact ? 4 : 8}>
-      {!record.is_approved && (
-        <>
-          <Button
-            type="primary"
-            size="small"
-            icon={<CheckCircleOutlined />}
-            onClick={() => handleApproveUser(record)}
-          >
-            通过
-          </Button>
-          <Button
-            danger
-            size="small"
-            icon={<CloseCircleOutlined />}
-            onClick={() => handleRejectUser(record.id)}
-          >
-            拒绝
-          </Button>
-        </>
-      )}
-      {record.is_approved && (
-        <Button size="small" icon={<ClockCircleOutlined />} onClick={() => handleExtendUser(record)}>
-          时长
-        </Button>
-      )}
-      {record.is_approved && !record.is_admin && (
-        <Button size="small" icon={<SettingOutlined />} onClick={() => handleVideoLimitUser(record)}>
-          配额
-        </Button>
-      )}
-      <Button size="small" icon={<SettingOutlined />} onClick={() => openPermissionModal(record)}>
-        权限
+      <Button type="primary" ghost size="small" icon={<EyeOutlined />} onClick={() => navigate(`/admin/users/${record.id}`)}>
+        用户详情
       </Button>
-      <Button type="primary" ghost size="small" icon={<EyeOutlined />} onClick={() => handleViewUser(record)}>
-        详情
-      </Button>
-      <Button
-        size="small"
-        type={record.is_active ? 'default' : 'primary'}
-        icon={record.is_active ? <LockOutlined /> : <UnlockOutlined />}
-        onClick={() => handleToggleActive(record.id)}
-      >
-        {record.is_active ? '禁用' : '启用'}
-      </Button>
-      <Popconfirm
-        title="确定删除此用户？"
-        description="删除后无法恢复"
-        onConfirm={() => handleDeleteUser(record.id)}
-        okText="确定"
-        cancelText="取消"
-      >
-        <Button type="text" danger size="small" icon={<DeleteOutlined />}>
-          删除
-        </Button>
-      </Popconfirm>
     </Space>
   )
 
@@ -470,6 +420,15 @@ export default function AdminUsers() {
     return { total, active, pending, admins }
   }, [users])
 
+  void handleToggleActive
+  void handleDeleteUser
+  void handleApproveUser
+  void handleRejectUser
+  void handleExtendUser
+  void handleViewUser
+  void handleVideoLimitUser
+  void openPermissionModal
+
   const columns = [
     {
       title: '用户',
@@ -542,7 +501,7 @@ export default function AdminUsers() {
     {
       title: '操作',
       key: 'action',
-      width: 260,
+      width: 120,
       render: (_: any, record: User) => renderUserActions(record),
     },
   ]

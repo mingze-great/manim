@@ -92,6 +92,13 @@ class PartnerCreateRequest(BaseModel):
     commission_rate_bps: int = 3000
 
 
+class UserPartnerProfileUpdate(BaseModel):
+    enabled: bool
+    display_name: Optional[str] = None
+    commission_rate_bps: Optional[int] = None
+    status: Optional[str] = None
+
+
 class InviteCodeCreateRequest(BaseModel):
     partner_id: Optional[int] = None
     plan_key: str = "basic"
@@ -167,6 +174,27 @@ def _normalize_visual_limit(limit: int):
     return normalized
 def _count_admin_users(users: list[User]) -> int:
     return sum(1 for user in users if bool(user.is_admin))
+
+
+def _partner_profile_payload(db: Session, user: User) -> dict:
+    partner = db.query(PartnerProfile).filter(PartnerProfile.user_id == user.id).first()
+    if not partner:
+        return {"enabled": False, "user_id": user.id}
+    referral = db.query(ReferralCode).filter(
+        ReferralCode.partner_id == partner.id,
+        ReferralCode.status == "active",
+    ).order_by(ReferralCode.created_at.desc()).first()
+    return {
+        "enabled": partner.status == "active" and user.role == "partner",
+        "id": partner.id,
+        "user_id": user.id,
+        "display_name": partner.display_name,
+        "commission_rate_bps": partner.commission_rate_bps,
+        "status": partner.status,
+        "referral_code": referral.code if referral else None,
+        "created_at": partner.created_at.isoformat() if partner.created_at else None,
+        "updated_at": partner.updated_at.isoformat() if partner.updated_at else None,
+    }
 
 
 @router.get("/partners")
@@ -849,8 +877,69 @@ async def get_user_detail(
         "current_status": current_status,
         "recent_projects": recent_projects,
         "recent_articles": recent_articles,
-        "latest_task": latest_task
+        "latest_task": latest_task,
+        "partner_profile": _partner_profile_payload(db, user),
     }
+
+
+@router.get("/users/{user_id}/partner-profile")
+async def get_user_partner_profile(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    return _partner_profile_payload(db, user)
+
+
+@router.put("/users/{user_id}/partner-profile")
+async def update_user_partner_profile(
+    user_id: int,
+    payload: UserPartnerProfileUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    if user.is_admin:
+        raise HTTPException(status_code=400, detail="管理员账号不能设置为合作者")
+
+    partner = db.query(PartnerProfile).filter(PartnerProfile.user_id == user.id).first()
+    if payload.enabled:
+        status = str(payload.status or "active").strip() or "active"
+        if status not in {"active", "inactive"}:
+            raise HTTPException(status_code=400, detail="合作者状态只能是 active 或 inactive")
+        if not partner:
+            partner = PartnerProfile(
+                user_id=user.id,
+                display_name=(payload.display_name or user.username).strip() or user.username,
+                commission_rate_bps=int(payload.commission_rate_bps if payload.commission_rate_bps is not None else 3000),
+                status=status,
+            )
+            db.add(partner)
+            db.flush()
+        else:
+            if payload.display_name is not None:
+                partner.display_name = payload.display_name.strip() or user.username
+            if payload.commission_rate_bps is not None:
+                partner.commission_rate_bps = int(payload.commission_rate_bps)
+            partner.status = status
+        if partner.commission_rate_bps < 0 or partner.commission_rate_bps > 10000:
+            raise HTTPException(status_code=400, detail="佣金比例需在 0 到 10000 基点之间")
+        user.role = "partner" if status == "active" else "user"
+        user.is_approved = True
+        ensure_referral_code(db, partner)
+    else:
+        if partner:
+            partner.status = "inactive"
+        user.role = "user"
+
+    db.commit()
+    db.refresh(user)
+    return _partner_profile_payload(db, user)
 
 
 @router.put("/users/{user_id}")

@@ -11,6 +11,16 @@ const api = axios.create({
 
 api.interceptors.request.use((config) => {
   const token = useAuthStore.getState().token
+  if (typeof FormData !== 'undefined' && config.data instanceof FormData && config.headers) {
+    const headers: any = config.headers
+    if (typeof headers.delete === 'function') {
+      headers.delete('Content-Type')
+      headers.delete('content-type')
+    } else {
+      delete headers['Content-Type']
+      delete headers['content-type']
+    }
+  }
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
@@ -49,6 +59,7 @@ export interface User {
   recent_articles?: Array<{ id: number; title: string; status_text: string; created_at: string }>
   recent_projects?: Array<{ id: number; title: string; status_text: string; created_at: string }>
   latest_task?: { project_title: string; status: string; error_message?: string | null; log?: string | null; created_at?: string | null } | null
+  partner_profile?: UserPartnerProfile | null
 }
 
 export interface UserStats {
@@ -129,6 +140,18 @@ export interface AdminPartner {
   status: string
   referral_code?: string
   created_at?: string | null
+}
+
+export interface UserPartnerProfile {
+  enabled: boolean
+  id?: number
+  user_id: number
+  display_name?: string
+  commission_rate_bps?: number
+  status?: string
+  referral_code?: string | null
+  created_at?: string | null
+  updated_at?: string | null
 }
 
 export interface AdminReferral {
@@ -236,7 +259,7 @@ export const adminApi = {
     }),
 
   resetPassword: (userId: number, newPassword: string) =>
-    api.post(`/admin/users/${userId}/reset-password`, { password: newPassword }),
+    api.post(`/admin/users/${userId}/reset-password`, null, { params: { password: newPassword } }),
 
   approveUser: (userId: number) =>
     api.post<{ message: string }>(`/admin/users/${userId}/approve`),
@@ -283,6 +306,16 @@ export const adminApi = {
 
   createPartner: (data: { user_id: number; display_name: string; commission_rate_bps: number }) =>
     api.post<AdminPartner>('/admin/partners', data),
+
+  getUserPartnerProfile: (userId: number) =>
+    api.get<UserPartnerProfile>(`/admin/users/${userId}/partner-profile`),
+
+  updateUserPartnerProfile: (userId: number, data: {
+    enabled: boolean
+    display_name?: string
+    commission_rate_bps?: number
+    status?: string
+  }) => api.put<UserPartnerProfile>(`/admin/users/${userId}/partner-profile`, data),
 
   getReferrals: (partnerId?: number) =>
     api.get<AdminReferral[]>('/admin/referrals', { params: partnerId ? { partner_id: partnerId } : undefined }),

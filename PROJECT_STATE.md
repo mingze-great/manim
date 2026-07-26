@@ -394,3 +394,27 @@
 - 浏览器控制台验证：最终 Playwright 复验 `badResponses=[]`，`meaningfulConsoleErrors=[]`；截图保存到 `C:\Users\Administrator\Documents\Codex\2026-07-18\300\outputs\3004_admin_fix_ui_final_clean.png`。
 - 注意：验证用 `codex_probe_generated_*` 素材库已清理；保留原 `codex_verify_library_bom` 测试库。
 - GitHub 同步：`git push origin codex/3004-partner-stickman-platform-20260724` 执行 180 秒后超时，不能确认 GitHub 远程分支已更新；当前可复现锚点以本地 worktree 与 3004 `.deployed-ref` 为准。
+
+# 2026-07-26 3004 用户详情、AI 助手动效、素材库 422 与模块可见性优化编码前记录
+
+- 当前任务：只在 3004 分支和部署目录实施后台用户详情页、AI 助手卡通动效、素材库 FormData 422 修复、AI 视频导演/知识 IP admin-only 可见性；不修改、不部署、不重启 3003。
+- 本地工作区：`C:\Users\Administrator\Documents\Codex\2026-07-18\300\work\3004-partner-stickman-worktree`。
+- 本地分支：`codex/3004-partner-stickman-platform-20260724`。
+- 编码前本地 HEAD：`e7b75f78798649ffd0bda5f96896d9e6926fedc2`。
+- 编码前工作树：`git status --short` 为空。
+- 3004 部署目录：`/opt/manim-v2-3004-snapshot`。
+- 3004 编码前部署锚点：`.deployed-ref` 记录 `commit=7e2b486aab7d6a9666247ae27e3e6332e9628f8d`，`deployed_at=2026-07-26T01:23:00+08:00`，`project_state_commit=e7b75f78798649ffd0bda5f96896d9e6926fedc2`。
+- 编码前 3004 健康：`http://127.0.0.1:8004/health` 返回 healthy；`manim-v2-3004-backend.service` active；根分区约 3.8G 可用。
+- 下一步：先补后端合作者详情/设置接口测试，再实现接口；随后改 admin 用户列表和详情页、修复 `admin.ts` FormData header、改 AI 助手入口和 admin-only 路由；本地验证后备份 3004 DB/代码并部署 3004。
+
+## 2026-07-26 3004 用户详情、AI 助手动效、素材库 422 与模块可见性优化本地验证记录
+
+- 当前分支：`codex/3004-partner-stickman-platform-20260724`。
+- 本地验证前 HEAD：`e7b75f78798649ffd0bda5f96896d9e6926fedc2`。
+- 已完成本地改动：`/admin/users` 每行只保留“用户详情”；新增 `/admin/users/:id` 集中管理审核、启停、有效期、密码、前端版本、模块权限、配额、最近任务和合作者设置；新增 admin 用户详情页启用/停用合作者 API；`admin.ts` 对 FormData 上传删除 JSON Content-Type，避免素材库 zip 上传 422；AI 助手入口改为卡通人浮动动效；首页、主菜单和路由均限制 AI 视频导演与知识 IP 仅 admin 可见可进。
+- 本地测试：`PYTHONPATH=backend pytest backend/tests/test_admin_user_partner_profile.py backend/tests/test_stickman_workflow_upload_persistence.py -q` -> `6 passed`。
+- 本地编译：`python -m py_compile backend/app/api/admin.py backend/app/services/stickman_workflow_assets.py` -> 通过。
+- 前端构建：`npm run build` in `frontend` -> 通过，仅有既有 Vite chunk size warning。
+- 差异检查：`git diff --check` -> 通过，仅提示 `PROJECT_STATE.md` CRLF 将转 LF。
+- 待部署边界：只部署到 `/opt/manim-v2-3004-snapshot`；只允许重启 3004 backend 和更新 3004 前端静态构建；不修改、不重启 3003。
+- 部署前下一步：提交本地改动；备份 3004 SQLite 与代码快照；同步并部署 3004；平台验证用户详情设置合作者、素材库覆盖上传 `codex_verify_library_bom` 不再 422、普通用户看不到/进不去 admin-only 模块、AI 助手卡通入口可见可用。

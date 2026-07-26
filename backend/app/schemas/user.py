@@ -169,6 +169,7 @@ class UserDetail(BaseModel):
     recent_projects: list[RecentProject] = []
     recent_articles: list[RecentProject] = []
     latest_task: Optional[TaskLog] = None
+    partner_profile: Optional[Dict[str, Any]] = None
 
 
 class TokenUsageItem(BaseModel):
