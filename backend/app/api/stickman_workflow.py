@@ -228,7 +228,8 @@ def create_stickman_job(
     permission = _stickman_permission_for_user(current_user)
     try:
         resolved_seconds = validate_script_duration_request(custom_script, payload.targetSeconds, max_seconds)
-        image_mode = validate_image_mode(payload.imageMode, bool(entitlement.get("can_use_ai_images")))
+        entitlement_image_mode = str(entitlement.get("material_mode") or "material_only").strip()
+        image_mode = validate_image_mode(entitlement_image_mode, bool(entitlement.get("can_use_ai_images")))
         _ensure_stickman_account_allowed(current_user, permission)
         validate_stickman_quota(permission, resolved_seconds or payload.targetSeconds or 60)
     except ValueError as exc:

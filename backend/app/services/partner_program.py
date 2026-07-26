@@ -12,6 +12,7 @@ from app.models.partner import CommissionLedger, InviteCode, PartnerProfile, Ref
 from app.models.subscription import Order, SUBSCRIPTION_PLANS, Subscription
 from app.models.user import User
 from app.models.user_module_permission import UserModulePermission
+from app.services.stickman_workflow_plans import find_stickman_workflow_plan, permission_from_plan
 
 
 def normalize_invite_code(code: str) -> str:
@@ -117,7 +118,7 @@ def stickman_entitlement_from_user(user: User) -> dict:
     return {
         "material_mode": material_mode,
         "can_use_ai_images": material_mode in {"ai_image", "hybrid"},
-        "max_video_seconds": max(15, min(300, max_video_seconds)),
+        "max_video_seconds": max(15, min(1800, max_video_seconds)),
         "allowed_libraries": [str(item).strip() for item in allowed_libraries if str(item).strip()],
     }
 
@@ -151,14 +152,15 @@ def apply_invite_code_to_user(db: Session, user: User, raw_code: str) -> InviteC
         referral = db.query(ReferralCode).filter(ReferralCode.partner_id == invite.partner_id, ReferralCode.status == "active").first()
         user.referral_code = referral.code if referral else None
 
+    plan_permission = permission_from_plan(find_stickman_workflow_plan(db, invite.plan_key) or {})
     upsert_module_permission(
         db,
         user,
         "stickman_v2",
         enabled=True,
         quota_limit=invite.quota_limit,
-        period=invite.quota_period,
-        expires_at=expires_at,
+        period=plan_permission.get("period") or invite.quota_period,
+        expires_at=None if plan_permission.get("unlimited_time") else expires_at,
     )
     allowed_libraries: list[str] = []
     if invite.allowed_libraries_json:
@@ -172,7 +174,9 @@ def apply_invite_code_to_user(db: Session, user: User, raw_code: str) -> InviteC
         user,
         "stickman_v2",
         {
+            **plan_permission,
             "material_mode": invite.material_mode or "material_only",
+            "daily_limit": invite.quota_limit,
             "max_video_seconds": int(invite.max_video_seconds or 60),
             "allowed_libraries": allowed_libraries,
         },
@@ -189,10 +193,10 @@ def apply_invite_code_to_user(db: Session, user: User, raw_code: str) -> InviteC
             partner_id=invite.partner_id,
             user_id=user.id,
             invite_code_id=invite.id,
-            amount=0,
-            commission_rate_bps=0,
-            commission_amount=0,
-            status="tracked",
+            amount=int(invite.amount or 0),
+            commission_rate_bps=int(invite.commission_rate_bps or 0),
+            commission_amount=int(invite.commission_amount or 0),
+            status="pending",
             source="invite_code",
             notes=f"兑换码开通套餐 {invite.plan_key}",
         ))

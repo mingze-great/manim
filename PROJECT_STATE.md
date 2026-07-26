@@ -449,3 +449,16 @@
 - ?????`PYTHONPATH=backend pytest backend/tests/test_stickman_workflow_upload_persistence.py backend/tests/test_stickman_workflow_limits.py -q` -> `15 passed`?`PYTHONPATH=backend pytest backend/tests/test_partner_program_service.py backend/tests/test_admin_user_partner_profile.py -q` -> `5 passed`?`python -m py_compile backend/app/services/stickman_workflow_assets.py backend/app/services/stickman_workflow_limits.py backend/app/api/stickman_workflow.py backend/app/api/admin.py` -> ???`npm run build` in `frontend` -> ?????? Vite chunk size warning?`git diff --check` -> ???? CRLF/LF ???
 - ??????????????? 3004 SQLite ????????? `/opt/manim-v2-3004-snapshot`???? 3004 backend ? reload nginx???? 3003??? 3004 ?????????? reset???????????????????????admin ???????????????
 - ????????? `/admin/stickman-v2/scene-style-libraries` ???? `/stickman-workflow` ??????????????????????? 3003?
+# 项目状态
+
+## 2026-07-26 3004 套餐、合作者发码、图片模式透明化与自定义文案完整性部署前记录
+
+- 当前任务：只在 3004 分支 `codex/3004-partner-stickman-platform-20260724` 上继续完成火柴人套餐配置、合作者按套餐生成兑换码、金额佣金计算、用户端隐藏底层图片模式、自定义文案完整生成；不触碰 3003。
+- 本地工作区：`C:\Users\Administrator\Documents\Codex\2026-07-18\300\work\3004-partner-stickman-worktree`。
+- 部署目标：`/opt/manim-v2-3004-snapshot`，平台 URL `http://152.136.218.74:3004`。
+- 编码前 HEAD：`d1b0121c07227b21455961e43f107c4e8a4e0ba2`，提交时间 `2026-07-26T13:41:50+08:00`，提交信息 `feat: add stickman quota plans and robust library upload`。
+- 已完成本地改动：新增后台火柴人套餐配置；admin/partner 可按套餐生成兑换码并填写金额；佣金按金额乘合作者比例计算；用户兑换后写入素材/实时生图模式、素材库范围、每日/每月分钟限制、总视频次数和单条上限；用户端隐藏底层图片模式，仅显示场景图风格；自定义文案按最多 3 句一组扩展分镜，避免只生成前 12 秒。
+- 最近修改文件：`backend/app/services/stickman_workflow_plans.py`、`backend/app/api/admin.py`、`backend/app/api/partner.py`、`backend/app/api/stickman_workflow.py`、`backend/app/services/partner_program.py`、`backend/app/services/ai_video.py`、`backend/app/models/partner.py`、`backend/app/main.py`、`frontend/src/pages/admin/AdminPartners.tsx`、`frontend/src/pages/PartnerDashboard.tsx`、`frontend/src/pages/StickmanWorkflow/index.tsx`、`frontend/src/services/admin.ts`、`frontend/src/services/partner.ts`、`backend/tests/test_stickman_workflow_plans.py`、`backend/tests/test_ai_video_user_script_completion.py`、`backend/tests/test_ai_video_sc1_material_urls.py`、`backend/tests/test_partner_program_service.py`。
+- 本地验证：`python -m py_compile backend/app/services/stickman_workflow_plans.py backend/app/api/admin.py backend/app/api/partner.py backend/app/api/stickman_workflow.py backend/app/services/partner_program.py backend/app/services/ai_video.py backend/app/main.py` 通过；`PYTHONPATH=backend pytest backend/tests/test_ai_video_sc1_material_urls.py backend/tests/test_ai_video_user_script_completion.py backend/tests/test_stickman_workflow_plans.py backend/tests/test_partner_program_service.py backend/tests/test_stickman_workflow_limits.py backend/tests/test_stickman_workflow_upload_persistence.py backend/tests/test_admin_user_partner_profile.py -q` -> `42 passed`；`npm run build` in `frontend` 通过，仅有既有 Vite chunk size warning；`git diff --check` 通过，仅有 CRLF/LF 换行提示。
+- 下一步：提交本地改动；部署前备份 3004 SQLite 和代码快照；同步到 `/opt/manim-v2-3004-snapshot`，构建前端，只重启 3004 backend/worker，必要时 reload nginx，不动 3003；平台验证 admin 套餐保存、合作者按套餐发码、佣金金额、用户兑换权限、用户端隐藏图片模式、长自定义文案生成完整成片。
+- 不要重复做：不要回滚或重启 3003；不要把底层实时生图模式暴露给普通用户；不要只用本地脚本替代 3004 平台闭环。

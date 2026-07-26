@@ -1,5 +1,6 @@
 ﻿import json
 import hashlib
+import math
 import os
 import re
 import shutil
@@ -710,6 +711,8 @@ class AiVideoService:
         requested_count = int(payload.get("sceneCount") or 0)
         scene_count = requested_count if requested_count else self._infer_scene_count(payload, template)
         chunks = self._split_script(script, scene_count, content_type, allow_prompt_expansion=script_source != "user")
+        if script_source == "user" and len(chunks) > scene_count:
+            scene_count = len(chunks)
         scene_types = template["sceneTypes"]
         steps = template["steps"]
         scenes: list[dict[str, Any]] = []
@@ -2561,6 +2564,16 @@ class AiVideoService:
         if allow_prompt_expansion and self._looks_like_generation_request(normalized) and "文案：" not in normalized and "旁白：" not in normalized and len(parts) < scene_count:
             return self._expand_prompt_to_scene_texts(normalized, content_type, scene_count)
         if len(parts) >= scene_count:
+            if not allow_prompt_expansion:
+                grouped: list[str] = []
+                cursor = 0
+                while cursor < len(parts):
+                    remaining_parts = len(parts) - cursor
+                    remaining_slots = max(scene_count - len(grouped), 1)
+                    group_size = min(3, max(1, math.ceil(remaining_parts / remaining_slots)))
+                    grouped.append("".join(parts[cursor : cursor + group_size]))
+                    cursor += group_size
+                return grouped
             return parts[:scene_count]
         if len(parts) == 1 and len(parts[0]) > 42:
             text = parts[0]

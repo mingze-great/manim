@@ -41,7 +41,6 @@ export default function StickmanWorkflow() {
   const [scriptMode, setScriptMode] = useState<'ai' | 'custom'>('ai')
   const [customScript, setCustomScript] = useState('')
   const [targetSeconds, setTargetSeconds] = useState<number | undefined>(undefined)
-  const [imageMode, setImageMode] = useState<'material_only' | 'ai_image' | 'hybrid'>('material_only')
   const [backgroundMode, setBackgroundMode] = useState('default')
   const [backgroundTemplate, setBackgroundTemplate] = useState('default')
   const [uploadedBackgroundUrl, setUploadedBackgroundUrl] = useState('')
@@ -64,7 +63,6 @@ export default function StickmanWorkflow() {
         setConfig(data)
         setVoiceId(data.defaults.voiceId || 'dayun_manbo')
         setMaterialLibrary(data.defaults.materialLibrary || 'sc1_outputs')
-        setImageMode(data.capabilities.canUseAiImages ? (data.defaults.imageMode || 'material_only') as 'material_only' | 'ai_image' | 'hybrid' : 'material_only')
         setBackgroundTemplate(data.backgroundTemplates?.[0]?.key || 'default')
       })
       .catch(() => message.error('加载火柴人配置失败'))
@@ -138,7 +136,6 @@ export default function StickmanWorkflow() {
         scriptMode,
         customScript: scriptMode === 'custom' ? cleanScript : undefined,
         targetSeconds: scriptMode === 'ai' ? targetSeconds : undefined,
-        imageMode,
         backgroundMode,
         backgroundTemplate: backgroundMode === 'template' ? backgroundTemplate : undefined,
         uploadedBackgroundUrl: backgroundMode === 'upload' ? uploadedBackgroundUrl : undefined,
@@ -184,14 +181,6 @@ export default function StickmanWorkflow() {
     label: item.description ? `${item.name} · ${item.description}` : item.name,
     value: item.key,
   }))
-  const imageModeOptions = [
-    { label: '风格匹配', value: 'material_only' },
-    ...(config?.capabilities.canUseAiImages ? [
-      { label: '实时生图', value: 'ai_image' },
-      { label: '混合补图', value: 'hybrid' },
-    ] : []),
-  ]
-
   return (
     <div className="stickman-workflow-page">
       <div className="stickman-workflow-header">
@@ -278,11 +267,6 @@ export default function StickmanWorkflow() {
                       />
                     </label>
                   )}
-
-                  <label className="workflow-field">
-                    <span>画面模式</span>
-                    <Select value={imageMode} onChange={setImageMode} options={imageModeOptions} />
-                  </label>
 
                   <label className="workflow-field">
                     <span>背景模式</span>

@@ -183,7 +183,27 @@ export interface AdminInviteCode {
   plan_key: string
   material_mode: string
   allowed_libraries?: string[]
+  amount?: number
+  commission_rate_bps?: number
+  commission_amount?: number
   status: string
+}
+
+export interface StickmanWorkflowPlan {
+  key: string
+  name: string
+  description?: string
+  quota_mode: 'period' | 'count_package'
+  daily_limit: number
+  daily_minutes_limit?: number
+  monthly_minutes_limit?: number
+  total_video_limit?: number
+  max_video_seconds: number
+  material_mode: 'material_only' | 'ai_image' | 'hybrid'
+  allowed_libraries?: string[]
+  amount: number
+  is_active?: boolean
+  sort_order?: number
 }
 
 export interface StickmanWorkflowMaterialLibrary {
@@ -332,7 +352,14 @@ export const adminApi = {
     max_video_seconds: number
     max_uses: number
     allowed_libraries?: string[]
+    amount?: number
   }) => api.post<AdminInviteCode>('/admin/invite-codes', data),
+
+  getStickmanWorkflowPlans: () =>
+    api.get<{ plans: StickmanWorkflowPlan[] }>('/admin/stickman-workflow/plans'),
+
+  saveStickmanWorkflowPlans: (plans: StickmanWorkflowPlan[]) =>
+    api.post<{ plans: StickmanWorkflowPlan[] }>('/admin/stickman-workflow/plans', { plans }),
 
   getStickmanWorkflowMaterialLibraries: () =>
     api.get<{ libraries: StickmanWorkflowMaterialLibrary[] }>('/admin/stickman-workflow/material-libraries'),

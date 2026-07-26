@@ -34,6 +34,12 @@ from app.services.stickman_workflow_assets import (
     save_material_library_package,
     material_library_asset_root,
 )
+from app.services.partner_program import estimate_commission_amount
+from app.services.stickman_workflow_plans import (
+    find_stickman_workflow_plan,
+    list_stickman_workflow_plans,
+    save_stickman_workflow_plans,
+)
 from app.tasks.celery_tasks import generate_material_library_celery
 import psutil
 from app.services.stickman_v2_assets import (
@@ -102,12 +108,21 @@ class UserPartnerProfileUpdate(BaseModel):
 class InviteCodeCreateRequest(BaseModel):
     partner_id: Optional[int] = None
     plan_key: str = "basic"
-    material_mode: str = "material_only"
-    quota_limit: int = 30
+    material_mode: Optional[str] = None
+    quota_limit: Optional[int] = None
     quota_period: str = "daily"
-    max_video_seconds: int = 60
+    max_video_seconds: Optional[int] = None
     max_uses: int = 1
     allowed_libraries: List[str] = []
+    amount: int = 0
+    quota_mode: Optional[str] = None
+    daily_minutes_limit: Optional[int] = None
+    monthly_minutes_limit: Optional[int] = None
+    total_video_limit: Optional[int] = None
+
+
+class StickmanWorkflowPlanSaveRequest(BaseModel):
+    plans: List[dict]
 
 
 def _normalize_module_permissions(payload: dict, user: User) -> dict:
@@ -328,10 +343,20 @@ async def create_invite_code(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
 ):
+    plan = find_stickman_workflow_plan(db, payload.plan_key) or {}
     if payload.partner_id:
         partner = db.query(PartnerProfile).filter(PartnerProfile.id == payload.partner_id).first()
         if not partner:
             raise HTTPException(status_code=404, detail="合作者不存在")
+        commission_rate_bps = int(partner.commission_rate_bps or 0)
+    else:
+        commission_rate_bps = 0
+    amount = int(payload.amount or plan.get("amount") or 0)
+    commission_amount = estimate_commission_amount(amount, commission_rate_bps)
+    material_mode = payload.material_mode or plan.get("material_mode") or "material_only"
+    quota_limit = int(payload.quota_limit if payload.quota_limit is not None else (plan.get("daily_limit") or plan.get("total_video_limit") or 0))
+    max_video_seconds = int(payload.max_video_seconds or plan.get("max_video_seconds") or 60)
+    allowed_libraries = payload.allowed_libraries or plan.get("allowed_libraries") or []
     code = generate_invite_code("SC1")
     while db.query(InviteCode).filter(InviteCode.code == code).first():
         code = generate_invite_code("SC1")
@@ -339,14 +364,17 @@ async def create_invite_code(
         code=code,
         partner_id=payload.partner_id,
         plan_key=payload.plan_key,
-        material_mode=payload.material_mode,
-        quota_limit=payload.quota_limit,
+        material_mode=material_mode,
+        quota_limit=quota_limit,
         quota_period=payload.quota_period,
-        max_video_seconds=payload.max_video_seconds,
+        max_video_seconds=max_video_seconds,
         allowed_libraries_json=json.dumps(
-            [str(item).strip() for item in payload.allowed_libraries if str(item).strip()],
+            [str(item).strip() for item in allowed_libraries if str(item).strip()],
             ensure_ascii=False,
-        ) if payload.allowed_libraries else None,
+        ) if allowed_libraries else None,
+        amount=amount,
+        commission_rate_bps=commission_rate_bps,
+        commission_amount=commission_amount,
         max_uses=payload.max_uses,
         created_by_user_id=current_user.id,
     )
@@ -355,7 +383,7 @@ async def create_invite_code(
     db.refresh(invite)
     notify_admin_event(
         "后台生成兑换码",
-        f"管理员 {current_user.username} 生成兑换码 {invite.code}，绑定合作者 {invite.partner_id or '无'}，套餐 {invite.plan_key}。",
+        f"管理员 {current_user.username} 生成兑换码 {invite.code}，绑定合作者 {invite.partner_id or '无'}，套餐 {invite.plan_key}，金额 {invite.amount / 100:.2f} 元，预计佣金 {invite.commission_amount / 100:.2f} 元。",
     )
     return {
         "id": invite.id,
@@ -364,8 +392,28 @@ async def create_invite_code(
         "plan_key": invite.plan_key,
         "material_mode": invite.material_mode,
         "allowed_libraries": json.loads(invite.allowed_libraries_json or "[]"),
+        "amount": invite.amount,
+        "commission_rate_bps": invite.commission_rate_bps,
+        "commission_amount": invite.commission_amount,
         "status": invite.status,
     }
+
+
+@router.get("/stickman-workflow/plans")
+async def get_stickman_workflow_plans(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    return {"plans": list_stickman_workflow_plans(db)}
+
+
+@router.post("/stickman-workflow/plans")
+async def set_stickman_workflow_plans(
+    payload: StickmanWorkflowPlanSaveRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    return {"plans": save_stickman_workflow_plans(db, payload.plans)}
 
 
 @router.get("/stickman-workflow/material-libraries")

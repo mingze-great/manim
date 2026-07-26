@@ -203,6 +203,22 @@ async def lifespan(app: FastAPI):
             conn.commit()
             print("Added commission_status column to orders")
 
+        result = conn.execute(text("PRAGMA table_info(invite_codes)"))
+        invite_columns = [row[1] for row in result.fetchall()] if result is not None else []
+        if invite_columns:
+            if 'amount' not in invite_columns:
+                conn.execute(text("ALTER TABLE invite_codes ADD COLUMN amount INTEGER DEFAULT 0"))
+                conn.commit()
+                print("Added amount column to invite_codes")
+            if 'commission_rate_bps' not in invite_columns:
+                conn.execute(text("ALTER TABLE invite_codes ADD COLUMN commission_rate_bps INTEGER DEFAULT 0"))
+                conn.commit()
+                print("Added commission_rate_bps column to invite_codes")
+            if 'commission_amount' not in invite_columns:
+                conn.execute(text("ALTER TABLE invite_codes ADD COLUMN commission_amount INTEGER DEFAULT 0"))
+                conn.commit()
+                print("Added commission_amount column to invite_codes")
+
         if 'generation_mode' not in project_columns:
             conn.execute(text("ALTER TABLE projects ADD COLUMN generation_mode VARCHAR(20) DEFAULT 'one_click'"))
             conn.commit()

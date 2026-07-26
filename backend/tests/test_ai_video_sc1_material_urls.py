@@ -204,6 +204,24 @@ def test_ai_image_mode_generates_scene_asset(monkeypatch):
     assert asset["slot"] == "center"
 
 
+def test_user_script_split_preserves_all_sentences_when_scene_count_is_smaller():
+    service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
+    script = "第一句。第二句。第三句。第四句。第五句。第六句。"
+
+    chunks = service._split_script(
+        script,
+        scene_count=3,
+        content_type="knowledge_ip_stickman",
+        allow_prompt_expansion=False,
+    )
+
+    joined = "".join(chunks)
+    for sentence in ["第一句", "第二句", "第三句", "第四句", "第五句", "第六句"]:
+        assert sentence in joined
+    assert len(chunks) == 3
+    assert all(chunk.count("。") <= 3 for chunk in chunks)
+
+
 def test_dayun_manbo_tts_rate_limit_falls_back_to_dashscope_before_edge_or_local_cosyvoice(tmp_path, monkeypatch):
     service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
     service.render_audio_root = tmp_path / "render-audio"

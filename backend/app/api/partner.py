@@ -11,18 +11,20 @@ from app.models.partner import CommissionLedger, InviteCode, PartnerProfile
 from app.models.subscription import Order
 from app.models.user import User
 from app.services.notifications import notify_admin_event
-from app.services.partner_program import ensure_referral_code, generate_invite_code, get_partner_profile_for_user
+from app.services.partner_program import ensure_referral_code, estimate_commission_amount, generate_invite_code, get_partner_profile_for_user
+from app.services.stickman_workflow_plans import find_stickman_workflow_plan, list_stickman_workflow_plans
 
 router = APIRouter(prefix="/partner", tags=["partner"])
 
 
 class PartnerInviteCodeCreate(BaseModel):
     plan_key: str = "basic"
-    quota_limit: int = 30
+    quota_limit: int | None = None
     quota_period: str = "daily"
-    max_video_seconds: int = 60
+    max_video_seconds: int | None = None
     max_uses: int = 1
     allowed_libraries: list[str] = []
+    amount: int = 0
 
 
 def _require_partner_profile(db: Session, user: User) -> PartnerProfile:
@@ -110,6 +112,15 @@ def list_partner_commissions(
     ]
 
 
+@router.get("/stickman-plans")
+def list_partner_stickman_plans(
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_partner_user)],
+):
+    _require_partner_profile(db, current_user)
+    return {"plans": list_stickman_workflow_plans(db, active_only=True)}
+
+
 @router.post("/invite-codes")
 def create_partner_invite_code(
     payload: PartnerInviteCodeCreate,
@@ -117,7 +128,13 @@ def create_partner_invite_code(
     current_user: Annotated[User, Depends(get_current_partner_user)],
 ):
     profile = _require_partner_profile(db, current_user)
-    allowed_libraries = [str(item).strip() for item in payload.allowed_libraries if str(item).strip()] or ["sc1_outputs"]
+    plan = find_stickman_workflow_plan(db, payload.plan_key) or {}
+    allowed_libraries = [str(item).strip() for item in (payload.allowed_libraries or plan.get("allowed_libraries") or []) if str(item).strip()] or ["sc1_outputs"]
+    amount = int(payload.amount or plan.get("amount") or 0)
+    commission_amount = estimate_commission_amount(amount, profile.commission_rate_bps)
+    quota_limit = int(payload.quota_limit if payload.quota_limit is not None else (plan.get("daily_limit") or plan.get("total_video_limit") or 0))
+    max_video_seconds = int(payload.max_video_seconds if payload.max_video_seconds is not None else (plan.get("max_video_seconds") or 60))
+    material_mode = str(plan.get("material_mode") or "material_only")
     code = generate_invite_code("SC1")
     while db.query(InviteCode).filter(InviteCode.code == code).first():
         code = generate_invite_code("SC1")
@@ -125,11 +142,14 @@ def create_partner_invite_code(
         code=code,
         partner_id=profile.id,
         plan_key=payload.plan_key,
-        material_mode="material_only",
-        quota_limit=payload.quota_limit,
+        material_mode=material_mode,
+        quota_limit=quota_limit,
         quota_period=payload.quota_period,
-        max_video_seconds=payload.max_video_seconds,
+        max_video_seconds=max_video_seconds,
         allowed_libraries_json=json.dumps(allowed_libraries, ensure_ascii=False),
+        amount=amount,
+        commission_rate_bps=profile.commission_rate_bps,
+        commission_amount=commission_amount,
         max_uses=payload.max_uses,
         created_by_user_id=current_user.id,
     )
@@ -138,12 +158,15 @@ def create_partner_invite_code(
     db.refresh(invite)
     notify_admin_event(
         "合作者生成兑换码",
-        f"合作者 {profile.display_name} 生成兑换码 {invite.code}，套餐 {invite.plan_key}，每日额度 {invite.quota_limit}，视频时长 {invite.max_video_seconds} 秒。",
+        f"合作者 {profile.display_name} 生成兑换码 {invite.code}，套餐 {invite.plan_key}，金额 {invite.amount / 100:.2f} 元，预计佣金 {invite.commission_amount / 100:.2f} 元。",
     )
     return {
         "code": invite.code,
         "plan_key": invite.plan_key,
         "material_mode": invite.material_mode,
         "allowed_libraries": json.loads(invite.allowed_libraries_json or "[]"),
+        "amount": invite.amount,
+        "commission_rate_bps": invite.commission_rate_bps,
+        "commission_amount": invite.commission_amount,
         "status": invite.status,
     }
