@@ -173,6 +173,26 @@ def test_saved_default_library_does_not_clear_detected_default_preview(tmp_path,
     stickman_workflow_assets.get_settings.cache_clear()
 
 
+def test_default_library_manifest_falls_back_to_generated_json(tmp_path, monkeypatch):
+    base = tmp_path / "sc1"
+    base.mkdir()
+    image = base / "generated.png"
+    image.write_bytes(b"png")
+    manifest = base / "materials.generated.json"
+    manifest.write_text('[{"fileName":"generated.png"}]', encoding="utf-8")
+    monkeypatch.setenv("STICKMAN_MATERIAL_SOURCE_DIR", str(base))
+    monkeypatch.setenv("STICKMAN_MATERIAL_LIBRARY_PATH", str(base / "missing-material.json"))
+    stickman_workflow_assets.get_settings.cache_clear()
+    db = _session()
+
+    public = public_material_libraries(db)
+    default = next(item for item in public if item["key"] == "sc1_outputs")
+
+    assert default["material_json_path"] == str(manifest)
+    assert default["image_url"] == "/api/stickman-workflow/assets/material-libraries/sc1_outputs/generated.png"
+    stickman_workflow_assets.get_settings.cache_clear()
+
+
 def test_default_count_package_plans_match_partner_sales_prices():
     plans = default_stickman_workflow_plans()
     count_plans = [item for item in plans if item["quota_mode"] == "count_package"]

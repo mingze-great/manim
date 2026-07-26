@@ -545,3 +545,10 @@
 - 本次补充改动：`backend/app/services/stickman_workflow_assets.py` 合并素材库配置时保留默认库自动识别的 base/manifest/cover 字段；`backend/app/api/stickman_workflow.py` 声音试听接口增加 `backend/storage/voice-references` 候选路径；`backend/tests/test_stickman_workflow_upload_persistence.py` 增加默认库空 cover 不覆盖自动预览测试。
 - 本地验证：`PYTHONPATH=backend pytest backend/tests/test_stickman_workflow_upload_persistence.py backend/tests/test_stickman_workflow_limits.py -q` -> `23 passed`；`python -m py_compile backend/app/services/stickman_workflow_assets.py backend/app/api/stickman_workflow.py` 通过；`git diff --check` 通过，仅有 CRLF/LF 换行提示。
 - 下一步：提交并增量部署 3004，验证普通用户 config 中默认 SC1 和上传库都有预览 URL，声音试听接口返回音频。
+## 2026-07-27 3004 默认 SC1 manifest fallback 补充记录
+
+- 当前任务：继续只修 3004。平台验证发现默认 SC1 风格仍没有预览图。
+- 根因：远程默认库路径 `/opt/manim_assets/sc1-outputs/material.json` 不存在，真实索引文件是 `/opt/manim_assets/sc1-outputs/materials.generated.json`。
+- 本次补充改动：`backend/app/services/stickman_workflow_assets.py` 在配置的默认 manifest 不存在时按 `material.json`、`materials.generated.json`、`materials.json`、`materials.normalized.json` 顺序寻找可用索引；`backend/tests/test_stickman_workflow_upload_persistence.py` 增加 fallback 测试。
+- 本地验证：`PYTHONPATH=backend pytest backend/tests/test_stickman_workflow_upload_persistence.py -q` -> `10 passed`；`python -m py_compile backend/app/services/stickman_workflow_assets.py` 通过；`git diff --check` 通过，仅有 CRLF/LF 换行提示。
+- 下一步：提交并增量部署 3004，复验默认 SC1 和上传素材库均有用户端预览图，声音试听接口返回 200 音频。

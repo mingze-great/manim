@@ -54,9 +54,14 @@ def _default_sc1_base_path() -> str:
 def _default_sc1_manifest_path(base_path: str) -> str:
     settings = get_settings()
     configured = str(settings.STICKMAN_MATERIAL_LIBRARY_PATH or "").strip()
-    if configured:
+    if configured and Path(configured).exists():
         return configured
-    return str(Path(base_path) / "material.json")
+    root = Path(base_path)
+    for name in ("material.json", "materials.generated.json", "materials.json", "materials.normalized.json"):
+        candidate = root / name
+        if candidate.exists() and candidate.is_file():
+            return str(candidate)
+    return str(root / "material.json")
 
 
 def _default_cover_image_path(base_path: str, manifest_path: str) -> str:
