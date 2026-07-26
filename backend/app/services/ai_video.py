@@ -1028,6 +1028,9 @@ class AiVideoService:
 
     def _sc1_summary_label(self, text: str, segment_index: int) -> str:
         cleaned = " ".join(str(text or "").split()).strip()
+        present_keywords = self._sc1_present_label_keywords(cleaned)
+        if present_keywords:
+            return self._sc1_clip_label(present_keywords[0], segment_index)
         keyword_map = [
             (["别急", "先别", "不要急", "下结论"], "别急"),
             (["想太多"], "内耗"),
@@ -1087,6 +1090,25 @@ class AiVideoService:
             return self._sc1_clip_label("看问题", segment_index)
         return self._sc1_label_fallback_pool()[segment_index % len(self._sc1_label_fallback_pool())]
 
+    def _sc1_present_label_keywords(self, text: str) -> list[str]:
+        cleaned = " ".join(str(text or "").split()).strip()
+        compact = re.sub(r"[^\u4e00-\u9fff]+", "", cleaned)
+        phrase_candidates = [
+            "分开看", "想太多", "内耗", "边界", "界限", "底线", "对象", "后果",
+            "责任", "情绪", "焦虑", "关系", "证明", "评价", "审判", "反思",
+            "自责", "消耗", "透支", "委屈", "害怕", "感受", "风险", "代价",
+            "规则", "真相", "误判", "清醒", "答案", "放下", "释怀", "稳住",
+        ]
+        labels: list[str] = []
+        for keyword in phrase_candidates:
+            if keyword in compact:
+                label = self._sc1_clip_label(keyword, 0)
+                if label not in labels:
+                    labels.append(label)
+        if "分开" in compact and "分开" not in labels:
+            labels.append("分开")
+        return labels
+
     def _sc1_clip_label(self, label: str, segment_index: int) -> str:
         cleaned = re.sub(r"[^\u4e00-\u9fffA-Za-z0-9]+", "", str(label or ""))
         if 2 <= len(cleaned) <= 4:
@@ -1099,7 +1121,11 @@ class AiVideoService:
         return ["别慌", "看清", "松绑", "稳住", "破防", "醒醒", "自救", "释怀"]
 
     def _sc1_make_unique_label(self, text: str, segment_index: int, used_labels: set[str]) -> str:
-        candidates = [self._sc1_summary_label(text, segment_index), *self._sc1_label_alternatives(text, segment_index)]
+        relevant_candidates = self._sc1_present_label_keywords(text)
+        candidates = [*relevant_candidates, self._sc1_summary_label(text, segment_index), *self._sc1_label_alternatives(text, segment_index)]
+        for base in relevant_candidates:
+            for suffix in range(1, 10):
+                candidates.append(f"{base}{suffix}")
         for fallback in self._sc1_label_fallback_pool():
             candidates.append(fallback)
         for candidate in candidates:

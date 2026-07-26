@@ -11,7 +11,7 @@ from app.models.partner import CommissionLedger, InviteCode, PartnerProfile
 from app.models.subscription import Order
 from app.models.user import User
 from app.services.notifications import notify_admin_event
-from app.services.partner_program import ensure_referral_code, estimate_commission_amount, generate_invite_code, get_partner_profile_for_user
+from app.services.partner_program import ensure_referral_code, estimate_commission_amount, generate_invite_code, get_partner_profile_for_user, stickman_entitlement_from_user
 from app.services.stickman_workflow_plans import find_stickman_workflow_plan, list_stickman_workflow_plans
 
 router = APIRouter(prefix="/partner", tags=["partner"])
@@ -25,6 +25,7 @@ class PartnerInviteCodeCreate(BaseModel):
     max_uses: int = 1
     allowed_libraries: list[str] = []
     amount: int = 0
+    material_mode: str | None = None
 
 
 def _require_partner_profile(db: Session, user: User) -> PartnerProfile:
@@ -48,6 +49,7 @@ def get_partner_profile(
         "commission_rate_bps": profile.commission_rate_bps,
         "status": profile.status,
         "referral_code": referral.code,
+        "stickman_entitlement": stickman_entitlement_from_user(current_user),
     }
 
 
@@ -118,7 +120,7 @@ def list_partner_stickman_plans(
     current_user: Annotated[User, Depends(get_current_partner_user)],
 ):
     _require_partner_profile(db, current_user)
-    return {"plans": list_stickman_workflow_plans(db, active_only=True)}
+    return {"plans": list_stickman_workflow_plans(db, active_only=True), "entitlement": stickman_entitlement_from_user(current_user)}
 
 
 @router.post("/invite-codes")
@@ -128,13 +130,23 @@ def create_partner_invite_code(
     current_user: Annotated[User, Depends(get_current_partner_user)],
 ):
     profile = _require_partner_profile(db, current_user)
+    entitlement = stickman_entitlement_from_user(current_user)
     plan = find_stickman_workflow_plan(db, payload.plan_key) or {}
     allowed_libraries = [str(item).strip() for item in (payload.allowed_libraries or plan.get("allowed_libraries") or []) if str(item).strip()] or ["sc1_outputs"]
     amount = int(payload.amount or plan.get("amount") or 0)
     commission_amount = estimate_commission_amount(amount, profile.commission_rate_bps)
     quota_limit = int(payload.quota_limit if payload.quota_limit is not None else (plan.get("daily_limit") or plan.get("total_video_limit") or 0))
     max_video_seconds = int(payload.max_video_seconds if payload.max_video_seconds is not None else (plan.get("max_video_seconds") or 60))
-    material_mode = str(plan.get("material_mode") or "material_only")
+    visible_modes = [str(item).strip() for item in entitlement.get("visible_image_modes") or ["material_only"] if str(item).strip()]
+    requested_mode = str(payload.material_mode or plan.get("material_mode") or entitlement.get("material_mode") or "material_only").strip()
+    if requested_mode == "hybrid":
+        requested_mode = "material_only"
+    if entitlement.get("can_choose_image_mode"):
+        if requested_mode not in visible_modes:
+            raise HTTPException(status_code=400, detail="当前合作者不支持给用户开通该图片模式")
+        material_mode = requested_mode
+    else:
+        material_mode = str(entitlement.get("material_mode") or visible_modes[0] or "material_only")
     code = generate_invite_code("SC1")
     while db.query(InviteCode).filter(InviteCode.code == code).first():
         code = generate_invite_code("SC1")

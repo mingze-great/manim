@@ -474,4 +474,13 @@ def test_sc1_summary_label_does_not_fall_back_to_arbitrary_script_slice():
     label = service._sc1_make_unique_label("你不需要为所有人的情绪负责", 0, used)
 
     assert label not in {"你不需要", "不需要为", "需要为所", "要为所有", "为所有人", "所有人的"}
-    assert label in {"觉察", "转念", "清醒", "破局", "重启", "自省", "看见"} or len(label) == 4
+    assert label in {"情绪", "责任", "负责", "觉察", "转念", "清醒", "破局", "重启", "自省", "看见"} or len(label) == 4
+
+
+def test_sc1_summary_label_prefers_keywords_from_current_caption():
+    service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
+    used = {"看清", "稳住", "松绑", "警报", "边界", "内耗"}
+
+    label = service._sc1_make_unique_label("把对象和后果分开看", 4, used)
+
+    assert label in {"对象", "后果", "分开", "分开看"}

@@ -23,8 +23,12 @@ sys.modules.setdefault("edge_tts", types.ModuleType("edge_tts"))
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 from app.api import stickman_workflow
+from app.database import Base
+from app.models.ai_video import AiVideoJob, AiVideoProject
 from app.services.stickman_workflow_limits import (
     consume_stickman_quota,
     estimate_script_duration_seconds,
@@ -71,6 +75,70 @@ def test_duration_estimate_returns_plan_limit_and_allowed_state():
     assert response["estimatedSeconds"] > 0
     assert response["maxVideoSeconds"] == 300
     assert response["allowed"] is True
+
+
+def test_duration_estimate_request_accepts_script_longer_than_1200_chars():
+    payload = stickman_workflow.StickmanWorkflowDurationEstimateRequest(script="你" * 1500)
+
+    assert len(payload.script) == 1500
+
+
+def test_stickman_config_exposes_allowed_image_modes_for_admin(monkeypatch):
+    monkeypatch.setattr(stickman_workflow, "_visible_libraries_for_user", lambda db, user: [])
+
+    response = stickman_workflow.get_stickman_workflow_config(db=None, current_user=SimpleNamespace(is_admin=True))
+
+    assert response["capabilities"]["visibleImageModes"] == ["material_only", "ai_image"]
+    assert response["capabilities"]["canChooseImageMode"] is True
+
+
+def test_stickman_job_history_lists_only_current_users_workflow_jobs(monkeypatch):
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(bind=engine)
+    db = sessionmaker(bind=engine)()
+    db.add_all([
+        AiVideoProject(id=1, user_id=1, title="我的火柴人", video_type="knowledge_ip_stickman"),
+        AiVideoProject(id=2, user_id=1, title="其他模块", video_type="knowledge_visualization"),
+        AiVideoProject(id=3, user_id=2, title="别人火柴人", video_type="knowledge_ip_stickman"),
+    ])
+    db.add_all([
+        AiVideoJob(
+            id=1,
+            project_id=1,
+            user_id=1,
+            status="completed",
+            progress=100,
+            stage="completed",
+            input_payload='{"workflowSource":"standalone_stickman_workflow"}',
+            output_url="/api/ai-video/files/1/output/video.mp4",
+        ),
+        AiVideoJob(
+            id=2,
+            project_id=2,
+            user_id=1,
+            status="completed",
+            progress=100,
+            stage="completed",
+            input_payload='{"workflowSource":"other"}',
+            output_url="/api/ai-video/files/2/output/video.mp4",
+        ),
+        AiVideoJob(
+            id=3,
+            project_id=3,
+            user_id=2,
+            status="completed",
+            progress=100,
+            stage="completed",
+            input_payload='{"workflowSource":"standalone_stickman_workflow"}',
+            output_url="/api/ai-video/files/3/output/video.mp4",
+        ),
+    ])
+    db.commit()
+    monkeypatch.setattr(stickman_workflow.service, "reconcile_stale_job", lambda db, job: job)
+
+    response = stickman_workflow.list_stickman_jobs(db=db, current_user=SimpleNamespace(id=1, is_admin=False))
+
+    assert [item.jobId for item in response] == ["job_1"]
 
 
 def test_period_card_can_limit_daily_videos_and_monthly_minutes():

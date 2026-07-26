@@ -4,6 +4,15 @@ import { CopyOutlined, GiftOutlined, ReloadOutlined, TeamOutlined, WalletOutline
 import { partnerApi, PartnerCommission, PartnerOrder, PartnerProfile, PartnerReferral, PartnerStickmanPlan } from '@/services/partner'
 
 const formatMoney = (value?: number | null) => `¥${(((value || 0) as number) / 100).toFixed(2)}`
+const materialModeOptions = [
+  { label: '素材库匹配', value: 'material_only' },
+  { label: '实时生成场景图', value: 'ai_image' },
+]
+const materialModeLabel: Record<string, string> = {
+  material_only: '素材库匹配',
+  ai_image: '实时生成场景图',
+  hybrid: '两种模式',
+}
 
 const formatDate = (value?: string | null) => {
   if (!value) return '-'
@@ -89,6 +98,9 @@ export default function PartnerDashboard() {
       max_video_seconds: plan.max_video_seconds,
       amount: plan.amount || 0,
       max_uses: 1,
+      material_mode: profile?.stickman_entitlement?.can_choose_image_mode
+        ? (plan.material_mode === 'hybrid' ? 'material_only' : plan.material_mode)
+        : profile?.stickman_entitlement?.material_mode,
     })
   }
 
@@ -106,6 +118,8 @@ export default function PartnerDashboard() {
   }
 
   const planOptions = plans.map((item) => ({ label: `${item.name} · ${formatMoney(item.amount)}`, value: item.key }))
+  const partnerEntitlement = profile?.stickman_entitlement
+  const partnerVisibleModes = partnerEntitlement?.visible_image_modes || ['material_only']
 
   return (
     <div className="partner-dashboard-page">
@@ -147,6 +161,19 @@ export default function PartnerDashboard() {
             </Col>
             <Col xs={24} md={8}><Form.Item name="amount" label="收款金额（分）"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
             <Col xs={24} md={8}><Form.Item label="预计佣金"><Input value={formatMoney(commissionPreview)} disabled /></Form.Item></Col>
+            {partnerEntitlement?.can_choose_image_mode ? (
+              <Col xs={24} md={8}>
+                <Form.Item name="material_mode" label="给用户开通的图片模式" rules={[{ required: true }]}>
+                  <Select options={materialModeOptions.filter((item) => partnerVisibleModes.includes(item.value as any))} />
+                </Form.Item>
+              </Col>
+            ) : (
+              <Col xs={24} md={8}>
+                <Form.Item label="给用户开通的图片模式">
+                  <Input value={materialModeLabel[partnerEntitlement?.material_mode || 'material_only'] || '素材库匹配'} disabled />
+                </Form.Item>
+              </Col>
+            )}
             <Col xs={24} md={8}><Form.Item name="quota_limit" label="周期/总次数" rules={[{ required: true }]}><InputNumber min={0} max={9999} style={{ width: '100%' }} /></Form.Item></Col>
             <Col xs={24} md={8}><Form.Item name="max_video_seconds" label="单条秒数" rules={[{ required: true }]}><InputNumber min={15} max={1800} step={15} style={{ width: '100%' }} /></Form.Item></Col>
             <Col xs={24} md={8}><Form.Item name="max_uses" label="可兑换次数" rules={[{ required: true }]}><InputNumber min={1} max={99} style={{ width: '100%' }} /></Form.Item></Col>

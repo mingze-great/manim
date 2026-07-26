@@ -142,6 +142,7 @@ def _normalize_module_permissions(payload: dict, user: User) -> dict:
         "monthly_minutes_marker",
         "unlimited_time",
         "material_mode",
+        "visible_image_modes",
         "allowed_libraries",
     }
     for module_key in MODULE_KEYS:

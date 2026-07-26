@@ -1,6 +1,6 @@
 ﻿import { useEffect, useMemo, useState } from 'react'
-import { Alert, Button, Card, Collapse, Input, InputNumber, Progress, Radio, Select, Space, Typography, Upload, message } from 'antd'
-import { DownloadOutlined, PictureOutlined, PlayCircleOutlined, RocketOutlined, SoundOutlined, UploadOutlined } from '@ant-design/icons'
+import { Alert, Button, Card, Collapse, Drawer, Input, InputNumber, Progress, Radio, Select, Space, Table, Typography, Upload, message } from 'antd'
+import { DownloadOutlined, HistoryOutlined, PictureOutlined, PlayCircleOutlined, RocketOutlined, SoundOutlined, UploadOutlined } from '@ant-design/icons'
 import { resolveBackendUrl } from '@/services/api'
 import { stickmanWorkflowApi } from '@/services/stickmanWorkflow'
 import type { StickmanWorkflowConfig } from '@/services/stickmanWorkflow'
@@ -38,6 +38,7 @@ export default function StickmanWorkflow() {
   const [title, setTitle] = useState('为什么你总是在关系里想太多')
   const [voiceId, setVoiceId] = useState('dayun_manbo')
   const [materialLibrary, setMaterialLibrary] = useState('sc1_outputs')
+  const [imageMode, setImageMode] = useState<'material_only' | 'ai_image'>('material_only')
   const [scriptMode, setScriptMode] = useState<'ai' | 'custom'>('ai')
   const [customScript, setCustomScript] = useState('')
   const [targetSeconds, setTargetSeconds] = useState<number | undefined>(undefined)
@@ -50,6 +51,9 @@ export default function StickmanWorkflow() {
   const [uploadingBackground, setUploadingBackground] = useState(false)
   const [durationEstimate, setDurationEstimate] = useState<StickmanWorkflowDurationEstimate | null>(null)
   const [estimatingDuration, setEstimatingDuration] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [historyJobs, setHistoryJobs] = useState<AiVideoJob[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
 
   const outputUrl = useMemo(() => resolveBackendUrl(job?.outputUrl), [job?.outputUrl])
   const currentStep = useMemo(
@@ -63,6 +67,7 @@ export default function StickmanWorkflow() {
         setConfig(data)
         setVoiceId(data.defaults.voiceId || 'dayun_manbo')
         setMaterialLibrary(data.defaults.materialLibrary || 'sc1_outputs')
+        setImageMode((data.defaults.imageMode === 'ai_image' ? 'ai_image' : 'material_only'))
         setBackgroundTemplate(data.backgroundTemplates?.[0]?.key || 'default')
       })
       .catch(() => message.error('加载火柴人配置失败'))
@@ -139,6 +144,7 @@ export default function StickmanWorkflow() {
         backgroundMode,
         backgroundTemplate: backgroundMode === 'template' ? backgroundTemplate : undefined,
         uploadedBackgroundUrl: backgroundMode === 'upload' ? uploadedBackgroundUrl : undefined,
+        imageMode,
       })
       const jobRes = await stickmanWorkflowApi.getJob(data.jobId)
       setJob(jobRes.data)
@@ -147,6 +153,19 @@ export default function StickmanWorkflow() {
       message.error(error?.response?.data?.detail || '创建任务失败')
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  const loadHistory = async () => {
+    setHistoryLoading(true)
+    try {
+      const { data } = await stickmanWorkflowApi.listJobs()
+      setHistoryJobs(data || [])
+      setHistoryOpen(true)
+    } catch (error: any) {
+      message.error(error?.response?.data?.detail || '加载历史作品失败')
+    } finally {
+      setHistoryLoading(false)
     }
   }
 
@@ -181,6 +200,10 @@ export default function StickmanWorkflow() {
     label: item.description ? `${item.name} · ${item.description}` : item.name,
     value: item.key,
   }))
+  const imageModeOptions = [
+    { label: '素材库匹配', value: 'material_only' },
+    { label: '实时生成场景图', value: 'ai_image' },
+  ].filter((item) => (config?.capabilities.visibleImageModes || ['material_only']).includes(item.value as any))
   return (
     <div className="stickman-workflow-page">
       <div className="stickman-workflow-header">
@@ -190,7 +213,10 @@ export default function StickmanWorkflow() {
             默认输入一个主题即可生成成片；高级选项支持自定义文案、时长、背景和场景图风格控制。
           </Typography.Paragraph>
         </div>
-        <div className="workflow-badge">SC1 独立模块</div>
+        <Space>
+          <Button icon={<HistoryOutlined />} loading={historyLoading} onClick={loadHistory}>历史作品查看</Button>
+          <div className="workflow-badge">SC1 独立模块</div>
+        </Space>
       </div>
 
       <div className="stickman-workflow-grid">
@@ -236,8 +262,6 @@ export default function StickmanWorkflow() {
                         value={customScript}
                         onChange={(event) => setCustomScript(event.target.value)}
                         rows={6}
-                        maxLength={1200}
-                        showCount
                         placeholder="粘贴完整口播文案。系统会根据配音实际时长同步字幕、场景图和总结关键词。"
                       />
                       <Alert type="info" showIcon message="自定义文案会自动决定视频时长，因此不能同时选择目标时长。" />
@@ -297,6 +321,18 @@ export default function StickmanWorkflow() {
                         </Upload>
                         {uploadedBackgroundUrl ? <Typography.Text type="secondary">已上传：{uploadedBackgroundUrl}</Typography.Text> : null}
                       </Space>
+                    </label>
+                  ) : null}
+                  {config?.capabilities.canChooseImageMode && imageModeOptions.length > 1 ? (
+                    <label className="workflow-field">
+                      <span>图片来源模式</span>
+                      <Radio.Group
+                        value={imageMode}
+                        onChange={(event) => setImageMode(event.target.value)}
+                        optionType="button"
+                        buttonStyle="solid"
+                        options={imageModeOptions}
+                      />
                     </label>
                   ) : null}
                 </Space>
@@ -401,6 +437,41 @@ export default function StickmanWorkflow() {
           )}
         </section>
       </div>
+      <Drawer
+        title="历史作品查看"
+        open={historyOpen}
+        width={720}
+        onClose={() => setHistoryOpen(false)}
+      >
+        <Table
+          loading={historyLoading}
+          dataSource={historyJobs}
+          rowKey="jobId"
+          pagination={{ pageSize: 8 }}
+          columns={[
+            { title: '任务', dataIndex: 'jobId', width: 100 },
+            { title: '状态', dataIndex: 'status', width: 100 },
+            {
+              title: '创建时间',
+              dataIndex: 'createdAt',
+              render: (value: string) => value ? new Date(value).toLocaleString('zh-CN') : '-',
+            },
+            {
+              title: '操作',
+              width: 180,
+              render: (_: any, record: AiVideoJob) => {
+                const url = resolveBackendUrl(record.outputUrl)
+                return url ? (
+                  <Space>
+                    <Button size="small" icon={<PlayCircleOutlined />} onClick={() => window.open(url, '_blank')}>打开</Button>
+                    <Button size="small" icon={<DownloadOutlined />} href={url}>下载</Button>
+                  </Space>
+                ) : '生成中'
+              },
+            },
+          ]}
+        />
+      </Drawer>
     </div>
   )
 }

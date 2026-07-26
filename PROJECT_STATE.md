@@ -487,3 +487,15 @@
   - 抽帧 `frame_02s.png`、`frame_08s.png`、`frame_16s.png` 目检：单张场景图居中完整，未被横线或白色面板遮挡；右上角 `心理分享 | 认知突破` 存在；无 `@Sc1火柴人`；字幕居中；总结关键词为 2-4 字短词并累计展示。
 - 服务器空间：根分区约 `40G`，已用约 `35G`，可用约 `3.0G`，使用率约 `93%`；后续批量渲染前仍建议继续清理旧备份/缓存。
 - 下一步建议：如果用户要保留 `codex_count_2x5m` 作为正式套餐，可在后台改名和金额；如果只是验证套餐，可在后台删除，避免污染正式套餐列表。
+
+## 2026-07-26 3004 图片模式权限、长文案、历史作品与关键词相关性部署前记录
+
+- 当前任务：只在 3004 分支 `codex/3004-partner-stickman-platform-20260724` 上继续优化火柴人图片模式可见权限、自定义文案长度限制、火柴人历史作品入口和方框总结关键词相关性；不触碰 3003。
+- 本地工作区：`C:\Users\Administrator\Documents\Codex\2026-07-18\300\work\3004-partner-stickman-worktree`。
+- 部署目标：`/opt/manim-v2-3004-snapshot`，平台 URL `http://152.136.218.74:3004`。
+- 编码前 HEAD：`b5009c9a68eee09173a5efc10996af71f84c90cc`，提交时间 `2026-07-26 21:54:03 +0800`，提交信息 `docs: record 3004 package plan deployment`。
+- 已完成本地改动：后台用户详情 `stickman_v2` 权限增加可见图片模式配置；admin 默认可见素材匹配和实时生图两种模式；合作者仅在自己有双模式权限时可给推荐用户选择图片模式，否则兑换码后端强制继承合作者单模式；火柴人自定义文案去掉 1200 字固定限制，改为只按预计时长/套餐上限判定；新增 `/api/stickman-workflow/jobs` 历史列表，前端 `/stickman-workflow` 增加“历史作品查看”按钮和下载入口；SC1 方框总结优先提取当前字幕中的强相关 2-4 字关键词，避免唯一性兜底漂移到不相关词。
+- 最近修改文件：`backend/app/services/partner_program.py`、`backend/app/services/stickman_workflow_plans.py`、`backend/app/api/stickman_workflow.py`、`backend/app/api/partner.py`、`backend/app/api/admin.py`、`backend/app/services/ai_video.py`、`backend/tests/test_partner_program_service.py`、`backend/tests/test_stickman_workflow_limits.py`、`backend/tests/test_ai_video_sc1_material_urls.py`、`frontend/src/pages/admin/AdminUserDetail.tsx`、`frontend/src/pages/PartnerDashboard.tsx`、`frontend/src/pages/StickmanWorkflow/index.tsx`、`frontend/src/services/partner.ts`、`frontend/src/services/stickmanWorkflow.ts`。
+- 本地验证：`python -m py_compile backend/app/services/partner_program.py backend/app/services/stickman_workflow_plans.py backend/app/api/stickman_workflow.py backend/app/api/partner.py backend/app/api/admin.py backend/app/services/ai_video.py` 通过；`PYTHONPATH=backend pytest backend/tests/test_partner_program_service.py backend/tests/test_stickman_workflow_limits.py backend/tests/test_ai_video_sc1_material_urls.py -q` -> `38 passed`；`npm run build` in `frontend` 通过，仅有既有 Vite chunk size warning；`git diff --check` 通过，仅有 CRLF/LF 换行提示。
+- 下一步：提交本地改动；部署前备份 3004 SQLite 和代码快照；同步到 `/opt/manim-v2-3004-snapshot`，构建前端并只重启 3004 backend/worker；平台验证 admin 设置用户图片模式、合作者发码继承/可选逻辑、长文案无 1200 字上限、历史作品列表可刷新后查看下载、生成成片关键词与当前字幕强相关。
+- 不要重复做：不要回滚、重启或覆盖 3003；不要把底层图片模式无条件暴露给普通用户；不要只用本地测试替代 3004 平台闭环验收。

@@ -43,6 +43,10 @@ const moduleLabels: Record<string, string> = {
 }
 
 const defaultModuleOrder = ['visual', 'stickman', 'stickman_v2', 'stickman_legacy', 'explainer', 'article']
+const imageModeOptions = [
+  { label: '素材库匹配', value: 'material_only' },
+  { label: '实时生成场景图', value: 'ai_image' },
+]
 
 const formatDateTime = (value?: string | null) => {
   if (!value) return '-'
@@ -301,6 +305,7 @@ export default function AdminUserDetail() {
                 {moduleKeys.map((moduleKey) => {
                   const permission: any = modulePermissions[moduleKey] || { enabled: false, daily_limit: 0, used_today: 0, period: moduleKey === 'visual' ? 'daily' : 'monthly' }
                   const isStickmanWorkflow = moduleKey === 'stickman_v2'
+                  const effectiveVisibleImageModes = permission.visible_image_modes || (permission.material_mode === 'ai_image' ? ['ai_image'] : permission.material_mode === 'hybrid' ? ['material_only', 'ai_image'] : ['material_only'])
                   return (
                     <Card key={moduleKey} size="small" title={moduleLabels[moduleKey] || moduleKey}>
                       <Space wrap align="center">
@@ -369,6 +374,34 @@ export default function AdminUserDetail() {
                                 </Col>
                               </Row>
                             )}
+                            <Row gutter={[12, 12]}>
+                              <Col xs={24} md={12}>
+                                <div className="text-gray-500 mb-1">用户可见图片模式</div>
+                                <Select
+                                  mode="multiple"
+                                  value={effectiveVisibleImageModes}
+                                  onChange={(modes) => {
+                                    const nextModes = modes.length ? modes : ['material_only']
+                                    const currentMode = nextModes.includes(permission.material_mode) ? permission.material_mode : nextModes[0]
+                                    updatePermission(moduleKey, {
+                                      visible_image_modes: nextModes,
+                                      material_mode: currentMode,
+                                    })
+                                  }}
+                                  options={imageModeOptions}
+                                  style={{ width: '100%' }}
+                                />
+                              </Col>
+                              <Col xs={24} md={12}>
+                                <div className="text-gray-500 mb-1">默认图片模式</div>
+                                <Select
+                                  value={permission.material_mode === 'hybrid' ? 'material_only' : permission.material_mode || 'material_only'}
+                                  onChange={(value) => updatePermission(moduleKey, { material_mode: value })}
+                                  options={imageModeOptions.filter((item) => effectiveVisibleImageModes.includes(item.value))}
+                                  style={{ width: '100%' }}
+                                />
+                              </Col>
+                            </Row>
                             <Space wrap>
                               <Tag color="purple">本月已用 {permission.used_monthly_minutes || 0} 分钟</Tag>
                               <Tag color="cyan">总已用 {permission.used_total_videos || 0} 个</Tag>

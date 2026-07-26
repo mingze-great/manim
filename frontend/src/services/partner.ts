@@ -6,6 +6,11 @@ export interface PartnerProfile {
   commission_rate_bps: number
   status: string
   referral_code?: string
+  stickman_entitlement?: {
+    material_mode: 'material_only' | 'ai_image'
+    visible_image_modes?: Array<'material_only' | 'ai_image'>
+    can_choose_image_mode?: boolean
+  }
 }
 
 export interface PartnerReferral {
@@ -53,7 +58,7 @@ export const partnerApi = {
   getReferrals: () => api.get<PartnerReferral[]>('/partner/referrals'),
   getOrders: () => api.get<PartnerOrder[]>('/partner/orders'),
   getCommissions: () => api.get<PartnerCommission[]>('/partner/commissions'),
-  getStickmanPlans: () => api.get<{ plans: PartnerStickmanPlan[] }>('/partner/stickman-plans'),
-  createInviteCode: (payload: { plan_key: string; quota_limit: number; quota_period: string; max_video_seconds: number; max_uses: number; allowed_libraries?: string[]; amount?: number }) =>
+  getStickmanPlans: () => api.get<{ plans: PartnerStickmanPlan[]; entitlement?: PartnerProfile['stickman_entitlement'] }>('/partner/stickman-plans'),
+  createInviteCode: (payload: { plan_key: string; quota_limit: number; quota_period: string; max_video_seconds: number; max_uses: number; allowed_libraries?: string[]; amount?: number; material_mode?: 'material_only' | 'ai_image' }) =>
     api.post<{ code: string; plan_key: string; material_mode: string; allowed_libraries?: string[]; amount?: number; commission_amount?: number; status: string }>('/partner/invite-codes', payload),
 }

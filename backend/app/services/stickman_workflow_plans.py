@@ -131,13 +131,15 @@ def find_stickman_workflow_plan(db: Session, key: str) -> dict | None:
 
 def permission_from_plan(plan: dict) -> dict:
     quota_mode = str(plan.get("quota_mode") or "period")
+    material_mode = plan.get("material_mode") or "material_only"
     permission = {
         "enabled": True,
         "quota_mode": quota_mode,
         "daily_limit": 0 if quota_mode == "count_package" else int(plan.get("daily_limit") or 0),
         "period": "lifetime" if quota_mode == "count_package" else "monthly",
         "max_video_seconds": int(plan.get("max_video_seconds") or 60),
-        "material_mode": plan.get("material_mode") or "material_only",
+        "material_mode": "material_only" if material_mode == "hybrid" else material_mode,
+        "visible_image_modes": ["material_only", "ai_image"] if material_mode == "hybrid" else [material_mode],
         "allowed_libraries": plan.get("allowed_libraries") or [],
     }
     if quota_mode == "count_package":

@@ -34,6 +34,8 @@ export interface StickmanWorkflowConfig {
   }
   capabilities: {
     canUseAiImages: boolean
+    visibleImageModes?: Array<'material_only' | 'ai_image'>
+    canChooseImageMode?: boolean
     canUploadBackground: boolean
     materialMode?: 'material_only' | 'ai_image' | 'hybrid'
     maxVideoSeconds: number
@@ -74,5 +76,6 @@ export const stickmanWorkflowApi = {
   },
   createJob: (payload: StickmanWorkflowJobCreate) =>
     api.post<{ jobId: string; projectId: number; status: string }>('/stickman-workflow/jobs', payload),
+  listJobs: () => api.get<AiVideoJob[]>('/stickman-workflow/jobs'),
   getJob: (jobId: string) => api.get<AiVideoJob>(`/stickman-workflow/jobs/${jobId}`),
 }

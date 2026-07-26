@@ -1,4 +1,5 @@
-﻿import re
+﻿import json
+import re
 import uuid
 from pathlib import Path
 from typing import Annotated, Optional
@@ -46,7 +47,7 @@ class StickmanWorkflowJobCreate(BaseModel):
 
 
 class StickmanWorkflowDurationEstimateRequest(BaseModel):
-    script: str = Field(..., min_length=1, max_length=1200)
+    script: str = Field(..., min_length=1)
 
 
 def _numeric_job_id(job_id: str) -> int:
@@ -65,7 +66,9 @@ def _max_video_seconds(user: User) -> int:
 def _stickman_entitlement(user: User) -> dict:
     if user.is_admin:
         return {
-            "material_mode": "hybrid",
+            "material_mode": "material_only",
+            "visible_image_modes": ["material_only", "ai_image"],
+            "can_choose_image_mode": True,
             "can_use_ai_images": True,
             "max_video_seconds": 300,
             "allowed_libraries": [],
@@ -110,6 +113,18 @@ def _stickman_permission_for_user(user: User) -> dict:
     permission.setdefault("period", "monthly")
     permission.setdefault("max_video_seconds", 60)
     return permission
+
+
+def _resolve_allowed_image_mode(requested_mode: str, entitlement: dict) -> str:
+    visible_modes = [str(item).strip() for item in entitlement.get("visible_image_modes") or [] if str(item).strip()]
+    if not visible_modes:
+        visible_modes = ["material_only"]
+    requested = str(requested_mode or entitlement.get("material_mode") or visible_modes[0]).strip() or visible_modes[0]
+    if requested == "hybrid":
+        requested = "material_only" if "material_only" in visible_modes else visible_modes[0]
+    if requested not in visible_modes:
+        raise ValueError("当前账号不支持该图片模式")
+    return validate_image_mode(requested, bool(entitlement.get("can_use_ai_images")))
 
 
 def _ensure_stickman_account_allowed(user: User, permission: dict) -> None:
@@ -166,11 +181,13 @@ def get_stickman_workflow_config(
             "voiceId": "dayun_manbo",
             "materialLibrary": "sc1_outputs",
             "sceneStyle": "sc1_outputs",
-            "imageMode": "material_only",
+            "imageMode": entitlement.get("material_mode") or "material_only",
             "scriptMode": "ai",
         },
         "capabilities": {
             "canUseAiImages": bool(entitlement.get("can_use_ai_images")),
+            "visibleImageModes": entitlement.get("visible_image_modes") or ["material_only"],
+            "canChooseImageMode": bool(entitlement.get("can_choose_image_mode")),
             "canUploadBackground": True,
             "materialMode": entitlement.get("material_mode") or "material_only",
             "maxVideoSeconds": _max_video_seconds(current_user),
@@ -228,8 +245,7 @@ def create_stickman_job(
     permission = _stickman_permission_for_user(current_user)
     try:
         resolved_seconds = validate_script_duration_request(custom_script, payload.targetSeconds, max_seconds)
-        entitlement_image_mode = str(entitlement.get("material_mode") or "material_only").strip()
-        image_mode = validate_image_mode(entitlement_image_mode, bool(entitlement.get("can_use_ai_images")))
+        image_mode = _resolve_allowed_image_mode(payload.imageMode, entitlement)
         _ensure_stickman_account_allowed(current_user, permission)
         validate_stickman_quota(permission, resolved_seconds or payload.targetSeconds or 60)
     except ValueError as exc:
@@ -293,6 +309,30 @@ def create_stickman_job(
     _persist_stickman_permission(db, current_user, permission)
     db.commit()
     return AiVideoJobCreated(jobId=f"job_{job.id}", projectId=job.project_id, status=job.status)
+
+
+@router.get("/jobs", response_model=list[AiVideoJobResponse])
+def list_stickman_jobs(
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    limit: int = 30,
+):
+    limit = max(1, min(int(limit or 30), 100))
+    query = db.query(AiVideoJob)
+    if not current_user.is_admin:
+        query = query.filter(AiVideoJob.user_id == current_user.id)
+    jobs = query.order_by(AiVideoJob.created_at.desc()).limit(200).all()
+    workflow_jobs = []
+    for job in jobs:
+        try:
+            input_payload = json.loads(job.input_payload or "{}")
+        except Exception:
+            input_payload = {}
+        if input_payload.get("workflowSource") == "standalone_stickman_workflow":
+            workflow_jobs.append(service.reconcile_stale_job(db, job))
+        if len(workflow_jobs) >= limit:
+            break
+    return [_job_response(job) for job in workflow_jobs]
 
 
 @router.get("/jobs/{job_id}", response_model=AiVideoJobResponse)

@@ -14,6 +14,39 @@ from app.models.user import User
 from app.models.user_module_permission import UserModulePermission
 from app.services.stickman_workflow_plans import find_stickman_workflow_plan, permission_from_plan
 
+IMAGE_MODE_OPTIONS = {"material_only", "ai_image"}
+
+
+def normalize_visible_image_modes(raw_modes, material_mode: str = "material_only") -> list[str]:
+    if isinstance(raw_modes, str):
+        try:
+            raw_modes = json.loads(raw_modes)
+        except Exception:
+            raw_modes = [raw_modes]
+    modes: list[str] = []
+    if isinstance(raw_modes, list):
+        for item in raw_modes:
+            mode = str(item or "").strip()
+            if mode == "hybrid":
+                for option in ["material_only", "ai_image"]:
+                    if option not in modes:
+                        modes.append(option)
+            elif mode in IMAGE_MODE_OPTIONS and mode not in modes:
+                modes.append(mode)
+    if not modes:
+        normalized_material_mode = str(material_mode or "material_only").strip()
+        modes = ["material_only", "ai_image"] if normalized_material_mode == "hybrid" else [normalized_material_mode if normalized_material_mode in IMAGE_MODE_OPTIONS else "material_only"]
+    return modes
+
+
+def normalize_effective_image_mode(material_mode: str, visible_modes: list[str]) -> str:
+    normalized = str(material_mode or "").strip()
+    if normalized == "hybrid":
+        return "material_only" if "material_only" in visible_modes else (visible_modes[0] if visible_modes else "material_only")
+    if normalized in visible_modes:
+        return normalized
+    return visible_modes[0] if visible_modes else "material_only"
+
 
 def normalize_invite_code(code: str) -> str:
     return str(code or "").strip().upper()
@@ -103,6 +136,8 @@ def stickman_entitlement_from_user(user: User) -> dict:
     material_mode = str(permission.get("material_mode") or "material_only").strip() or "material_only"
     if material_mode not in {"material_only", "ai_image", "hybrid"}:
         material_mode = "material_only"
+    visible_image_modes = normalize_visible_image_modes(permission.get("visible_image_modes"), material_mode)
+    material_mode = normalize_effective_image_mode(material_mode, visible_image_modes)
     try:
         max_video_seconds = int(permission.get("max_video_seconds") or 60)
     except Exception:
@@ -117,7 +152,9 @@ def stickman_entitlement_from_user(user: User) -> dict:
         allowed_libraries = []
     return {
         "material_mode": material_mode,
-        "can_use_ai_images": material_mode in {"ai_image", "hybrid"},
+        "visible_image_modes": visible_image_modes,
+        "can_choose_image_mode": len(visible_image_modes) > 1,
+        "can_use_ai_images": "ai_image" in visible_image_modes,
         "max_video_seconds": max(15, min(1800, max_video_seconds)),
         "allowed_libraries": [str(item).strip() for item in allowed_libraries if str(item).strip()],
     }
@@ -176,6 +213,7 @@ def apply_invite_code_to_user(db: Session, user: User, raw_code: str) -> InviteC
         {
             **plan_permission,
             "material_mode": invite.material_mode or "material_only",
+            "visible_image_modes": normalize_visible_image_modes([invite.material_mode or "material_only"], invite.material_mode or "material_only"),
             "daily_limit": invite.quota_limit,
             "max_video_seconds": int(invite.max_video_seconds or 60),
             "allowed_libraries": allowed_libraries,
