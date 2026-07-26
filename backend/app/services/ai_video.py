@@ -932,9 +932,9 @@ class AiVideoService:
         if not cleaned:
             return ["Scene point"]
         parts = [
-            item.strip(" .,!?:;、。，；：！？")
+            self._sc1_clean_caption_cue(item)
             for item in re.split(r"(?<=[。！？!?；;])\s*", cleaned)
-            if item.strip(" .,!?:;、。，；：！？")
+            if self._sc1_clean_caption_cue(item)
         ]
         if len(parts) >= 2:
             if len(parts) <= 3:
@@ -954,13 +954,13 @@ class AiVideoService:
                     bucket_len += len(part)
             if bucket:
                 groups.append(bucket)
-            return [item.strip(" .,!?:;、。，；：！？") for item in groups if item.strip(" .,!?:;、。，；：！？")][:3]
+            return [self._sc1_clean_caption_cue(item) for item in groups if self._sc1_clean_caption_cue(item)][:3]
         if len(cleaned) <= 18:
-            return [cleaned]
+            return [self._sc1_clean_caption_cue(cleaned) or cleaned]
         comma_parts = [
-            item.strip(" .,!?:;、。，；：！？")
+            self._sc1_clean_caption_cue(item)
             for item in re.split(r"[，,、；;】【：：]", cleaned)
-            if item.strip(" .,!?:;、。，；：！？")
+            if self._sc1_clean_caption_cue(item)
         ]
         if len(comma_parts) >= 2:
             return comma_parts[:3]
@@ -973,9 +973,17 @@ class AiVideoService:
                     break
             if split_at != midpoint:
                 break
-        first = cleaned[:split_at].strip(" .,!?:;、。，；：！？")
-        second = cleaned[split_at:].strip(" .,!?:;、。，；：！？")
-        return [first or cleaned, second or cleaned][:3]
+        first = self._sc1_clean_caption_cue(cleaned[:split_at])
+        second = self._sc1_clean_caption_cue(cleaned[split_at:])
+        fallback_cues = [item for item in [first, second] if item]
+        return (fallback_cues or [cleaned])[:3]
+
+    def _sc1_clean_caption_cue(self, text: str) -> str:
+        cleaned = str(text or "").strip(" .,!?:;、。，；：！？")
+        cleaned = re.sub(r"^第[一二三四五六七八九十百千万0-9]+句\s*[,，、:：]?\s*", "", cleaned).strip(" .,!?:;、。，；：！？")
+        if re.fullmatch(r"第[一二三四五六七八九十百千万0-9]+句", cleaned):
+            return ""
+        return cleaned
 
     def _sc1_layout_mode_for_scene(self, scene_index: int, text: str) -> str:
         text = str(text or "")

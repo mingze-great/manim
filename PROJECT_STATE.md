@@ -509,3 +509,12 @@
 - 本地补充修复：`backend/app/services/ai_video.py` 在 DashScope SDK 和 Edge TTS 失败后、进入本机 CosyVoice 前，新增轻量外部 `external_simple_tts` 兜底；实际优先使用服务器可访问的有道 `dictvoice`，Google Translate TTS 只作为次级尝试；不启动本机模型。如果外部 TTS 也失败，仍保持本机 CosyVoice 健康闸门。
 - 本地补充测试：`PYTHONPATH=backend pytest backend/tests/test_partner_program_service.py backend/tests/test_stickman_workflow_limits.py backend/tests/test_ai_video_sc1_material_urls.py -q` -> `39 passed`；`python -m py_compile backend/app/services/partner_program.py backend/app/services/stickman_workflow_plans.py backend/app/api/stickman_workflow.py backend/app/api/partner.py backend/app/api/admin.py backend/app/services/ai_video.py` 通过；`npm run build` in `frontend` 通过；`git diff --check` 通过。
 - 下一步：提交有道优先的 TTS 兜底修复并再次部署 3004，仅重启 3004 backend/worker；重新创建平台成片任务，下载 MP4 并用 ffprobe/抽帧验证音视频流、字幕/总结/场景图同步。
+## 2026-07-26 3004 字幕编号前缀清理部署前记录
+
+- 当前任务：继续只在 3004 分支 `codex/3004-partner-stickman-platform-20260724` 上完成火柴人自定义文案字幕清理，不触碰 3003。
+- 本地工作区：`C:\Users\Administrator\Documents\Codex\2026-07-18\300\work\3004-partner-stickman-worktree`。
+- 部署目标：`/opt/manim-v2-3004-snapshot`，平台 URL `http://152.136.218.74:3004`。
+- 编码前 HEAD：`43e9a46ce4de518bd086d09b2e4d6809ab1dd93e`，提交时间 `2026-07-26 23:04:45 +0800`，提交信息 `fix: prefer accessible external tts fallback`。
+- 当前改动：`backend/app/services/ai_video.py` 在 SC1 caption cue 切分时清理 `第一句/第二句/第三句` 等编号前缀，避免编号单独或带前缀出现在字幕中；`backend/tests/test_ai_video_sc1_material_urls.py` 增加回归测试。
+- 下一步：运行目标 pytest、py_compile、git diff 检查；提交后只部署 3004 backend/worker，创建 3004 平台任务验证字幕、音频、场景图和总结同步。
+- 不要重复做：不要改动、重启、覆盖 3003；不要只用本地测试替代 3004 平台成片闭环。

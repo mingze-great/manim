@@ -515,3 +515,11 @@ def test_sc1_summary_label_prefers_keywords_from_current_caption():
     label = service._sc1_make_unique_label("把对象和后果分开看", 4, used)
 
     assert label in {"对象", "后果", "分开", "分开看"}
+
+
+def test_sc1_caption_cues_drop_sentence_number_prefixes():
+    service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
+
+    cues = service._split_sc1_caption_cues("第二句，不要把别人的情绪都揽到自己身上。")
+
+    assert cues == ["不要把别人的情绪都揽到自己身上"]
