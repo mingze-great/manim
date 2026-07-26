@@ -16,6 +16,10 @@ from app.config import get_settings
 from app.models.system_config import SystemConfig
 
 STICKMAN_WORKFLOW_MATERIAL_LIBRARY_CONFIG_KEY = "stickman_workflow_material_libraries"
+MAX_PACKAGE_BYTES = int(os.getenv("STICKMAN_WORKFLOW_MAX_PACKAGE_MB", "260")) * 1024 * 1024
+MAX_EXTRACTED_BYTES = int(os.getenv("STICKMAN_WORKFLOW_MAX_EXTRACTED_MB", "800")) * 1024 * 1024
+MAX_ARCHIVE_FILES = int(os.getenv("STICKMAN_WORKFLOW_MAX_ARCHIVE_FILES", "1000"))
+UPLOAD_CHUNK_BYTES = 1024 * 1024
 
 
 def _upload_root() -> Path:
@@ -188,11 +192,33 @@ def find_material_library_asset(db: Session, filename: str, library_key: str = "
 
 def _safe_extract_zip(zip_path: Path, target_dir: Path):
     with zipfile.ZipFile(zip_path, "r") as archive:
-        for member in archive.infolist():
+        members = archive.infolist()
+        if len(members) > MAX_ARCHIVE_FILES:
+            raise ValueError(f"压缩包文件数量不能超过 {MAX_ARCHIVE_FILES} 个")
+        total_size = sum(max(member.file_size, 0) for member in members)
+        if total_size > MAX_EXTRACTED_BYTES:
+            limit_mb = MAX_EXTRACTED_BYTES // 1024 // 1024
+            raise ValueError(f"压缩包解压后不能超过 {limit_mb}MB")
+        for member in members:
             destination = (target_dir / member.filename).resolve()
             if not str(destination).startswith(str(target_dir.resolve())):
                 raise ValueError("压缩包包含不安全路径")
         archive.extractall(target_dir)
+
+
+async def _write_upload_stream(file: UploadFile, zip_path: Path) -> int:
+    total = 0
+    with zip_path.open("wb") as handle:
+        while True:
+            chunk = await file.read(UPLOAD_CHUNK_BYTES)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > MAX_PACKAGE_BYTES:
+                limit_mb = MAX_PACKAGE_BYTES // 1024 // 1024
+                raise ValueError(f"压缩包不能超过 {limit_mb}MB")
+            handle.write(chunk)
+    return total
 
 
 def _resolve_image(package_dir: Path, raw_path: str, file_name: str) -> Optional[Path]:
@@ -241,17 +267,18 @@ async def save_material_library_package(file: UploadFile, *, library_key: str) -
     suffix = Path(file.filename or "material_library.zip").suffix.lower()
     if suffix != ".zip":
         raise ValueError("仅支持 zip 素材库")
-    content = await file.read()
-    if not content:
-        raise ValueError("压缩包为空")
     package_dir = _asset_dir() / f"{_slug(library_key)}_{uuid.uuid4().hex[:10]}"
     package_dir.mkdir(parents=True, exist_ok=True)
     zip_path = package_dir / "package.zip"
-    zip_path.write_bytes(content)
     try:
+        uploaded_size = await _write_upload_stream(file, zip_path)
+        if uploaded_size <= 0:
+            raise ValueError("压缩包为空")
         _safe_extract_zip(zip_path, package_dir)
     except Exception as exc:
         shutil.rmtree(package_dir, ignore_errors=True)
+        if isinstance(exc, ValueError):
+            raise exc
         raise ValueError(f"压缩包解压失败: {exc}") from exc
     finally:
         if zip_path.exists():

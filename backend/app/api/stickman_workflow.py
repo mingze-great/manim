@@ -16,9 +16,11 @@ from app.schemas.ai_video import AiVideoJobCreated, AiVideoJobResponse
 from app.services.partner_program import stickman_entitlement_from_user
 from app.services.stickman_workflow_assets import public_material_libraries, resolve_material_library
 from app.services.stickman_workflow_limits import (
+    consume_stickman_quota,
     estimate_script_duration_seconds,
     validate_image_mode,
     validate_script_duration_request,
+    validate_stickman_quota,
 )
 
 
@@ -80,10 +82,59 @@ def _visible_libraries_for_user(db: Session, user: User) -> list[dict]:
     return libraries
 
 
+def _scene_styles_for_user(db: Session, user: User) -> list[dict]:
+    return [
+        {
+            "key": item.get("key"),
+            "label": item.get("name") or item.get("key"),
+            "name": item.get("name") or item.get("key"),
+            "description": item.get("description") or "",
+            "sampleImageUrl": item.get("image_url"),
+            "image_url": item.get("image_url"),
+        }
+        for item in _visible_libraries_for_user(db, user)
+    ]
+
+
 def _ensure_material_library_allowed(material_library: dict, entitlement: dict) -> None:
     allowed = {str(item).strip() for item in entitlement.get("allowed_libraries") or [] if str(item).strip()}
     if allowed and str(material_library.get("key") or "") not in allowed:
         raise HTTPException(status_code=400, detail="当前套餐不支持该素材库")
+
+
+def _stickman_permission_for_user(user: User) -> dict:
+    permissions = user.get_module_permissions()
+    permission = dict(permissions.get("stickman_v2") or {})
+    permission.setdefault("enabled", True)
+    permission.setdefault("daily_limit", 2)
+    permission.setdefault("period", "monthly")
+    permission.setdefault("max_video_seconds", 60)
+    return permission
+
+
+def _ensure_stickman_account_allowed(user: User, permission: dict) -> None:
+    if user.is_admin:
+        return
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="当前账号已被禁用")
+    if not user.is_approved:
+        raise HTTPException(status_code=403, detail="当前账号暂未审核通过")
+    if user.is_expired() and not (permission.get("quota_mode") == "count_package" and permission.get("unlimited_time")):
+        raise HTTPException(status_code=403, detail="当前账号已过期")
+
+
+def _persist_stickman_permission(db: Session, user: User, permission: dict) -> None:
+    if user.is_admin:
+        return
+    permissions = user.get_module_permissions()
+    permissions["stickman_v2"] = permission
+    user.set_module_permissions(permissions)
+    record = user.get_module_permission_record(db, "stickman_v2")
+    if record:
+        record.enabled = bool(permission.get("enabled", True))
+        record.quota_limit = int(permission.get("daily_limit") or permission.get("total_video_limit") or 0)
+        record.quota_used = int(permission.get("used_today") or permission.get("used_total_videos") or 0)
+        record.period = str(permission.get("period") or ("lifetime" if permission.get("quota_mode") == "count_package" else "monthly"))
 
 
 def _background_templates() -> list[dict[str, str]]:
@@ -101,8 +152,10 @@ def get_stickman_workflow_config(
     current_user: Annotated[User, Depends(get_current_user)],
 ):
     entitlement = _stickman_entitlement(current_user)
+    scene_styles = _scene_styles_for_user(db, current_user)
     return {
         "materialLibraries": _visible_libraries_for_user(db, current_user),
+        "sceneStyles": scene_styles,
         "backgroundTemplates": _background_templates(),
         "voices": [
             {"label": "曼波参考音色", "value": "dayun_manbo", "provider": "dayun_tools"},
@@ -112,6 +165,7 @@ def get_stickman_workflow_config(
         "defaults": {
             "voiceId": "dayun_manbo",
             "materialLibrary": "sc1_outputs",
+            "sceneStyle": "sc1_outputs",
             "imageMode": "material_only",
             "scriptMode": "ai",
         },
@@ -167,17 +221,16 @@ def create_stickman_job(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ):
-    can_use, reason = current_user.can_use_module_new(db, "stickman_v2")
-    if not can_use:
-        raise HTTPException(status_code=403, detail=reason or "当前账号暂未开通火柴人工作流")
-
     title = payload.title.strip()
     custom_script = str(payload.customScript or "").strip()
     max_seconds = _max_video_seconds(current_user)
     entitlement = _stickman_entitlement(current_user)
+    permission = _stickman_permission_for_user(current_user)
     try:
         resolved_seconds = validate_script_duration_request(custom_script, payload.targetSeconds, max_seconds)
         image_mode = validate_image_mode(payload.imageMode, bool(entitlement.get("can_use_ai_images")))
+        _ensure_stickman_account_allowed(current_user, permission)
+        validate_stickman_quota(permission, resolved_seconds or payload.targetSeconds or 60)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -235,7 +288,8 @@ def create_stickman_job(
     if payload.sceneCount is not None:
         job_payload["sceneCount"] = payload.sceneCount
     job = service.create_generation_job(db, current_user.id, job_payload)
-    current_user.increment_module_usage_new(db, "stickman_v2")
+    consume_stickman_quota(permission, resolved_seconds or payload.targetSeconds or 60)
+    _persist_stickman_permission(db, current_user, permission)
     db.commit()
     return AiVideoJobCreated(jobId=f"job_{job.id}", projectId=job.project_id, status=job.status)
 

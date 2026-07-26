@@ -112,6 +112,23 @@ class InviteCodeCreateRequest(BaseModel):
 
 def _normalize_module_permissions(payload: dict, user: User) -> dict:
     permissions = user.get_module_permissions()
+    extra_permission_fields = {
+        "quota_mode",
+        "max_video_seconds",
+        "daily_video_limit",
+        "daily_minutes_limit",
+        "monthly_minutes_limit",
+        "total_video_limit",
+        "used_total_videos",
+        "used_total_minutes",
+        "used_daily_minutes",
+        "used_monthly_minutes",
+        "daily_minutes_marker",
+        "monthly_minutes_marker",
+        "unlimited_time",
+        "material_mode",
+        "allowed_libraries",
+    }
     for module_key in MODULE_KEYS:
         if module_key in payload and isinstance(payload[module_key], dict):
             current = permissions.get(module_key, {})
@@ -122,6 +139,9 @@ def _normalize_module_permissions(payload: dict, user: User) -> dict:
                 "last_reset_date": payload[module_key].get("last_reset_date", current.get("last_reset_date")),
                 "period": payload[module_key].get("period", current.get("period", "daily")),
             })
+            for field in extra_permission_fields:
+                if field in payload[module_key]:
+                    current[field] = payload[module_key].get(field)
             permissions[module_key] = current
     visual_permission = permissions.get("visual") or {}
     if visual_permission.get("daily_limit") is not None:
@@ -146,16 +166,16 @@ def _sync_permissions_to_db(db, user: User, permissions: dict):
                 user_id=user.id,
                 module_key=module_key,
                 enabled=perm_data.get("enabled", True),
-                quota_limit=perm_data.get("daily_limit", 0),
-                quota_used=perm_data.get("used_today", 0),
-                period=perm_data.get("period", "daily"),
+                quota_limit=perm_data.get("total_video_limit" if perm_data.get("quota_mode") == "count_package" else "daily_limit", 0),
+                quota_used=perm_data.get("used_total_videos" if perm_data.get("quota_mode") == "count_package" else "used_today", 0),
+                period=perm_data.get("period", "lifetime" if perm_data.get("quota_mode") == "count_package" else "daily"),
             )
             db.add(record)
         else:
             record.enabled = perm_data.get("enabled", record.enabled)
-            record.quota_limit = perm_data.get("daily_limit", record.quota_limit)
-            record.quota_used = perm_data.get("used_today", record.quota_used)
-            record.period = perm_data.get("period", record.period)
+            record.quota_limit = perm_data.get("total_video_limit" if perm_data.get("quota_mode") == "count_package" else "daily_limit", record.quota_limit)
+            record.quota_used = perm_data.get("used_total_videos" if perm_data.get("quota_mode") == "count_package" else "used_today", record.quota_used)
+            record.period = perm_data.get("period", "lifetime" if perm_data.get("quota_mode") == "count_package" else record.period)
     
     db.flush()
 

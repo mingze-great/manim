@@ -25,7 +25,12 @@ import pytest
 from fastapi import HTTPException
 
 from app.api import stickman_workflow
-from app.services.stickman_workflow_limits import estimate_script_duration_seconds, validate_script_duration_request
+from app.services.stickman_workflow_limits import (
+    consume_stickman_quota,
+    estimate_script_duration_seconds,
+    validate_script_duration_request,
+    validate_stickman_quota,
+)
 
 
 def test_estimate_script_duration_seconds_counts_chinese_text_and_pauses():
@@ -68,6 +73,50 @@ def test_duration_estimate_returns_plan_limit_and_allowed_state():
     assert response["allowed"] is True
 
 
+def test_period_card_can_limit_daily_videos_and_monthly_minutes():
+    permission = {
+        "enabled": True,
+        "quota_mode": "period",
+        "period": "monthly",
+        "daily_limit": 5,
+        "used_today": 1,
+        "monthly_minutes_limit": 10,
+        "used_monthly_minutes": 8,
+        "max_video_seconds": 300,
+    }
+
+    validate_stickman_quota(permission, requested_seconds=120)
+
+    with pytest.raises(ValueError, match="剩余分钟"):
+        validate_stickman_quota(permission, requested_seconds=181)
+
+
+def test_count_package_limits_total_videos_without_calendar_expiry():
+    permission = {
+        "enabled": True,
+        "quota_mode": "count_package",
+        "total_video_limit": 40,
+        "used_total_videos": 39,
+        "max_video_seconds": 300,
+        "unlimited_time": True,
+    }
+
+    validate_stickman_quota(permission, requested_seconds=300)
+    consume_stickman_quota(permission, requested_seconds=300)
+
+    assert permission["used_total_videos"] == 40
+    with pytest.raises(ValueError, match="视频次数"):
+        validate_stickman_quota(permission, requested_seconds=60)
+
+
+def test_stickman_quota_rejects_single_video_over_limit():
+    with pytest.raises(ValueError, match="单条视频不能超过"):
+        validate_stickman_quota(
+            {"enabled": True, "quota_mode": "count_package", "max_video_seconds": 300},
+            requested_seconds=301,
+        )
+
+
 def test_material_generation_asset_endpoint_requires_admin_dependency():
     from app.api import admin
     from app.api.auth import get_current_admin_user
@@ -75,3 +124,23 @@ def test_material_generation_asset_endpoint_requires_admin_dependency():
     parameter = inspect.signature(admin.get_material_library_generation_asset).parameters["current_user"]
 
     assert parameter.default.dependency is get_current_admin_user
+
+
+def test_config_exposes_scene_styles_as_user_facing_material_library_alias(monkeypatch):
+    monkeypatch.setattr(
+        stickman_workflow,
+        "_visible_libraries_for_user",
+        lambda db, user: [
+            {
+                "key": "warm_style",
+                "name": "温暖陪伴",
+                "description": "柔和心理场景",
+                "image_url": "/api/example.png",
+            }
+        ],
+    )
+
+    response = stickman_workflow.get_stickman_workflow_config(db=None, current_user=SimpleNamespace(is_admin=True))
+
+    assert response["sceneStyles"][0]["key"] == "warm_style"
+    assert response["sceneStyles"][0]["sampleImageUrl"] == "/api/example.png"

@@ -1,6 +1,6 @@
 ﻿import { useEffect, useMemo, useState } from 'react'
-import { Alert, Button, Collapse, Input, InputNumber, Progress, Radio, Select, Space, Typography, Upload, message } from 'antd'
-import { DownloadOutlined, FolderOpenOutlined, PlayCircleOutlined, RocketOutlined, SoundOutlined, UploadOutlined } from '@ant-design/icons'
+import { Alert, Button, Card, Collapse, Input, InputNumber, Progress, Radio, Select, Space, Typography, Upload, message } from 'antd'
+import { DownloadOutlined, PictureOutlined, PlayCircleOutlined, RocketOutlined, SoundOutlined, UploadOutlined } from '@ant-design/icons'
 import { resolveBackendUrl } from '@/services/api'
 import { stickmanWorkflowApi } from '@/services/stickmanWorkflow'
 import type { StickmanWorkflowConfig } from '@/services/stickmanWorkflow'
@@ -169,17 +169,23 @@ export default function StickmanWorkflow() {
   }
 
   const maxVideoSeconds = config?.capabilities.maxVideoSeconds || 60
-  const materialOptions = (config?.materialLibraries || [{ key: 'sc1_outputs', name: 'SC1 火柴人素材库' }]).map((item) => ({
-    label: `${item.name}${item.material_count ? ` · ${item.material_count}条` : ''}`,
-    value: item.key,
-  }))
+  const sceneStyles = config?.sceneStyles?.length
+    ? config.sceneStyles
+    : (config?.materialLibraries || [{ key: 'sc1_outputs', name: '经典心理火柴人' }]).map((item) => ({
+        key: item.key,
+        label: item.name,
+        name: item.name,
+        description: item.description,
+        sampleImageUrl: item.image_url,
+        image_url: item.image_url,
+      }))
   const voiceOptions = (config?.voices || [{ label: '曼波参考音色', value: 'dayun_manbo' }]).map((item) => ({ label: item.label, value: item.value }))
   const backgroundTemplateOptions = (config?.backgroundTemplates || [{ key: 'default', name: '默认白纸' }]).map((item) => ({
     label: item.description ? `${item.name} · ${item.description}` : item.name,
     value: item.key,
   }))
   const imageModeOptions = [
-    { label: '素材库匹配', value: 'material_only' },
+    { label: '风格匹配', value: 'material_only' },
     ...(config?.capabilities.canUseAiImages ? [
       { label: '实时生图', value: 'ai_image' },
       { label: '混合补图', value: 'hybrid' },
@@ -192,7 +198,7 @@ export default function StickmanWorkflow() {
         <div>
           <Typography.Title level={2}>火柴人工作流</Typography.Title>
           <Typography.Paragraph>
-            默认输入一个主题即可生成成片；高级选项支持自定义文案、时长、背景和素材库控制。
+            默认输入一个主题即可生成成片；高级选项支持自定义文案、时长、背景和场景图风格控制。
           </Typography.Paragraph>
         </div>
         <div className="workflow-badge">SC1 独立模块</div>
@@ -319,10 +325,34 @@ export default function StickmanWorkflow() {
               <span>声音</span>
               <Select value={voiceId} onChange={setVoiceId} suffixIcon={<SoundOutlined />} options={voiceOptions} />
             </label>
-            <label>
-              <span>素材库</span>
-              <Select value={materialLibrary} onChange={setMaterialLibrary} suffixIcon={<FolderOpenOutlined />} options={materialOptions} />
-            </label>
+          </div>
+
+          <div className="scene-style-section">
+            <div className="scene-style-title">
+              <PictureOutlined />
+              <span>场景图风格</span>
+            </div>
+            <div className="scene-style-grid">
+              {sceneStyles.map((style) => {
+                const imageUrl = resolveBackendUrl(style.sampleImageUrl || style.image_url)
+                const selected = materialLibrary === style.key
+                return (
+                  <Card
+                    key={style.key}
+                    size="small"
+                    hoverable
+                    className={`scene-style-card ${selected ? 'selected' : ''}`}
+                    onClick={() => setMaterialLibrary(style.key)}
+                    cover={imageUrl ? <img src={imageUrl} alt={style.label || style.name || style.key} /> : undefined}
+                  >
+                    <Card.Meta
+                      title={style.label || style.name || style.key}
+                      description={style.description || '适合心理学火柴人成片'}
+                    />
+                  </Card>
+                )
+              })}
+            </div>
           </div>
 
           <Button

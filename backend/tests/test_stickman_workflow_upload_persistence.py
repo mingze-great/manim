@@ -105,3 +105,19 @@ def test_upload_package_accepts_generated_manifest_and_camel_case_paths(tmp_path
     assert package_info["image_count"] == 1
     assert package_info["material_json_path"].endswith("materials.normalized.json")
     assert package_info["cover_image_path"].endswith("scene.png")
+
+
+def test_upload_package_rejects_oversized_zip_with_clear_error(tmp_path, monkeypatch):
+    upload_root = tmp_path / "uploads"
+    monkeypatch.setattr(stickman_workflow_assets, "_upload_root", lambda: upload_root)
+    monkeypatch.setattr(stickman_workflow_assets, "MAX_PACKAGE_BYTES", 10)
+
+    buffer = BytesIO(b"0" * 32)
+    upload = UploadFile(filename="library.zip", file=buffer)
+
+    try:
+        asyncio.run(stickman_workflow_assets.save_material_library_package(upload, library_key="too_large"))
+    except ValueError as exc:
+        assert "压缩包不能超过" in str(exc)
+    else:
+        raise AssertionError("oversized package should be rejected")

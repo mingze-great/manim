@@ -12,6 +12,7 @@ import {
   InputNumber,
   message,
   Modal,
+  Radio,
   Row,
   Select,
   Space,
@@ -299,6 +300,7 @@ export default function AdminUserDetail() {
               <Space direction="vertical" style={{ width: '100%' }} size="middle">
                 {moduleKeys.map((moduleKey) => {
                   const permission: any = modulePermissions[moduleKey] || { enabled: false, daily_limit: 0, used_today: 0, period: moduleKey === 'visual' ? 'daily' : 'monthly' }
+                  const isStickmanWorkflow = moduleKey === 'stickman_v2'
                   return (
                     <Card key={moduleKey} size="small" title={moduleLabels[moduleKey] || moduleKey}>
                       <Space wrap align="center">
@@ -318,6 +320,62 @@ export default function AdminUserDetail() {
                         />
                         <Tag color="geekblue">已用 {permission.used_today || 0}</Tag>
                       </Space>
+                      {isStickmanWorkflow ? (
+                        <>
+                          <Divider />
+                          <Space direction="vertical" style={{ width: '100%' }} size="middle">
+                            <Radio.Group
+                              value={permission.quota_mode || 'period'}
+                              onChange={(event) => updatePermission(moduleKey, { quota_mode: event.target.value })}
+                              optionType="button"
+                              buttonStyle="solid"
+                              options={[
+                                { label: '月卡/周期卡', value: 'period' },
+                                { label: '次数包不限时', value: 'count_package' },
+                              ]}
+                            />
+                            {(permission.quota_mode || 'period') === 'count_package' ? (
+                              <Row gutter={[12, 12]}>
+                                <Col xs={24} md={8}>
+                                  <div className="text-gray-500 mb-1">总视频个数</div>
+                                  <InputNumber min={0} max={9999} value={permission.total_video_limit || permission.daily_limit || 40} onChange={(value) => updatePermission(moduleKey, { total_video_limit: value || 0, daily_limit: value || 0 })} style={{ width: '100%' }} />
+                                </Col>
+                                <Col xs={24} md={8}>
+                                  <div className="text-gray-500 mb-1">已用视频</div>
+                                  <InputNumber min={0} max={9999} value={permission.used_total_videos || 0} onChange={(value) => updatePermission(moduleKey, { used_total_videos: value || 0, used_today: value || 0 })} style={{ width: '100%' }} />
+                                </Col>
+                                <Col xs={24} md={8}>
+                                  <div className="text-gray-500 mb-1">单条最长秒数</div>
+                                  <InputNumber min={15} max={1800} value={permission.max_video_seconds || 300} onChange={(value) => updatePermission(moduleKey, { max_video_seconds: value || 300, unlimited_time: true, period: 'lifetime' })} style={{ width: '100%' }} />
+                                </Col>
+                              </Row>
+                            ) : (
+                              <Row gutter={[12, 12]}>
+                                <Col xs={24} md={6}>
+                                  <div className="text-gray-500 mb-1">每日视频数</div>
+                                  <InputNumber min={0} max={999} value={permission.daily_limit || 0} onChange={(value) => updatePermission(moduleKey, { daily_limit: value || 0, period: 'monthly' })} style={{ width: '100%' }} />
+                                </Col>
+                                <Col xs={24} md={6}>
+                                  <div className="text-gray-500 mb-1">每日分钟</div>
+                                  <InputNumber min={0} max={9999} value={permission.daily_minutes_limit || 0} onChange={(value) => updatePermission(moduleKey, { daily_minutes_limit: value || 0 })} style={{ width: '100%' }} />
+                                </Col>
+                                <Col xs={24} md={6}>
+                                  <div className="text-gray-500 mb-1">每月分钟</div>
+                                  <InputNumber min={0} max={99999} value={permission.monthly_minutes_limit || 0} onChange={(value) => updatePermission(moduleKey, { monthly_minutes_limit: value || 0 })} style={{ width: '100%' }} />
+                                </Col>
+                                <Col xs={24} md={6}>
+                                  <div className="text-gray-500 mb-1">单条最长秒数</div>
+                                  <InputNumber min={15} max={1800} value={permission.max_video_seconds || 60} onChange={(value) => updatePermission(moduleKey, { max_video_seconds: value || 60 })} style={{ width: '100%' }} />
+                                </Col>
+                              </Row>
+                            )}
+                            <Space wrap>
+                              <Tag color="purple">本月已用 {permission.used_monthly_minutes || 0} 分钟</Tag>
+                              <Tag color="cyan">总已用 {permission.used_total_videos || 0} 个</Tag>
+                            </Space>
+                          </Space>
+                        </>
+                      ) : null}
                     </Card>
                   )
                 })}

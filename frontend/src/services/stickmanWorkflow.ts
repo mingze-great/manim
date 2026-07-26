@@ -12,8 +12,18 @@ export interface StickmanWorkflowMaterialLibrary {
   is_visible?: boolean
 }
 
+export interface StickmanWorkflowSceneStyle {
+  key: string
+  label: string
+  name?: string
+  description?: string
+  sampleImageUrl?: string | null
+  image_url?: string | null
+}
+
 export interface StickmanWorkflowConfig {
   materialLibraries: StickmanWorkflowMaterialLibrary[]
+  sceneStyles?: StickmanWorkflowSceneStyle[]
   backgroundTemplates: Array<{ key: string; name: string; description?: string }>
   voices: Array<{ label: string; value: string; provider?: string }>
   defaults: {
