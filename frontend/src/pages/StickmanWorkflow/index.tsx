@@ -1,6 +1,6 @@
 ﻿import { useEffect, useMemo, useState } from 'react'
-import { Alert, Button, Card, Collapse, Drawer, Input, InputNumber, Progress, Radio, Select, Space, Table, Typography, Upload, message } from 'antd'
-import { DownloadOutlined, HistoryOutlined, PictureOutlined, PlayCircleOutlined, RocketOutlined, SoundOutlined, UploadOutlined } from '@ant-design/icons'
+import { Alert, Button, Card, Collapse, Drawer, Image, Input, InputNumber, Progress, Radio, Select, Space, Table, Typography, Upload, message } from 'antd'
+import { DownloadOutlined, HistoryOutlined, PictureOutlined, PlayCircleOutlined, ReloadOutlined, RocketOutlined, SoundOutlined, UploadOutlined } from '@ant-design/icons'
 import { resolveBackendUrl } from '@/services/api'
 import { stickmanWorkflowApi } from '@/services/stickmanWorkflow'
 import type { StickmanWorkflowConfig } from '@/services/stickmanWorkflow'
@@ -54,12 +54,36 @@ export default function StickmanWorkflow() {
   const [historyOpen, setHistoryOpen] = useState(false)
   const [historyJobs, setHistoryJobs] = useState<AiVideoJob[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
+  const [backgroundPreviewUrl, setBackgroundPreviewUrl] = useState('')
+  const [refreshingConfig, setRefreshingConfig] = useState(false)
+  const [voicePreviewing, setVoicePreviewing] = useState(false)
 
   const outputUrl = useMemo(() => resolveBackendUrl(job?.outputUrl), [job?.outputUrl])
   const currentStep = useMemo(
     () => progressSteps.slice().reverse().find((step) => job ? job.progress >= step.at || job.status === step.key : false) || progressSteps[0],
     [job],
   )
+
+  const loadConfig = async (silent = false) => {
+    setRefreshingConfig(true)
+    try {
+      const { data } = await stickmanWorkflowApi.getConfig()
+      setConfig(data)
+      setVoiceId(data.defaults.voiceId || 'dayun_manbo')
+      setMaterialLibrary((current) => {
+        const styles = data.sceneStyles?.length ? data.sceneStyles : data.materialLibraries
+        if (styles?.some((item: any) => item.key === current)) return current
+        return data.defaults.materialLibrary || styles?.[0]?.key || 'sc1_outputs'
+      })
+      setImageMode((data.defaults.imageMode === 'ai_image' ? 'ai_image' : 'material_only'))
+      setBackgroundTemplate(data.backgroundTemplates?.[0]?.key || 'default')
+      if (!silent) message.success('火柴人配置已刷新')
+    } catch {
+      message.error('加载火柴人配置失败')
+    } finally {
+      setRefreshingConfig(false)
+    }
+  }
 
   useEffect(() => {
     stickmanWorkflowApi.getConfig()
@@ -170,10 +194,28 @@ export default function StickmanWorkflow() {
   }
 
   const uploadBackground = async (file: File) => {
+    const imageUrl = URL.createObjectURL(file)
+    const ratioOk = await new Promise<boolean>((resolve) => {
+      const image = document.createElement('img')
+      image.onload = () => {
+        const ratio = image.naturalWidth / Math.max(1, image.naturalHeight)
+        URL.revokeObjectURL(imageUrl)
+        resolve(Math.abs(ratio - 16 / 9) <= 0.08)
+      }
+      image.onerror = () => {
+        URL.revokeObjectURL(imageUrl)
+        resolve(false)
+      }
+      image.src = imageUrl
+    })
+    if (!ratioOk) {
+      message.warning('背景图建议上传 16:9 横版图片，否则生成视频会自动裁切填充。')
+    }
     setUploadingBackground(true)
     try {
       const { data } = await stickmanWorkflowApi.uploadBackground(file)
       setUploadedBackgroundUrl(data.url)
+      setBackgroundPreviewUrl(resolveBackendUrl(data.url))
       setBackgroundMode('upload')
       message.success('背景图已上传')
     } catch (error: any) {
@@ -182,6 +224,26 @@ export default function StickmanWorkflow() {
       setUploadingBackground(false)
     }
     return false
+  }
+
+  const previewVoice = () => {
+    const currentVoice = (config?.voices || []).find((item) => item.value === voiceId)
+    const url = resolveBackendUrl(currentVoice?.previewUrl)
+    if (!url) {
+      message.warning('当前音色暂未配置试听')
+      return
+    }
+    setVoicePreviewing(true)
+    const audio = new Audio(url)
+    audio.onended = () => setVoicePreviewing(false)
+    audio.onerror = () => {
+      setVoicePreviewing(false)
+      message.error('声音试听加载失败，请检查服务器试听文件')
+    }
+    audio.play().catch(() => {
+      setVoicePreviewing(false)
+      message.error('浏览器阻止了声音播放，请再点一次试听')
+    })
   }
 
   const maxVideoSeconds = config?.capabilities.maxVideoSeconds || 60
@@ -196,7 +258,9 @@ export default function StickmanWorkflow() {
         image_url: item.image_url,
       }))
   const voiceOptions = (config?.voices || [{ label: '曼波参考音色', value: 'dayun_manbo' }]).map((item) => ({ label: item.label, value: item.value }))
-  const backgroundTemplateOptions = (config?.backgroundTemplates || [{ key: 'default', name: '默认白纸' }]).map((item) => ({
+  const backgroundTemplates = config?.backgroundTemplates || [{ key: 'default', name: '默认白纸', preview: 'paper' }]
+  const selectedBackgroundTemplate = backgroundTemplates.find((item) => item.key === backgroundTemplate)
+  const backgroundTemplateOptions = backgroundTemplates.map((item) => ({
     label: item.description ? `${item.name} · ${item.description}` : item.name,
     value: item.key,
   }))
@@ -309,6 +373,9 @@ export default function StickmanWorkflow() {
                     <label className="workflow-field">
                       <span>背景风格</span>
                       <Select value={backgroundTemplate} onChange={setBackgroundTemplate} options={backgroundTemplateOptions} />
+                      <div className={`background-template-preview ${selectedBackgroundTemplate?.preview || 'paper'}`}>
+                        <span>{selectedBackgroundTemplate?.name || '背景预览'}</span>
+                      </div>
                     </label>
                   ) : null}
 
@@ -319,6 +386,8 @@ export default function StickmanWorkflow() {
                         <Upload beforeUpload={uploadBackground} showUploadList={false} accept=".png,.jpg,.jpeg,.webp">
                           <Button icon={<UploadOutlined />} loading={uploadingBackground}>选择背景图</Button>
                         </Upload>
+                        <Typography.Text type="secondary">请上传 16:9 横版图片，和最终视频比例一致；非 16:9 会自动裁切填充。</Typography.Text>
+                        {backgroundPreviewUrl ? <Image src={backgroundPreviewUrl} alt="上传背景预览" className="uploaded-background-preview" /> : null}
                         {uploadedBackgroundUrl ? <Typography.Text type="secondary">已上传：{uploadedBackgroundUrl}</Typography.Text> : null}
                       </Space>
                     </label>
@@ -343,7 +412,10 @@ export default function StickmanWorkflow() {
           <div className="workflow-controls">
             <label>
               <span>声音</span>
-              <Select value={voiceId} onChange={setVoiceId} suffixIcon={<SoundOutlined />} options={voiceOptions} />
+              <Space.Compact style={{ width: '100%' }}>
+                <Select value={voiceId} onChange={setVoiceId} suffixIcon={<SoundOutlined />} options={voiceOptions} style={{ width: '100%' }} />
+                <Button icon={<SoundOutlined />} loading={voicePreviewing} onClick={previewVoice}>试听</Button>
+              </Space.Compact>
             </label>
           </div>
 
@@ -351,6 +423,7 @@ export default function StickmanWorkflow() {
             <div className="scene-style-title">
               <PictureOutlined />
               <span>场景图风格</span>
+              <Button size="small" icon={<ReloadOutlined />} loading={refreshingConfig} onClick={() => loadConfig(false)}>刷新</Button>
             </div>
             <div className="scene-style-grid">
               {sceneStyles.map((style) => {
@@ -363,7 +436,7 @@ export default function StickmanWorkflow() {
                     hoverable
                     className={`scene-style-card ${selected ? 'selected' : ''}`}
                     onClick={() => setMaterialLibrary(style.key)}
-                    cover={imageUrl ? <img src={imageUrl} alt={style.label || style.name || style.key} /> : undefined}
+                    cover={imageUrl ? <img src={imageUrl} alt={style.label || style.name || style.key} /> : <div className="scene-style-empty-cover">暂无预览图</div>}
                   >
                     <Card.Meta
                       title={style.label || style.name || style.key}

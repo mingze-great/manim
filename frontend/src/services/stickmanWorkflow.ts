@@ -24,8 +24,8 @@ export interface StickmanWorkflowSceneStyle {
 export interface StickmanWorkflowConfig {
   materialLibraries: StickmanWorkflowMaterialLibrary[]
   sceneStyles?: StickmanWorkflowSceneStyle[]
-  backgroundTemplates: Array<{ key: string; name: string; description?: string }>
-  voices: Array<{ label: string; value: string; provider?: string }>
+  backgroundTemplates: Array<{ key: string; name: string; description?: string; preview?: string }>
+  voices: Array<{ label: string; value: string; provider?: string; previewUrl?: string }>
   defaults: {
     voiceId: string
     materialLibrary: string
@@ -74,6 +74,7 @@ export const stickmanWorkflowApi = {
     formData.append('file', file)
     return api.post<{ url: string; filename: string }>('/stickman-workflow/backgrounds', formData)
   },
+  previewVoiceUrl: (previewUrl?: string | null) => previewUrl || '',
   createJob: (payload: StickmanWorkflowJobCreate) =>
     api.post<{ jobId: string; projectId: number; status: string }>('/stickman-workflow/jobs', payload),
   listJobs: () => api.get<AiVideoJob[]>('/stickman-workflow/jobs'),

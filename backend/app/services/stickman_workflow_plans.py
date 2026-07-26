@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.models.system_config import SystemConfig
 
 CONFIG_KEY = "stickman_workflow_plans"
+BUILT_IN_PLAN_KEYS = {"count_40x5m", "count_65x5m", "count_90x5m"}
 
 
 def default_stickman_workflow_plans() -> list[dict]:
@@ -29,7 +30,7 @@ def default_stickman_workflow_plans() -> list[dict]:
         },
         {
             "key": "count_40x5m",
-            "name": "40条不限时包",
+            "name": "399元40个视频",
             "description": "40个视频，每个视频5分钟以内，不限制自然有效期",
             "quota_mode": "count_package",
             "daily_limit": 0,
@@ -39,9 +40,41 @@ def default_stickman_workflow_plans() -> list[dict]:
             "max_video_seconds": 300,
             "material_mode": "material_only",
             "allowed_libraries": ["sc1_outputs"],
-            "amount": 19900,
+            "amount": 39900,
             "is_active": True,
             "sort_order": 2,
+        },
+        {
+            "key": "count_65x5m",
+            "name": "599元65个视频",
+            "description": "65个视频，每个视频5分钟以内，不限制自然有效期",
+            "quota_mode": "count_package",
+            "daily_limit": 0,
+            "daily_minutes_limit": 0,
+            "monthly_minutes_limit": 0,
+            "total_video_limit": 65,
+            "max_video_seconds": 300,
+            "material_mode": "material_only",
+            "allowed_libraries": ["sc1_outputs"],
+            "amount": 59900,
+            "is_active": True,
+            "sort_order": 3,
+        },
+        {
+            "key": "count_90x5m",
+            "name": "799元90个视频",
+            "description": "90个视频，每个视频5分钟以内，不限制自然有效期",
+            "quota_mode": "count_package",
+            "daily_limit": 0,
+            "daily_minutes_limit": 0,
+            "monthly_minutes_limit": 0,
+            "total_video_limit": 90,
+            "max_video_seconds": 300,
+            "material_mode": "material_only",
+            "allowed_libraries": ["sc1_outputs"],
+            "amount": 79900,
+            "is_active": True,
+            "sort_order": 4,
         },
     ]
 
@@ -98,6 +131,23 @@ def normalize_stickman_workflow_plans(items: list[dict]) -> list[dict]:
     return plans
 
 
+def _merge_built_in_plans(saved_items: list[dict] | None) -> list[dict]:
+    defaults = normalize_stickman_workflow_plans(default_stickman_workflow_plans())
+    if not isinstance(saved_items, list):
+        return defaults
+    saved = normalize_stickman_workflow_plans(saved_items)
+    default_by_key = {plan["key"]: plan for plan in defaults}
+    merged_by_key = {plan["key"]: plan for plan in saved if plan["key"] not in BUILT_IN_PLAN_KEYS}
+    for plan in defaults:
+        if plan["key"] in BUILT_IN_PLAN_KEYS:
+            merged_by_key[plan["key"]] = plan
+        else:
+            merged_by_key.setdefault(plan["key"], plan)
+    merged = list(merged_by_key.values())
+    merged.sort(key=lambda item: (int(item.get("sort_order") or 0), item.get("name") or ""))
+    return merged
+
+
 def list_stickman_workflow_plans(db: Session, active_only: bool = False) -> list[dict]:
     config = db.query(SystemConfig).filter(SystemConfig.key == CONFIG_KEY).first()
     payload = None
@@ -106,7 +156,7 @@ def list_stickman_workflow_plans(db: Session, active_only: bool = False) -> list
             payload = json.loads(config.value)
         except Exception:
             payload = None
-    plans = normalize_stickman_workflow_plans(payload if isinstance(payload, list) else default_stickman_workflow_plans())
+    plans = _merge_built_in_plans(payload if isinstance(payload, list) else None)
     if active_only:
         plans = [plan for plan in plans if plan.get("is_active")]
     return plans

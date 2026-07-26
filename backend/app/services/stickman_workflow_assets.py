@@ -153,8 +153,8 @@ def _asset_public_url(local_path: str = "", explicit_url: str = "", library_key:
         return explicit_url or None
     key = str(library_key or "").strip()
     if key:
-        return f"/api/admin/stickman-workflow/assets/material-libraries/{key}/{Path(image_path).name}"
-    return f"/api/admin/stickman-workflow/assets/material-libraries/{Path(image_path).name}"
+        return f"/api/stickman-workflow/assets/material-libraries/{key}/{Path(image_path).name}"
+    return f"/api/stickman-workflow/assets/material-libraries/{Path(image_path).name}"
 
 
 def _public_payload(item: dict) -> dict:

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+﻿import { useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Button, Drawer, Input, Space, Spin, Tag, Typography, message as antMessage } from 'antd'
 import {
@@ -26,7 +26,7 @@ interface ChatMessage {
 
 const quickQuestions = [
   '如何生成火柴人视频',
-  '如何选择素材库',
+  '如何选择场景图风格',
   '如何兑换邀请码',
   '如何查看作品',
   '合作者如何发码',
@@ -57,7 +57,7 @@ export default function PlatformAssistantWidget() {
     {
       id: 'welcome',
       role: 'assistant',
-      content: '你好，我是平台 AI 助手。你可以问我怎么生成视频、选择素材库、兑换邀请码或查看作品。',
+      content: '你好，我是平台 AI 助手。你可以问我怎么生成视频、选择场景图风格、兑换邀请码或查看作品。',
       actions: [
         { label: '去火柴人工作流', route: '/stickman-workflow' },
         { label: '去个人中心兑换码', route: '/profile' },
@@ -109,7 +109,7 @@ export default function PlatformAssistantWidget() {
             { label: '去火柴人工作流', route: '/stickman-workflow' },
             { label: '去个人中心兑换码', route: '/profile' },
           ],
-          sources: [{ title: '离线引导', source: '前端兜底' }],
+          sources: [{ title: '绂荤嚎寮曞', source: '鍓嶇鍏滃簳' }],
         },
       ])
     } finally {
@@ -132,16 +132,14 @@ export default function PlatformAssistantWidget() {
         onClick={() => setOpen(true)}
       >
         <span className="assistant-person" aria-hidden="true">
-          <span className="assistant-head">
-            <span className="assistant-hair" />
-            <span className="assistant-eye left" />
-            <span className="assistant-eye right" />
-            <span className="assistant-smile" />
-          </span>
-          <span className="assistant-body" />
-          <span className="assistant-hand" />
+          <img src="/assistant-bot.png" alt="" />
+          <span className="assistant-sparkle one" />
+          <span className="assistant-sparkle two" />
         </span>
-        <span className="assistant-fab-label">AI助手</span>
+        <span className="assistant-fab-label">
+          <strong>AI助手</strong>
+          <em>有问题点我</em>
+        </span>
       </button>
 
       <Drawer
@@ -210,7 +208,7 @@ export default function PlatformAssistantWidget() {
               <div className="platform-assistant-message assistant">
                 <div className="platform-assistant-bubble loading">
                   <Spin size="small" />
-                  <Text type="secondary">正在结合当前页面生成回答...</Text>
+                  <Text type="secondary">姝ｅ湪缁撳悎褰撳墠椤甸潰鐢熸垚鍥炵瓟...</Text>
                 </div>
               </div>
             )}
@@ -227,7 +225,7 @@ export default function PlatformAssistantWidget() {
                   sendMessage(input)
                 }
               }}
-              placeholder="问我平台怎么用..."
+              placeholder="闂垜骞冲彴鎬庝箞鐢?.."
               autoSize={{ minRows: 2, maxRows: 4 }}
               maxLength={500}
               disabled={loading}

@@ -78,6 +78,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  justify-content: space-between;
   margin-bottom: 10px;
   font-size: 13px;
   font-weight: 800;
@@ -111,6 +112,62 @@
   height: 118px;
   object-fit: contain;
   padding: 8px;
+}
+
+.scene-style-empty-cover {
+  display: grid;
+  height: 118px;
+  place-items: center;
+  background: #f8fafc;
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.background-template-preview {
+  position: relative;
+  display: grid;
+  min-height: 88px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid #dfe3ea;
+  border-radius: 8px;
+  color: #111827;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.background-template-preview.paper {
+  background:
+    radial-gradient(circle at 18% 12%, rgba(0, 0, 0, 0.03), transparent 26%),
+    radial-gradient(circle at 76% 78%, rgba(0, 0, 0, 0.03), transparent 30%),
+    #fff;
+}
+
+.background-template-preview.warm {
+  background:
+    linear-gradient(180deg, rgba(255, 247, 228, 0.88), rgba(255, 255, 255, 0.96)),
+    radial-gradient(circle at 16% 18%, rgba(227, 174, 95, 0.18), transparent 32%);
+}
+
+.background-template-preview.grid {
+  background:
+    linear-gradient(rgba(50, 82, 120, 0.11) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(50, 82, 120, 0.11) 1px, transparent 1px),
+    #fff;
+  background-size: 18px 18px;
+}
+
+.background-template-preview.gradient {
+  background: linear-gradient(135deg, rgba(240, 247, 255, 0.92), rgba(255, 255, 255, 0.98) 48%, rgba(255, 244, 238, 0.82));
+}
+
+.uploaded-background-preview {
+  width: 100%;
+  max-height: 140px;
+  object-fit: cover;
+  aspect-ratio: 16 / 9;
+  border: 1px solid #dfe3ea;
+  border-radius: 8px;
 }
 
 .scene-style-card .ant-card-meta-title {

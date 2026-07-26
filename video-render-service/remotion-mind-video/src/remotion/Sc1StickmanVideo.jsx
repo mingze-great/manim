@@ -316,8 +316,8 @@ const Paper = ({backgroundMode = 'default', backgroundTemplate = '', backgroundS
   <AbsoluteFill style={{background: '#ffffff'}}>
     {imageSrc ? (
       <>
-        <Img src={imageSrc} style={{position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0.22}} />
-        <div style={{position: 'absolute', inset: 0, background: 'rgba(255,255,255,.72)'}} />
+        <Img src={imageSrc} style={{position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0.58}} />
+        <div style={{position: 'absolute', inset: 0, background: 'rgba(255,255,255,.34)'}} />
       </>
     ) : (
       <div style={{

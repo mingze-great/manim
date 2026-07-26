@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -15,7 +16,7 @@ from app.models.ai_video import AiVideoJob
 from app.models.user import User
 from app.schemas.ai_video import AiVideoJobCreated, AiVideoJobResponse
 from app.services.partner_program import stickman_entitlement_from_user
-from app.services.stickman_workflow_assets import public_material_libraries, resolve_material_library
+from app.services.stickman_workflow_assets import find_material_library_asset, public_material_libraries, resolve_material_library
 from app.services.stickman_workflow_limits import (
     consume_stickman_quota,
     estimate_script_duration_seconds,
@@ -154,10 +155,18 @@ def _persist_stickman_permission(db: Session, user: User, permission: dict) -> N
 
 def _background_templates() -> list[dict[str, str]]:
     return [
-        {"key": "default", "name": "默认白纸", "description": "接近参考视频的简洁白底"},
-        {"key": "warm_paper", "name": "暖色纸感", "description": "偏温暖的纸面背景"},
-        {"key": "cool_grid", "name": "冷静网格", "description": "偏理性的浅色网格"},
-        {"key": "soft_gradient", "name": "柔和渐变", "description": "轻微渐变的低干扰背景"},
+        {"key": "default", "name": "默认白纸", "description": "接近参考视频的简洁白底", "preview": "paper"},
+        {"key": "warm_paper", "name": "暖色纸感", "description": "偏温暖的纸面背景", "preview": "warm"},
+        {"key": "cool_grid", "name": "冷静网格", "description": "偏理性的浅色网格", "preview": "grid"},
+        {"key": "soft_gradient", "name": "柔和渐变", "description": "轻微渐变的低干扰背景", "preview": "gradient"},
+    ]
+
+
+def _voice_options() -> list[dict[str, str]]:
+    return [
+        {"label": "曼波参考音色", "value": "dayun_manbo", "provider": "dayun_tools", "previewUrl": "/api/stickman-workflow/voices/dayun_manbo/preview"},
+        {"label": "中文女", "value": "中文女", "provider": "dashscope_cosyvoice", "previewUrl": "/api/stickman-workflow/voices/dayun_manbo/preview"},
+        {"label": "中文男", "value": "中文男", "provider": "dashscope_cosyvoice", "previewUrl": "/api/stickman-workflow/voices/dayun_manbo/preview"},
     ]
 
 
@@ -172,11 +181,7 @@ def get_stickman_workflow_config(
         "materialLibraries": _visible_libraries_for_user(db, current_user),
         "sceneStyles": scene_styles,
         "backgroundTemplates": _background_templates(),
-        "voices": [
-            {"label": "曼波参考音色", "value": "dayun_manbo", "provider": "dayun_tools"},
-            {"label": "中文女", "value": "中文女", "provider": "dashscope_cosyvoice"},
-            {"label": "中文男", "value": "中文男", "provider": "dashscope_cosyvoice"},
-        ],
+        "voices": _voice_options(),
         "defaults": {
             "voiceId": "dayun_manbo",
             "materialLibrary": "sc1_outputs",
@@ -193,6 +198,41 @@ def get_stickman_workflow_config(
             "maxVideoSeconds": _max_video_seconds(current_user),
         },
     }
+
+
+@router.get("/assets/material-libraries/{library_key}/{filename}")
+def get_stickman_workflow_material_library_preview_asset(
+    library_key: str,
+    filename: str,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    visible_keys = {str(item.get("key") or "") for item in _visible_libraries_for_user(db, current_user)}
+    if str(library_key or "") not in visible_keys:
+        raise HTTPException(status_code=404, detail="素材库不可用")
+    asset_path = find_material_library_asset(db, filename, library_key)
+    if not asset_path or not asset_path.exists():
+        raise HTTPException(status_code=404, detail="预览图不存在")
+    return FileResponse(asset_path)
+
+
+@router.get("/voices/{voice_id}/preview")
+def preview_stickman_voice(
+    voice_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    candidates = [
+        Path(str(Path.cwd())) / "outputs" / "dayun_tools_manbo_tts_test.mp3",
+        Path(__file__).resolve().parents[2] / "outputs" / "dayun_tools_manbo_tts_test.mp3",
+        Path(__file__).resolve().parents[2].parent / "outputs" / "dayun_tools_manbo_tts_test.mp3",
+        Path(__file__).resolve().parents[2] / "outputs" / "cosyvoice_zero_shot_sample.wav",
+        Path(__file__).resolve().parents[2].parent / "outputs" / "cosyvoice_zero_shot_sample.wav",
+    ]
+    for path in candidates:
+        if path.exists() and path.is_file():
+            media_type = "audio/mpeg" if path.suffix.lower() == ".mp3" else "audio/wav"
+            return FileResponse(path, media_type=media_type, filename=path.name)
+    raise HTTPException(status_code=404, detail="当前服务器未配置声音试听文件")
 
 
 @router.post("/duration-estimate")

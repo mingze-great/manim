@@ -13,7 +13,8 @@ from sqlalchemy.orm import sessionmaker
 from app.database import Base
 from app.models.system_config import SystemConfig
 from app.services import stickman_workflow_assets
-from app.services.stickman_workflow_assets import _normalize_manifest, list_material_libraries, save_material_libraries
+from app.services.stickman_workflow_assets import _normalize_manifest, list_material_libraries, public_material_libraries, save_material_libraries
+from app.services.stickman_workflow_plans import CONFIG_KEY, default_stickman_workflow_plans, list_stickman_workflow_plans
 
 
 def _session():
@@ -121,3 +122,48 @@ def test_upload_package_rejects_oversized_zip_with_clear_error(tmp_path, monkeyp
         assert "压缩包不能超过" in str(exc)
     else:
         raise AssertionError("oversized package should be rejected")
+
+
+def test_public_material_library_preview_uses_user_workflow_asset_route(tmp_path):
+    db = _session()
+    package_dir = tmp_path / "library"
+    package_dir.mkdir()
+    cover = package_dir / "cover.png"
+    cover.write_bytes(b"png")
+
+    save_material_libraries(db, [{
+        "key": "visible_style",
+        "name": "Visible Style",
+        "cover_image_path": str(cover),
+        "is_active": True,
+        "is_visible": True,
+    }])
+
+    public = public_material_libraries(db)
+    uploaded = next(item for item in public if item["key"] == "visible_style")
+
+    assert uploaded["image_url"] == "/api/stickman-workflow/assets/material-libraries/visible_style/cover.png"
+
+
+def test_default_count_package_plans_match_partner_sales_prices():
+    plans = default_stickman_workflow_plans()
+    count_plans = [item for item in plans if item["quota_mode"] == "count_package"]
+
+    assert [(item["amount"], item["total_video_limit"], item["max_video_seconds"]) for item in count_plans] == [
+        (39900, 40, 300),
+        (59900, 65, 300),
+        (79900, 90, 300),
+    ]
+
+
+def test_builtin_sales_plans_override_old_saved_plan_config():
+    db = _session()
+    db.add(SystemConfig(key=CONFIG_KEY, value='[{"key":"count_40x5m","name":"旧套餐","quota_mode":"count_package","total_video_limit":40,"max_video_seconds":300,"amount":19900,"is_active":true}]'))
+    db.commit()
+
+    plans = list_stickman_workflow_plans(db, active_only=True)
+    sales = {item["key"]: item for item in plans if item["key"].startswith("count_")}
+
+    assert sales["count_40x5m"]["amount"] == 39900
+    assert sales["count_65x5m"]["total_video_limit"] == 65
+    assert sales["count_90x5m"]["amount"] == 79900

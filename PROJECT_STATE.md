@@ -518,3 +518,14 @@
 - 当前改动：`backend/app/services/ai_video.py` 在 SC1 caption cue 切分时清理 `第一句/第二句/第三句` 等编号前缀，避免编号单独或带前缀出现在字幕中；`backend/tests/test_ai_video_sc1_material_urls.py` 增加回归测试。
 - 下一步：运行目标 pytest、py_compile、git diff 检查；提交后只部署 3004 backend/worker，创建 3004 平台任务验证字幕、音频、场景图和总结同步。
 - 不要重复做：不要改动、重启、覆盖 3003；不要只用本地测试替代 3004 平台成片闭环。
+## 2026-07-27 3004 素材风格预览、声音试听、上传背景、套餐与助手图标部署前记录
+
+- 当前任务：只在 3004 分支 `codex/3004-partner-stickman-platform-20260724` 上修复用户端新素材库不可见/不能实时刷新、场景图风格缺少预览、声音不能试听、上传背景未明显生效、合作者兑换码套餐固定为 399/599/799 三档，以及 AI 助手入口使用用户提供的机器人图标；不触碰 3003。
+- 本地工作区：`C:\Users\Administrator\Documents\Codex\2026-07-18\300\work\3004-partner-stickman-worktree`。
+- 部署目标：`/opt/manim-v2-3004-snapshot`，平台 URL `http://152.136.218.74:3004`。
+- 编码前 HEAD：`2d7a4652f75b7517498f088523d38a265094ab43`，提交时间 `2026-07-26 23:22:59 +0800`，提交信息 `fix: clean numbered custom script captions`。
+- 已完成本地改动：用户端素材库预览 URL 改为 `/api/stickman-workflow/assets/material-libraries/...` 并新增登录用户可访问的只读封面接口；火柴人 config 返回声音试听 URL、背景模板 preview 字段；用户端火柴人页面支持刷新场景图风格、展示素材示例图、声音试听、上传背景 16:9 提示和预览、背景模板预览；Remotion 上传背景透明度增强；默认/内置套餐强制包含 `399元40个视频`、`599元65个视频`、`799元90个视频`；AI 助手入口改用 `frontend/public/assistant-bot.png` 并保留动态提示。
+- 最近修改文件：`backend/app/api/stickman_workflow.py`、`backend/app/services/stickman_workflow_assets.py`、`backend/app/services/stickman_workflow_plans.py`、`backend/tests/test_stickman_workflow_upload_persistence.py`、`frontend/src/pages/StickmanWorkflow/index.tsx`、`frontend/src/pages/StickmanWorkflow/StickmanWorkflow.css`、`frontend/src/services/stickmanWorkflow.ts`、`frontend/src/components/PlatformAssistant/PlatformAssistantWidget.tsx`、`frontend/src/components/PlatformAssistant/PlatformAssistantWidget.css`、`frontend/public/assistant-bot.png`、`video-render-service/remotion-mind-video/src/remotion/Sc1StickmanVideo.jsx`。
+- 本地验证：`PYTHONPATH=backend pytest backend/tests/test_stickman_workflow_upload_persistence.py backend/tests/test_stickman_workflow_limits.py backend/tests/test_partner_program_service.py backend/tests/test_ai_video_sc1_material_urls.py -q` -> `48 passed`；`python -m py_compile backend/app/services/stickman_workflow_plans.py backend/app/services/stickman_workflow_assets.py backend/app/api/stickman_workflow.py backend/app/services/ai_video.py` 通过；`npm run build` in `frontend` 通过，仅有既有 Vite chunk size warning；`git diff --check` 通过，仅有 CRLF/LF 换行提示。
+- 下一步：提交本地改动；部署前备份 3004 SQLite 和代码快照；同步到 `/opt/manim-v2-3004-snapshot`，重启 3004 backend/worker/render 或必要服务；平台验证 config 中新素材库封面 URL、用户端场景风格刷新/预览、声音试听、上传背景生成 payload/成片背景、合作者套餐三档、AI 助手机器人图标。
+- 不要重复做：不要修改、回滚、重启或覆盖 3003；不要把后台 `/api/admin/...` 资源 URL 暴露给普通用户端预览；不要只用本地测试替代 3004 平台闭环。
