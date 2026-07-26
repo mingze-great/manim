@@ -435,3 +435,4 @@
 - admin-only 可见性验证：源码与构建均已包含 `/ai-video/*` 和 `/knowledge-ip` 的 `AdminRoute` 包裹，主菜单和首页工作流卡片按 `user.is_admin` 过滤；普通用户 admin API 403 已复验。浏览器自动化因本机 Playwright 包不可用未完成截图验证，后续如需视觉截图可在装好 Playwright 后补跑 `work/verify_3004_ui.js`。
 - 磁盘状态：`/` 分区 40GB，已用约 34GB，可用约 3.8GB，使用率约 90%；后续批量渲染前仍建议清理旧任务与缓存。
 - 不要重复做：本轮只部署 3004，不要回滚或重启 3003；不要把 `codex_verify_library_bom` 当作正式素材库，它是覆盖上传验证库。
+- GitHub 同步：`git push origin codex/3004-partner-stickman-platform-20260724` 已成功，远程分支已创建/更新；PR 地址为 `https://github.com/mingze-great/manim/pull/new/codex/3004-partner-stickman-platform-20260724`。
