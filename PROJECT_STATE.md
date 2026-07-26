@@ -436,3 +436,4 @@
 - 磁盘状态：`/` 分区 40GB，已用约 34GB，可用约 3.8GB，使用率约 90%；后续批量渲染前仍建议清理旧任务与缓存。
 - 不要重复做：本轮只部署 3004，不要回滚或重启 3003；不要把 `codex_verify_library_bom` 当作正式素材库，它是覆盖上传验证库。
 - GitHub 同步：`git push origin codex/3004-partner-stickman-platform-20260724` 已成功，远程分支已创建/更新；PR 地址为 `https://github.com/mingze-great/manim/pull/new/codex/3004-partner-stickman-platform-20260724`。
+- 补充说明：后续本地状态提交 `acba0a42a590f0491f85d476104c2a0bf7453e90` 已同步到 3004 服务器 `PROJECT_STATE.md` 和 `.deployed-ref`，但再次推送 GitHub 时网络 `Recv failure: Connection was reset`；GitHub 至少已包含功能部署记录提交 `1d985ef2a22d7f4b4e7bad2aef7c450a20b70a5b`。
