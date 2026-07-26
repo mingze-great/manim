@@ -462,3 +462,28 @@
 - 本地验证：`python -m py_compile backend/app/services/stickman_workflow_plans.py backend/app/api/admin.py backend/app/api/partner.py backend/app/api/stickman_workflow.py backend/app/services/partner_program.py backend/app/services/ai_video.py backend/app/main.py` 通过；`PYTHONPATH=backend pytest backend/tests/test_ai_video_sc1_material_urls.py backend/tests/test_ai_video_user_script_completion.py backend/tests/test_stickman_workflow_plans.py backend/tests/test_partner_program_service.py backend/tests/test_stickman_workflow_limits.py backend/tests/test_stickman_workflow_upload_persistence.py backend/tests/test_admin_user_partner_profile.py -q` -> `42 passed`；`npm run build` in `frontend` 通过，仅有既有 Vite chunk size warning；`git diff --check` 通过，仅有 CRLF/LF 换行提示。
 - 下一步：提交本地改动；部署前备份 3004 SQLite 和代码快照；同步到 `/opt/manim-v2-3004-snapshot`，构建前端，只重启 3004 backend/worker，必要时 reload nginx，不动 3003；平台验证 admin 套餐保存、合作者按套餐发码、佣金金额、用户兑换权限、用户端隐藏图片模式、长自定义文案生成完整成片。
 - 不要重复做：不要回滚或重启 3003；不要把底层实时生图模式暴露给普通用户；不要只用本地脚本替代 3004 平台闭环。
+## 2026-07-26 3004 套餐与自定义文案完整性部署验收记录
+
+- 功能提交：`e3d5930`，提交信息 `feat: add stickman package plans and invite commissions`。
+- 3004 部署目录：`/opt/manim-v2-3004-snapshot`。
+- 3004 `.deployed-ref`：`branch=codex/3004-partner-stickman-platform-20260724`，`commit=e3d5930`，`deployed_at=2026-07-26T21:43:51+0800`。
+- 部署前备份：
+  - SQLite：`/opt/manim-v2-3004-backups/manim_platform_3004.pre-package-plans..db`
+  - 代码快照：`/opt/manim-v2-3004-backups/manim-v2-3004.pre-package-plans..tar.gz`
+  - 注：本轮备份命令第一次被 PowerShell 吃掉时间戳变量，因此文件名中时间戳为空，但备份文件已存在且可用于回退。
+- 服务状态：`manim-v2-3004-backend.service` active，`manim-v2-3004-worker.service` active，`manim-v2-3004-ai-video-render.service` active；`http://127.0.0.1:8004/health` healthy；`http://127.0.0.1:3004/` 返回 200；`http://127.0.0.1:3003/` 返回 200，未修改或重启 3003。
+- 平台 API 验收：
+  - admin 手机号登录 `13990049991` 成功。
+  - `POST /api/admin/stickman-workflow/plans` 保存成功，验证套餐 `codex_count_2x5m`：`quota_mode=count_package`，`total_video_limit=2`，`max_video_seconds=300`，`material_mode=ai_image`，`amount=200`。
+  - admin 绑定合作者生成兑换码 `SC1-3OBHD1KB`，`amount=200`，`commission_amount=60`，`material_mode=ai_image`，证明佣金按金额乘合作者比例计算。
+  - 普通用户 `13990049992` 的 `/api/stickman-workflow/config` 返回 `sceneStyles=2`，`materialMode=material_only`，`canUseAiImages=false`，前端页面源码不包含 `画面模式` 或 `实时生图`，说明底层图片模式对用户透明。
+  - 合作者 `13990049993` 的 `/api/partner/stickman-plans` 可看到验证套餐 `codex_count_2x5m`，`material_mode=ai_image`，`amount=200`。
+- 平台成片验收：
+  - 通过 3004 `/api/stickman-workflow/jobs` 创建自定义文案任务 `job_96`，输出 `/api/ai-video/files/96/output/video.mp4`。
+  - 远程输出文件：`/opt/manim-v2-3004-snapshot/backend/storage/ai-video/tasks/job_96/output/video.mp4`。
+  - 本地下载与抽帧目录：`C:\Users\Administrator\Documents\Codex\2026-07-18\300\outputs\job_96_verify`。
+  - `ffprobe` 确认 MP4 包含 `h264` 视频流和 `aac` 音频流，时长约 `29.31s`。
+  - `project.json` 场景数为 `4`，完整包含用户文案第十句“第十句，是终于不用反复审判自己。”，证明不再只生成前几个分镜/前 12 秒。
+  - 抽帧 `frame_02s.png`、`frame_08s.png`、`frame_16s.png` 目检：单张场景图居中完整，未被横线或白色面板遮挡；右上角 `心理分享 | 认知突破` 存在；无 `@Sc1火柴人`；字幕居中；总结关键词为 2-4 字短词并累计展示。
+- 服务器空间：根分区约 `40G`，已用约 `35G`，可用约 `3.0G`，使用率约 `93%`；后续批量渲染前仍建议继续清理旧备份/缓存。
+- 下一步建议：如果用户要保留 `codex_count_2x5m` 作为正式套餐，可在后台改名和金额；如果只是验证套餐，可在后台删除，避免污染正式套餐列表。
