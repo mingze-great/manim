@@ -8,6 +8,7 @@ from app.models.system_config import SystemConfig
 
 CONFIG_KEY = "stickman_workflow_plans"
 BUILT_IN_PLAN_KEYS = {"count_40x5m", "count_65x5m", "count_90x5m"}
+PARTNER_SALES_PLAN_KEYS = {"count_40x5m", "count_65x5m", "count_90x5m"}
 
 
 def default_stickman_workflow_plans() -> list[dict]:
@@ -160,6 +161,22 @@ def list_stickman_workflow_plans(db: Session, active_only: bool = False) -> list
     if active_only:
         plans = [plan for plan in plans if plan.get("is_active")]
     return plans
+
+
+def list_partner_stickman_sales_plans(db: Session) -> list[dict]:
+    """Plans shown to partners when creating invite codes."""
+    plans = [
+        plan
+        for plan in list_stickman_workflow_plans(db, active_only=True)
+        if str(plan.get("key") or "") in PARTNER_SALES_PLAN_KEYS
+    ]
+    plans.sort(key=lambda item: int(item.get("sort_order") or 0))
+    return plans
+
+
+def find_partner_stickman_sales_plan(db: Session, key: str) -> dict | None:
+    plan_key = str(key or "").strip()
+    return next((plan for plan in list_partner_stickman_sales_plans(db) if plan.get("key") == plan_key), None)
 
 
 def save_stickman_workflow_plans(db: Session, items: list[dict]) -> list[dict]:

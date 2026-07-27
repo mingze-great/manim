@@ -20,6 +20,7 @@ MAX_PACKAGE_BYTES = int(os.getenv("STICKMAN_WORKFLOW_MAX_PACKAGE_MB", "260")) * 
 MAX_EXTRACTED_BYTES = int(os.getenv("STICKMAN_WORKFLOW_MAX_EXTRACTED_MB", "800")) * 1024 * 1024
 MAX_ARCHIVE_FILES = int(os.getenv("STICKMAN_WORKFLOW_MAX_ARCHIVE_FILES", "1000"))
 UPLOAD_CHUNK_BYTES = 1024 * 1024
+PREVIEW_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 
 
 def _upload_root() -> Path:
@@ -216,12 +217,27 @@ def resolve_material_library(db: Session, library_key: str) -> Optional[dict]:
 
 def find_material_library_asset(db: Session, filename: str, library_key: str = "") -> Optional[Path]:
     safe_name = Path(str(filename or "")).name
+    if not safe_name or Path(safe_name).suffix.lower() not in PREVIEW_IMAGE_EXTENSIONS:
+        return None
     for item in list_material_libraries(db):
         if library_key and item.get("key") != library_key:
             continue
-        path = str(item.get("cover_image_path") or "").strip()
-        if path and Path(path).name == safe_name and Path(path).exists():
-            return Path(path)
+        direct_candidates = [
+            str(item.get("cover_image_path") or "").strip(),
+            str(Path(str(item.get("base_path") or "")) / safe_name) if item.get("base_path") else "",
+        ]
+        manifest = Path(str(item.get("material_json_path") or ""))
+        if manifest.parent and str(manifest.parent) not in {"", "."}:
+            direct_candidates.append(str(manifest.parent / safe_name))
+        for raw_path in direct_candidates:
+            path = Path(raw_path) if raw_path else None
+            if path and path.name == safe_name and path.exists() and path.is_file():
+                return path
+        base_path = Path(str(item.get("base_path") or ""))
+        if base_path.exists() and base_path.is_dir():
+            for match in base_path.rglob(safe_name):
+                if match.exists() and match.is_file():
+                    return match
     candidate = _asset_dir() / safe_name
     if candidate.exists():
         return candidate

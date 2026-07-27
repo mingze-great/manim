@@ -1,7 +1,8 @@
 .stickman-workflow-page {
   min-height: calc(100vh - 88px);
-  padding: 28px;
-  background: #f6f7f9;
+  padding: 30px;
+  background:
+    linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
   color: #111827;
 }
 
@@ -10,7 +11,19 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 20px;
-  margin-bottom: 20px;
+  margin-bottom: 22px;
+  padding: 22px 24px;
+  border: 1px solid #dfe5ee;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 16px 38px rgba(15, 23, 42, 0.06);
+}
+
+.workflow-kicker {
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 900;
+  color: #2563eb;
 }
 
 .stickman-workflow-header h2 {
@@ -35,8 +48,9 @@
 
 .stickman-workflow-grid {
   display: grid;
-  grid-template-columns: minmax(360px, 480px) minmax(0, 1fr);
-  gap: 18px;
+  grid-template-columns: minmax(380px, 520px) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
 }
 
 .workflow-panel {
@@ -44,19 +58,49 @@
   border: 1px solid #dfe3ea;
   border-radius: 8px;
   background: #fff;
-  padding: 18px;
+  padding: 20px;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.05);
 }
 
 .panel-title {
   margin-bottom: 14px;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 900;
   color: #111827;
 }
 
+.workflow-form-panel .ant-input,
+.workflow-form-panel .ant-select-selector,
+.workflow-form-panel .ant-input-number,
+.workflow-form-panel .ant-btn {
+  border-radius: 6px;
+}
+
+.workflow-form-panel textarea.ant-input {
+  line-height: 1.7;
+}
+
+.workflow-advanced {
+  margin-top: 14px;
+  border-color: #e2e8f0;
+  background: #f8fafc;
+}
+
+.workflow-field {
+  display: grid;
+  gap: 8px;
+}
+
+.workflow-field > span,
+.workflow-controls label > span {
+  font-size: 13px;
+  font-weight: 900;
+  color: #334155;
+}
+
 .workflow-controls {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 12px;
   margin: 14px 0 18px;
 }
@@ -71,7 +115,9 @@
 }
 
 .scene-style-section {
-  margin: 4px 0 18px;
+  margin: 6px 0 20px;
+  padding-top: 14px;
+  border-top: 1px solid #edf0f5;
 }
 
 .scene-style-title {
@@ -88,12 +134,19 @@
 .scene-style-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 14px;
 }
 
 .scene-style-card {
   overflow: hidden;
   border-radius: 8px;
+  border-color: #e2e8f0;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.scene-style-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
 }
 
 .scene-style-card.selected {
@@ -102,21 +155,25 @@
 }
 
 .scene-style-card .ant-card-cover {
-  height: 118px;
-  background: #f8fafc;
+  height: 132px;
+  background:
+    linear-gradient(45deg, rgba(148, 163, 184, 0.12) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(148, 163, 184, 0.12) 25%, transparent 25%),
+    #fbfdff;
+  background-size: 18px 18px;
   border-bottom: 1px solid #edf0f5;
 }
 
 .scene-style-card .ant-card-cover img {
   width: 100%;
-  height: 118px;
+  height: 132px;
   object-fit: contain;
-  padding: 8px;
+  padding: 10px;
 }
 
 .scene-style-empty-cover {
   display: grid;
-  height: 118px;
+  height: 132px;
   place-items: center;
   background: #f8fafc;
   color: #94a3b8;
@@ -219,14 +276,14 @@
 
 .workflow-step-list {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   margin-top: 16px;
 }
 
 .workflow-step {
-  min-height: 54px;
-  padding: 10px;
+  min-height: 68px;
+  padding: 11px;
   border: 1px solid #dfe3ea;
   border-radius: 6px;
   background: #fafbfc;
@@ -323,6 +380,11 @@
   border-radius: 6px;
   background: #000;
   margin-bottom: 12px;
+}
+
+.workflow-status-panel {
+  position: sticky;
+  top: 90px;
 }
 
 .workflow-preview video:fullscreen {

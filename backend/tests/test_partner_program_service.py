@@ -4,6 +4,7 @@ os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from fastapi import HTTPException
 
 from app.api import partner
 from app.database import Base
@@ -100,7 +101,7 @@ def test_partner_invite_inherits_single_visible_image_mode_even_if_payload_reque
 
     response = partner.create_partner_invite_code(
         partner.PartnerInviteCodeCreate(
-            plan_key="custom_single",
+            plan_key="count_40x5m",
             material_mode="ai_image",
             quota_limit=1,
             max_video_seconds=60,
@@ -113,3 +114,46 @@ def test_partner_invite_inherits_single_visible_image_mode_even_if_payload_reque
     invite = db.query(InviteCode).filter(InviteCode.code == response["code"]).first()
     assert invite.material_mode == "material_only"
     assert response["material_mode"] == "material_only"
+
+
+def test_partner_invite_rejects_hidden_or_custom_plan_key():
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(bind=engine)
+    db = sessionmaker(bind=engine)()
+    user = User(
+        id=1,
+        username="partner_user",
+        email="partner@example.test",
+        hashed_password="x",
+        is_active=True,
+        is_approved=True,
+        role="partner",
+    )
+    user.set_module_permissions({
+        "stickman_v2": {
+            "enabled": True,
+            "material_mode": "material_only",
+            "visible_image_modes": ["material_only"],
+            "max_video_seconds": 300,
+        }
+    })
+    db.add(user)
+    db.add(PartnerProfile(user_id=1, display_name="渠道", commission_rate_bps=3000, status="active"))
+    db.commit()
+
+    try:
+        partner.create_partner_invite_code(
+            partner.PartnerInviteCodeCreate(
+                plan_key="codex_count_2x5m",
+                quota_limit=2,
+                max_video_seconds=300,
+                amount=200,
+            ),
+            db,
+            user,
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 400
+        assert "399" in str(exc.detail)
+    else:
+        raise AssertionError("hidden partner plan should be rejected")

@@ -13,8 +13,8 @@ from sqlalchemy.orm import sessionmaker
 from app.database import Base
 from app.models.system_config import SystemConfig
 from app.services import stickman_workflow_assets
-from app.services.stickman_workflow_assets import _normalize_manifest, list_material_libraries, public_material_libraries, save_material_libraries
-from app.services.stickman_workflow_plans import CONFIG_KEY, default_stickman_workflow_plans, list_stickman_workflow_plans
+from app.services.stickman_workflow_assets import _normalize_manifest, find_material_library_asset, list_material_libraries, public_material_libraries, save_material_libraries
+from app.services.stickman_workflow_plans import CONFIG_KEY, default_stickman_workflow_plans, list_partner_stickman_sales_plans, list_stickman_workflow_plans
 
 
 def _session():
@@ -145,6 +145,31 @@ def test_public_material_library_preview_uses_user_workflow_asset_route(tmp_path
     assert uploaded["image_url"] == "/api/stickman-workflow/assets/material-libraries/visible_style/cover.png"
 
 
+def test_find_material_library_asset_searches_library_base_path(tmp_path):
+    db = _session()
+    package_dir = tmp_path / "library"
+    nested_dir = package_dir / "nested"
+    nested_dir.mkdir(parents=True)
+    cover = nested_dir / "preview.png"
+    cover.write_bytes(b"png")
+    manifest = package_dir / "materials.normalized.json"
+    manifest.write_text("[]", encoding="utf-8")
+
+    save_material_libraries(db, [{
+        "key": "nested_style",
+        "name": "Nested Style",
+        "base_path": str(package_dir),
+        "material_json_path": str(manifest),
+        "cover_image_path": "",
+        "is_active": True,
+        "is_visible": True,
+    }])
+
+    found = find_material_library_asset(db, "preview.png", "nested_style")
+
+    assert found == cover
+
+
 def test_saved_default_library_does_not_clear_detected_default_preview(tmp_path, monkeypatch):
     base = tmp_path / "sc1"
     base.mkdir()
@@ -215,3 +240,14 @@ def test_builtin_sales_plans_override_old_saved_plan_config():
     assert sales["count_40x5m"]["amount"] == 39900
     assert sales["count_65x5m"]["total_video_limit"] == 65
     assert sales["count_90x5m"]["amount"] == 79900
+
+
+def test_partner_sales_plans_hide_monthly_and_old_verification_packages():
+    db = _session()
+    db.add(SystemConfig(key=CONFIG_KEY, value='[{"key":"codex_count_2x5m","name":"Codex验证2条包","quota_mode":"count_package","total_video_limit":2,"max_video_seconds":300,"amount":200,"is_active":true}]'))
+    db.commit()
+
+    plans = list_partner_stickman_sales_plans(db)
+
+    assert [item["key"] for item in plans] == ["count_40x5m", "count_65x5m", "count_90x5m"]
+    assert [item["amount"] for item in plans] == [39900, 59900, 79900]

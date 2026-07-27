@@ -710,6 +710,9 @@ class AiVideoService:
         template = CONTENT_TEMPLATES.get(content_type, CONTENT_TEMPLATES["insight"])
         requested_count = int(payload.get("sceneCount") or 0)
         scene_count = requested_count if requested_count else self._infer_scene_count(payload, template)
+        is_sc1_content = content_type == "knowledge_ip_stickman" or visual_style == "sc1_stickman"
+        if is_sc1_content and script_source == "user" and not requested_count:
+            scene_count = self._infer_sc1_user_script_scene_count(script, scene_count)
         chunks = self._split_script(script, scene_count, content_type, allow_prompt_expansion=script_source != "user")
         if script_source == "user" and len(chunks) > scene_count:
             scene_count = len(chunks)
@@ -731,7 +734,7 @@ class AiVideoService:
             target_seconds = int(payload.get("targetSeconds") or 0)
             min_scene_seconds = max(0, target_seconds // scene_count) if target_seconds else 0
             media = self._media_for_scene(content_type, visual_style, text, index)
-            is_sc1_video = content_type == "knowledge_ip_stickman" or visual_style == "sc1_stickman"
+            is_sc1_video = is_sc1_content
             sc1_segments = self._sc1_segments_for_scene(text, index, sc1_used_summary_labels) if is_sc1_video else []
             image_mode = str(payload.get("imageMode") or ("material_only" if payload.get("useMaterialLibrary", True) else "ai_image")).strip()
             material_images: list[dict[str, Any]] = []
@@ -834,9 +837,12 @@ class AiVideoService:
     def _sc1_generated_image_prompt(self, payload: dict[str, Any], text: str, index: int) -> str:
         topic = str(payload.get("prompt") or payload.get("title") or payload.get("requirements") or "心理成长").strip()
         return (
-            "SC1心理学火柴人视频中间场景图，白纸背景可抠图，黑色简洁火柴人线稿，"
-            "只生成一个完整居中的场景，不要文字，不要水印，不要边框，不要复杂背景。"
-            f"主题：{topic}。当前文案：{text}。分镜编号：{index + 1}。"
+            "为SC1心理学火柴人短视频生成一张中间场景图，风格参考素材库“小女生、sucai2、大叔、outputs”："
+            "画面以纯白或近白背景为主，主体是居中的单个人物/火柴人化人物，表情和姿态要表达当前文案情绪；"
+            "只放少量线条道具或简洁场景元素辅助语义，例如手机、对话框、椅子、门、纸张、警示符号。"
+            "构图完整，人物不要贴边，不要半身被裁切；不要文字、字幕、水印、logo、边框、复杂室内背景、强色块和拥挤元素。"
+            "输出应像可嵌入白纸背景的视频素材，而不是海报或插画封面。"
+            f"视频主题：{topic}。本段文案：{text}。语义分段编号：{index + 1}。"
         )
 
     def _sc1_material_images_for_scene(
@@ -1869,6 +1875,10 @@ class AiVideoService:
 
         if not self._pcm_is_plausible_for_text(pcm, text):
             prompt_candidates = [
+                Path(os.getenv("SC1_MANBO_REFERENCE_MP3", "")).expanduser() if os.getenv("SC1_MANBO_REFERENCE_MP3") else None,
+                REPO_ROOT / "backend" / "storage" / "voice-references" / "曼波.mp3",
+                REPO_ROOT / "outputs" / "曼波.mp3",
+                Path(r"E:\ai\火柴人工作流\配音\曼波.mp3"),
                 Path(os.getenv("SC1_COSYVOICE_PROMPT_WAV", "")).expanduser() if os.getenv("SC1_COSYVOICE_PROMPT_WAV") else None,
                 REPO_ROOT / "outputs" / "dayun_tools_manbo_tts_test.mp3",
                 Path(r"C:\Users\Administrator\Documents\Codex\2026-07-18\300\outputs\dayun_tools_manbo_tts_test.mp3"),
@@ -2620,6 +2630,21 @@ class AiVideoService:
             return explicit
         inferred = self._parse_edit_intent(f"{payload.get('customPrompt') or ''} {payload.get('goal') or ''}").get("visualStyle")
         return inferred or template.get("defaultStyle") or "dark_editorial"
+
+    def _infer_sc1_user_script_scene_count(self, script: str, fallback: int) -> int:
+        normalized = " ".join(str(script or "").replace("\n", " ").split()).strip()
+        if not normalized:
+            return fallback
+        sentence_parts = [
+            part.strip()
+            for part in re.split(r"(?<=[。！？!?；;])\s*", normalized)
+            if part.strip(" ，,、；;：:。！？!?")
+        ]
+        if sentence_parts:
+            scene_count = math.ceil(len(sentence_parts) / 2)
+        else:
+            scene_count = math.ceil(len(normalized) / 42)
+        return min(24, max(1, scene_count))
 
     def _infer_scene_count(self, payload: dict[str, Any], template: dict[str, Any]) -> int:
         patch_count = self._parse_edit_intent(str(payload.get("customPrompt") or "")).get("sceneCount")

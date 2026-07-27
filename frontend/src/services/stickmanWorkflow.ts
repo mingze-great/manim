@@ -1,6 +1,17 @@
-﻿import api from './api'
+import api from './api'
 import type { AiVideoJob } from './aiVideo'
 
+function protectedStickmanPreviewPath(input: string) {
+  const raw = String(input || '').trim()
+  if (!raw || raw.startsWith('http://') || raw.startsWith('https://') || raw.startsWith('//')) {
+    throw new Error('仅支持平台内部预览资源')
+  }
+  const path = raw.replace(/^\/api/, '')
+  if (!path.startsWith('/stickman-workflow/')) {
+    throw new Error('仅支持火柴人工作流预览资源')
+  }
+  return path
+}
 export interface StickmanWorkflowMaterialLibrary {
   key: string
   name: string
@@ -74,6 +85,10 @@ export const stickmanWorkflowApi = {
     formData.append('file', file)
     return api.post<{ url: string; filename: string }>('/stickman-workflow/backgrounds', formData)
   },
+  getVoicePreview: (previewUrl: string, signal?: AbortSignal) =>
+    api.get<Blob>(protectedStickmanPreviewPath(previewUrl), { responseType: 'blob', signal }),
+  getPreviewAsset: (assetUrl: string, signal?: AbortSignal) =>
+    api.get<Blob>(protectedStickmanPreviewPath(assetUrl), { responseType: 'blob', signal }),
   previewVoiceUrl: (previewUrl?: string | null) => previewUrl || '',
   createJob: (payload: StickmanWorkflowJobCreate) =>
     api.post<{ jobId: string; projectId: number; status: string }>('/stickman-workflow/jobs', payload),

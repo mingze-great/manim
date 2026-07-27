@@ -204,6 +204,47 @@ def test_ai_image_mode_generates_scene_asset(monkeypatch):
     assert asset["slot"] == "center"
 
 
+def test_ai_image_mode_generates_per_user_script_semantic_scene(monkeypatch):
+    service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
+    service.backend_public_url = "http://127.0.0.1:8004"
+    service._sc1_material_cache = (None, [])
+    service._media_for_scene = lambda *_args, **_kwargs: []
+
+    calls = []
+
+    async def fake_generate_image(prompt):
+        calls.append(prompt)
+        return f"/api/article-images/generated-{len(calls)}.png", f"/api/article-images/generated-{len(calls)}.png", "local"
+
+    fake_service = types.SimpleNamespace(generate_image=fake_generate_image)
+    monkeypatch.setattr(ai_video, "image_gen_service", fake_service, raising=False)
+
+    script = "第一句。第二句。第三句。第四句。第五句。第六句。第七句。第八句。"
+    scenes = service._build_scenes(
+        script,
+        {"prompt": "关系内耗", "imageMode": "ai_image", "useMaterialLibrary": False},
+        "knowledge_ip_stickman",
+        "sc1_stickman",
+        "medium",
+        script_source="user",
+    )
+
+    assert len(scenes) == 4
+    assert len(calls) == 4
+    assert len({scene["visual"]["assetImages"][0]["src"] for scene in scenes}) == 4
+
+
+def test_sc1_generated_image_prompt_uses_material_library_style():
+    service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
+
+    prompt = service._sc1_generated_image_prompt({"prompt": "关系内耗"}, "你总是把沉默理解成否定", 1)
+
+    assert "小女生、sucai2、大叔、outputs" in prompt
+    assert "纯白或近白背景" in prompt
+    assert "少量线条道具" in prompt
+    assert "不要文字" in prompt
+
+
 def test_user_script_split_preserves_all_sentences_when_scene_count_is_smaller():
     service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
     script = "第一句。第二句。第三句。第四句。第五句。第六句。"

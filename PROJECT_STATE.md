@@ -589,3 +589,25 @@
 - 特殊情况：`test-driven-development` 目录因 Windows 占用未能整体移动，但其中 `SKILL.md` 和参考文件已移动到归档目录，活动目录下残留空目录，不会作为 skill 加载。
 - 项目规则更新：已重写 `rules/skill-usage.md` 为中文精简版，明确小需求不启用完整 skills 链路，复杂需求才按需使用保留 skills。
 - 不要重复做：不要再恢复 `using-superpowers` 的“每轮强制读 skill”规则；不要为小需求启动多 agent/worktree 流程。
+
+## 2026-07-27 3004 曼波音色、预览鉴权、实时生图分段与火柴人 UI 部署前记录
+
+- 当前任务：继续只在 3004 分支 `codex/3004-partner-stickman-platform-20260724` 和部署目录 `/opt/manim-v2-3004-snapshot` 上修复火柴人平台体验，不触碰 3003。
+- 本地工作区：`C:\Users\Administrator\Documents\Codex\2026-07-18\300\work\3004-partner-stickman-worktree`。
+- 编码前 HEAD：`2ac765d15401a6acffac201b7325f4aac0724ed0`，提交时间 `2026-07-27 20:59:05 +0800`，提交信息 `chore: prune codex skill usage`。
+- 本次改动目标：
+  - 曼波试听和 open-source CosyVoice zero-shot 参考音频优先使用用户提供的 `E:\ai\火柴人工作流\配音\曼波.mp3`，部署时同步到 3004 的 `backend/storage/voice-references/曼波.mp3`。
+  - 合作者生成兑换码的套餐下拉只展示 `399元40个视频`、`599元65个视频`、`799元90个视频`，后台套餐管理和自定义能力保留。
+  - 场景图风格预览和声音试听改为前端通过 axios 带 Bearer token 拉取 blob，再交给 `<img>`/`audio` 展示，避免受保护 `/api/...` 资源直接访问导致预览失败。
+  - 素材库预览后端按素材库 `base_path`、manifest 同级目录和递归文件名查找封面，解决上传成功但用户端无法预览的问题。
+  - SC1 自定义文案按真实句子数量推导语义分段场景数，每个场景一张图；实时生图 prompt 改为参考“小女生、sucai2、大叔、outputs”素材库的白底人物 + 少量道具风格，避免整条视频只生成一张图或风格跑偏。
+  - `/stickman-workflow` 页面调整为更清晰的制作台布局，保留现有业务逻辑，增强风格卡片、试听提示和进度区可读性。
+- 最近修改文件：`backend/app/api/partner.py`、`backend/app/api/stickman_workflow.py`、`backend/app/services/ai_video.py`、`backend/app/services/stickman_workflow_assets.py`、`backend/app/services/stickman_workflow_plans.py`、`backend/tests/test_ai_video_sc1_material_urls.py`、`backend/tests/test_stickman_workflow_upload_persistence.py`、`frontend/src/pages/StickmanWorkflow/index.tsx`、`frontend/src/pages/StickmanWorkflow/StickmanWorkflow.css`、`frontend/src/services/stickmanWorkflow.ts`。
+- 本地验证：
+  - `python -m py_compile backend/app/services/stickman_workflow_plans.py backend/app/services/stickman_workflow_assets.py backend/app/api/partner.py backend/app/api/stickman_workflow.py backend/app/services/ai_video.py` 通过。
+  - `$env:PYTHONPATH='backend'; pytest backend/tests/test_stickman_workflow_upload_persistence.py backend/tests/test_stickman_workflow_limits.py backend/tests/test_partner_program_service.py backend/tests/test_ai_video_sc1_material_urls.py -q` -> `57 passed`。
+  - `npm run build` in `frontend` 通过，仅有既有 Vite chunk size warning。
+  - `git diff --check` 通过，仅有 CRLF/LF 换行提示。
+- 代码审查修复：后端 partner 发码接口已限制只能选择 399/599/799 三档 `plan_key`；前端 blob 预览只允许平台内部 `/stickman-workflow/...` 路径，避免 Bearer token 发给外部 URL；场景风格和声音试听请求已支持取消，卸载后不再创建 object URL；素材预览后端只允许图片扩展名。
+- 当前待做：提交审查修复后的本地改动，部署前备份 3004 SQLite 和代码快照，增量同步改动和 `曼波.mp3` 到 `/opt/manim-v2-3004-snapshot`，只重启 3004 backend/worker/frontend 必要服务；随后通过 3004 平台验证套餐下拉、声音试听、场景风格预览、实时生图分段和成片输出。
+- 不要重复做：不要提交 `曼波.mp3` 到 git；不要让普通用户看到底层素材库概念；不要修改、回滚、重启或覆盖 3003；不要只用本地测试替代 3004 平台闭环验收。

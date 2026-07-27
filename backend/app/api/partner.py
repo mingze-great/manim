@@ -12,7 +12,7 @@ from app.models.subscription import Order
 from app.models.user import User
 from app.services.notifications import notify_admin_event
 from app.services.partner_program import ensure_referral_code, estimate_commission_amount, generate_invite_code, get_partner_profile_for_user, stickman_entitlement_from_user
-from app.services.stickman_workflow_plans import find_stickman_workflow_plan, list_stickman_workflow_plans
+from app.services.stickman_workflow_plans import find_partner_stickman_sales_plan, list_partner_stickman_sales_plans
 
 router = APIRouter(prefix="/partner", tags=["partner"])
 
@@ -120,7 +120,7 @@ def list_partner_stickman_plans(
     current_user: Annotated[User, Depends(get_current_partner_user)],
 ):
     _require_partner_profile(db, current_user)
-    return {"plans": list_stickman_workflow_plans(db, active_only=True), "entitlement": stickman_entitlement_from_user(current_user)}
+    return {"plans": list_partner_stickman_sales_plans(db), "entitlement": stickman_entitlement_from_user(current_user)}
 
 
 @router.post("/invite-codes")
@@ -131,7 +131,9 @@ def create_partner_invite_code(
 ):
     profile = _require_partner_profile(db, current_user)
     entitlement = stickman_entitlement_from_user(current_user)
-    plan = find_stickman_workflow_plan(db, payload.plan_key) or {}
+    plan = find_partner_stickman_sales_plan(db, payload.plan_key)
+    if not plan:
+        raise HTTPException(status_code=400, detail="合作者只能选择 399、599、799 三档火柴人套餐")
     allowed_libraries = [str(item).strip() for item in (payload.allowed_libraries or plan.get("allowed_libraries") or []) if str(item).strip()] or ["sc1_outputs"]
     amount = int(payload.amount or plan.get("amount") or 0)
     commission_amount = estimate_commission_amount(amount, profile.commission_rate_bps)

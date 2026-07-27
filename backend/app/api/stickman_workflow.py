@@ -1,5 +1,6 @@
 ﻿import json
 import re
+import os
 import uuid
 from pathlib import Path
 from typing import Annotated, Optional
@@ -219,6 +220,15 @@ def preview_stickman_voice(
     current_user: Annotated[User, Depends(get_current_user)],
 ):
     candidates = [
+        Path(os.getenv("SC1_MANBO_REFERENCE_MP3", "")).expanduser() if os.getenv("SC1_MANBO_REFERENCE_MP3") else None,
+        Path(str(Path.cwd())) / "outputs" / "曼波.mp3",
+        Path(str(Path.cwd())) / "storage" / "voice-references" / "曼波.mp3",
+        Path(str(Path.cwd())) / "backend" / "storage" / "voice-references" / "曼波.mp3",
+        Path(__file__).resolve().parents[2] / "outputs" / "曼波.mp3",
+        Path(__file__).resolve().parents[2].parent / "outputs" / "曼波.mp3",
+        Path(__file__).resolve().parents[2] / "storage" / "voice-references" / "曼波.mp3",
+        Path(__file__).resolve().parents[2].parent / "backend" / "storage" / "voice-references" / "曼波.mp3",
+        Path(r"E:\ai\火柴人工作流\配音\曼波.mp3"),
         Path(str(Path.cwd())) / "outputs" / "dayun_tools_manbo_tts_test.mp3",
         Path(str(Path.cwd())) / "storage" / "voice-references" / "dayun_tools_manbo_tts_test.mp3",
         Path(str(Path.cwd())) / "backend" / "storage" / "voice-references" / "dayun_tools_manbo_tts_test.mp3",
@@ -231,7 +241,7 @@ def preview_stickman_voice(
         Path(__file__).resolve().parents[2] / "storage" / "voice-references" / "cosyvoice_zero_shot_sample.wav",
     ]
     for path in candidates:
-        if path.exists() and path.is_file():
+        if path and path.exists() and path.is_file():
             media_type = "audio/mpeg" if path.suffix.lower() == ".mp3" else "audio/wav"
             return FileResponse(path, media_type=media_type, filename=path.name)
     raise HTTPException(status_code=404, detail="当前服务器未配置声音试听文件")

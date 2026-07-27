@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Button, Card, Collapse, Drawer, Image, Input, InputNumber, Progress, Radio, Select, Space, Table, Typography, Upload, message } from 'antd'
 import { DownloadOutlined, HistoryOutlined, PictureOutlined, PlayCircleOutlined, ReloadOutlined, RocketOutlined, SoundOutlined, UploadOutlined } from '@ant-design/icons'
 import { resolveBackendUrl } from '@/services/api'
@@ -57,6 +57,13 @@ export default function StickmanWorkflow() {
   const [backgroundPreviewUrl, setBackgroundPreviewUrl] = useState('')
   const [refreshingConfig, setRefreshingConfig] = useState(false)
   const [voicePreviewing, setVoicePreviewing] = useState(false)
+  const [voicePreviewHint, setVoicePreviewHint] = useState('')
+  const [scenePreviewUrls, setScenePreviewUrls] = useState<Record<string, string>>({})
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const audioObjectUrlRef = useRef<string>('')
+  const scenePreviewObjectUrlsRef = useRef<string[]>([])
+  const voicePreviewAbortRef = useRef<AbortController | null>(null)
+  const mountedRef = useRef(true)
 
   const outputUrl = useMemo(() => resolveBackendUrl(job?.outputUrl), [job?.outputUrl])
   const currentStep = useMemo(
@@ -95,6 +102,16 @@ export default function StickmanWorkflow() {
         setBackgroundTemplate(data.backgroundTemplates?.[0]?.key || 'default')
       })
       .catch(() => message.error('加载火柴人配置失败'))
+  }, [])
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      voicePreviewAbortRef.current?.abort()
+      if (audioObjectUrlRef.current) URL.revokeObjectURL(audioObjectUrlRef.current)
+      scenePreviewObjectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url))
+    }
   }, [])
 
   useEffect(() => {
@@ -226,26 +243,46 @@ export default function StickmanWorkflow() {
     return false
   }
 
-  const previewVoice = () => {
+  const previewVoice = async () => {
     const currentVoice = (config?.voices || []).find((item) => item.value === voiceId)
-    const url = resolveBackendUrl(currentVoice?.previewUrl)
-    if (!url) {
+    const previewUrl = currentVoice?.previewUrl
+    if (!previewUrl) {
       message.warning('当前音色暂未配置试听')
       return
     }
+    const audio = audioRef.current
+    if (!audio) return
+    voicePreviewAbortRef.current?.abort()
+    const controller = new AbortController()
+    voicePreviewAbortRef.current = controller
     setVoicePreviewing(true)
-    const audio = new Audio(url)
-    audio.onended = () => setVoicePreviewing(false)
-    audio.onerror = () => {
+    setVoicePreviewHint('正在准备试听音频...')
+    try {
+      audio.pause()
+      const { data } = await stickmanWorkflowApi.getVoicePreview(previewUrl, controller.signal)
+      if (controller.signal.aborted || !mountedRef.current) return
+      if (audioObjectUrlRef.current) URL.revokeObjectURL(audioObjectUrlRef.current)
+      audioObjectUrlRef.current = URL.createObjectURL(data)
+      audio.src = audioObjectUrlRef.current
+      audio.currentTime = 0
+      audio.onended = () => {
+        setVoicePreviewing(false)
+        setVoicePreviewHint('')
+      }
+      audio.onerror = () => {
+        setVoicePreviewing(false)
+        setVoicePreviewHint('试听加载失败，请确认服务器已配置曼波音频。')
+      }
+      await audio.play()
+      setVoicePreviewHint('正在播放曼波试听')
+    } catch (error: any) {
+      if (controller.signal.aborted || !mountedRef.current) return
       setVoicePreviewing(false)
-      message.error('声音试听加载失败，请检查服务器试听文件')
+      const blocked = String(error?.name || error?.message || '').includes('NotAllowed')
+      setVoicePreviewHint(blocked ? '浏览器需要你再点一次试听按钮。' : (error?.response?.data?.detail || error?.message || '声音试听加载失败，请稍后重试。'))
+      if (!blocked) message.error('声音试听加载失败')
     }
-    audio.play().catch(() => {
-      setVoicePreviewing(false)
-      message.error('浏览器阻止了声音播放，请再点一次试听')
-    })
   }
-
   const maxVideoSeconds = config?.capabilities.maxVideoSeconds || 60
   const sceneStyles = config?.sceneStyles?.length
     ? config.sceneStyles
@@ -257,6 +294,43 @@ export default function StickmanWorkflow() {
         sampleImageUrl: item.image_url,
         image_url: item.image_url,
       }))
+  const scenePreviewSignature = sceneStyles.map((style) => `${style.key}:${style.sampleImageUrl || style.image_url || ''}`).join('|')
+
+  useEffect(() => {
+    let cancelled = false
+    const controller = new AbortController()
+    const createdUrls: string[] = []
+    const loadScenePreviews = async () => {
+      scenePreviewObjectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url))
+      scenePreviewObjectUrlsRef.current = []
+      const entries: Record<string, string> = {}
+      await Promise.all(sceneStyles.map(async (style) => {
+        const assetUrl = style.sampleImageUrl || style.image_url
+        if (!assetUrl) return
+        try {
+          const { data } = await stickmanWorkflowApi.getPreviewAsset(assetUrl, controller.signal)
+          if (cancelled || controller.signal.aborted || !mountedRef.current) return
+          const objectUrl = URL.createObjectURL(data)
+          createdUrls.push(objectUrl)
+          entries[style.key] = objectUrl
+        } catch {
+          entries[style.key] = ''
+        }
+      }))
+      if (!cancelled && !controller.signal.aborted && mountedRef.current) {
+        scenePreviewObjectUrlsRef.current = createdUrls
+        setScenePreviewUrls(entries)
+      } else {
+        createdUrls.forEach((url) => URL.revokeObjectURL(url))
+      }
+    }
+    loadScenePreviews()
+    return () => {
+      cancelled = true
+      controller.abort()
+      createdUrls.forEach((url) => URL.revokeObjectURL(url))
+    }
+  }, [scenePreviewSignature])
   const voiceOptions = (config?.voices || [{ label: '曼波参考音色', value: 'dayun_manbo' }]).map((item) => ({ label: item.label, value: item.value }))
   const backgroundTemplates = config?.backgroundTemplates || [{ key: 'default', name: '默认白纸', preview: 'paper' }]
   const selectedBackgroundTemplate = backgroundTemplates.find((item) => item.key === backgroundTemplate)
@@ -272,6 +346,7 @@ export default function StickmanWorkflow() {
     <div className="stickman-workflow-page">
       <div className="stickman-workflow-header">
         <div>
+          <div className="workflow-kicker">心理学火柴人视频制作</div>
           <Typography.Title level={2}>火柴人工作流</Typography.Title>
           <Typography.Paragraph>
             默认输入一个主题即可生成成片；高级选项支持自定义文案、时长、背景和场景图风格控制。
@@ -416,6 +491,8 @@ export default function StickmanWorkflow() {
                 <Select value={voiceId} onChange={setVoiceId} suffixIcon={<SoundOutlined />} options={voiceOptions} style={{ width: '100%' }} />
                 <Button icon={<SoundOutlined />} loading={voicePreviewing} onClick={previewVoice}>试听</Button>
               </Space.Compact>
+              <audio ref={audioRef} preload="none" />
+              {voicePreviewHint ? <Typography.Text type="secondary">{voicePreviewHint}</Typography.Text> : null}
             </label>
           </div>
 
@@ -427,7 +504,7 @@ export default function StickmanWorkflow() {
             </div>
             <div className="scene-style-grid">
               {sceneStyles.map((style) => {
-                const imageUrl = resolveBackendUrl(style.sampleImageUrl || style.image_url)
+                const imageUrl = scenePreviewUrls[style.key] || ''
                 const selected = materialLibrary === style.key
                 return (
                   <Card
