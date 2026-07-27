@@ -1547,8 +1547,10 @@ class AiVideoService:
         elif provider == "edge_tts":
             voice = self._resolve_edge_tts_voice(str(payload.get("voiceId") or project_json.get("voice", {}).get("speaker") or "中文女"))
 
+        actual_provider = provider
+
         def synthesize_one(synth_text: str, output_path: Path, label: str, scene_index: int, cue_index: int | None = None) -> float:
-            nonlocal provider, voice
+            nonlocal actual_provider, provider, voice
             self._append_log(log_path, f"CosyVoice {label} provider={provider} voice={voice} text={synth_text[:80]}")
             if provider == "dayun_manbo":
                 try:
@@ -1561,7 +1563,7 @@ class AiVideoService:
                         cue_index=cue_index,
                         log_path=log_path,
                     )
-                    provider = "local_tts_worker"
+                    actual_provider = "local_tts_worker"
                     voice = "dayun_manbo"
                     return seconds_value
                 except Exception as exc:
@@ -1574,7 +1576,7 @@ class AiVideoService:
                         str(payload.get("voiceId") or project_json.get("voice", {}).get("speaker") or "中文女"),
                     )
                     voice = fallback_voice
-                    provider = fallback_provider
+                    actual_provider = fallback_provider
                     return seconds_value
             if provider == "edge_tts":
                 return self._generate_edge_tts_audio(synth_text, voice, output_path)
@@ -1589,7 +1591,7 @@ class AiVideoService:
                         str(payload.get("voiceId") or project_json.get("voice", {}).get("speaker") or "中文女"),
                     )
                     voice = fallback_voice
-                    provider = fallback_provider
+                    actual_provider = fallback_provider
                     return seconds_value
             return self._generate_open_source_cosyvoice_audio(synth_text, voice, output_path)
 
@@ -1661,7 +1663,7 @@ class AiVideoService:
                     cue_timings[-1]["endFrame"] = duration_frames
                     segment["captionCues"] = cue_timings
             scene["audio"] = {
-                "provider": provider,
+                "provider": actual_provider,
                 "voice": voice,
                 "path": str(backend_audio_path),
                 "src": render_audio_src,
@@ -1675,11 +1677,11 @@ class AiVideoService:
                     "src": render_audio_src,
                     "seconds": seconds,
                     "durationInFrames": duration_frames,
-                    "provider": provider,
+                    "provider": actual_provider,
                 }
             )
 
-        project_json.setdefault("voice", {})["provider"] = provider
+        project_json.setdefault("voice", {})["provider"] = actual_provider
         project_json.setdefault("voice", {})["speaker"] = voice
         return audio_scenes
 
