@@ -453,6 +453,13 @@
 
 ## 2026-07-27 3004 本地 TTS Worker 部署前记录
 
+- 平台闭环验收：3004 admin 创建真实 `/stickman-workflow` 任务 `job_122`，用户侧仍为一键生成；本地 `scripts/local_tts_worker.py --provider dayun` 轮询 3004 并完成 3 个本地 TTS 请求：`tts_122_01_01_d9c5ececee`、`tts_122_01_02_df3e5d698d`、`tts_122_02_01_fa73fb2c26`。任务最终 `completed/100`，输出 `/api/ai-video/files/122/output/video.mp4`。
+- 验收文件：本地下载目录 `C:\Users\Administrator\Documents\Codex\2026-07-18\300\outputs\job_122_local_tts_validation`；MP4 文件 `video.mp4`，大小 `823561` 字节；远程项目 JSON 已下载为 `project.json`。
+- ffmpeg 验证：`video.mp4` 时长 `10.65s`，包含 h264 视频流和 aac 音频流。
+- 抽帧验证：`frame_02s.png` 与 `frame_08s.png` 显示右上角 `心理分享 | 认知突破`，单张场景图居中完整，字幕居中，无 `@Sc1火柴人`；总结词为 `关系`、`审判`、`委屈`，均为 2 字且与当前文案强相关。
+- JSON 验证：`voice.provider=local_tts_worker`，sceneCount=`2`，所有场景音频 provider 均为 `local_tts_worker`；无英文字幕字段输出、无 `???`、无水印字符串。
+- 当前 3004 部署标记：`/opt/manim-v2-3004-snapshot/.deployed-ref` 记录 `codex/3004-partner-stickman-platform-20260724@95e3a41090533b6679c124d2cda0fb9e3a84665b`；后续还需同步本状态提交到远程快照后更新为最新提交。
+- 当前限制：本轮平台闭环使用本地 worker 的 `dayun` provider 完成；开源 CosyVoice 本机服务仍未安装/启动成功，不能宣称“开源 CosyVoice 曼波克隆已完成”。要达到用户指定的开源 CosyVoice 音色，需要后续在本机独立安装 CosyVoice 模型并启动 `http://127.0.0.1:50000`，再把 worker provider 切回 `cosyvoice`。
 - 二次修复：`job_121` 证明本地 worker 已成功领取并回传第一段音频，但后端把路由 provider 从 `dayun_manbo` 改成 `local_tts_worker`，导致第二段掉入服务器本机 CosyVoice fallback。已修复为 `provider` 保持 `dayun_manbo` 继续路由，`actual_provider` 仅用于记录实际音频来源。验证：相关 3 个 TTS 路由测试通过，`python -m py_compile backend/app/services/ai_video.py` 通过，`git diff --check` 通过。
 - 本地 TTS 引擎补充：`scripts/local_tts_worker.py` 新增 `--provider dayun`，按 Milora/Dayun API 的 JSON `url` 下载 mp3，再用本机 `ffmpeg.exe` 转成 22050Hz 单声道 wav 回传平台；已用本地探针生成 `outputs/dayun_provider_smoke.wav`，文件大小 `115034` 字节。该 provider 用于先完成 3004 平台一键生成闭环；开源 CosyVoice 本机环境仍需后续专项安装/启动。
 - 代码审查补充修复：根据审查反馈，`local_tts_queue.py` 已重写为 ASCII 错误信息并加入进程内锁、唯一临时文件、active lease 不重复领取、completed 不被 late fail 覆盖；`ai_video.py` 新增 `AI_VIDEO_ALLOW_SERVER_LOCAL_COSYVOICE`，默认禁止服务器本机 CosyVoice fallback，即使 `LOCAL_TTS_ALLOW_SAFE_FALLBACK=1` 也不会默认回到服务器大模型；`.gitignore` 已忽略 `backend/storage/`、`backend/uploads/`、`outputs/` 和音频扩展名。验证：`pytest ...` 目标集 `63 passed`，`python -m py_compile` 通过，`git diff --check` 通过。
