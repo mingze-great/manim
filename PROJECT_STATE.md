@@ -451,6 +451,23 @@
 - ????????? `/admin/stickman-v2/scene-style-libraries` ???? `/stickman-workflow` ??????????????????????? 3003?
 # 项目状态
 
+## 2026-07-27 3004 本地 TTS Worker 部署前记录
+
+- 当前任务：保持用户一键生成体验不变，但在 `tts_generating` 阶段把曼波配音任务派发给本地 TTS Worker；本地用开源 CosyVoice 生成音频后自动回传 3004，服务器继续 Remotion 成片，不再在腾讯云小内存机器上启动本机 CosyVoice。
+- 当前工作区：`C:\Users\Administrator\Documents\Codex\2026-07-18\300\work\3004-partner-stickman-worktree`。
+- 当前分支：`codex/3004-partner-stickman-platform-20260724`。
+- 编码前 HEAD：`2ba9c2768d556fc2319a5d88056f60932c1836f4`，提交时间 `2026-07-27 22:31:08 +0800`，提交信息 `fix: improve stickman previews and ai scene generation`。
+- 3004 部署目录：`/opt/manim-v2-3004-snapshot`，平台 URL `http://152.136.218.74:3004`。
+- 远程恢复与预防：已通过 SSH 确认服务器恢复；已执行 `systemctl disable --now manim-v2-3003-cosyvoice.service || true`；3004 backend/worker/render 均为 active；`http://127.0.0.1:8004/health` healthy；`http://127.0.0.1:18788/api/health` ok；根分区约 `2.7G` 可用，内存约 `1.5G` 可用。后续不要再在服务器常驻启动 CosyVoice。
+- 本次本地改动：新增 `backend/app/services/local_tts_queue.py` 文件队列；新增 `backend/app/api/local_tts.py` 的 worker 领取、完成、失败上报接口；`backend/app/services/ai_video.py` 将 `dayun_manbo` 改为优先走 `local_tts_worker`，本地 worker 未配置或超时时快速失败，默认不再安全兜底到服务器本机 CosyVoice；新增 `scripts/local_tts_worker.py` 用于本地轮询 3004、调用本机 CosyVoice zero-shot 并上传 WAV；systemd/env 示例增加 `LOCAL_TTS_WAIT_TIMEOUT` 和 `LOCAL_TTS_ALLOW_SAFE_FALLBACK`，真实 `LOCAL_TTS_WORKER_TOKEN` 只放远程环境，不提交。
+- 本地 CosyVoice 状态：本机 `http://127.0.0.1:50000/health` 当前不可用；`E:\ai` 下未找到现成 CosyVoice 目录；`E:\anaconda_env\envs\torch` 有 `torch/torchaudio`，但未安装 `cosyvoice`。因此本轮先完成平台队列协议和部署；正式曼波开源音色闭环还需要本机启动 CosyVoice 服务，或临时用 worker 的 `--provider edge` 只验证平台音频回传链路。
+- 本地验证：
+  - `python -m py_compile backend\app\services\local_tts_queue.py backend\app\api\local_tts.py backend\app\services\ai_video.py backend\app\api\stickman_workflow.py backend\app\main.py scripts\local_tts_worker.py` 通过。
+  - `$env:PYTHONPATH='backend'; $env:DATABASE_URL='sqlite:///./test_local_tts.db'; pytest backend\tests\test_local_tts_queue.py backend\tests\test_stickman_workflow_upload_persistence.py backend\tests\test_stickman_workflow_limits.py backend\tests\test_partner_program_service.py backend\tests\test_ai_video_sc1_material_urls.py -q` -> `60 passed`。
+  - `git diff --check` 通过，仅有 CRLF/LF 换行提示。
+- 下一步：提交本地改动；部署前备份 3004 SQLite 和代码快照；同步新增 local TTS API、队列服务、worker 脚本、`ai_video.py` 和 systemd/env 示例到 `/opt/manim-v2-3004-snapshot`；远程设置不入库的 `LOCAL_TTS_WORKER_TOKEN`；重启 3004 backend/worker，不触碰 3003；用本地 worker 跑一次平台任务并生成 MP4，验证音视频流和 SC1 画面。
+- 不要重复做：不要把 `LOCAL_TTS_WORKER_TOKEN` 写进 git；不要在腾讯云 3003/3004 服务器上启动 full CosyVoice；不要改动或重启 3003；不要让用户手动上传音频，用户侧必须仍然是一键生成。
+
 ## 2026-07-26 3004 套餐、合作者发码、图片模式透明化与自定义文案完整性部署前记录
 
 - 当前任务：只在 3004 分支 `codex/3004-partner-stickman-platform-20260724` 上继续完成火柴人套餐配置、合作者按套餐生成兑换码、金额佣金计算、用户端隐藏底层图片模式、自定义文案完整生成；不触碰 3003。
@@ -611,3 +628,22 @@
 - 代码审查修复：后端 partner 发码接口已限制只能选择 399/599/799 三档 `plan_key`；前端 blob 预览只允许平台内部 `/stickman-workflow/...` 路径，避免 Bearer token 发给外部 URL；场景风格和声音试听请求已支持取消，卸载后不再创建 object URL；素材预览后端只允许图片扩展名。
 - 当前待做：提交审查修复后的本地改动，部署前备份 3004 SQLite 和代码快照，增量同步改动和 `曼波.mp3` 到 `/opt/manim-v2-3004-snapshot`，只重启 3004 backend/worker/frontend 必要服务；随后通过 3004 平台验证套餐下拉、声音试听、场景风格预览、实时生图分段和成片输出。
 - 不要重复做：不要提交 `曼波.mp3` 到 git；不要让普通用户看到底层素材库概念；不要修改、回滚、重启或覆盖 3003；不要只用本地测试替代 3004 平台闭环验收。
+
+## 2026-07-27 3004 开源 CosyVoice 启动事故记录
+
+- 当前本地提交：`2ba9c2768d556fc2319a5d88056f60932c1836f4`（`fix: improve stickman previews and ai scene generation`）。
+- 已部署到 3004：`/opt/manim-v2-3004-snapshot/.deployed-ref` 记录同一提交，部署方式 `incremental_archive_upload`，部署时间 `2026-07-27T22:43:45+08:00`。
+- 部署前备份：`/opt/manim-v2-3004-backups/manim-v2-3004.pre-manbo-preview-ai-scene.20260727_224301.tar.gz`；SQLite `/opt/manim-v2-3004-backups/manim_platform_3004.pre-manbo-preview-ai-scene.20260727_224301.db`。
+- 部署后 API 验证：3004 backend/worker/render 均 active；`8004/health` healthy；`18788/api/health` ok；用户端 `/stickman-workflow/config` 返回 `sceneStyleCount=3`；首个场景风格预览接口 200；曼波试听接口 200，返回 `318381` 字节；合作者 `/api/partner/stickman-plans` 只返回 `count_40x5m,count_65x5m,count_90x5m`。
+- 平台成片验证：3004 admin 创建 `job_118`，使用 `dayun_manbo`、自定义短文案、`imageMode=ai_image`。任务失败于 `tts_generating/48%`，错误为 Dayun/DashScope/Edge/外部简单 TTS 均不可用，本机 open-source CosyVoice 被健康闸门拒绝。
+- 用户要求改走开源 CosyVoice 并打开本机 CosyVoice。执行前已清理服务器空间：删除 `/tmp/remotion-webpack-bundle-*`、旧 `/tmp/manim-3004-*.tar`、`/tmp/frontend-dist-3004-*.tar`、旧 3004 临时部署包等，根分区从 `24M available / 100%` 恢复到约 `2.7G available / 93%`。
+- CosyVoice 模型检查：`/opt/cosyvoice-3003/pretrained_models/CosyVoice-300M` 缺 `llm.pt`，但存在 `._____temp/llm.llm.fp32.zip`，zip 内容有效。已尝试把该 zip 移动为正式 `llm.pt` 并启动 `manim-v2-3003-cosyvoice.service`。
+- 事故复现：启动开源 CosyVoice 后脚本 6 分钟超时；随后 SSH 只能 TCP 建连但卡在 `banner exchange`，公网 3003/3004 HTTP 均超时。这说明当前腾讯云小规格机器无法安全承载本机 CosyVoice 模型加载，和 2026-07-25 事故一致。
+- 当前阻塞：无法通过 SSH 停止服务或继续部署，需要用户在腾讯云控制台重启服务器。
+- 服务器重启后第一步必须执行：
+  1. `systemctl stop manim-v2-3003-cosyvoice.service || true`
+  2. `systemctl disable manim-v2-3003-cosyvoice.service || true`
+  3. `pkill -f cosyvoice || true`
+  4. `df -h / && free -h`
+  5. 确认 3003/3004 backend、worker、render 恢复。
+- 重要决策：不要再在这台 3.6G 内存机器上直接启动 full open-source CosyVoice 常驻服务。要么换更大机器/独立 TTS 机器，要么使用外部 CosyVoice API/已经可用的轻量 TTS 服务。若必须本机跑，需要单独部署 3004 CosyVoice 服务并加 `MemoryMax`、`CPUQuota`、`Restart=no` 或严格 `StartLimitBurst`，且先在离线命令中验证一次 zero-shot 不拖垮机器。

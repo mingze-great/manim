@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.models.ai_video import AiVideoJob, AiVideoProject, AiVideoVersion
+from app.services.local_tts_queue import LocalTTSQueue
 
 
 STAGE_MESSAGES = {
@@ -239,6 +240,9 @@ class AiVideoService:
             )
         )
         self.render_timeout = int(os.getenv("AI_VIDEO_RENDER_TIMEOUT", "600"))
+        self.local_tts_queue = LocalTTSQueue(Path(os.getenv("LOCAL_TTS_QUEUE_ROOT", self.storage_root / "local-tts-queue")))
+        self.local_tts_timeout = int(os.getenv("LOCAL_TTS_WAIT_TIMEOUT", "900"))
+        self.local_tts_allow_safe_fallback = str(os.getenv("LOCAL_TTS_ALLOW_SAFE_FALLBACK", "0")).strip().lower() in {"1", "true", "yes"}
         self.cosyvoice_url = (
             os.getenv("AI_VIDEO_COSYVOICE_URL")
             or _read_config_value("AI_VIDEO_COSYVOICE_URL")
@@ -1542,14 +1546,27 @@ class AiVideoService:
         elif provider == "edge_tts":
             voice = self._resolve_edge_tts_voice(str(payload.get("voiceId") or project_json.get("voice", {}).get("speaker") or "中文女"))
 
-        def synthesize_one(synth_text: str, output_path: Path, label: str) -> float:
+        def synthesize_one(synth_text: str, output_path: Path, label: str, scene_index: int, cue_index: int | None = None) -> float:
             nonlocal provider, voice
             self._append_log(log_path, f"CosyVoice {label} provider={provider} voice={voice} text={synth_text[:80]}")
             if provider == "dayun_manbo":
                 try:
-                    return self._generate_dayun_manbo_audio(synth_text, output_path)
+                    seconds_value = self._generate_local_tts_worker_audio(
+                        synth_text,
+                        output_path,
+                        voice,
+                        job_id=task_dir.name.replace("job_", ""),
+                        scene_index=scene_index,
+                        cue_index=cue_index,
+                        log_path=log_path,
+                    )
+                    provider = "local_tts_worker"
+                    voice = "dayun_manbo"
+                    return seconds_value
                 except Exception as exc:
-                    self._append_log(log_path, f"Dayun Manbo fallback to Edge TTS {label} error={exc}")
+                    if not self.local_tts_allow_safe_fallback:
+                        raise RuntimeError(f"本地曼波配音服务不可用: {exc}") from exc
+                    self._append_log(log_path, f"Local Manbo worker fallback to safe TTS {label} error={exc}")
                     seconds_value, fallback_provider, fallback_voice = self._generate_safe_tts_fallback_audio(
                         synth_text,
                         output_path,
@@ -1602,7 +1619,7 @@ class AiVideoService:
                 cursor_ms = 0
                 for cue_index, cue in enumerate(cue_items):
                     cue_path = backend_audio_dir / f"scene-{index + 1:02d}-cue-{cue_index + 1:02d}.wav"
-                    cue_seconds = synthesize_one(cue["text"], cue_path, f"scene={index + 1} cue={cue_index + 1}")
+                    cue_seconds = synthesize_one(cue["text"], cue_path, f"scene={index + 1} cue={cue_index + 1}", index, cue_index)
                     if cue_seconds <= 0 or not cue_path.exists() or cue_path.stat().st_size <= 0:
                         raise RuntimeError(f"CosyVoice returned invalid audio for scene_{index + 1} cue_{cue_index + 1}")
                     cue_audio = AudioSegment.from_file(cue_path).set_channels(1).set_frame_rate(self.cosyvoice_sample_rate)
@@ -1616,7 +1633,7 @@ class AiVideoService:
                 combined.export(backend_audio_path, format="wav")
                 seconds = max(len(combined) / 1000.0, 0.01)
             else:
-                seconds = synthesize_one(text, backend_audio_path, f"scene={index + 1}")
+                seconds = synthesize_one(text, backend_audio_path, f"scene={index + 1}", index)
             if seconds <= 0 or not backend_audio_path.exists() or backend_audio_path.stat().st_size <= 0:
                 raise RuntimeError(f"CosyVoice returned invalid audio for scene_{index + 1}")
 
@@ -1664,6 +1681,40 @@ class AiVideoService:
         project_json.setdefault("voice", {})["provider"] = provider
         project_json.setdefault("voice", {})["speaker"] = voice
         return audio_scenes
+
+    def _generate_local_tts_worker_audio(
+        self,
+        text: str,
+        output_path: Path,
+        voice: str,
+        *,
+        job_id: str,
+        scene_index: int,
+        cue_index: int | None = None,
+        log_path: str | None = None,
+    ) -> float:
+        if not self.local_tts_queue.enabled():
+            raise RuntimeError("LOCAL_TTS_WORKER_TOKEN is not configured")
+        request = self.local_tts_queue.create_request(
+            text=text,
+            voice=voice or "dayun_manbo",
+            job_id=job_id,
+            scene_index=scene_index,
+            cue_index=cue_index,
+            prompt_text=os.getenv("SC1_COSYVOICE_PROMPT_TEXT", "焦虑不是敌人，它只是先替你把危险放大。"),
+        )
+        request_id = str(request.get("requestId") or "")
+        self._append_log(log_path, f"Local TTS worker request queued id={request_id} scene={scene_index + 1}")
+        completed_path = self.local_tts_queue.wait_for_audio(request_id, self.local_tts_timeout)
+        audio = AudioSegment.from_file(completed_path).set_channels(1).set_frame_rate(self.cosyvoice_sample_rate)
+        audio = self._trim_audio_segment_silence(audio)
+        if len(audio.raw_data) < 1024 or audio.rms <= 0:
+            raise RuntimeError("Local TTS worker returned silent audio")
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        audio.export(output_path, format="wav")
+        seconds = max(len(audio) / 1000.0, 0.01)
+        self._append_log(log_path, f"Local TTS worker request completed id={request_id} seconds={seconds:.2f}")
+        return seconds
 
     def _generate_safe_tts_fallback_audio(self, text: str, output_path: Path, requested_voice: str) -> tuple[float, str, str]:
         dashscope_voice = self._resolve_dashscope_voice(requested_voice)

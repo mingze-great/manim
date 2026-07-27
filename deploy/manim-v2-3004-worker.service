@@ -16,6 +16,8 @@ Environment=AI_VIDEO_BACKEND_PUBLIC_URL=http://127.0.0.1:8004
 Environment=SC1_MATERIAL_PUBLIC_BASE_URL=http://127.0.0.1:18788/sc1-materials
 Environment=AI_VIDEO_COSYVOICE_TIMEOUT=180
 Environment=SC1_COSYVOICE_PROMPT_WAV=/opt/manim-v2-3004-snapshot/outputs/cosyvoice_zero_shot_sample.wav
+Environment=LOCAL_TTS_WAIT_TIMEOUT=900
+Environment=LOCAL_TTS_ALLOW_SAFE_FALLBACK=0
 
 [Install]
 WantedBy=multi-user.target

@@ -263,7 +263,7 @@ def test_user_script_split_preserves_all_sentences_when_scene_count_is_smaller()
     assert all(chunk.count("。") <= 3 for chunk in chunks)
 
 
-def test_dayun_manbo_tts_rate_limit_falls_back_to_dashscope_before_edge_or_local_cosyvoice(tmp_path, monkeypatch):
+def test_dayun_manbo_tts_routes_to_local_worker(tmp_path, monkeypatch):
     service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
     service.render_audio_root = tmp_path / "render-audio"
     service.render_service_url = "http://127.0.0.1:18787"
@@ -272,14 +272,12 @@ def test_dayun_manbo_tts_rate_limit_falls_back_to_dashscope_before_edge_or_local
     service._resolve_cosyvoice_voice = lambda _voice: "中文女"
     service._resolve_edge_tts_voice = lambda _voice: "zh-CN-XiaoxiaoNeural"
     service._resolve_dashscope_voice = lambda _voice: "longanhuan"
+    service.local_tts_allow_safe_fallback = False
 
-    def fail_dayun(_text, _output_path):
-        raise RuntimeError("Dayun Manbo TTS request failed: HTTP Error 429: Too Many Requests")
+    local_worker_calls = []
 
-    dashscope_calls = []
-
-    def fallback_dashscope(text, _voice, output_path):
-        dashscope_calls.append((text, _voice))
+    def local_worker(text, output_path, voice, **kwargs):
+        local_worker_calls.append((text, voice, kwargs["scene_index"], kwargs.get("cue_index")))
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with wave.open(str(output_path), "wb") as wav:
             wav.setnchannels(1)
@@ -288,17 +286,26 @@ def test_dayun_manbo_tts_rate_limit_falls_back_to_dashscope_before_edge_or_local
             wav.writeframes(b"\x01\x00" * 22050)
         return 1.0
 
-    monkeypatch.setattr(service, "_generate_dayun_manbo_audio", fail_dayun)
-    monkeypatch.setattr(service, "_generate_dashscope_cosyvoice_audio", fallback_dashscope)
+    monkeypatch.setattr(service, "_generate_local_tts_worker_audio", local_worker)
+    monkeypatch.setattr(
+        service,
+        "_generate_dayun_manbo_audio",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("Dayun HTTP should not run for Manbo one-click jobs")),
+    )
+    monkeypatch.setattr(
+        service,
+        "_generate_dashscope_cosyvoice_audio",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("DashScope should not run when local worker works")),
+    )
     monkeypatch.setattr(
         service,
         "_generate_edge_tts_audio",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("Edge TTS should not run when DashScope works")),
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("Edge TTS should not run when local worker works")),
     )
     monkeypatch.setattr(
         service,
         "_generate_open_source_cosyvoice_audio",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("local CosyVoice should not run when Edge TTS works")),
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("server local CosyVoice should not run")),
     )
 
     project_json = {"scenes": [{"voiceText": "先别急着证明自己", "duration": 1.2}]}
@@ -309,10 +316,41 @@ def test_dayun_manbo_tts_rate_limit_falls_back_to_dashscope_before_edge_or_local
         {"voiceProvider": "dayun_manbo", "voiceId": "dayun_manbo"},
     )
 
-    assert dashscope_calls == [("先别急着证明自己", "longanhuan")]
-    assert audio_scenes[0]["provider"] == "dashscope_cosyvoice"
+    assert local_worker_calls == [("先别急着证明自己", "dayun_manbo", 0, None)]
+    assert audio_scenes[0]["provider"] == "local_tts_worker"
     assert audio_scenes[0]["src"] == "http://127.0.0.1:18787/generated-audio/job_42/scene-01.wav"
     assert (tmp_path / "job_42" / "audio" / "scene-01.wav").exists()
+
+
+def test_dayun_manbo_tts_worker_failure_does_not_start_server_cosyvoice(tmp_path, monkeypatch):
+    service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
+    service.render_audio_root = tmp_path / "render-audio"
+    service.render_service_url = "http://127.0.0.1:18787"
+    service.cosyvoice_sample_rate = 22050
+    service._append_log = lambda *_args, **_kwargs: None
+    service._resolve_cosyvoice_voice = lambda _voice: "中文女"
+    service._resolve_edge_tts_voice = lambda _voice: "zh-CN-XiaoxiaoNeural"
+    service._resolve_dashscope_voice = lambda _voice: "longanhuan"
+    service.local_tts_allow_safe_fallback = False
+
+    monkeypatch.setattr(
+        service,
+        "_generate_local_tts_worker_audio",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("worker offline")),
+    )
+    monkeypatch.setattr(
+        service,
+        "_generate_open_source_cosyvoice_audio",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("server local CosyVoice should not run")),
+    )
+
+    with pytest.raises(RuntimeError, match="本地曼波配音服务不可用"):
+        service._generate_cosyvoice_audio(
+            {"scenes": [{"voiceText": "先别急着证明自己", "duration": 1.2}]},
+            tmp_path / "job_42",
+            None,
+            {"voiceProvider": "dayun_manbo", "voiceId": "dayun_manbo"},
+        )
 
 
 def test_safe_tts_fallback_uses_local_cosyvoice_only_after_edge_tts_failure(tmp_path, monkeypatch):
