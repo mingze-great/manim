@@ -565,3 +565,16 @@
 - 本地验证：`PYTHONPATH=backend pytest backend/tests/test_ai_video_sc1_material_urls.py -q` -> `22 passed`；`python -m py_compile backend/app/services/ai_video.py` 通过。
 - 下一步：提交本次修复，部署到 3004；用服务器侧 UTF-8 JSON 文件创建新平台任务，重新下载 MP4、ffprobe 检查音视频流、抽帧确认中文字幕正常、无英文字幕、背景/场景图/总结显示符合要求。
 - 不要重复做：不要把 shell 里直接拼接中文 JSON 当作平台验证请求；不要修改、重启、覆盖 3003。
+
+## 2026-07-27 3004 SC1 英文字幕兜底清理部署后验收记录
+
+- 部署方式：因 GitHub push 临时未更新远程分支，先采用增量上传方式只覆盖 3004 的 `backend/app/services/ai_video.py`、`backend/tests/test_ai_video_sc1_material_urls.py` 和 `PROJECT_STATE.md`，未触碰 3003。
+- 当前 3004 部署标记：`/opt/manim-v2-3004-snapshot/.deployed-ref` 记录 `codex/3004-partner-stickman-platform-20260724@67523ef6d782d3d8459518dc0f0a790bca8642de`，部署时间 `2026-07-27T09:47:00+0800`，`deploy_method=incremental_upload`。
+- 回退备份：SQLite `/opt/manim-v2-3004-backups/manim_platform_3004.pre-sc1-no-english.20260727_0945.db`；代码备份目录 `/opt/manim-v2-3004-backups/pre-sc1-no-english-20260727_0945/`。
+- 服务健康：`manim-v2-3004-backend.service`、`manim-v2-3004-worker.service`、`manim-v2-3004-ai-video-render.service` 均为 active；`http://127.0.0.1:8004/health` 返回 healthy；`http://127.0.0.1:18788/api/health` 返回 ok。
+- 平台闭环验证：通过 3004 API 使用 admin 账号创建真实 `/stickman-workflow` 任务 `job_116`，上传 16:9 干净背景 `/api/background-images/stickman_bg_u87_4a9b22b9fe58.png`，素材风格使用 `codex_verify_library_bom`。
+- 输出结果：`job_116` 状态 `completed/100`，平台输出 URL `/api/ai-video/files/116/output/video.mp4`；服务器 MP4 `/tmp/codex_3004_sc1_clean_verify/job_116.mp4`；项目 JSON `/opt/manim-v2-3004-snapshot/backend/storage/ai-video/tasks/job_116/project.json`；本地验收文件 `C:\Users\Administrator\Documents\Codex\2026-07-18\300\outputs\job_116_validation\video.mp4`。
+- ffprobe 验证：MP4 包含 h264 视频流，时长 `15.533333s`；包含 aac 音频流，时长 `15.594667s`。
+- 文案/字幕验证：`project.json` 中 `containsQuestionMarks=false`、`hasEnglishText=false`；首段中文文案为 `你越想证明自己，越容易把关系变成考场。`，字幕 cue 为 `你越想证明自己`。
+- 抽帧验证：本地 `outputs/job_116_validation/frame_006.png` 和 `frame_012.png` 显示右上角 `心理分享 | 认知突破`，一张中间场景图完整展示，字幕居中，无英文字幕，无 `@Sc1火柴人`，总结词为 `先拆开`、`清醒` 等 2-4 字关键词。
+- 仍需注意：GitHub 远程分支查询仍停在 `b5009c9a68eee09173a5efc10996af71f84c90cc`，后续网络稳定后要把本地 `67523ef6d782d3d8459518dc0f0a790bca8642de` 和本状态提交推送到远程，保证远程 Git 分支与 3004 部署完全一致。
