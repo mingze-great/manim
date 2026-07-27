@@ -2,6 +2,7 @@
 import sys
 import types
 import inspect
+import wave
 from types import SimpleNamespace
 
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
@@ -219,3 +220,22 @@ def test_config_exposes_scene_styles_as_user_facing_material_library_alias(monke
 
     assert response["sceneStyles"][0]["key"] == "warm_style"
     assert response["sceneStyles"][0]["sampleImageUrl"] == "/api/example.png"
+
+
+def test_voice_preview_cache_is_limited_to_five_seconds(tmp_path):
+    source = tmp_path / "sample.wav"
+    sample_rate = 16000
+    with wave.open(str(source), "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(sample_rate)
+        wav_file.writeframes(b"\x00\x00" * sample_rate * 7)
+
+    preview = stickman_workflow._five_second_voice_preview(source)
+    try:
+        with wave.open(str(preview), "rb") as wav_file:
+            duration_ms = int(wav_file.getnframes() / wav_file.getframerate() * 1000)
+        assert 4800 <= duration_ms <= 5200
+        assert preview.suffix == ".wav"
+    finally:
+        preview.unlink(missing_ok=True)

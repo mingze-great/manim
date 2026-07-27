@@ -1,7 +1,9 @@
-﻿import json
+﻿import hashlib
+import json
 import re
 import os
 import uuid
+import subprocess
 from pathlib import Path
 from typing import Annotated, Optional
 
@@ -9,6 +11,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+import imageio_ffmpeg
 
 from app.api.ai_video import _job_response, service
 from app.api.auth import get_current_user
@@ -57,6 +60,38 @@ def _numeric_job_id(job_id: str) -> int:
         return int(str(job_id).replace("job_", ""))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="Invalid job id") from exc
+
+
+def _five_second_voice_preview(path: Path) -> Path:
+    stat = path.stat()
+    digest = hashlib.sha1(f"{path.resolve()}:{stat.st_mtime_ns}:{stat.st_size}".encode("utf-8", errors="ignore")).hexdigest()[:16]
+    preview_dir = Path(__file__).resolve().parents[2] / "storage" / "voice-previews"
+    preview_dir.mkdir(parents=True, exist_ok=True)
+    preview_path = preview_dir / f"{path.stem}.{digest}.5s.wav"
+    if preview_path.exists() and preview_path.stat().st_size > 0:
+        return preview_path
+    ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+    command = [
+        ffmpeg,
+        "-y",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-t",
+        "5",
+        "-i",
+        str(path),
+        "-vn",
+        "-acodec",
+        "pcm_s16le",
+        "-ar",
+        "44100",
+        "-ac",
+        "1",
+        str(preview_path),
+    ]
+    subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=20)
+    return preview_path
 
 
 def _max_video_seconds(user: User) -> int:
@@ -242,8 +277,12 @@ def preview_stickman_voice(
     ]
     for path in candidates:
         if path and path.exists() and path.is_file():
-            media_type = "audio/mpeg" if path.suffix.lower() == ".mp3" else "audio/wav"
-            return FileResponse(path, media_type=media_type, filename=path.name)
+            try:
+                preview_path = _five_second_voice_preview(path)
+                return FileResponse(preview_path, media_type="audio/wav", filename=preview_path.name)
+            except Exception:
+                media_type = "audio/mpeg" if path.suffix.lower() == ".mp3" else "audio/wav"
+                return FileResponse(path, media_type=media_type, filename=path.name)
     raise HTTPException(status_code=404, detail="当前服务器未配置声音试听文件")
 
 

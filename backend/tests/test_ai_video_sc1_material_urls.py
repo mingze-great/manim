@@ -234,6 +234,79 @@ def test_ai_image_mode_generates_per_user_script_semantic_scene(monkeypatch):
     assert len({scene["visual"]["assetImages"][0]["src"] for scene in scenes}) == 4
 
 
+def test_ai_image_mode_expands_generated_target_duration_into_segment_images(monkeypatch):
+    service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
+    service.backend_public_url = "http://127.0.0.1:8004"
+    service._sc1_material_cache = (None, [])
+    service._media_for_scene = lambda *_args, **_kwargs: []
+
+    calls = []
+
+    async def fake_generate_image(prompt):
+        calls.append(prompt)
+        return f"/api/article-images/segment-{len(calls)}.png", f"/api/article-images/segment-{len(calls)}.png", "local"
+
+    fake_service = types.SimpleNamespace(generate_image=fake_generate_image)
+    monkeypatch.setattr(ai_video, "image_gen_service", fake_service, raising=False)
+
+    scenes = service._build_scenes(
+        "关系内耗",
+        {"prompt": "关系内耗", "targetSeconds": 60, "imageMode": "ai_image", "useMaterialLibrary": False},
+        "knowledge_ip_stickman",
+        "sc1_stickman",
+        "medium",
+        script_source="generated",
+    )
+
+    assert len(scenes) >= 8
+    assert len(calls) == len(scenes)
+    assert len({scene["visual"]["assetImages"][0]["src"] for scene in scenes}) == len(scenes)
+    assert all("当前语义分段" in prompt for prompt in calls)
+
+
+def test_ai_image_mode_sends_material_reference_image_for_style(tmp_path, monkeypatch):
+    material_root = tmp_path / "xiaonvsheng"
+    material_root.mkdir()
+    (material_root / "1.png").write_bytes(b"reference-image-bytes")
+    manifest = material_root / "materials.json"
+    manifest.write_text(json.dumps([{"fileName": "1.png"}], ensure_ascii=False), encoding="utf-8")
+
+    service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
+    service.backend_public_url = "http://127.0.0.1:8004"
+    service._sc1_material_cache = (None, [])
+    service._media_for_scene = lambda *_args, **_kwargs: []
+
+    reference_payloads = []
+
+    async def fake_generate_image(prompt, reference_images=None):
+        reference_payloads.append(reference_images or [])
+        return "/api/article-images/generated-style.png", "/api/article-images/generated-style.png", "local"
+
+    fake_service = types.SimpleNamespace(generate_image=fake_generate_image)
+    monkeypatch.setattr(ai_video, "image_gen_service", fake_service, raising=False)
+
+    scenes = service._build_scenes(
+        "你越想证明自己，越容易在关系里内耗。",
+        {
+            "prompt": "关系内耗",
+            "materialLibrary": "小女生",
+            "materialLibraryName": "小女生",
+            "materialLibraryPath": str(material_root),
+            "materialLibraryManifest": str(manifest),
+            "imageMode": "ai_image",
+            "useMaterialLibrary": False,
+        },
+        "knowledge_ip_stickman",
+        "sc1_stickman",
+        "medium",
+        script_source="user",
+    )
+
+    assert scenes[0]["visual"]["assetImages"][0]["generated"] is True
+    assert reference_payloads
+    assert reference_payloads[0][0].startswith("data:image/png;base64,")
+
+
 def test_sc1_generated_image_prompt_uses_material_library_style():
     service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
 

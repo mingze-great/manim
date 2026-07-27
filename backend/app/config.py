@@ -116,7 +116,7 @@ class Settings(BaseSettings):
     STICKMAN_LLM_BASE_URL: str = ""
     STICKMAN_LLM_MODEL: str = ""
     STICKMAN_IMAGE_API_KEY: str = ""
-    STICKMAN_IMAGE_BASE_URL: str = "https://v1/api/generate"
+    STICKMAN_IMAGE_BASE_URL: str = "https://grsaiapi.com/v1/api/generate"
     STICKMAN_IMAGE_MODEL: str = "gpt-image-2"
     STICKMAN_IMAGE_MODELS: str = "gpt-image-2"
     STICKMAN_SCENE_IMAGE_MODEL: str = "qwen-image-max-2025-12-30"

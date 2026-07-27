@@ -61,6 +61,7 @@ export default function StickmanWorkflow() {
   const [scenePreviewUrls, setScenePreviewUrls] = useState<Record<string, string>>({})
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const audioObjectUrlRef = useRef<string>('')
+  const voicePreviewTimerRef = useRef<number | null>(null)
   const scenePreviewObjectUrlsRef = useRef<string[]>([])
   const voicePreviewAbortRef = useRef<AbortController | null>(null)
   const mountedRef = useRef(true)
@@ -109,6 +110,7 @@ export default function StickmanWorkflow() {
     return () => {
       mountedRef.current = false
       voicePreviewAbortRef.current?.abort()
+      if (voicePreviewTimerRef.current) window.clearTimeout(voicePreviewTimerRef.current)
       if (audioObjectUrlRef.current) URL.revokeObjectURL(audioObjectUrlRef.current)
       scenePreviewObjectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url))
     }
@@ -259,6 +261,7 @@ export default function StickmanWorkflow() {
     setVoicePreviewHint('正在准备试听音频...')
     try {
       audio.pause()
+      if (voicePreviewTimerRef.current) window.clearTimeout(voicePreviewTimerRef.current)
       const { data } = await stickmanWorkflowApi.getVoicePreview(previewUrl, controller.signal)
       if (controller.signal.aborted || !mountedRef.current) return
       if (audioObjectUrlRef.current) URL.revokeObjectURL(audioObjectUrlRef.current)
@@ -266,17 +269,26 @@ export default function StickmanWorkflow() {
       audio.src = audioObjectUrlRef.current
       audio.currentTime = 0
       audio.onended = () => {
+        if (voicePreviewTimerRef.current) window.clearTimeout(voicePreviewTimerRef.current)
         setVoicePreviewing(false)
         setVoicePreviewHint('')
       }
       audio.onerror = () => {
+        if (voicePreviewTimerRef.current) window.clearTimeout(voicePreviewTimerRef.current)
         setVoicePreviewing(false)
         setVoicePreviewHint('试听加载失败，请确认服务器已配置曼波音频。')
       }
       await audio.play()
       setVoicePreviewHint('正在播放曼波试听')
+      voicePreviewTimerRef.current = window.setTimeout(() => {
+        audio.pause()
+        audio.currentTime = 0
+        setVoicePreviewing(false)
+        setVoicePreviewHint('试听已播放 5 秒')
+      }, 5000)
     } catch (error: any) {
       if (controller.signal.aborted || !mountedRef.current) return
+      if (voicePreviewTimerRef.current) window.clearTimeout(voicePreviewTimerRef.current)
       setVoicePreviewing(false)
       const blocked = String(error?.name || error?.message || '').includes('NotAllowed')
       setVoicePreviewHint(blocked ? '浏览器需要你再点一次试听按钮。' : (error?.response?.data?.detail || error?.message || '声音试听加载失败，请稍后重试。'))

@@ -1,6 +1,8 @@
-﻿import json
+﻿import base64
+import json
 import hashlib
 import math
+import mimetypes
 import os
 import re
 import shutil
@@ -714,8 +716,18 @@ class AiVideoService:
     ) -> list[dict[str, Any]]:
         template = CONTENT_TEMPLATES.get(content_type, CONTENT_TEMPLATES["insight"])
         requested_count = int(payload.get("sceneCount") or 0)
-        scene_count = requested_count if requested_count else self._infer_scene_count(payload, template)
         is_sc1_content = content_type == "knowledge_ip_stickman" or visual_style == "sc1_stickman"
+        image_mode = str(payload.get("imageMode") or ("material_only" if payload.get("useMaterialLibrary", True) else "ai_image")).strip()
+        scene_count = requested_count if requested_count else self._infer_scene_count(payload, template)
+        if is_sc1_content:
+            scene_count = self._sc1_scene_count_for_image_mode(
+                script,
+                payload,
+                scene_count,
+                script_source,
+                image_mode,
+                bool(requested_count),
+            )
         if is_sc1_content and script_source == "user" and not requested_count:
             scene_count = self._infer_sc1_user_script_scene_count(script, scene_count)
         chunks = self._split_script(script, scene_count, content_type, allow_prompt_expansion=script_source != "user")
@@ -741,7 +753,6 @@ class AiVideoService:
             media = self._media_for_scene(content_type, visual_style, text, index)
             is_sc1_video = is_sc1_content
             sc1_segments = self._sc1_segments_for_scene(text, index, sc1_used_summary_labels) if is_sc1_video else []
-            image_mode = str(payload.get("imageMode") or ("material_only" if payload.get("useMaterialLibrary", True) else "ai_image")).strip()
             material_images: list[dict[str, Any]] = []
             if is_sc1_video:
                 if image_mode in {"ai_image", "hybrid"}:
@@ -798,12 +809,17 @@ class AiVideoService:
         segment_text = " ".join(cue_texts[:3]).strip() or text
         layout_mode = str(segment.get("layoutMode") or self._sc1_layout_mode_for_scene(index, text)).strip()
         prompt = self._sc1_generated_image_prompt(payload, segment_text, index)
+        reference_images = self._sc1_reference_images_for_generation(payload)
         try:
             generator = globals().get("image_gen_service")
             if generator is None:
                 from app.services.image_gen import image_gen_service as generator
 
-            local_url, public_url, _storage = self._run_async_image_generation(generator.generate_image(prompt))
+            try:
+                coroutine = generator.generate_image(prompt, reference_images=reference_images)
+            except TypeError:
+                coroutine = generator.generate_image(prompt)
+            local_url, public_url, _storage = self._run_async_image_generation(coroutine)
         except Exception:
             return []
         src = self._backend_asset_url(str(public_url or local_url or ""))
@@ -841,14 +857,87 @@ class AiVideoService:
 
     def _sc1_generated_image_prompt(self, payload: dict[str, Any], text: str, index: int) -> str:
         topic = str(payload.get("prompt") or payload.get("title") or payload.get("requirements") or "心理成长").strip()
+        style_hint = self._sc1_generated_image_style_hint(payload)
         return (
-            "为SC1心理学火柴人短视频生成一张中间场景图，风格参考素材库“小女生、sucai2、大叔、outputs”："
-            "画面以纯白或近白背景为主，主体是居中的单个人物/火柴人化人物，表情和姿态要表达当前文案情绪；"
-            "只放少量线条道具或简洁场景元素辅助语义，例如手机、对话框、椅子、门、纸张、警示符号。"
-            "构图完整，人物不要贴边，不要半身被裁切；不要文字、字幕、水印、logo、边框、复杂室内背景、强色块和拥挤元素。"
-            "输出应像可嵌入白纸背景的视频素材，而不是海报或插画封面。"
-            f"视频主题：{topic}。本段文案：{text}。语义分段编号：{index + 1}。"
+            "为SC1心理学火柴人短视频生成一张“当前语义分段”的中间场景图。"
+            "必须参考素材库“小女生、sucai2、大叔、outputs”的视频素材感："
+            "纯白或近白背景，黑白线稿/火柴人化人物为主，主体完整居中，画面留白充足；"
+            "只允许少量线条道具或简洁心理场景元素辅助语义，例如手机、对话框、椅子、门、纸张、警示符号、情绪气泡。"
+            f"{style_hint}"
+            "情绪通过表情、眼神、姿态和肢体语言表达；道具必须服务于当前文案，不能做无关装饰。"
+            "不要文字；禁止字幕、中文/英文单词、水印、logo、边框、海报标题、复杂室内背景、强色块、拥挤元素、多人杂乱构图。"
+            "不要生成封面、截图、营销海报或复杂插画；输出要像能嵌入白纸背景的 1024x1024 单张场景素材。"
+            f"视频主题：{topic}。当前分段文案：{text}。分段编号：{index + 1}。"
         )
+
+    def _sc1_generated_image_style_hint(self, payload: dict[str, Any]) -> str:
+        name = " ".join(
+            str(payload.get(key) or "")
+            for key in ("materialLibraryName", "materialLibrary", "sceneStyle", "styleName")
+        ).lower()
+        if "小女生" in name or "girl" in name:
+            return "角色风格优先使用黑白线稿小女生：短发或学生感人物，表情清晰，动作自然。"
+        if "大叔" in name or "man" in name or "uncle" in name:
+            return "角色风格优先使用黑白线稿大叔/成年男性：稳重但情绪可见，动作和道具表达心理状态。"
+        if "sucai2" in name:
+            return "角色风格优先使用干净黑白线稿人物：人物不要过度写实，保持短视频素材库一致性。"
+        return "角色风格优先使用黑色火柴人或黑白线稿人物，搭配少量蓝/红/黄符号化道具。"
+
+    def _sc1_reference_images_for_generation(self, payload: dict[str, Any], limit: int = 1) -> list[str]:
+        material_root, manifest_path = self._sc1_material_paths(payload)
+        candidates: list[Path] = []
+        for key in ("coverImagePath", "cover_image_path", "sampleImagePath"):
+            raw = str(payload.get(key) or "").strip()
+            if raw:
+                candidates.append(Path(raw))
+        if manifest_path.exists():
+            try:
+                data = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
+                records = data if isinstance(data, list) else (data.get("materials") if isinstance(data, dict) else [])
+                if isinstance(records, list):
+                    for record in records[:12]:
+                        if not isinstance(record, dict):
+                            continue
+                        raw_file = (
+                            record.get("file")
+                            or record.get("fileName")
+                            or record.get("file_name")
+                            or record.get("path")
+                            or record.get("imagePath")
+                            or record.get("relativePath")
+                        )
+                        if raw_file:
+                            candidates.append(material_root / str(raw_file).replace("\\", "/").lstrip("/"))
+            except Exception:
+                pass
+        if material_root.exists():
+            for pattern, max_count in (("*.png", 6), ("*.jpg", 3), ("*.jpeg", 3), ("*.webp", 3)):
+                candidates.extend(sorted(material_root.glob(pattern))[:max_count])
+
+        refs: list[str] = []
+        seen: set[Path] = set()
+        for candidate in candidates:
+            try:
+                path = candidate if candidate.is_absolute() else material_root / candidate
+                path = path.resolve()
+            except Exception:
+                continue
+            if path in seen or not path.exists() or not path.is_file():
+                continue
+            seen.add(path)
+            if path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}:
+                continue
+            try:
+                if path.stat().st_size > 3 * 1024 * 1024:
+                    continue
+                mime_type = mimetypes.guess_type(path.name)[0] or "image/png"
+                encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+                refs.append(f"data:{mime_type};base64,{encoded}")
+            except Exception:
+                continue
+            if len(refs) >= limit:
+                break
+        return refs
 
     def _sc1_material_images_for_scene(
         self,
@@ -2750,6 +2839,30 @@ class AiVideoService:
         else:
             scene_count = math.ceil(len(normalized) / 42)
         return min(24, max(1, scene_count))
+
+    def _sc1_scene_count_for_image_mode(
+        self,
+        script: str,
+        payload: dict[str, Any],
+        fallback: int,
+        script_source: str,
+        image_mode: str,
+        has_requested_count: bool,
+    ) -> int:
+        if str(image_mode or "").strip() not in {"ai_image", "hybrid"}:
+            return fallback
+        if has_requested_count and script_source != "user":
+            return max(1, min(24, fallback))
+        normalized = " ".join(str(script or "").replace("\n", " ").split()).strip()
+        cue_units = self._split_sc1_caption_units(normalized, max_chars=18) if normalized else []
+        cue_based = math.ceil(len(cue_units) / 2) if cue_units else 0
+        target_seconds = int(payload.get("targetSeconds") or 0)
+        seconds_based = math.ceil(target_seconds / 8) if target_seconds else 0
+        if script_source == "user":
+            desired = max(fallback, cue_based)
+        else:
+            desired = max(fallback, cue_based, seconds_based, 5 if target_seconds else fallback)
+        return min(24, max(1, desired))
 
     def _infer_scene_count(self, payload: dict[str, Any], template: dict[str, Any]) -> int:
         patch_count = self._parse_edit_intent(str(payload.get("customPrompt") or "")).get("sceneCount")

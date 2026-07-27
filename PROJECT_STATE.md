@@ -689,3 +689,23 @@
 - 3004 快照 `.deployed-ref` 已更新为 `commit=074621a06e80af77f17a660fd07bf1f27bb8b8c5`、`code_commit=19ebd5556aad19e8e00bc867a80fb6167d1340c2`、`validation_job=job_126`。
 - `git push origin codex/3004-partner-stickman-platform-20260724` 本轮在本地等待 184 秒后超时；3004 服务端快照已包含代码和状态文件，后续网络稳定时需要补推 GitHub 分支。
 - 推送超时后复验：3004 backend/worker/render 均 active，`8004/health` healthy，`18788/api/health` ok，`http://127.0.0.1:3004/` 和 `http://127.0.0.1:3003/` 均返回 `HTTP/1.1 200 OK`。
+
+## 2026-07-28 3004 实时生图分段与 5 秒声音试听部署前记录
+
+- 当前任务：修复 `/stickman-workflow` 实时生图模式“整条视频只有一张图”的问题，并把声音试听限制为 5 秒；只部署 3004，不触碰 3003。
+- 本地工作区：`C:\Users\Administrator\Documents\Codex\2026-07-18\300\work\3004-partner-stickman-worktree`。
+- 当前分支：`codex/3004-partner-stickman-platform-20260724`。
+- 编码前 HEAD：`62e3d3081c4ecc44a69818cb4bbfd156154acd63`，提交时间 `2026-07-28 01:10:13 +0800`，提交信息 `docs: record sc1 git push status`。
+- 远程 3004 部署锚点：`/opt/manim-v2-3004-snapshot/.deployed-ref` 记录 `commit=62e3d3081c4ecc44a69818cb4bbfd156154acd63`、`code_commit=19ebd5556aad19e8e00bc867a80fb6167d1340c2`、`validation_job=job_126`。
+- 远程预检：3004 backend/worker/render 均 active；根分区 `/` 为 `40G`，已用 `36G`，可用约 `2.4G`；systemd 未显式设置 `STICKMAN_IMAGE_BASE_URL`，部署后使用代码默认 `https://grsaiapi.com/v1/api/generate`。
+- 本次本地改动：
+  - `backend/app/services/ai_video.py`：实时生图模式按 SC1 语义场景/目标时长扩展分段，每个 scene 生成一张居中场景图；每次生图传入当前素材库的一张参考图；提示词锁定白底、完整居中人物、少量道具、无文字水印。
+  - `backend/app/config.py` 和 `deploy/env.backend.3004.example`：将生图默认接口从占位 `https://v1/api/generate` 改为 `https://grsaiapi.com/v1/api/generate`，API key 仍只走环境变量。
+  - `backend/app/api/stickman_workflow.py`：声音试听用 ffmpeg 裁剪并缓存 5 秒 WAV。
+  - `frontend/src/pages/StickmanWorkflow/index.tsx`：前端试听增加 5 秒自动停止保险。
+- 本地验证：
+  - `python -m py_compile backend/app/services/ai_video.py backend/app/api/stickman_workflow.py backend/app/services/image_gen.py backend/app/config.py` 通过。
+  - `PYTHONPATH=backend pytest backend/tests/test_ai_video_sc1_material_urls.py backend/tests/test_stickman_workflow_limits.py backend/tests/test_image_gen_service.py -q` -> `47 passed`。
+  - `npm run build` in `frontend` 通过，仅有既有 Vite 大 chunk warning。
+  - `git diff --check` 通过，仅有 CRLF/LF 换行提示。
+- 待部署验证：提交后增量同步到 `/opt/manim-v2-3004-snapshot`，重启 3004 backend/worker；复验 3004 健康、声音试听文件约 5 秒；创建实时生图任务，检查 `project.json` 中 scene 数和 generated asset image 数一致且每段 prompt 不同，最终 MP4 有音视频流。
