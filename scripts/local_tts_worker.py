@@ -1,6 +1,6 @@
 import argparse
-import io
 import os
+import subprocess
 import sys
 import time
 import wave
@@ -83,6 +83,31 @@ def synthesize_with_edge(text: str, output_path: Path, sample_rate: int) -> None
     asyncio.run(run())
 
 
+def synthesize_with_sapi(text: str, output_path: Path, sample_rate: int) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    script = f"""
+Add-Type -AssemblyName System.Speech
+$synth = New-Object System.Speech.Synthesis.SpeechSynthesizer
+$synth.Rate = 1
+$synth.Volume = 100
+$synth.SetOutputToWaveFile('{str(output_path).replace("'", "''")}')
+$synth.Speak('{str(text).replace("'", "''")}')
+$synth.Dispose()
+"""
+    result = subprocess.run(
+        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    if result.returncode != 0 or not output_path.exists() or output_path.stat().st_size <= 0:
+        raise RuntimeError((result.stderr or result.stdout or "Windows SAPI failed").strip())
+    audio = AudioSegment.from_file(output_path).set_channels(1).set_frame_rate(sample_rate)
+    if len(audio.raw_data) < 1024 or audio.rms <= 0:
+        raise RuntimeError("Windows SAPI returned empty or silent audio")
+    audio.export(output_path, format="wav")
+
+
 def upload_completion(platform_url: str, token: str, request_id: str, audio_path: Path) -> None:
     with audio_path.open("rb") as audio_file:
         response = requests.post(
@@ -123,7 +148,9 @@ def run_once(args, prompt_wav: Path, workspace: Path) -> bool:
     output_path = workspace / f"{request_id}.wav"
     print(f"[local-tts] claimed {request_id}: {text[:60]}", flush=True)
     try:
-        if args.provider == "edge":
+        if args.provider == "sapi":
+            synthesize_with_sapi(text, output_path, args.sample_rate)
+        elif args.provider == "edge":
             synthesize_with_edge(text, output_path, args.sample_rate)
         else:
             synthesize_with_cosyvoice(
@@ -151,7 +178,7 @@ def main() -> None:
     parser.add_argument("--prompt-audio", default=os.getenv("LOCAL_TTS_PROMPT_AUDIO", r"E:\ai\火柴人工作流\配音\曼波.mp3"))
     parser.add_argument("--prompt-text", default=os.getenv("SC1_COSYVOICE_PROMPT_TEXT", "焦虑不是敌人，它只是先替你把危险放大。"))
     parser.add_argument("--workspace", default=os.getenv("LOCAL_TTS_WORKSPACE", str(Path("outputs") / "local-tts-worker")))
-    parser.add_argument("--provider", choices=["cosyvoice", "edge"], default=os.getenv("LOCAL_TTS_PROVIDER", "cosyvoice"))
+    parser.add_argument("--provider", choices=["cosyvoice", "edge", "sapi"], default=os.getenv("LOCAL_TTS_PROVIDER", "cosyvoice"))
     parser.add_argument("--sample-rate", type=int, default=int(os.getenv("LOCAL_TTS_SAMPLE_RATE", "22050")))
     parser.add_argument("--timeout", type=int, default=int(os.getenv("LOCAL_TTS_TIMEOUT", "180")))
     parser.add_argument("--poll-interval", type=float, default=float(os.getenv("LOCAL_TTS_POLL_INTERVAL", "2")))
