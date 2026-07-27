@@ -742,14 +742,14 @@ class AiVideoService:
                     material_images = self._sc1_material_images_for_scene(payload, text, index, sc1_segments, sc1_selected_materials)
             layout_variant = self._layout_variant_for_scene(content_type, visual_style, scene_type, text, index, edit_directive)
             energy_pattern = self._energy_pattern_for_scene(scene_type, layout_variant, text, index)
-            english_text = " ".join(segment.get("englishText", "") for segment in sc1_segments).strip()
+            english_text = "" if is_sc1_video else " ".join(segment.get("englishText", "") for segment in sc1_segments).strip()
             scenes.append(
                 {
                     "id": f"scene_{index + 1:02d}",
                     "duration": max(self._scene_duration_for_pace(pace, text), min_scene_seconds),
                     "voiceText": text,
                     "subtitleText": self._display_text_for_scene(text, step[0], index),
-                    "englishText": english_text or self._sc1_english_for_segment(text, index, 0),
+                    "englishText": "" if is_sc1_video else english_text or self._sc1_english_for_segment(text, index, 0),
                     "segments": sc1_segments,
                     "intent": step[1],
                     "cta": self._cta_for_scene(index, scene_count, content_type),
@@ -808,7 +808,7 @@ class AiVideoService:
                 "slot": "center",
                 "segmentIndex": 0,
                 "segmentText": segment_text,
-                "englishText": self._sc1_english_for_segment(segment_text, index, 0),
+                "englishText": "",
                 "summaryLabel": self._sc1_summary_label(segment_text, 0),
                 "enterDirection": self._sc1_enter_direction(index, 0),
                 "startRatio": 0,
@@ -873,7 +873,7 @@ class AiVideoService:
                     "slot": slot_hints[offset] if offset < len(slot_hints) else ("right" if offset else "center"),
                     "segmentIndex": offset,
                     "segmentText": segment_text,
-                    "englishText": self._sc1_english_for_segment(segment_text, index, offset),
+                    "englishText": "",
                     "summaryLabel": self._sc1_summary_label(segment_text, offset),
                     "enterDirection": self._sc1_enter_direction(index, offset),
                     "startRatio": 0 if offset == 0 else 0.4,
@@ -910,14 +910,14 @@ class AiVideoService:
                 "index": 0,
                 "text": cleaned,
                 "subtitleText": cleaned,
-                "englishText": self._sc1_english_for_segment(cleaned, scene_index, 0),
+                "englishText": "",
                 "summaryLabel": summary_labels[0] if summary_labels else self._sc1_summary_label(cleaned, 0),
                 "summaryLabels": summary_labels,
                 "layoutMode": layout_mode,
                 "captionCues": [
                     {
                         "text": cue,
-                        "englishText": self._sc1_english_for_segment(cue, scene_index, cue_index),
+                        "englishText": "",
                         "summaryLabel": summary_labels[cue_index] if cue_index < len(summary_labels) else self._sc1_summary_label(cue, cue_index),
                     }
                     for cue_index, cue in enumerate(cues)

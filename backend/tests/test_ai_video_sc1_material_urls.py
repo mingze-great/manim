@@ -523,3 +523,25 @@ def test_sc1_caption_cues_drop_sentence_number_prefixes():
     cues = service._split_sc1_caption_cues("第二句，不要把别人的情绪都揽到自己身上。")
 
     assert cues == ["不要把别人的情绪都揽到自己身上"]
+
+
+def test_sc1_video_does_not_emit_english_subtitles(monkeypatch):
+    service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
+    service._sc1_material_cache = (None, [])
+    service._infer_scene_count = lambda *_args, **_kwargs: 1
+    monkeypatch.setattr(service, "_media_for_scene", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(service, "_sc1_material_images_for_scene", lambda *_args, **_kwargs: [])
+
+    scenes = service._build_scenes(
+        "Keep the Chinese captions only.",
+        {"sceneCount": 1, "scriptSource": "user", "imageMode": "material_only"},
+        "knowledge_ip_stickman",
+        "sc1_stickman",
+        "medium",
+        script_source="user",
+    )
+
+    assert scenes[0]["englishText"] == ""
+    for segment in scenes[0]["segments"]:
+        assert segment["englishText"] == ""
+        assert all(cue["englishText"] == "" for cue in segment["captionCues"])

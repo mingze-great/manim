@@ -552,3 +552,16 @@
 - 本次补充改动：`backend/app/services/stickman_workflow_assets.py` 在配置的默认 manifest 不存在时按 `material.json`、`materials.generated.json`、`materials.json`、`materials.normalized.json` 顺序寻找可用索引；`backend/tests/test_stickman_workflow_upload_persistence.py` 增加 fallback 测试。
 - 本地验证：`PYTHONPATH=backend pytest backend/tests/test_stickman_workflow_upload_persistence.py -q` -> `10 passed`；`python -m py_compile backend/app/services/stickman_workflow_assets.py` 通过；`git diff --check` 通过，仅有 CRLF/LF 换行提示。
 - 下一步：提交并增量部署 3004，复验默认 SC1 和上传素材库均有用户端预览图，声音试听接口返回 200 音频。
+
+## 2026-07-27 3004 SC1 英文字幕兜底清理部署前记录
+
+- 当前任务：继续只在 3004 分支 `codex/3004-partner-stickman-platform-20260724` 和部署目录 `/opt/manim-v2-3004-snapshot` 上修复火柴人成片闭环，不触碰 3003。
+- 本地工作区：`C:\Users\Administrator\Documents\Codex\2026-07-18\300\work\3004-partner-stickman-worktree`。
+- 编码前 HEAD：`f04c032e887ce8bafeb0107bdc7edd65af1947ae`，提交时间 `2026-07-27 01:19:19 +0800`，提交信息 `fix: detect generated stickman material manifests`。
+- 已部署锚点：远程 `.deployed-ref` 记录 `codex/3004-partner-stickman-platform-20260724@f04c0322b7e68cc35b8c98aa8f156767d12a2c96`，部署时间 `2026-07-27T01:30:00+0800`。
+- 平台验证发现：`job_105` 实际已完成，数据库为 `completed/100`，输出 `/api/ai-video/files/105/output/video.mp4` 可 200 下载，MP4 有 h264 视频流和 aac 音频流；不是 Remotion 卡死。
+- 当前问题：`job_105` 成片字幕和文案为 `???`，这是本轮远程验证创建任务时中文经过 Windows/SSH/shell 多层传参被替换成问号；同时 SC1 后端会填英文兜底，导致成片出现英文字幕，和参考视频要求不一致。
+- 本次本地改动：`backend/app/services/ai_video.py` 对 SC1 视频关闭 scene、segment、caption cue、asset image 的英文字幕字段；`backend/tests/test_ai_video_sc1_material_urls.py` 增加回归测试，确保 SC1 不再输出英文字幕。
+- 本地验证：`PYTHONPATH=backend pytest backend/tests/test_ai_video_sc1_material_urls.py -q` -> `22 passed`；`python -m py_compile backend/app/services/ai_video.py` 通过。
+- 下一步：提交本次修复，部署到 3004；用服务器侧 UTF-8 JSON 文件创建新平台任务，重新下载 MP4、ffprobe 检查音视频流、抽帧确认中文字幕正常、无英文字幕、背景/场景图/总结显示符合要求。
+- 不要重复做：不要把 shell 里直接拼接中文 JSON 当作平台验证请求；不要修改、重启、覆盖 3003。
