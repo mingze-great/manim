@@ -669,3 +669,16 @@
 - 本次测试改动：`backend/tests/test_ai_video_sc1_material_urls.py` 将旧的“SC1 不输出英文字幕”断言改为“每个 cue 都有英文字幕”，新增长字幕拆短和用户截图句子关键词强相关回归测试。
 - 本地验证：`python -m py_compile backend\app\services\ai_video.py` 通过；`PYTHONPATH=backend pytest backend\tests\test_ai_video_sc1_material_urls.py -q` -> `28 passed`；`PYTHONPATH=backend pytest backend\tests\test_stickman_workflow_upload_persistence.py backend\tests\test_stickman_workflow_limits.py backend\tests\test_partner_program_service.py backend\tests\test_ai_video_sc1_material_urls.py -q` -> `61 passed`；`git diff --check` 通过。
 - 待部署边界：提交本地改动后只同步到 `/opt/manim-v2-3004-snapshot`，只重启 3004 backend/worker/render 所需服务；不修改、不重启 3003。部署后必须通过 3004 平台创建真实 `/stickman-workflow` 任务并检查 MP4 音视频流、`project.json` 英文 cue、短中文字幕、关键词强相关与抽帧画面。
+
+## 2026-07-28 3004 SC1 英文字幕与关键词强相关修复部署后验收记录
+
+- 本地功能提交：`19ebd5556aad19e8e00bc867a80fb6167d1340c2`（`fix: restore sc1 english cues and keyword labels`）。
+- 3004 部署目录：`/opt/manim-v2-3004-snapshot`；`.deployed-ref` 已写入 `branch=codex/3004-partner-stickman-platform-20260724`、`commit=19ebd5556aad19e8e00bc867a80fb6167d1340c2`、`deploy_method=incremental_upload_sc1_english_keywords`。
+- 部署前备份：`/opt/manim-v2-3004-backups/pre-sc1-english-keywords-20260728_004859/`；SQLite 备份：`/opt/manim-v2-3004-backups/manim_platform_3004.pre-sc1-english-keywords.20260728_004859.db`。
+- 服务验证：`manim-v2-3004-backend.service`、`manim-v2-3004-worker.service`、`manim-v2-3004-ai-video-render.service` 均为 `active`；`http://127.0.0.1:8004/health` 返回 healthy；`http://127.0.0.1:18788/api/health` 返回 ok。
+- 平台闭环任务：3004 admin 通过 `/stickman-workflow` API 创建真实任务 `job_126`，输出 URL `/api/ai-video/files/126/output/video.mp4`，本地验收目录 `C:\Users\Administrator\Documents\Codex\2026-07-18\300\outputs\job_sc1_english_keyword_worker`。
+- 本地 TTS worker：使用 `scripts/local_tts_worker.py --provider dayun` 领取并完成 7 个 cue 音频：`tts_126_01_01_a23dd00b33`、`tts_126_01_02_99cd0dd021`、`tts_126_02_01_91f542e554`、`tts_126_02_02_570a88bfcf`、`tts_126_03_01_3505bf94e7`、`tts_126_03_02_de25e098ec`、`tts_126_04_01_1d736cbeea`；worker 已停止。
+- MP4 验证：`video.mp4` 大小 `1246136` 字节，时长约 `15.66s`，包含 h264 视频流和 aac 音频流；`ffmpeg -map 0:v:0 -map 0:a:0 -f null NUL` 解码通过。
+- JSON 验证：远程 `project.json` 大小 `17608` 字节；`scene_count=4`、`cue_count=7`、`english_missing=[]`、`long_cues=[]`、无 `@Sc1`；方框关键词为 `价值`、`患失`、`爱己`、`留住`、`丢掉`、`分开`、`审判`，均来自或强相关于当前展示文案。
+- 抽帧验证：`frame_02s.png` 显示中文短字幕 `别总是在别人的情绪里寻找自己的价值` 和英文字幕；关键词 `价值`；`frame_07s.png` 显示关键词 `爱己`、`留住` 依次累计；`frame_12s.png` 显示关键词 `丢掉`、`分开` 且场景图居中完整。右上角 `心理分享 | 认知突破` 可见，无 `@Sc1火柴人`。
+- 已知后续优化：当前英文为规则化兜底翻译，已满足“英文字幕恢复并同步”的功能要求；若要更贴近原视频语气，可后续接入更自然的逐句翻译模型，但不能牺牲 cue 同步。
