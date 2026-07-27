@@ -578,3 +578,14 @@
 - 文案/字幕验证：`project.json` 中 `containsQuestionMarks=false`、`hasEnglishText=false`；首段中文文案为 `你越想证明自己，越容易把关系变成考场。`，字幕 cue 为 `你越想证明自己`。
 - 抽帧验证：本地 `outputs/job_116_validation/frame_006.png` 和 `frame_012.png` 显示右上角 `心理分享 | 认知突破`，一张中间场景图完整展示，字幕居中，无英文字幕，无 `@Sc1火柴人`，总结词为 `先拆开`、`清醒` 等 2-4 字关键词。
 - 仍需注意：GitHub 远程分支查询仍停在 `b5009c9a68eee09173a5efc10996af71f84c90cc`，后续网络稳定后要把本地 `67523ef6d782d3d8459518dc0f0a790bca8642de` 和本状态提交推送到远程，保证远程 Git 分支与 3004 部署完全一致。
+
+## 2026-07-27 Codex skills 精简记录
+
+- 当前任务：用户反馈 Codex skills 太冗余，要求删除用不到的 skill，降低开发流程噪音。
+- 本次处理范围：只处理 `C:\Users\Administrator\.codex\skills` 下的用户自定义 skills；未删除 `.system` 系统内置 skills，未修改插件缓存。
+- 保留活动 skills：`brainstorming`、`requesting-code-review`、`verification-before-completion`、`material-library-generator`、`playwright`。
+- 已归档目录：`C:\Users\Administrator\.codex\skills-disabled\20260727-pruned`。
+- 已归档 skills：`using-superpowers`、`systematic-debugging`、`test-driven-development`、`writing-plans`、`executing-plans`、`dispatching-parallel-agents`、`subagent-driven-development`、`using-git-worktrees`、`receiving-code-review`、`finishing-a-development-branch`、`byted-text-to-speech`、`akshare-stock`、`notion-spec-to-implementation`、`screenshot`、`security-best-practices`、`security-threat-model`。
+- 特殊情况：`test-driven-development` 目录因 Windows 占用未能整体移动，但其中 `SKILL.md` 和参考文件已移动到归档目录，活动目录下残留空目录，不会作为 skill 加载。
+- 项目规则更新：已重写 `rules/skill-usage.md` 为中文精简版，明确小需求不启用完整 skills 链路，复杂需求才按需使用保留 skills。
+- 不要重复做：不要再恢复 `using-superpowers` 的“每轮强制读 skill”规则；不要为小需求启动多 agent/worktree 流程。
