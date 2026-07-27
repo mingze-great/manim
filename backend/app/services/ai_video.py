@@ -858,16 +858,30 @@ class AiVideoService:
         ]
 
     def _run_async_image_generation(self, coroutine: Any) -> tuple[str, str, str]:
+        timeout_seconds = self._image_generation_timeout_seconds()
+        async def _with_timeout() -> tuple[str, str, str]:
+            return await asyncio.wait_for(coroutine, timeout=timeout_seconds)
+
         try:
-            return asyncio.run(coroutine)
+            return asyncio.run(_with_timeout())
+        except TimeoutError as exc:
+            raise RuntimeError(f"图片生成超时（超过 {int(timeout_seconds)} 秒）") from exc
         except RuntimeError as exc:
             if "asyncio.run()" not in str(exc):
                 raise
             loop = asyncio.new_event_loop()
             try:
-                return loop.run_until_complete(coroutine)
+                return loop.run_until_complete(_with_timeout())
+            except TimeoutError as timeout_exc:
+                raise RuntimeError(f"图片生成超时（超过 {int(timeout_seconds)} 秒）") from timeout_exc
             finally:
                 loop.close()
+
+    def _image_generation_timeout_seconds(self) -> float:
+        try:
+            return max(1.0, float(os.getenv("STICKMAN_IMAGE_TIMEOUT_SECONDS", "360") or "360"))
+        except (TypeError, ValueError):
+            return 360.0
 
     def _sc1_generated_image_prompt(self, payload: dict[str, Any], text: str, index: int) -> str:
         topic = str(payload.get("prompt") or payload.get("title") or payload.get("requirements") or "心理成长").strip()

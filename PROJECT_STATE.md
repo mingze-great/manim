@@ -746,3 +746,17 @@
   - `PYTHONPATH=backend pytest backend/tests/test_ai_video_sc1_material_urls.py backend/tests/test_image_gen_service.py backend/tests/test_stickman_workflow_limits.py -q` -> `50 passed`。
   - `git diff --check` 通过，仅有既有 LF/CRLF 提示。
 - 下一步：提交并部署本次超时修复；远程 drop-in 增加 `STICKMAN_IMAGE_TIMEOUT_SECONDS=360`；重启 3004 backend/worker；创建新的 `imageMode=ai_image` 平台任务，等待多张实时图生成、运行本地 TTS worker、下载 MP4 并验证音视频流和分段场景图。
+
+## 2026-07-28 3004 实时生图编排层硬超时部署前记录
+
+- 当前任务：继续修复实时生图平台闭环，避免 `job_131` 这类任务长时间停在 `tts_generating/48%`。
+- 已完成部署：`d8b391e85604714733b34ac98871dc46c1157802` 已同步到 3004，远程 backend/worker 环境变量 `STICKMAN_IMAGE_TIMEOUT_SECONDS=360` 已修正为有效整数，3004 backend/worker/render 均 active，健康接口正常。
+- 平台发现：`job_131` 创建后超过 7 分钟仍只有 `render.log` 的“正在生成配音”三行，未生成 `project.json`，说明实时生图 coroutine 可能在底层 HTTP 层之外挂住，单靠 `httpx` timeout 不足以防止后台线程长期占用。
+- 本次本地改动：
+  - `backend/app/services/ai_video.py` 在 `_run_async_image_generation` 外层增加 `asyncio.wait_for` 硬超时，超时后抛出 `图片生成超时（超过 360 秒）`。
+  - `backend/tests/test_ai_video_sc1_material_urls.py` 新增慢速 coroutine 回归测试，证明 `imageMode=ai_image` 会明确超时失败，不会无限挂起。
+- 本地验证：
+  - `python -m py_compile backend/app/services/ai_video.py backend/app/services/image_gen.py backend/app/config.py backend/app/api/stickman_workflow.py` 通过。
+  - `PYTHONPATH=backend pytest backend/tests/test_ai_video_sc1_material_urls.py backend/tests/test_image_gen_service.py backend/tests/test_stickman_workflow_limits.py -q` -> `51 passed`。
+  - `git diff --check` 通过。
+- 下一步：提交并部署硬超时；重启 3004 backend/worker 终止已挂起的 `job_131` 后，创建更短的实时生图验证任务，优先验证至少 2 个语义分段生成 2 张不同场景图，再跑本地 TTS worker 和 MP4 验收。
