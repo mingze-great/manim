@@ -709,3 +709,22 @@
   - `npm run build` in `frontend` 通过，仅有既有 Vite 大 chunk warning。
   - `git diff --check` 通过，仅有 CRLF/LF 换行提示。
 - 待部署验证：提交后增量同步到 `/opt/manim-v2-3004-snapshot`，重启 3004 backend/worker；复验 3004 健康、声音试听文件约 5 秒；创建实时生图任务，检查 `project.json` 中 scene 数和 generated asset image 数一致且每段 prompt 不同，最终 MP4 有音视频流。
+
+## 2026-07-28 3004 实时生图失败不再静默回退部署前记录
+
+- 当前任务：继续修复 `/stickman-workflow` 实时生图模式。上一轮平台验收发现 `job_128` 虽然 completed，但 `project.json` 中 `scene_count=9`、`generated_asset_count=0`，说明实时生图接口失败后被静默回退为无生成图成片；这不符合用户要求。
+- 本地工作区：`C:\Users\Administrator\Documents\Codex\2026-07-18\300\work\3004-partner-stickman-worktree`。
+- 当前分支：`codex/3004-partner-stickman-platform-20260724`。
+- 本次功能提交：`b5710ff3e3453d2b22bb3f1b6b81557918f3d052`，提交时间 `2026-07-28 02:32:59 +0800`，提交信息 `fix: fail clearly for ai image generation errors`。
+- 本次改动：
+  - `backend/app/services/ai_video.py`：`imageMode=ai_image` 改为严格实时生图，图片接口异常或未返回 URL 时直接失败并写入 job 错误和 `render.log`；`hybrid` 仍允许失败后回退素材库。
+  - `backend/app/services/image_gen.py`：识别生图接口返回的 `status=failed/error` 或 `error/message/msg`，输出明确错误，例如 API key 无效。
+  - `backend/tests/test_ai_video_sc1_material_urls.py`：新增 `ai_image` 失败必须报错、`hybrid` 失败可回退素材库的回归测试。
+  - `backend/tests/test_image_gen_service.py`：新增 provider failed 状态解析测试。
+- 本地验证：
+  - `python -m py_compile backend/app/services/ai_video.py backend/app/services/image_gen.py backend/app/api/stickman_workflow.py backend/app/config.py` 通过。
+  - `PYTHONPATH=backend pytest backend/tests/test_ai_video_sc1_material_urls.py backend/tests/test_image_gen_service.py backend/tests/test_stickman_workflow_limits.py -q` -> `50 passed`。
+  - `git diff --check` 通过。
+- 待部署事项：增量同步 3004 后端文件和本状态文件到 `/opt/manim-v2-3004-snapshot`，设置 3004 环境变量中的实时生图 API key（不写入代码、不记录明文），只重启 3004 backend/worker。
+- 待平台验收：先探测图片接口是否返回可用图片；若 API key 仍无效，3004 应明确失败并显示“实时生图失败”；修复环境后创建真实 `imageMode=ai_image` 任务，验证每个语义分段生成不同场景图、MP4 有音视频流、声音试听为 5 秒。
+- 不要重复做：不要把实时生图失败的任务当成成功成片；不要提交或打印 API key；不要修改、重启或覆盖 3003。
