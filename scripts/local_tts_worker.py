@@ -1,5 +1,7 @@
 import argparse
+import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -11,6 +13,11 @@ from pydub import AudioSegment
 
 
 def configure_ffmpeg() -> None:
+    ffmpeg_path = resolve_ffmpeg_path()
+    if ffmpeg_path:
+        AudioSegment.converter = str(ffmpeg_path)
+        AudioSegment.ffmpeg = str(ffmpeg_path)
+        return
     try:
         import imageio_ffmpeg
 
@@ -22,15 +29,62 @@ def configure_ffmpeg() -> None:
         return
 
 
+def resolve_ffmpeg_path() -> Path | None:
+    candidates = [
+        os.getenv("LOCAL_TTS_FFMPEG", ""),
+        r"E:\anaconda3\Lib\site-packages\imageio_ffmpeg\binaries\ffmpeg-win-x86_64-v7.1.exe",
+        r"E:\anaconda_env\envs\manim\Lib\site-packages\imageio_ffmpeg\binaries\ffmpeg-win-x86_64-v7.1.exe",
+    ]
+    for candidate in candidates:
+        if candidate and Path(candidate).exists():
+            return Path(candidate)
+    return None
+
+
+def convert_with_ffmpeg(source_path: Path, output_path: Path, sample_rate: int) -> bool:
+    ffmpeg_path = resolve_ffmpeg_path()
+    if not ffmpeg_path:
+        return False
+    result = subprocess.run(
+        [
+            str(ffmpeg_path),
+            "-y",
+            "-i",
+            str(source_path),
+            "-ac",
+            "1",
+            "-ar",
+            str(sample_rate),
+            str(output_path),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    if result.returncode != 0:
+        raise RuntimeError((result.stderr or result.stdout or "ffmpeg conversion failed").strip()[:1000])
+    return True
+
+
+def ensure_valid_wav(path: Path) -> None:
+    if not path.exists() or path.stat().st_size < 1024:
+        raise RuntimeError("Generated wav is missing or too small")
+    with wave.open(str(path), "rb") as wav:
+        if wav.getnframes() <= 0 or wav.getnchannels() <= 0:
+            raise RuntimeError("Generated wav has no audio frames")
+
+
 def prepare_prompt_wav(source: Path, sample_rate: int, workspace: Path) -> Path:
     if not source.exists():
         raise FileNotFoundError(f"Prompt audio not found: {source}")
     workspace.mkdir(parents=True, exist_ok=True)
     target = workspace / "prompt.wav"
-    audio = AudioSegment.from_file(source).set_channels(1).set_frame_rate(sample_rate)
-    if len(audio) > 15000:
-        audio = audio[:15000]
-    audio.export(target, format="wav")
+    if not convert_with_ffmpeg(source, target, sample_rate):
+        audio = AudioSegment.from_file(source).set_channels(1).set_frame_rate(sample_rate)
+        if len(audio) > 15000:
+            audio = audio[:15000]
+        audio.export(target, format="wav")
+    ensure_valid_wav(target)
     return target
 
 
@@ -108,6 +162,42 @@ $synth.Dispose()
     audio.export(output_path, format="wav")
 
 
+def synthesize_with_dayun(text: str, output_path: Path, sample_rate: int) -> None:
+    api_url = os.getenv("DAYUN_MANBO_TTS_URL", "https://api.milorapart.top/apis/mbAIsc")
+    clean_chars = []
+    for ch in str(text or ""):
+        if ch.isalnum() or ("\u4e00" <= ch <= "\u9fff"):
+            clean_chars.append(ch)
+        else:
+            clean_chars.append(" ")
+    clean_text = re.sub(r"\s+", " ", "".join(clean_chars)).strip()
+    if not clean_text:
+        raise RuntimeError("Dayun Manbo text is empty after cleanup")
+    response = requests.get(api_url, params={"text": clean_text}, timeout=60)
+    response.raise_for_status()
+    try:
+        payload = response.json()
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Dayun Manbo returned non-json response: {response.text[:200]}") from exc
+    audio_url = str(payload.get("url") or "").strip()
+    if not audio_url:
+        raise RuntimeError(f"Dayun Manbo did not return audio url: {payload}")
+    audio_response = requests.get(audio_url, timeout=120)
+    audio_response.raise_for_status()
+    if len(audio_response.content or b"") < 1024:
+        raise RuntimeError("Dayun Manbo returned implausibly short audio")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    mp3_path = output_path.with_suffix(".dayun.mp3")
+    mp3_path.write_bytes(audio_response.content)
+    if not convert_with_ffmpeg(mp3_path, output_path, sample_rate):
+        audio = AudioSegment.from_file(mp3_path).set_channels(1).set_frame_rate(sample_rate)
+        if len(audio.raw_data) < 1024 or audio.rms <= 0:
+            raise RuntimeError("Dayun Manbo returned empty or silent audio")
+        audio.export(output_path, format="wav")
+    ensure_valid_wav(output_path)
+    mp3_path.unlink(missing_ok=True)
+
+
 def upload_completion(platform_url: str, token: str, request_id: str, audio_path: Path) -> None:
     with audio_path.open("rb") as audio_file:
         response = requests.post(
@@ -148,7 +238,9 @@ def run_once(args, prompt_wav: Path, workspace: Path) -> bool:
     output_path = workspace / f"{request_id}.wav"
     print(f"[local-tts] claimed {request_id}: {text[:60]}", flush=True)
     try:
-        if args.provider == "sapi":
+        if args.provider == "dayun":
+            synthesize_with_dayun(text, output_path, args.sample_rate)
+        elif args.provider == "sapi":
             synthesize_with_sapi(text, output_path, args.sample_rate)
         elif args.provider == "edge":
             synthesize_with_edge(text, output_path, args.sample_rate)
@@ -178,7 +270,7 @@ def main() -> None:
     parser.add_argument("--prompt-audio", default=os.getenv("LOCAL_TTS_PROMPT_AUDIO", r"E:\ai\火柴人工作流\配音\曼波.mp3"))
     parser.add_argument("--prompt-text", default=os.getenv("SC1_COSYVOICE_PROMPT_TEXT", "焦虑不是敌人，它只是先替你把危险放大。"))
     parser.add_argument("--workspace", default=os.getenv("LOCAL_TTS_WORKSPACE", str(Path("outputs") / "local-tts-worker")))
-    parser.add_argument("--provider", choices=["cosyvoice", "edge", "sapi"], default=os.getenv("LOCAL_TTS_PROVIDER", "cosyvoice"))
+    parser.add_argument("--provider", choices=["cosyvoice", "dayun", "edge", "sapi"], default=os.getenv("LOCAL_TTS_PROVIDER", "cosyvoice"))
     parser.add_argument("--sample-rate", type=int, default=int(os.getenv("LOCAL_TTS_SAMPLE_RATE", "22050")))
     parser.add_argument("--timeout", type=int, default=int(os.getenv("LOCAL_TTS_TIMEOUT", "180")))
     parser.add_argument("--poll-interval", type=float, default=float(os.getenv("LOCAL_TTS_POLL_INTERVAL", "2")))
