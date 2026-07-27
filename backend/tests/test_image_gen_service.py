@@ -2,6 +2,7 @@ import os
 import sys
 import types
 import asyncio
+import json
 
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 
@@ -48,6 +49,20 @@ class _FakeClient:
     async def get(self, url):
         self.requests.append({"get": url})
         return _FakeResponse(content=b"downloaded-image")
+
+
+class _FakeUrlopenResponse:
+    def __init__(self, content: bytes):
+        self._content = content
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def read(self):
+        return self._content
 
 
 def test_generate_image_uses_gpt_image_generate_payload(monkeypatch):
@@ -99,6 +114,43 @@ def test_generate_image_includes_reference_image_for_style_consistency(monkeypat
     asyncio.run(service.generate_image("保持参考图风格", reference_images=["data:image/png;base64,AAAA"]))
 
     assert _FakeClient.requests[0]["json"]["images"] == ["data:image/png;base64,AAAA"]
+
+
+def test_generate_image_can_use_urllib_transport(monkeypatch):
+    from app.services import image_gen
+
+    calls = []
+
+    def fake_urlopen(request, timeout=None):
+        calls.append({"request": request, "timeout": timeout})
+        if len(calls) == 1:
+            payload = json.dumps({"data": [{"url": "https://example.test/generated.png"}]}).encode("utf-8")
+            return _FakeUrlopenResponse(payload)
+        return _FakeUrlopenResponse(b"downloaded-image")
+
+    monkeypatch.setattr(image_gen.urllib.request, "urlopen", fake_urlopen)
+
+    service = ImageGenService.__new__(ImageGenService)
+    service.api_key = "test-key"
+    service.base_url = "https://grsaiapi.com/v1/api/generate"
+    service.model = "gpt-image-2"
+    service.model_chain = ["gpt-image-2"]
+    service.image_size = "1024x1024"
+    service.reply_type = "json"
+    service.timeout_seconds = 360
+    service.transport = "urllib"
+    service._save_image = lambda content: ("/api/article-images/test.png", "/api/article-images/test.png", "local")
+
+    result = asyncio.run(service.generate_image("生成一张心理学火柴人场景图"))
+
+    request = calls[0]["request"]
+    body = json.loads(request.data.decode("utf-8"))
+    assert request.full_url == "https://grsaiapi.com/v1/api/generate"
+    assert request.headers["Authorization"] == "Bearer test-key"
+    assert body["model"] == "gpt-image-2"
+    assert body["aspectRatio"] == "1024x1024"
+    assert calls[1]["request"].full_url == "https://example.test/generated.png"
+    assert result == ("/api/article-images/test.png", "/api/article-images/test.png", "local")
 
 
 def test_generate_image_reports_provider_failed_status(monkeypatch):

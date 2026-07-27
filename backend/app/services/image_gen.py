@@ -1,5 +1,9 @@
 import base64
+import asyncio
+import json
 import httpx
+import urllib.error
+import urllib.request
 import uuid
 from pathlib import Path
 from typing import Any, List
@@ -20,6 +24,7 @@ class ImageGenService:
         self.image_size = settings.STICKMAN_IMAGE_SIZE or "1024x1024"
         self.reply_type = getattr(settings, "STICKMAN_IMAGE_REPLY_TYPE", "json") or "json"
         self.timeout_seconds = int(getattr(settings, "STICKMAN_IMAGE_TIMEOUT_SECONDS", 240) or 240)
+        self.transport = str(getattr(settings, "STICKMAN_IMAGE_TRANSPORT", "httpx") or "httpx").strip().lower()
 
     async def generate_image(self, prompt: str, reference_images: list[str] | None = None) -> tuple[str, str, str]:
         """生成单张图片"""
@@ -27,6 +32,8 @@ class ImageGenService:
         async with httpx.AsyncClient(timeout=float(getattr(self, "timeout_seconds", 240) or 240)) as client:
             for model in self.model_chain:
                 try:
+                    if self._uses_generate_api(model) and getattr(self, "transport", "httpx") == "urllib":
+                        return await asyncio.to_thread(self._generate_image_with_urllib, model, prompt, reference_images)
                     response = await client.post(
                         self.base_url,
                         headers={
@@ -50,6 +57,35 @@ class ImageGenService:
                     last_error = exc
                     continue
         raise Exception(f"图片生成失败: {self._format_error(last_error)}")
+
+    def _generate_image_with_urllib(self, model: str, prompt: str, reference_images: list[str] | None = None) -> tuple[str, str, str]:
+        payload = self._build_payload(model, prompt, reference_images=reference_images)
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        request = urllib.request.Request(
+            self.base_url,
+            data=body,
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=float(getattr(self, "timeout_seconds", 240) or 240)) as response:
+                raw = response.read()
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")[:500]
+            raise Exception(f"图片生成接口 HTTP {exc.code}: {detail}") from exc
+        data = json.loads(raw.decode("utf-8", errors="replace"))
+        self._raise_for_provider_error(data)
+        source_type, image_source = self._extract_image_source(data)
+        if not image_source:
+            raise Exception(f"图片生成未返回有效的URL: {data}")
+        if source_type == "base64":
+            return self._save_image(self._decode_base64_image(image_source))
+        image_request = urllib.request.Request(image_source, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(image_request, timeout=float(getattr(self, "timeout_seconds", 240) or 240)) as image_response:
+            return self._save_image(image_response.read())
 
     def _raise_for_provider_error(self, data: Any) -> None:
         if not isinstance(data, dict):

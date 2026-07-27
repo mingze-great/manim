@@ -760,3 +760,18 @@
   - `PYTHONPATH=backend pytest backend/tests/test_ai_video_sc1_material_urls.py backend/tests/test_image_gen_service.py backend/tests/test_stickman_workflow_limits.py -q` -> `51 passed`。
   - `git diff --check` 通过。
 - 下一步：提交并部署硬超时；重启 3004 backend/worker 终止已挂起的 `job_131` 后，创建更短的实时生图验证任务，优先验证至少 2 个语义分段生成 2 张不同场景图，再跑本地 TTS worker 和 MP4 验收。
+
+## 2026-07-28 3004 实时生图 urllib 传输部署前记录
+
+- 当前任务：继续排查 3004 实时生图平台闭环。`job_132` 在部署硬超时后仍长时间停在 `tts_generating/48%` 且未生成 `project.json`，说明实际卡点更接近 `httpx` 对当前 `/api/generate` 接口的网络传输层。
+- 关键证据：远程 `/tmp/remote_image_probe.py` 使用 Python 标准库 `urllib` 调用同一接口、同一模型、同一 API key，返回 `ok=true`、`provider_status=succeeded`、`source_type=url`；因此接口和 key 可用，问题集中在平台代码当前的 `httpx.AsyncClient` 调用路径。
+- 本次本地改动：
+  - `backend/app/config.py` 新增 `STICKMAN_IMAGE_TRANSPORT`，默认仍为 `httpx`。
+  - `backend/app/services/image_gen.py` 支持 `STICKMAN_IMAGE_TRANSPORT=urllib` 时对 `/api/generate` 使用标准库 `urllib.request.urlopen` 发送 JSON 和下载图片，复用现有 payload、provider error 解析和本地保存逻辑。
+  - `deploy/env.backend.3004.example` 为 3004 示例配置增加 `STICKMAN_IMAGE_TRANSPORT=urllib`。
+  - `backend/tests/test_image_gen_service.py` 增加 urllib 传输回归测试。
+- 本地验证：
+  - `python -m py_compile backend/app/services/ai_video.py backend/app/services/image_gen.py backend/app/config.py backend/app/api/stickman_workflow.py` 通过。
+  - `PYTHONPATH=backend pytest backend/tests/test_ai_video_sc1_material_urls.py backend/tests/test_image_gen_service.py backend/tests/test_stickman_workflow_limits.py -q` -> `52 passed`。
+  - `git diff --check` 通过，仅有既有 LF/CRLF 提示。
+- 下一步：提交并部署；远程 backend/worker drop-in 增加 `STICKMAN_IMAGE_TRANSPORT=urllib`，只重启 3004 backend/worker；重新创建短文案 `imageMode=ai_image` 平台任务验证至少 2 张实时场景图。

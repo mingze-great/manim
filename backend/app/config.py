@@ -124,6 +124,7 @@ class Settings(BaseSettings):
     STICKMAN_IMAGE_SIZE: str = "1024x1024"
     STICKMAN_IMAGE_REPLY_TYPE: str = "json"
     STICKMAN_IMAGE_TIMEOUT_SECONDS: int = 360
+    STICKMAN_IMAGE_TRANSPORT: str = "httpx"
     STICKMAN_IMAGE_NEGATIVE_PROMPT: str = "低分辨率，低画质，肢体畸形，手指畸形，画面过饱和，蜡像感，人脸无细节，过度光滑，画面具有AI感，构图混乱，文字模糊，扭曲"
     STICKMAN_TTS_API_KEY: str = ""
     STICKMAN_TTS_BASE_URL: str = "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
