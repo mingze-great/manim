@@ -204,6 +204,65 @@ def test_ai_image_mode_generates_scene_asset(monkeypatch):
     assert asset["slot"] == "center"
 
 
+def test_ai_image_mode_fails_clearly_when_realtime_generation_fails(monkeypatch):
+    service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
+    service.backend_public_url = "http://127.0.0.1:8004"
+    service._sc1_material_cache = (None, [])
+    service._media_for_scene = lambda *_args, **_kwargs: []
+    service._infer_scene_count = lambda *_args, **_kwargs: 1
+
+    async def fake_generate_image(_prompt, reference_images=None):
+        raise RuntimeError("apikey error")
+
+    fake_service = types.SimpleNamespace(generate_image=fake_generate_image)
+    monkeypatch.setattr(ai_video, "image_gen_service", fake_service, raising=False)
+
+    with pytest.raises(RuntimeError, match="实时生图失败"):
+        service._build_scenes(
+            "你越想证明自己，越容易在关系里内耗。",
+            {"prompt": "关系内耗", "imageMode": "ai_image", "useMaterialLibrary": False},
+            "knowledge_ip_stickman",
+            "sc1_stickman",
+            "medium",
+        )
+
+
+def test_hybrid_image_mode_can_fallback_when_realtime_generation_fails(tmp_path, monkeypatch):
+    material_root = tmp_path / "materials"
+    material_root.mkdir()
+    (material_root / "1.png").write_bytes(b"fallback-material")
+
+    service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
+    service.backend_public_url = "http://127.0.0.1:8004"
+    service.render_material_root = tmp_path / "render" / "sc1-materials"
+    service._sc1_material_cache = (None, [])
+    service._media_for_scene = lambda *_args, **_kwargs: []
+    service._infer_scene_count = lambda *_args, **_kwargs: 1
+
+    async def fake_generate_image(_prompt, reference_images=None):
+        raise RuntimeError("apikey error")
+
+    fake_service = types.SimpleNamespace(generate_image=fake_generate_image)
+    monkeypatch.setattr(ai_video, "image_gen_service", fake_service, raising=False)
+
+    scenes = service._build_scenes(
+        "你越想证明自己，越容易在关系里内耗。",
+        {
+            "prompt": "关系内耗",
+            "imageMode": "hybrid",
+            "useMaterialLibrary": True,
+            "materialLibraryPath": str(material_root),
+        },
+        "knowledge_ip_stickman",
+        "sc1_stickman",
+        "medium",
+    )
+
+    asset = scenes[0]["visual"]["assetImages"][0]
+    assert asset.get("generated") is not True
+    assert "/sc1-materials/" in asset["src"]
+
+
 def test_ai_image_mode_generates_per_user_script_semantic_scene(monkeypatch):
     service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
     service.backend_public_url = "http://127.0.0.1:8004"

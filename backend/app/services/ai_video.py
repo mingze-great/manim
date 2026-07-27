@@ -636,6 +636,8 @@ class AiVideoService:
         except Exception as exc:
             job = db.query(AiVideoJob).filter(AiVideoJob.id == job_id).first()
             if job:
+                if job.log_path:
+                    self._append_log(job.log_path, f"{STAGE_MESSAGES['failed']}：{exc}")
                 job.status = "failed"
                 job.stage = "failed"
                 job.error_message = str(exc)
@@ -756,7 +758,13 @@ class AiVideoService:
             material_images: list[dict[str, Any]] = []
             if is_sc1_video:
                 if image_mode in {"ai_image", "hybrid"}:
-                    material_images = self._sc1_generated_images_for_scene(payload, text, index, sc1_segments)
+                    material_images = self._sc1_generated_images_for_scene(
+                        payload,
+                        text,
+                        index,
+                        sc1_segments,
+                        strict=image_mode == "ai_image",
+                    )
                 if not material_images and image_mode in {"material_only", "hybrid"}:
                     material_images = self._sc1_material_images_for_scene(payload, text, index, sc1_segments, sc1_selected_materials)
             layout_variant = self._layout_variant_for_scene(content_type, visual_style, scene_type, text, index, edit_directive)
@@ -798,6 +806,8 @@ class AiVideoService:
         text: str,
         index: int,
         segments: list[dict[str, Any]] | None = None,
+        *,
+        strict: bool = False,
     ) -> list[dict[str, Any]]:
         segment_items = segments or self._sc1_segments_for_scene(text, index)
         segment = segment_items[0] if segment_items else {}
@@ -820,10 +830,14 @@ class AiVideoService:
             except TypeError:
                 coroutine = generator.generate_image(prompt)
             local_url, public_url, _storage = self._run_async_image_generation(coroutine)
-        except Exception:
+        except Exception as exc:
+            if strict:
+                raise RuntimeError(f"实时生图失败：图片生成接口不可用或 API key 无效（第 {index + 1} 段）。{exc}") from exc
             return []
         src = self._backend_asset_url(str(public_url or local_url or ""))
         if not src:
+            if strict:
+                raise RuntimeError(f"实时生图失败：图片生成接口没有返回可用图片 URL（第 {index + 1} 段）。")
             return []
         return [
             {

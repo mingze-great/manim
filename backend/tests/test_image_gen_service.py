@@ -99,3 +99,27 @@ def test_generate_image_includes_reference_image_for_style_consistency(monkeypat
     asyncio.run(service.generate_image("保持参考图风格", reference_images=["data:image/png;base64,AAAA"]))
 
     assert _FakeClient.requests[0]["json"]["images"] == ["data:image/png;base64,AAAA"]
+
+
+def test_generate_image_reports_provider_failed_status(monkeypatch):
+    from app.services import image_gen
+
+    class FailedClient(_FakeClient):
+        async def post(self, url, headers=None, json=None):
+            return _FakeResponse({"status": "failed", "error": "apikey error"})
+
+    monkeypatch.setattr(image_gen.httpx, "AsyncClient", FailedClient)
+
+    service = ImageGenService.__new__(ImageGenService)
+    service.api_key = "test-key"
+    service.base_url = "https://grsaiapi.com/v1/api/generate"
+    service.model = "gpt-image-2"
+    service.model_chain = ["gpt-image-2"]
+    service.image_size = "1024x1024"
+    service.reply_type = "json"
+
+    try:
+        asyncio.run(service.generate_image("生成一张心理学火柴人场景图"))
+        assert False, "expected provider failure"
+    except Exception as exc:
+        assert "apikey error" in str(exc)

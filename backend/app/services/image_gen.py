@@ -36,6 +36,7 @@ class ImageGenService:
                     )
                     response.raise_for_status()
                     data = response.json()
+                    self._raise_for_provider_error(data)
                     source_type, image_source = self._extract_image_source(data)
                     if not image_source:
                         raise Exception(f"图片生成未返回有效的URL: {data}")
@@ -48,6 +49,14 @@ class ImageGenService:
                     last_error = exc
                     continue
         raise Exception(f"图片生成失败: {last_error}")
+
+    def _raise_for_provider_error(self, data: Any) -> None:
+        if not isinstance(data, dict):
+            return
+        status = str(data.get("status") or data.get("state") or "").strip().lower()
+        error = data.get("error") or data.get("message") or data.get("msg")
+        if status in {"failed", "error", "fail"} or error:
+            raise Exception(f"图片生成接口返回失败: {error or data}")
 
     def _build_payload(self, model: str, prompt: str, reference_images: list[str] | None = None) -> dict[str, Any]:
         if self._uses_generate_api(model):
