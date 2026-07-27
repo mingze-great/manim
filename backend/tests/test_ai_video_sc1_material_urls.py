@@ -618,6 +618,31 @@ def test_sc1_summary_label_prefers_keywords_from_current_caption():
     assert label in {"对象", "后果", "分开", "分开看"}
 
 
+def test_sc1_summary_label_uses_strong_keyword_from_current_caption():
+    service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
+
+    label = service._sc1_make_unique_label(
+        "别总是在别人的情绪里寻找自己的价值，爱你的人不会让你长期患得患失，而真正爱自己的人，也不会为了留住一个人，慢慢丢掉自己",
+        0,
+        set(),
+    )
+
+    assert label in {"价值", "爱己", "患失", "留住", "丢掉"}
+    assert label != "情绪"
+
+
+def test_sc1_caption_cues_split_long_caption_into_short_lines():
+    service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
+
+    cues = service._split_sc1_caption_cues(
+        "别总是在别人的情绪里寻找自己的价值，爱你的人不会让你长期患得患失，而真正爱自己的人，也不会为了留住一个人，慢慢丢掉自己"
+    )
+
+    assert len(cues) == 3
+    assert all(len(cue) <= 18 for cue in cues)
+    assert cues[0] == "别总是在别人的情绪里寻找自己的价值"
+
+
 def test_sc1_caption_cues_drop_sentence_number_prefixes():
     service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
 
@@ -626,7 +651,7 @@ def test_sc1_caption_cues_drop_sentence_number_prefixes():
     assert cues == ["不要把别人的情绪都揽到自己身上"]
 
 
-def test_sc1_video_does_not_emit_english_subtitles(monkeypatch):
+def test_sc1_video_emits_english_subtitles_for_each_caption_cue(monkeypatch):
     service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
     service._sc1_material_cache = (None, [])
     service._infer_scene_count = lambda *_args, **_kwargs: 1
@@ -642,7 +667,7 @@ def test_sc1_video_does_not_emit_english_subtitles(monkeypatch):
         script_source="user",
     )
 
-    assert scenes[0]["englishText"] == ""
+    assert scenes[0]["englishText"]
     for segment in scenes[0]["segments"]:
-        assert segment["englishText"] == ""
-        assert all(cue["englishText"] == "" for cue in segment["captionCues"])
+        assert segment["englishText"]
+        assert all(cue["englishText"] for cue in segment["captionCues"])

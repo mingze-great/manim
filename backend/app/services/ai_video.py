@@ -719,7 +719,7 @@ class AiVideoService:
         if is_sc1_content and script_source == "user" and not requested_count:
             scene_count = self._infer_sc1_user_script_scene_count(script, scene_count)
         chunks = self._split_script(script, scene_count, content_type, allow_prompt_expansion=script_source != "user")
-        if script_source == "user" and len(chunks) > scene_count:
+        if (script_source == "user" or is_sc1_content) and len(chunks) > scene_count:
             scene_count = len(chunks)
         scene_types = template["sceneTypes"]
         steps = template["steps"]
@@ -750,14 +750,14 @@ class AiVideoService:
                     material_images = self._sc1_material_images_for_scene(payload, text, index, sc1_segments, sc1_selected_materials)
             layout_variant = self._layout_variant_for_scene(content_type, visual_style, scene_type, text, index, edit_directive)
             energy_pattern = self._energy_pattern_for_scene(scene_type, layout_variant, text, index)
-            english_text = "" if is_sc1_video else " ".join(segment.get("englishText", "") for segment in sc1_segments).strip()
+            english_text = " ".join(str(segment.get("englishText") or "") for segment in sc1_segments).strip()
             scenes.append(
                 {
                     "id": f"scene_{index + 1:02d}",
                     "duration": max(self._scene_duration_for_pace(pace, text), min_scene_seconds),
                     "voiceText": text,
                     "subtitleText": self._display_text_for_scene(text, step[0], index),
-                    "englishText": "" if is_sc1_video else english_text or self._sc1_english_for_segment(text, index, 0),
+                    "englishText": english_text or self._sc1_english_for_segment(text, index, 0),
                     "segments": sc1_segments,
                     "intent": step[1],
                     "cta": self._cta_for_scene(index, scene_count, content_type),
@@ -816,7 +816,7 @@ class AiVideoService:
                 "slot": "center",
                 "segmentIndex": 0,
                 "segmentText": segment_text,
-                "englishText": "",
+                "englishText": self._sc1_english_for_segment(segment_text, index, 0),
                 "summaryLabel": self._sc1_summary_label(segment_text, 0),
                 "enterDirection": self._sc1_enter_direction(index, 0),
                 "startRatio": 0,
@@ -884,7 +884,7 @@ class AiVideoService:
                     "slot": slot_hints[offset] if offset < len(slot_hints) else ("right" if offset else "center"),
                     "segmentIndex": offset,
                     "segmentText": segment_text,
-                    "englishText": "",
+                    "englishText": self._sc1_english_for_segment(segment_text, index, offset),
                     "summaryLabel": self._sc1_summary_label(segment_text, offset),
                     "enterDirection": self._sc1_enter_direction(index, offset),
                     "startRatio": 0 if offset == 0 else 0.4,
@@ -911,24 +911,27 @@ class AiVideoService:
         cues = self._split_sc1_caption_cues(cleaned)[:3]
         layout_mode = self._sc1_layout_mode_for_scene(scene_index, cleaned)
         summary_labels: list[str] = []
+        cue_english: list[str] = []
         used_labels = video_used_labels if video_used_labels is not None else set()
         for cue_index, cue in enumerate(cues):
             label = self._sc1_make_unique_label(cue, scene_index * 3 + cue_index, used_labels)
             used_labels.add(label)
             summary_labels.append(label)
+            cue_english.append(self._sc1_english_for_segment(cue, scene_index, cue_index))
+        segment_english = " ".join(item for item in cue_english if item).strip()
         return [
             {
                 "index": 0,
                 "text": cleaned,
                 "subtitleText": cleaned,
-                "englishText": "",
+                "englishText": segment_english,
                 "summaryLabel": summary_labels[0] if summary_labels else self._sc1_summary_label(cleaned, 0),
                 "summaryLabels": summary_labels,
                 "layoutMode": layout_mode,
                 "captionCues": [
                     {
                         "text": cue,
-                        "englishText": "",
+                        "englishText": cue_english[cue_index] if cue_index < len(cue_english) else self._sc1_english_for_segment(cue, scene_index, cue_index),
                         "summaryLabel": summary_labels[cue_index] if cue_index < len(summary_labels) else self._sc1_summary_label(cue, cue_index),
                     }
                     for cue_index, cue in enumerate(cues)
@@ -942,52 +945,52 @@ class AiVideoService:
         cleaned = " ".join(str(text or "").replace("\n", " ").split()).strip()
         if not cleaned:
             return ["Scene point"]
-        parts = [
+        units = self._split_sc1_caption_units(cleaned, max_chars=18)
+        return units[:3] if units else [self._sc1_clean_caption_cue(cleaned) or cleaned]
+
+    def _split_sc1_caption_units(self, text: str, max_chars: int = 18) -> list[str]:
+        cleaned = " ".join(str(text or "").replace("\n", " ").split()).strip()
+        if not cleaned:
+            return []
+        raw_units = [
             self._sc1_clean_caption_cue(item)
-            for item in re.split(r"(?<=[。！？!?；;])\s*", cleaned)
+            for item in re.split(r"(?<=[。！？!?；;])\s*|[，,、；;】【：：]", cleaned)
             if self._sc1_clean_caption_cue(item)
         ]
-        if len(parts) >= 2:
-            if len(parts) <= 3:
-                return parts[:3]
-            total = sum(len(part) for part in parts) or len(parts)
-            target = max(12, total // 3)
-            groups: list[str] = []
-            bucket = ""
-            bucket_len = 0
-            for part in parts:
-                if bucket and bucket_len + len(part) > target and len(groups) < 2:
-                    groups.append(bucket)
-                    bucket = part
-                    bucket_len = len(part)
-                else:
-                    bucket = f"{bucket} {part}".strip()
-                    bucket_len += len(part)
-            if bucket:
-                groups.append(bucket)
-            return [self._sc1_clean_caption_cue(item) for item in groups if self._sc1_clean_caption_cue(item)][:3]
-        if len(cleaned) <= 18:
-            return [self._sc1_clean_caption_cue(cleaned) or cleaned]
-        comma_parts = [
-            self._sc1_clean_caption_cue(item)
-            for item in re.split(r"[，,、；;】【：：]", cleaned)
-            if self._sc1_clean_caption_cue(item)
-        ]
-        if len(comma_parts) >= 2:
-            return comma_parts[:3]
-        midpoint = len(cleaned) // 2
-        split_at = midpoint
-        for radius in range(0, min(18, midpoint)):
-            for candidate in (midpoint - radius, midpoint + radius):
-                if 0 < candidate < len(cleaned) and cleaned[candidate] in "、。，；：,;: ":
-                    split_at = candidate + 1
+        if not raw_units:
+            raw_units = [self._sc1_clean_caption_cue(cleaned) or cleaned]
+        units: list[str] = []
+        for unit in raw_units:
+            units.extend(self._split_sc1_long_caption_unit(unit, max_chars=max_chars))
+        return [item for item in units if item]
+
+    def _split_sc1_long_caption_unit(self, text: str, max_chars: int = 18) -> list[str]:
+        cleaned = self._sc1_clean_caption_cue(text)
+        if not cleaned:
+            return []
+        if len(cleaned) <= max_chars:
+            return [cleaned]
+        chunks: list[str] = []
+        remaining = cleaned
+        soft_breaks = "，,、；;。：: "
+        while len(remaining) > max_chars:
+            split_at = 0
+            upper = min(len(remaining), max_chars + 1)
+            lower = max(8, max_chars - 6)
+            for idx in range(upper - 1, lower - 1, -1):
+                if remaining[idx] in soft_breaks:
+                    split_at = idx + 1
                     break
-            if split_at != midpoint:
-                break
-        first = self._sc1_clean_caption_cue(cleaned[:split_at])
-        second = self._sc1_clean_caption_cue(cleaned[split_at:])
-        fallback_cues = [item for item in [first, second] if item]
-        return (fallback_cues or [cleaned])[:3]
+            if split_at <= 0:
+                split_at = max_chars
+            chunk = self._sc1_clean_caption_cue(remaining[:split_at])
+            if chunk:
+                chunks.append(chunk)
+            remaining = remaining[split_at:].strip()
+        tail = self._sc1_clean_caption_cue(remaining)
+        if tail:
+            chunks.append(tail)
+        return chunks
 
     def _sc1_clean_caption_cue(self, text: str) -> str:
         cleaned = str(text or "").strip(" .,!?:;、。，；：！？")
@@ -1112,20 +1115,59 @@ class AiVideoService:
     def _sc1_present_label_keywords(self, text: str) -> list[str]:
         cleaned = " ".join(str(text or "").split()).strip()
         compact = re.sub(r"[^\u4e00-\u9fff]+", "", cleaned)
-        phrase_candidates = [
-            "分开看", "想太多", "内耗", "边界", "界限", "底线", "对象", "后果",
-            "责任", "情绪", "焦虑", "关系", "证明", "评价", "审判", "反思",
-            "自责", "消耗", "透支", "委屈", "害怕", "感受", "风险", "代价",
-            "规则", "真相", "误判", "清醒", "答案", "放下", "释怀", "稳住",
+        phrase_candidates: list[tuple[str, str]] = [
+            ("患得患失", "患失"),
+            ("丢掉自己", "丢掉"),
+            ("慢慢丢掉", "丢掉"),
+            ("自己的价值", "价值"),
+            ("寻找自己的价值", "价值"),
+            ("爱自己", "爱己"),
+            ("真正爱自己", "爱己"),
+            ("留住一个人", "留住"),
+            ("证明自己", "证明"),
+            ("反思是不是自己做错", "自责"),
+            ("是不是自己做错", "自责"),
+            ("对象", "对象"),
+            ("后果", "后果"),
+            ("分开看", "分开"),
+            ("分开", "分开"),
+            ("责任", "责任"),
+            ("负责", "负责"),
+            ("边界", "边界"),
+            ("界限", "界限"),
+            ("底线", "底线"),
+            ("想太多", "内耗"),
+            ("内耗", "内耗"),
+            ("焦虑", "焦虑"),
+            ("证明", "证明"),
+            ("评价", "评价"),
+            ("审判", "审判"),
+            ("反思", "反思"),
+            ("自责", "自责"),
+            ("消耗", "消耗"),
+            ("透支", "透支"),
+            ("委屈", "委屈"),
+            ("害怕", "害怕"),
+            ("感受", "感受"),
+            ("风险", "风险"),
+            ("代价", "代价"),
+            ("规则", "规则"),
+            ("真相", "真相"),
+            ("误判", "误判"),
+            ("清醒", "清醒"),
+            ("答案", "答案"),
+            ("放下", "放下"),
+            ("释怀", "释怀"),
+            ("稳住", "稳住"),
+            ("关系", "关系"),
+            ("情绪", "情绪"),
         ]
         labels: list[str] = []
-        for keyword in phrase_candidates:
+        for keyword, label_text in phrase_candidates:
             if keyword in compact:
-                label = self._sc1_clip_label(keyword, 0)
+                label = self._sc1_clip_label(label_text, 0)
                 if label not in labels:
                     labels.append(label)
-        if "分开" in compact and "分开" not in labels:
-            labels.append("分开")
         return labels
 
     def _sc1_clip_label(self, label: str, segment_index: int) -> str:
@@ -2695,13 +2737,16 @@ class AiVideoService:
         normalized = " ".join(str(script or "").replace("\n", " ").split()).strip()
         if not normalized:
             return fallback
+        cue_units = self._split_sc1_caption_units(normalized, max_chars=18)
         sentence_parts = [
-            part.strip()
+            part.strip(" ，,、；;：:。！？!?")
             for part in re.split(r"(?<=[。！？!?；;])\s*", normalized)
             if part.strip(" ，,、；;：:。！？!?")
         ]
-        if sentence_parts:
-            scene_count = math.ceil(len(sentence_parts) / 2)
+        if len(sentence_parts) > len(cue_units):
+            cue_units = sentence_parts
+        if cue_units:
+            scene_count = math.ceil(len(cue_units) / 2)
         else:
             scene_count = math.ceil(len(normalized) / 42)
         return min(24, max(1, scene_count))
@@ -2722,6 +2767,10 @@ class AiVideoService:
         parts = [part.strip(" ，,、；;：:") for part in re.split(r"(?<=[。！？!?；;])\s*", normalized) if part.strip()]
         if content_type == "knowledge_ip_stickman" and allow_prompt_expansion and len(parts) < scene_count:
             return self._expand_prompt_to_scene_texts(normalized, content_type, scene_count)
+        if content_type == "knowledge_ip_stickman":
+            sc1_chunks = self._split_sc1_script_into_scene_chunks(normalized, scene_count)
+            if sc1_chunks:
+                return sc1_chunks
         if allow_prompt_expansion and self._looks_like_generation_request(normalized) and "文案：" not in normalized and "旁白：" not in normalized and len(parts) < scene_count:
             return self._expand_prompt_to_scene_texts(normalized, content_type, scene_count)
         if len(parts) >= scene_count:
@@ -2746,6 +2795,33 @@ class AiVideoService:
         while len(parts) < scene_count:
             parts.append(self._contextual_fallback_sentence(len(parts), content_type, normalized))
         return parts[:scene_count]
+
+    def _split_sc1_script_into_scene_chunks(self, text: str, requested_scene_count: int) -> list[str]:
+        units = self._split_sc1_caption_units(text, max_chars=18)
+        sentence_parts = [
+            part.strip(" ，,、；;：:。！？!?")
+            for part in re.split(r"(?<=[。！？!?；;])\s*", text)
+            if part.strip(" ，,、；;：:。！？!?")
+        ]
+        if len(sentence_parts) > len(units):
+            units = sentence_parts
+        if not units:
+            return []
+        chunks: list[str] = []
+        bucket: list[str] = []
+        max_scene_chars = 48
+        target_cues_per_scene = 2 if requested_scene_count >= math.ceil(len(units) / 2) else 3
+        for unit in units:
+            bucket_chars = sum(len(item) for item in bucket)
+            if bucket and (len(bucket) >= target_cues_per_scene or bucket_chars + len(unit) > max_scene_chars):
+                chunks.append("，".join(bucket))
+                bucket = []
+            bucket.append(unit)
+        if bucket:
+            chunks.append("，".join(bucket))
+        if requested_scene_count and len(chunks) < requested_scene_count:
+            chunks.extend(self._contextual_fallback_sentence(len(chunks), "knowledge_ip_stickman", text) for _ in range(requested_scene_count - len(chunks)))
+        return chunks[:24]
 
     def _looks_like_generation_request(self, text: str) -> bool:
         return any(word in text for word in ["帮我", "生成", "做一条", "做一个", "视频", "短视频", "文案", "风格", "火柴人", "知识IP", "知识 IP"])

@@ -659,3 +659,13 @@
   4. `df -h / && free -h`
   5. 确认 3003/3004 backend、worker、render 恢复。
 - 重要决策：不要再在这台 3.6G 内存机器上直接启动 full open-source CosyVoice 常驻服务。要么换更大机器/独立 TTS 机器，要么使用外部 CosyVoice API/已经可用的轻量 TTS 服务。若必须本机跑，需要单独部署 3004 CosyVoice 服务并加 `MemoryMax`、`CPUQuota`、`Restart=no` 或严格 `StartLimitBurst`，且先在离线命令中验证一次 zero-shot 不拖垮机器。
+
+## 2026-07-28 3004 SC1 英文字幕与关键词强相关修复部署前记录
+
+- 当前任务：只在 3004 分支 `codex/3004-partner-stickman-platform-20260724` 修复 SC1 成片英文字幕缺失、单 cue 字幕过长、方框总结词弱相关问题，不触碰 3003。
+- 本地工作区：`C:\Users\Administrator\Documents\Codex\2026-07-18\300\work\3004-partner-stickman-worktree`。
+- 编码前 HEAD：`f49fc4ef5def9be85aba33c78913c30da7076690`，提交时间 `2026-07-28 00:05:27 +0800`，提交信息 `docs: record local tts platform validation`。
+- 本次本地改动：`backend/app/services/ai_video.py` 恢复 SC1 scene/segment/caption cue 的 `englishText` 输出；新增短字幕单元拆分，长文案按最多 2-3 个 cue 拆成更多语义场景，避免单分镜字幕过长或后续文案被截断；方框总结词优先从当前 cue 提取强相关关键词，例如 `价值`、`爱己`、`患失`、`留住`、`丢掉`，再回落到总结词池。
+- 本次测试改动：`backend/tests/test_ai_video_sc1_material_urls.py` 将旧的“SC1 不输出英文字幕”断言改为“每个 cue 都有英文字幕”，新增长字幕拆短和用户截图句子关键词强相关回归测试。
+- 本地验证：`python -m py_compile backend\app\services\ai_video.py` 通过；`PYTHONPATH=backend pytest backend\tests\test_ai_video_sc1_material_urls.py -q` -> `28 passed`；`PYTHONPATH=backend pytest backend\tests\test_stickman_workflow_upload_persistence.py backend\tests\test_stickman_workflow_limits.py backend\tests\test_partner_program_service.py backend\tests\test_ai_video_sc1_material_urls.py -q` -> `61 passed`；`git diff --check` 通过。
+- 待部署边界：提交本地改动后只同步到 `/opt/manim-v2-3004-snapshot`，只重启 3004 backend/worker/render 所需服务；不修改、不重启 3003。部署后必须通过 3004 平台创建真实 `/stickman-workflow` 任务并检查 MP4 音视频流、`project.json` 英文 cue、短中文字幕、关键词强相关与抽帧画面。
