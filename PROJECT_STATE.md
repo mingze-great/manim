@@ -682,3 +682,10 @@
 - JSON 验证：远程 `project.json` 大小 `17608` 字节；`scene_count=4`、`cue_count=7`、`english_missing=[]`、`long_cues=[]`、无 `@Sc1`；方框关键词为 `价值`、`患失`、`爱己`、`留住`、`丢掉`、`分开`、`审判`，均来自或强相关于当前展示文案。
 - 抽帧验证：`frame_02s.png` 显示中文短字幕 `别总是在别人的情绪里寻找自己的价值` 和英文字幕；关键词 `价值`；`frame_07s.png` 显示关键词 `爱己`、`留住` 依次累计；`frame_12s.png` 显示关键词 `丢掉`、`分开` 且场景图居中完整。右上角 `心理分享 | 认知突破` 可见，无 `@Sc1火柴人`。
 - 已知后续优化：当前英文为规则化兜底翻译，已满足“英文字幕恢复并同步”的功能要求；若要更贴近原视频语气，可后续接入更自然的逐句翻译模型，但不能牺牲 cue 同步。
+
+## 2026-07-28 3004 SC1 英文字幕修复 Git 同步状态补充
+
+- 本地最新提交：`074621a06e80af77f17a660fd07bf1f27bb8b8c5`（`docs: record sc1 english cue validation`），其中功能代码提交为 `19ebd5556aad19e8e00bc867a80fb6167d1340c2`。
+- 3004 快照 `.deployed-ref` 已更新为 `commit=074621a06e80af77f17a660fd07bf1f27bb8b8c5`、`code_commit=19ebd5556aad19e8e00bc867a80fb6167d1340c2`、`validation_job=job_126`。
+- `git push origin codex/3004-partner-stickman-platform-20260724` 本轮在本地等待 184 秒后超时；3004 服务端快照已包含代码和状态文件，后续网络稳定时需要补推 GitHub 分支。
+- 推送超时后复验：3004 backend/worker/render 均 active，`8004/health` healthy，`18788/api/health` ok，`http://127.0.0.1:3004/` 和 `http://127.0.0.1:3003/` 均返回 `HTTP/1.1 200 OK`。
