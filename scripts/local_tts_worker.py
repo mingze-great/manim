@@ -10,6 +10,18 @@ import requests
 from pydub import AudioSegment
 
 
+def configure_ffmpeg() -> None:
+    try:
+        import imageio_ffmpeg
+
+        ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
+        AudioSegment.converter = ffmpeg_path
+        AudioSegment.ffmpeg = ffmpeg_path
+        AudioSegment.ffprobe = ffmpeg_path
+    except Exception:
+        return
+
+
 def prepare_prompt_wav(source: Path, sample_rate: int, workspace: Path) -> Path:
     if not source.exists():
         raise FileNotFoundError(f"Prompt audio not found: {source}")
@@ -150,7 +162,10 @@ def main() -> None:
         raise SystemExit("LOCAL_TTS_WORKER_TOKEN is required")
 
     workspace = Path(args.workspace).resolve()
-    prompt_wav = prepare_prompt_wav(Path(args.prompt_audio), args.sample_rate, workspace)
+    configure_ffmpeg()
+    prompt_wav = workspace / "prompt.wav"
+    if args.provider == "cosyvoice":
+        prompt_wav = prepare_prompt_wav(Path(args.prompt_audio), args.sample_rate, workspace)
     print(f"[local-tts] platform={args.platform_url} provider={args.provider} prompt={prompt_wav}", flush=True)
 
     while True:

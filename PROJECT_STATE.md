@@ -453,6 +453,8 @@
 
 ## 2026-07-27 3004 本地 TTS Worker 部署前记录
 
+- 补充记录：`scripts/local_tts_worker.py` 已改为仅在 `--provider cosyvoice` 时准备 prompt wav；同时自动使用 `imageio_ffmpeg` 配置 pydub，避免本地临时 edge 链路验证被曼波 mp3 转码阻塞。`python -m py_compile scripts\local_tts_worker.py` 和 `git diff --check` 均通过。下一次同步远程时必须包含该脚本。
+
 - 当前任务：保持用户一键生成体验不变，但在 `tts_generating` 阶段把曼波配音任务派发给本地 TTS Worker；本地用开源 CosyVoice 生成音频后自动回传 3004，服务器继续 Remotion 成片，不再在腾讯云小内存机器上启动本机 CosyVoice。
 - 当前工作区：`C:\Users\Administrator\Documents\Codex\2026-07-18\300\work\3004-partner-stickman-worktree`。
 - 当前分支：`codex/3004-partner-stickman-platform-20260724`。
