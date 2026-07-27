@@ -65,3 +65,37 @@ def test_local_tts_worker_rejects_bad_token(tmp_path, monkeypatch):
 
     response = client.post("/api/local-tts/claim", headers={"Authorization": "Bearer wrong-token"})
     assert response.status_code == 401
+
+
+def test_local_tts_worker_does_not_reclaim_active_lease(tmp_path, monkeypatch):
+    monkeypatch.setenv("LOCAL_TTS_WORKER_TOKEN", "test-token")
+    monkeypatch.setenv("LOCAL_TTS_QUEUE_ROOT", str(tmp_path / "queue"))
+
+    queue = LocalTTSQueue(tmp_path / "queue", token="test-token")
+    request = queue.create_request(text="先别急着证明自己", voice="dayun_manbo", job_id="42", scene_index=0)
+
+    first = queue.claim_next()
+    second = queue.claim_next()
+
+    assert first and first["requestId"] == request["requestId"]
+    assert second is None
+
+
+def test_local_tts_worker_fail_does_not_overwrite_completed_audio(tmp_path, monkeypatch):
+    monkeypatch.setenv("LOCAL_TTS_WORKER_TOKEN", "test-token")
+    monkeypatch.setenv("LOCAL_TTS_QUEUE_ROOT", str(tmp_path / "queue"))
+
+    queue = LocalTTSQueue(tmp_path / "queue", token="test-token")
+    request = queue.create_request(text="先别急着证明自己", voice="dayun_manbo", job_id="42", scene_index=0)
+    queue.request_dir(request["requestId"]).mkdir(parents=True, exist_ok=True)
+    completed_path = queue.request_dir(request["requestId"]) / "completed.wav"
+    completed_path.write_bytes(_wav_bytes())
+    payload = queue._read_payload(request["requestId"]) or {}
+    payload["status"] = "completed"
+    queue._write_payload(request["requestId"], payload)
+
+    result = queue.fail_request(request["requestId"], "late failure")
+    stored = queue._read_payload(request["requestId"])
+
+    assert result["status"] == "completed"
+    assert stored["status"] == "completed"

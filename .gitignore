@@ -47,6 +47,13 @@ celerybeat.pid
 media/
 videos/
 *.mp4
+*.wav
+*.mp3
+*.m4a
+*.aac
+backend/storage/
+backend/uploads/
+outputs/
 
 # Build artifacts
 *.tar.gz

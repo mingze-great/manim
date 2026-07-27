@@ -1,6 +1,7 @@
 import json
 import os
 import shutil
+import threading
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -15,6 +16,8 @@ def utc_now_iso() -> str:
 
 
 class LocalTTSQueue:
+    _lock = threading.Lock()
+
     def __init__(self, root: Path, token: str = ""):
         self.root = Path(root).resolve()
         self.token = str(token or os.getenv("LOCAL_TTS_WORKER_TOKEN") or "").strip()
@@ -26,9 +29,9 @@ class LocalTTSQueue:
 
     def require_token(self, token: str | None) -> None:
         if not self.enabled():
-            raise HTTPException(status_code=503, detail="本地配音队列未配置")
+            raise HTTPException(status_code=503, detail="Local TTS queue is not configured")
         if str(token or "").strip() != self.token:
-            raise HTTPException(status_code=401, detail="本地配音 worker token 无效")
+            raise HTTPException(status_code=401, detail="Invalid local TTS worker token")
 
     def request_dir(self, request_id: str) -> Path:
         safe_id = str(request_id or "").strip()
@@ -70,74 +73,97 @@ class LocalTTSQueue:
             "updatedAt": utc_now_iso(),
             "attempts": 0,
         }
-        self._write_payload(request_id, payload)
+        with self._lock:
+            self._write_payload(request_id, payload)
         return payload
 
     def claim_next(self) -> dict[str, Any] | None:
-        now = datetime.utcnow()
-        candidates: list[tuple[datetime, str, dict[str, Any]]] = []
-        for request_file in self.root.glob("*/request.json"):
-            payload = self._read_payload_path(request_file)
+        with self._lock:
+            now = datetime.utcnow()
+            candidates: list[tuple[datetime, str]] = []
+            for request_file in self.root.glob("*/request.json"):
+                payload = self._read_payload_path(request_file)
+                if not payload:
+                    continue
+                status = str(payload.get("status") or "")
+                if status == "completed":
+                    continue
+                if status == "leased":
+                    lease_until = self._parse_iso(str(payload.get("leaseUntil") or ""))
+                    if lease_until and lease_until > now:
+                        continue
+                if status not in {"pending", "leased"}:
+                    continue
+                created_at = self._parse_iso(str(payload.get("createdAt") or "")) or now
+                candidates.append((created_at, str(payload.get("requestId") or request_file.parent.name)))
+            if not candidates:
+                return None
+            candidates.sort(key=lambda item: item[0])
+            _, request_id = candidates[0]
+            payload = self._read_payload(request_id)
             if not payload:
-                continue
+                return None
             status = str(payload.get("status") or "")
             if status == "completed":
-                continue
+                return None
             if status == "leased":
                 lease_until = self._parse_iso(str(payload.get("leaseUntil") or ""))
                 if lease_until and lease_until > now:
-                    continue
-            if status not in {"pending", "leased"}:
-                continue
-            created_at = self._parse_iso(str(payload.get("createdAt") or "")) or now
-            candidates.append((created_at, str(payload.get("requestId") or request_file.parent.name), payload))
-        if not candidates:
-            return None
-        candidates.sort(key=lambda item: item[0])
-        _, request_id, payload = candidates[0]
-        payload["status"] = "leased"
-        payload["attempts"] = int(payload.get("attempts") or 0) + 1
-        payload["leaseUntil"] = (now + timedelta(seconds=self.lease_seconds)).replace(microsecond=0).isoformat() + "Z"
-        payload["updatedAt"] = utc_now_iso()
-        self._write_payload(request_id, payload)
-        return payload
+                    return None
+            payload["status"] = "leased"
+            payload["attempts"] = int(payload.get("attempts") or 0) + 1
+            payload["leaseUntil"] = (now + timedelta(seconds=self.lease_seconds)).replace(microsecond=0).isoformat() + "Z"
+            payload["updatedAt"] = utc_now_iso()
+            self._write_payload(request_id, payload)
+            return payload
 
     async def complete_request(self, request_id: str, file: UploadFile) -> dict[str, Any]:
-        request_dir = self.request_dir(request_id)
-        payload = self._read_payload(request_id)
-        if not payload:
-            raise HTTPException(status_code=404, detail="本地配音请求不存在")
-        suffix = Path(file.filename or "").suffix.lower() or ".wav"
-        if suffix not in {".wav", ".mp3", ".m4a", ".aac", ".ogg"}:
-            raise HTTPException(status_code=400, detail="仅支持 wav/mp3/m4a/aac/ogg 音频")
-        raw_path = request_dir / f"uploaded{suffix}"
-        with raw_path.open("wb") as output:
-            shutil.copyfileobj(file.file, output)
-        if raw_path.stat().st_size <= 0:
-            raise HTTPException(status_code=400, detail="上传音频为空")
-        completed_path = request_dir / "completed.wav"
-        try:
-            audio = AudioSegment.from_file(raw_path)
-            audio = audio.set_channels(1).set_frame_rate(22050)
-            audio.export(completed_path, format="wav")
-        except Exception as exc:
-            raise HTTPException(status_code=400, detail=f"音频转换失败: {exc}") from exc
-        payload["status"] = "completed"
-        payload["audioPath"] = str(completed_path)
-        payload["audioBytes"] = completed_path.stat().st_size
-        payload["updatedAt"] = utc_now_iso()
-        self._write_payload(request_id, payload)
-        return {"requestId": request_id, "status": "completed", "audioBytes": payload["audioBytes"]}
+        with self._lock:
+            request_dir = self.request_dir(request_id)
+            payload = self._read_payload(request_id)
+            if not payload:
+                raise HTTPException(status_code=404, detail="Local TTS request not found")
+            if str(payload.get("status") or "") == "completed":
+                completed_path = request_dir / "completed.wav"
+                return {
+                    "requestId": request_id,
+                    "status": "completed",
+                    "audioBytes": completed_path.stat().st_size if completed_path.exists() else 0,
+                }
+            suffix = Path(file.filename or "").suffix.lower() or ".wav"
+            if suffix not in {".wav", ".mp3", ".m4a", ".aac", ".ogg"}:
+                raise HTTPException(status_code=400, detail="Only wav/mp3/m4a/aac/ogg audio is supported")
+            raw_path = request_dir / f"uploaded{suffix}"
+            with raw_path.open("wb") as output:
+                shutil.copyfileobj(file.file, output)
+            if raw_path.stat().st_size <= 0:
+                raise HTTPException(status_code=400, detail="Uploaded audio is empty")
+            completed_path = request_dir / "completed.wav"
+            try:
+                audio = AudioSegment.from_file(raw_path)
+                audio = audio.set_channels(1).set_frame_rate(22050)
+                audio.export(completed_path, format="wav")
+            except Exception as exc:
+                raise HTTPException(status_code=400, detail=f"Audio conversion failed: {exc}") from exc
+            payload["status"] = "completed"
+            payload["audioPath"] = str(completed_path)
+            payload["audioBytes"] = completed_path.stat().st_size
+            payload["updatedAt"] = utc_now_iso()
+            self._write_payload(request_id, payload)
+            return {"requestId": request_id, "status": "completed", "audioBytes": payload["audioBytes"]}
 
     def fail_request(self, request_id: str, error: str) -> dict[str, Any]:
-        payload = self._read_payload(request_id)
-        if not payload:
-            raise HTTPException(status_code=404, detail="本地配音请求不存在")
-        payload["status"] = "failed"
-        payload["error"] = str(error or "本地配音失败")[:1000]
-        payload["updatedAt"] = utc_now_iso()
-        self._write_payload(request_id, payload)
-        return {"requestId": request_id, "status": "failed"}
+        with self._lock:
+            payload = self._read_payload(request_id)
+            if not payload:
+                raise HTTPException(status_code=404, detail="Local TTS request not found")
+            if str(payload.get("status") or "") == "completed":
+                return {"requestId": request_id, "status": "completed"}
+            payload["status"] = "failed"
+            payload["error"] = str(error or "Local TTS failed")[:1000]
+            payload["updatedAt"] = utc_now_iso()
+            self._write_payload(request_id, payload)
+            return {"requestId": request_id, "status": "failed"}
 
     def wait_for_audio(self, request_id: str, timeout_seconds: int) -> Path:
         import time
@@ -167,7 +193,7 @@ class LocalTTSQueue:
         request_dir = self.request_dir(request_id)
         request_dir.mkdir(parents=True, exist_ok=True)
         target = request_dir / "request.json"
-        tmp = request_dir / "request.json.tmp"
+        tmp = request_dir / f"request.{os.getpid()}.{threading.get_ident()}.{uuid.uuid4().hex}.tmp"
         tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         tmp.replace(target)
 

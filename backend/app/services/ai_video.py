@@ -243,6 +243,7 @@ class AiVideoService:
         self.local_tts_queue = LocalTTSQueue(Path(os.getenv("LOCAL_TTS_QUEUE_ROOT", self.storage_root / "local-tts-queue")))
         self.local_tts_timeout = int(os.getenv("LOCAL_TTS_WAIT_TIMEOUT", "900"))
         self.local_tts_allow_safe_fallback = str(os.getenv("LOCAL_TTS_ALLOW_SAFE_FALLBACK", "0")).strip().lower() in {"1", "true", "yes"}
+        self.allow_server_local_cosyvoice = str(os.getenv("AI_VIDEO_ALLOW_SERVER_LOCAL_COSYVOICE", "0")).strip().lower() in {"1", "true", "yes"}
         self.cosyvoice_url = (
             os.getenv("AI_VIDEO_COSYVOICE_URL")
             or _read_config_value("AI_VIDEO_COSYVOICE_URL")
@@ -1736,6 +1737,12 @@ class AiVideoService:
             return self._generate_external_simple_tts_audio(text, output_path), "external_simple_tts", "zh-CN"
         except Exception as exc:
             external_error = exc
+
+        if not self.allow_server_local_cosyvoice:
+            raise RuntimeError(
+                f"TTS fallback unavailable: DashScope failed: {dashscope_error}; Edge TTS failed: {edge_error}; "
+                f"External simple TTS failed: {external_error}; server local CosyVoice is disabled"
+            )
 
         cosy_voice = self._resolve_cosyvoice_voice(requested_voice)
         try:

@@ -358,6 +358,7 @@ def test_safe_tts_fallback_uses_local_cosyvoice_only_after_edge_tts_failure(tmp_
     service._resolve_edge_tts_voice = lambda _voice: "zh-CN-XiaoxiaoNeural"
     service._resolve_cosyvoice_voice = lambda _voice: "中文女"
     service._resolve_dashscope_voice = lambda _voice: "longanhuan"
+    service.allow_server_local_cosyvoice = True
 
     calls = []
     monkeypatch.setattr(service, "_generate_dashscope_cosyvoice_audio", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("dashscope unavailable")))
@@ -384,6 +385,7 @@ def test_safe_tts_fallback_uses_external_tts_before_local_cosyvoice(tmp_path, mo
     service._resolve_edge_tts_voice = lambda _voice: "zh-CN-XiaoxiaoNeural"
     service._resolve_cosyvoice_voice = lambda _voice: "中文女"
     service._resolve_dashscope_voice = lambda _voice: "longanhuan"
+    service.allow_server_local_cosyvoice = False
 
     calls = []
     monkeypatch.setattr(service, "_generate_dashscope_cosyvoice_audio", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("dashscope unavailable")))
@@ -407,6 +409,26 @@ def test_safe_tts_fallback_uses_external_tts_before_local_cosyvoice(tmp_path, mo
     assert provider == "external_simple_tts"
     assert voice == "zh-CN"
     assert calls == ["先别急着证明自己"]
+
+
+def test_safe_tts_fallback_does_not_call_server_local_cosyvoice_by_default(tmp_path, monkeypatch):
+    service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
+    service._resolve_edge_tts_voice = lambda _voice: "zh-CN-XiaoxiaoNeural"
+    service._resolve_cosyvoice_voice = lambda _voice: "中文女"
+    service._resolve_dashscope_voice = lambda _voice: "longanhuan"
+    service.allow_server_local_cosyvoice = False
+
+    monkeypatch.setattr(service, "_generate_dashscope_cosyvoice_audio", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("dashscope unavailable")))
+    monkeypatch.setattr(service, "_generate_edge_tts_audio", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("edge unavailable")))
+    monkeypatch.setattr(service, "_generate_external_simple_tts_audio", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("external unavailable")))
+    monkeypatch.setattr(
+        service,
+        "_generate_open_source_cosyvoice_audio",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("server local CosyVoice should not run by default")),
+    )
+
+    with pytest.raises(RuntimeError, match="server local CosyVoice is disabled"):
+        service._generate_safe_tts_fallback_audio("先别急着证明自己", tmp_path / "scene.wav", "中文女")
 
 
 def test_open_source_cosyvoice_accepts_valid_pcm_when_stream_times_out(tmp_path, monkeypatch):

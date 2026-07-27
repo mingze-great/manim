@@ -453,6 +453,7 @@
 
 ## 2026-07-27 3004 本地 TTS Worker 部署前记录
 
+- 代码审查补充修复：根据审查反馈，`local_tts_queue.py` 已重写为 ASCII 错误信息并加入进程内锁、唯一临时文件、active lease 不重复领取、completed 不被 late fail 覆盖；`ai_video.py` 新增 `AI_VIDEO_ALLOW_SERVER_LOCAL_COSYVOICE`，默认禁止服务器本机 CosyVoice fallback，即使 `LOCAL_TTS_ALLOW_SAFE_FALLBACK=1` 也不会默认回到服务器大模型；`.gitignore` 已忽略 `backend/storage/`、`backend/uploads/`、`outputs/` 和音频扩展名。验证：`pytest ...` 目标集 `63 passed`，`python -m py_compile` 通过，`git diff --check` 通过。
 - 补充记录：`scripts/local_tts_worker.py` 已改为仅在 `--provider cosyvoice` 时准备 prompt wav；同时自动使用 `imageio_ffmpeg` 配置 pydub，避免本地临时 edge 链路验证被曼波 mp3 转码阻塞。`python -m py_compile scripts\local_tts_worker.py` 和 `git diff --check` 均通过。下一次同步远程时必须包含该脚本。
 
 - 当前任务：保持用户一键生成体验不变，但在 `tts_generating` 阶段把曼波配音任务派发给本地 TTS Worker；本地用开源 CosyVoice 生成音频后自动回传 3004，服务器继续 Remotion 成片，不再在腾讯云小内存机器上启动本机 CosyVoice。
