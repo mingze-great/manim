@@ -19,11 +19,12 @@ class ImageGenService:
             self.model_chain.insert(0, self.model)
         self.image_size = settings.STICKMAN_IMAGE_SIZE or "1024x1024"
         self.reply_type = getattr(settings, "STICKMAN_IMAGE_REPLY_TYPE", "json") or "json"
+        self.timeout_seconds = int(getattr(settings, "STICKMAN_IMAGE_TIMEOUT_SECONDS", 240) or 240)
 
     async def generate_image(self, prompt: str, reference_images: list[str] | None = None) -> tuple[str, str, str]:
         """生成单张图片"""
         last_error = None
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        async with httpx.AsyncClient(timeout=float(getattr(self, "timeout_seconds", 240) or 240)) as client:
             for model in self.model_chain:
                 try:
                     response = await client.post(
@@ -48,7 +49,7 @@ class ImageGenService:
                 except Exception as exc:
                     last_error = exc
                     continue
-        raise Exception(f"图片生成失败: {last_error}")
+        raise Exception(f"图片生成失败: {self._format_error(last_error)}")
 
     def _raise_for_provider_error(self, data: Any) -> None:
         if not isinstance(data, dict):
@@ -57,6 +58,14 @@ class ImageGenService:
         error = data.get("error") or data.get("message") or data.get("msg")
         if status in {"failed", "error", "fail"} or error:
             raise Exception(f"图片生成接口返回失败: {error or data}")
+
+    def _format_error(self, exc: Any) -> str:
+        if exc is None:
+            return "未知错误"
+        message = str(exc).strip()
+        if message:
+            return message
+        return exc.__class__.__name__
 
     def _build_payload(self, model: str, prompt: str, reference_images: list[str] | None = None) -> dict[str, Any]:
         if self._uses_generate_api(model):

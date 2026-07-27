@@ -728,3 +728,21 @@
 - 待部署事项：增量同步 3004 后端文件和本状态文件到 `/opt/manim-v2-3004-snapshot`，设置 3004 环境变量中的实时生图 API key（不写入代码、不记录明文），只重启 3004 backend/worker。
 - 待平台验收：先探测图片接口是否返回可用图片；若 API key 仍无效，3004 应明确失败并显示“实时生图失败”；修复环境后创建真实 `imageMode=ai_image` 任务，验证每个语义分段生成不同场景图、MP4 有音视频流、声音试听为 5 秒。
 - 不要重复做：不要把实时生图失败的任务当成成功成片；不要提交或打印 API key；不要修改、重启或覆盖 3003。
+
+## 2026-07-28 3004 实时生图超时修复部署前记录
+
+- 当前任务：继续只在 3004 修复实时生图平台闭环，不触碰 3003。
+- 已完成部署：`dd530442494cf5e148b3362da4e9b9448cadbef9` 状态记录和 `b5710ff3e3453d2b22bb3f1b6b81557918f3d052` 功能修复已增量同步到 `/opt/manim-v2-3004-snapshot`；3004 backend/worker/render 均 active；`8004/health` 和 `18788/api/health` 正常。
+- 环境修复：已通过 3004 systemd drop-in 给 backend/worker 配置 `STICKMAN_IMAGE_API_KEY`、`STICKMAN_IMAGE_BASE_URL=https://grsaiapi.com/v1/api/generate`、`STICKMAN_IMAGE_MODEL=gpt-image-2`、`STICKMAN_IMAGE_SIZE=1024x1024`；密钥只在服务器环境变量中保存，未写入代码和 git。
+- 接口探针：远程 `/tmp/remote_image_probe.py` 调用真实生图接口，结果写入 `/tmp/remote_image_probe_result.jsonl`，返回 `ok=true`、`http_status=200`、`provider_status=succeeded`、`source_type=url`，说明 API key 和接口地址有效。
+- 平台任务：通过 3004 API 创建真实 `imageMode=ai_image` 任务 `job_130`，配置读取结果显示 `canUseAiImages=true`、`visibleImageModes=["material_only","ai_image"]`、`style_key=sc1_outputs`。
+- 当前问题：`job_130` 在第二段实时生图时失败，日志为 `实时生图失败：图片生成接口不可用或 API key 无效（第 2 段）。图片生成失败:`；结合探针可判断不是 key 无效，而是单张图片生成耗时超过原 `httpx` 120 秒默认超时且错误文本为空。
+- 本次本地改动：
+  - `backend/app/config.py` 新增 `STICKMAN_IMAGE_TIMEOUT_SECONDS=360` 默认值。
+  - `backend/app/services/image_gen.py` 使用可配置超时，并将空错误格式化为异常类名，避免用户只看到空错误。
+  - `deploy/env.backend.3004.example` 补充 `STICKMAN_IMAGE_TIMEOUT_SECONDS=360`，保证 3004 部署可复现。
+- 本地验证：
+  - `python -m py_compile backend/app/services/ai_video.py backend/app/services/image_gen.py backend/app/config.py backend/app/api/stickman_workflow.py` 通过。
+  - `PYTHONPATH=backend pytest backend/tests/test_ai_video_sc1_material_urls.py backend/tests/test_image_gen_service.py backend/tests/test_stickman_workflow_limits.py -q` -> `50 passed`。
+  - `git diff --check` 通过，仅有既有 LF/CRLF 提示。
+- 下一步：提交并部署本次超时修复；远程 drop-in 增加 `STICKMAN_IMAGE_TIMEOUT_SECONDS=360`；重启 3004 backend/worker；创建新的 `imageMode=ai_image` 平台任务，等待多张实时图生成、运行本地 TTS worker、下载 MP4 并验证音视频流和分段场景图。
