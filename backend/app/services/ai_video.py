@@ -790,6 +790,8 @@ class AiVideoService:
                         sc1_segments,
                         strict=image_mode == "ai_image",
                     )
+                    if image_mode == "ai_image" and any(self._sc1_is_material_fallback_image(image) for image in material_images):
+                        raise RuntimeError("实时生图模式必须使用模型生成的场景图，不能回退到素材库图片")
                 if not material_images and image_mode in {"material_only", "hybrid"}:
                     material_images = self._sc1_material_images_for_scene(payload, text, index, sc1_segments, sc1_selected_materials)
             layout_variant = self._layout_variant_for_scene(content_type, visual_style, scene_type, text, index, edit_directive)
@@ -881,6 +883,19 @@ class AiVideoService:
                 "prompt": prompt,
             }
         ]
+
+    def _sc1_is_material_fallback_image(self, image: dict[str, Any]) -> bool:
+        src = str(image.get("src") or "")
+        local_url = str(image.get("local_url") or image.get("localUrl") or "")
+        public_url = str(image.get("public_url") or image.get("publicUrl") or "")
+        markers = ("/sc1-materials/", "/material-libraries/", "/stickman-workflow/material-libraries/")
+        return (
+            not bool(image.get("generated"))
+            or any(marker in src for marker in markers)
+            or any(marker in local_url for marker in markers)
+            or any(marker in public_url for marker in markers)
+            or bool(image.get("fileName") or image.get("relativePath"))
+        )
 
     def _run_async_image_generation(self, coroutine: Any) -> tuple[str, str, str]:
         timeout_seconds = self._image_generation_timeout_seconds()
@@ -1262,6 +1277,9 @@ class AiVideoService:
             ("丢掉自己", "丢掉"),
             ("慢慢丢掉", "丢掉"),
             ("自己的价值", "价值"),
+            ("价值感", "价值"),
+            ("拿回来", "拿回"),
+            ("牵着走", "牵走"),
             ("寻找自己的价值", "价值"),
             ("爱自己", "爱己"),
             ("真正爱自己", "爱己"),
@@ -1290,6 +1308,7 @@ class AiVideoService:
             ("透支", "透支"),
             ("委屈", "委屈"),
             ("害怕", "害怕"),
+            ("失去", "失去"),
             ("感受", "感受"),
             ("风险", "风险"),
             ("代价", "代价"),
@@ -1312,6 +1331,26 @@ class AiVideoService:
                     labels.append(label)
         return labels
 
+    def _sc1_short_terms_from_text(self, text: str) -> list[str]:
+        stopwords = {
+            "不是", "因为", "所以", "但是", "如果", "只是", "一个", "一种", "这个", "那个", "时候", "开始",
+            "正在", "已经", "没有", "不要", "不能", "可以", "需要", "自己", "别人", "对方",
+        }
+        terms: list[str] = []
+        for phrase in re.findall(r"[\u4e00-\u9fff]{2,}", str(text or "")):
+            candidates: list[str] = []
+            if 2 <= len(phrase) <= 4:
+                candidates.append(phrase)
+            if len(phrase) > 4:
+                candidates.extend([phrase[:4], phrase[-4:]])
+                for size in (4, 3, 2):
+                    candidates.extend(phrase[index : index + size] for index in range(0, max(0, len(phrase) - size + 1)))
+            for candidate in candidates:
+                label = self._sc1_clip_label(candidate, 0)
+                if label not in stopwords and label not in terms:
+                    terms.append(label)
+        return terms[:12]
+
     def _sc1_clip_label(self, label: str, segment_index: int) -> str:
         cleaned = re.sub(r"[^\u4e00-\u9fffA-Za-z0-9]+", "", str(label or ""))
         if 2 <= len(cleaned) <= 4:
@@ -1325,10 +1364,12 @@ class AiVideoService:
 
     def _sc1_make_unique_label(self, text: str, segment_index: int, used_labels: set[str]) -> str:
         relevant_candidates = self._sc1_present_label_keywords(text)
-        candidates = [*relevant_candidates, self._sc1_summary_label(text, segment_index), *self._sc1_label_alternatives(text, segment_index)]
-        for base in relevant_candidates:
-            for suffix in range(1, 10):
-                candidates.append(f"{base}{suffix}")
+        candidates = [
+            *relevant_candidates,
+            *self._sc1_short_terms_from_text(text),
+            self._sc1_summary_label(text, segment_index),
+            *self._sc1_label_alternatives(text, segment_index),
+        ]
         for fallback in self._sc1_label_fallback_pool():
             candidates.append(fallback)
         for candidate in candidates:

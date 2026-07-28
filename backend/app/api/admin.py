@@ -355,8 +355,15 @@ async def create_invite_code(
     amount = int(payload.amount or plan.get("amount") or 0)
     commission_amount = estimate_commission_amount(amount, commission_rate_bps)
     material_mode = payload.material_mode or plan.get("material_mode") or "material_only"
-    quota_limit = int(payload.quota_limit if payload.quota_limit is not None else (plan.get("daily_limit") or plan.get("total_video_limit") or 0))
-    max_video_seconds = int(payload.max_video_seconds or plan.get("max_video_seconds") or 60)
+    plan_permission = permission_from_plan(plan)
+    quota_mode = str(payload.quota_mode or plan.get("quota_mode") or plan_permission.get("quota_mode") or "period")
+    if quota_mode == "count_package":
+        quota_limit = int(payload.total_video_limit or payload.quota_limit or plan.get("total_video_limit") or plan_permission.get("total_video_limit") or 0)
+        quota_period = "lifetime"
+    else:
+        quota_limit = int(payload.quota_limit if payload.quota_limit is not None else (plan.get("daily_limit") or plan_permission.get("daily_limit") or 0))
+        quota_period = "daily"
+    max_video_seconds = int(payload.max_video_seconds or plan.get("max_video_seconds") or plan_permission.get("max_video_seconds") or 300)
     allowed_libraries = payload.allowed_libraries or plan.get("allowed_libraries") or []
     code = generate_invite_code("SC1")
     while db.query(InviteCode).filter(InviteCode.code == code).first():
@@ -367,7 +374,7 @@ async def create_invite_code(
         plan_key=payload.plan_key,
         material_mode=material_mode,
         quota_limit=quota_limit,
-        quota_period=payload.quota_period,
+        quota_period=quota_period,
         max_video_seconds=max_video_seconds,
         allowed_libraries_json=json.dumps(
             [str(item).strip() for item in allowed_libraries if str(item).strip()],

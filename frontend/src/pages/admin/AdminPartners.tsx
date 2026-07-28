@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Button, Card, Col, Form, Input, InputNumber, Modal, Row, Select, Space, Statistic, Switch, Table, Tabs, Tag, Typography, message } from 'antd'
+import { Alert, Button, Card, Col, Form, Input, InputNumber, Modal, Row, Select, Space, Statistic, Switch, Table, Tabs, Tag, Typography, message } from 'antd'
 import { GiftOutlined, PlusOutlined, ReloadOutlined, TeamOutlined, WalletOutlined } from '@ant-design/icons'
 import { adminApi, AdminCommission, AdminPartner, AdminReferral, StickmanWorkflowMaterialLibrary, StickmanWorkflowPlan, User } from '@/services/admin'
 
@@ -54,6 +54,41 @@ export default function AdminPartners() {
   const partnerNameMap = useMemo(() => Object.fromEntries(partners.map((item) => [item.id, item.display_name])), [partners])
   const selectedInvitePartner = partners.find((item) => item.id === watchedInvitePartnerId)
   const commissionPreview = Math.round(Number(watchedInviteAmount || 0) * Number(selectedInvitePartner?.commission_rate_bps || 0) / 10000)
+  const toPlanForm = (plan: StickmanWorkflowPlan): StickmanWorkflowPlan => ({
+    ...plan,
+    max_video_minutes: Math.max(1, Math.ceil(Number(plan.max_video_seconds || 300) / 60)),
+  })
+  const normalizePlansForSave = (items: StickmanWorkflowPlan[]): StickmanWorkflowPlan[] => (items || []).map((item, index) => {
+    const maxVideoMinutes = Math.max(1, Number(item.max_video_minutes || Math.ceil(Number(item.max_video_seconds || 300) / 60) || 5))
+    const maxVideoSeconds = maxVideoMinutes * 60
+    const quotaMode: StickmanWorkflowPlan['quota_mode'] = item.quota_mode === 'count_package' ? 'count_package' : 'period'
+    if (quotaMode === 'count_package') {
+      return {
+        ...item,
+        quota_mode: quotaMode,
+        daily_limit: 0,
+        daily_minutes_limit: 0,
+        monthly_minutes_limit: 0,
+        total_video_limit: Number(item.total_video_limit || 0),
+        max_video_seconds: maxVideoSeconds,
+        max_video_minutes: maxVideoMinutes,
+        sort_order: item.sort_order || index + 1,
+      }
+    }
+    const dailyLimit = Number(item.daily_limit || 0)
+    const dailyMinutes = dailyLimit * maxVideoMinutes
+    return {
+      ...item,
+      quota_mode: 'period',
+      daily_limit: dailyLimit,
+      daily_minutes_limit: dailyMinutes,
+      monthly_minutes_limit: dailyMinutes * 30,
+      total_video_limit: 0,
+      max_video_seconds: maxVideoSeconds,
+      max_video_minutes: maxVideoMinutes,
+      sort_order: item.sort_order || index + 1,
+    }
+  })
 
   const summary = useMemo(() => {
     const filteredCommissions = selectedPartnerId ? commissions.filter((item) => item.partner_id === selectedPartnerId) : commissions
@@ -83,7 +118,7 @@ export default function AdminPartners() {
       setMaterialLibraries(libraryRes.data?.libraries || [])
       const nextPlans = planRes.data?.plans || []
       setPlans(nextPlans)
-      planForm.setFieldsValue({ plans: nextPlans })
+      planForm.setFieldsValue({ plans: nextPlans.map(toPlanForm) })
     } catch (error: any) {
       message.error(getErrorMessage(error, '加载合作者数据失败'))
     } finally {
@@ -145,9 +180,9 @@ export default function AdminPartners() {
   const savePlans = async (values: { plans: StickmanWorkflowPlan[] }) => {
     setSubmitting(true)
     try {
-      const { data } = await adminApi.saveStickmanWorkflowPlans(values.plans || [])
+      const { data } = await adminApi.saveStickmanWorkflowPlans(normalizePlansForSave(values.plans || []))
       setPlans(data.plans || [])
-      planForm.setFieldsValue({ plans: data.plans || [] })
+      planForm.setFieldsValue({ plans: (data.plans || []).map(toPlanForm) })
       message.success('火柴人套餐已保存')
     } catch (error: any) {
       message.error(getErrorMessage(error, '保存套餐失败'))
@@ -162,9 +197,11 @@ export default function AdminPartners() {
     inviteForm.setFieldsValue({
       plan_key: plan.key,
       material_mode: plan.material_mode,
+      quota_mode: plan.quota_mode,
       quota_limit: plan.quota_mode === 'count_package' ? plan.total_video_limit : plan.daily_limit,
       quota_period: plan.quota_mode === 'count_package' ? 'lifetime' : 'daily',
       max_video_seconds: plan.max_video_seconds,
+      total_video_limit: plan.total_video_limit,
       allowed_libraries: plan.allowed_libraries || [],
       amount: plan.amount || 0,
     })
@@ -241,11 +278,27 @@ export default function AdminPartners() {
                               <Col xs={24} md={6}><Form.Item name={[field.name, 'name']} label="套餐名称" rules={[{ required: true }]}><Input /></Form.Item></Col>
                               <Col xs={24} md={6}><Form.Item name={[field.name, 'quota_mode']} label="套餐类型"><Select options={quotaModeOptions} /></Form.Item></Col>
                               <Col xs={24} md={6}><Form.Item name={[field.name, 'amount']} label="金额（分）"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
-                              <Col xs={24} md={6}><Form.Item name={[field.name, 'daily_limit']} label="每日视频数"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
-                              <Col xs={24} md={6}><Form.Item name={[field.name, 'daily_minutes_limit']} label="每日分钟数"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
-                              <Col xs={24} md={6}><Form.Item name={[field.name, 'monthly_minutes_limit']} label="每月分钟数"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
-                              <Col xs={24} md={6}><Form.Item name={[field.name, 'total_video_limit']} label="总视频数"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
-                              <Col xs={24} md={6}><Form.Item name={[field.name, 'max_video_seconds']} label="单条上限秒"><InputNumber min={15} max={1800} step={15} style={{ width: '100%' }} /></Form.Item></Col>
+                              <Form.Item noStyle shouldUpdate={(prev, current) => prev?.plans?.[field.name]?.quota_mode !== current?.plans?.[field.name]?.quota_mode || prev?.plans?.[field.name]?.daily_limit !== current?.plans?.[field.name]?.daily_limit || prev?.plans?.[field.name]?.max_video_minutes !== current?.plans?.[field.name]?.max_video_minutes}>
+                                {({ getFieldValue }) => {
+                                  const plan = getFieldValue(['plans', field.name]) || {}
+                                  const quotaMode = plan.quota_mode || 'period'
+                                  const maxVideoMinutes = Number(plan.max_video_minutes || Math.ceil(Number(plan.max_video_seconds || 300) / 60) || 5)
+                                  const dailyLimit = Number(plan.daily_limit || 0)
+                                  return quotaMode === 'count_package' ? (
+                                    <>
+                                      <Col xs={24} md={8}><Form.Item name={[field.name, 'total_video_limit']} label="总视频次数"><InputNumber min={1} max={9999} style={{ width: '100%' }} /></Form.Item></Col>
+                                      <Col xs={24} md={8}><Form.Item name={[field.name, 'max_video_minutes']} label="单条上限分钟"><InputNumber min={1} max={30} style={{ width: '100%' }} /></Form.Item></Col>
+                                      <Col xs={24} md={8}><Alert type="info" showIcon message={`系统自动按 ${plan.total_video_limit || 0} 个视频，每个 ${maxVideoMinutes} 分钟以内计算`} /></Col>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Col xs={24} md={8}><Form.Item name={[field.name, 'daily_limit']} label="每日视频数"><InputNumber min={1} max={999} style={{ width: '100%' }} /></Form.Item></Col>
+                                      <Col xs={24} md={8}><Form.Item name={[field.name, 'max_video_minutes']} label="单条上限分钟"><InputNumber min={1} max={30} style={{ width: '100%' }} /></Form.Item></Col>
+                                      <Col xs={24} md={8}><Alert type="info" showIcon message={`自动计算：每日约 ${dailyLimit * maxVideoMinutes} 分钟，每月约 ${dailyLimit * maxVideoMinutes * 30} 分钟`} /></Col>
+                                    </>
+                                  )
+                                }}
+                              </Form.Item>
                               <Col xs={24} md={6}><Form.Item name={[field.name, 'material_mode']} label="底层图片模式"><Select options={materialModeOptions} /></Form.Item></Col>
                               <Col xs={24} md={8}><Form.Item name={[field.name, 'allowed_libraries']} label="可用素材库"><Select mode="multiple" allowClear options={materialLibraryOptions} /></Form.Item></Col>
                               <Col xs={24} md={4}><Form.Item name={[field.name, 'is_active']} label="启用" valuePropName="checked"><Switch /></Form.Item></Col>
@@ -253,7 +306,7 @@ export default function AdminPartners() {
                             </Row>
                           </Card>
                         ))}
-                        <Button onClick={() => add({ key: `plan_${Date.now()}`, name: '新套餐', quota_mode: 'period', daily_limit: 3, max_video_seconds: 60, material_mode: 'material_only', allowed_libraries: ['sc1_outputs'], amount: 0, is_active: true })}>新增套餐</Button>
+                        <Button onClick={() => add({ key: `plan_${Date.now()}`, name: '新套餐', quota_mode: 'period', daily_limit: 3, max_video_seconds: 300, max_video_minutes: 5, material_mode: 'material_only', allowed_libraries: ['sc1_outputs'], amount: 0, is_active: true })}>新增套餐</Button>
                       </Space>
                     )}
                   </Form.List>

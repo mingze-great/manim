@@ -44,7 +44,7 @@ class StickmanWorkflowJobCreate(BaseModel):
     targetPlatform: str = "douyin"
     scriptMode: str = "ai"
     customScript: Optional[str] = None
-    targetSeconds: Optional[int] = Field(default=None, ge=1, le=300)
+    targetSeconds: Optional[int] = Field(default=None, ge=1, le=1800)
     backgroundMode: str = "default"
     backgroundTemplate: Optional[str] = None
     uploadedBackgroundUrl: Optional[str] = None
@@ -142,10 +142,14 @@ def _ensure_material_library_allowed(material_library: dict, entitlement: dict) 
 def _stickman_permission_for_user(user: User) -> dict:
     permissions = user.get_module_permissions()
     permission = dict(permissions.get("stickman_v2") or {})
+    entitlement = _stickman_entitlement(user)
     permission.setdefault("enabled", True)
     permission.setdefault("daily_limit", 2)
-    permission.setdefault("period", "monthly")
-    permission.setdefault("max_video_seconds", 60)
+    permission.setdefault("period", "daily")
+    permission.setdefault("max_video_seconds", int(entitlement.get("max_video_seconds") or (300 if user.is_admin else 60)))
+    permission.setdefault("material_mode", entitlement.get("material_mode") or "material_only")
+    permission.setdefault("visible_image_modes", entitlement.get("visible_image_modes") or ["material_only"])
+    permission.setdefault("allowed_libraries", entitlement.get("allowed_libraries") or [])
     return permission
 
 

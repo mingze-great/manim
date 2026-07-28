@@ -295,7 +295,7 @@ export default function StickmanWorkflow() {
       if (!blocked) message.error('声音试听加载失败')
     }
   }
-  const maxVideoSeconds = config?.capabilities.maxVideoSeconds || 60
+  const maxVideoSeconds = config?.capabilities.maxVideoSeconds || 300
   const sceneStyles = config?.sceneStyles?.length
     ? config.sceneStyles
     : (config?.materialLibraries || [{ key: 'sc1_outputs', name: '经典心理火柴人' }]).map((item) => ({

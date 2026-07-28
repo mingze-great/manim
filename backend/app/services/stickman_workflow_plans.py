@@ -19,10 +19,10 @@ def default_stickman_workflow_plans() -> list[dict]:
             "description": "适合稳定日更的素材库模式",
             "quota_mode": "period",
             "daily_limit": 3,
-            "daily_minutes_limit": 0,
-            "monthly_minutes_limit": 90,
+            "daily_minutes_limit": 15,
+            "monthly_minutes_limit": 450,
             "total_video_limit": 0,
-            "max_video_seconds": 60,
+            "max_video_seconds": 300,
             "material_mode": "material_only",
             "allowed_libraries": ["sc1_outputs"],
             "amount": 9900,
@@ -103,21 +103,37 @@ def _normalize_plan(raw: dict, index: int) -> dict:
             libraries = []
     if not isinstance(libraries, list):
         libraries = []
+    max_video_seconds = _safe_int(raw.get("max_video_seconds"), 0)
+    if raw.get("max_video_minutes") is not None:
+        max_video_seconds = _safe_int(raw.get("max_video_minutes"), 5) * 60
+    max_video_seconds = max(15, min(1800, max_video_seconds or 300))
+    per_video_minutes = max(1, (max_video_seconds + 59) // 60)
     total_video_limit = max(0, _safe_int(raw.get("total_video_limit")))
     daily_limit = max(0, _safe_int(raw.get("daily_limit")))
-    if quota_mode == "count_package" and total_video_limit == 0:
-        total_video_limit = daily_limit
+    if quota_mode == "count_package":
+        if total_video_limit == 0:
+            total_video_limit = daily_limit
         daily_limit = 0
+        daily_minutes_limit = 0
+        monthly_minutes_limit = 0
+        period = "lifetime"
+    else:
+        total_video_limit = 0
+        daily_minutes_limit = daily_limit * per_video_minutes if daily_limit > 0 else 0
+        monthly_minutes_limit = daily_minutes_limit * 30 if daily_minutes_limit > 0 else 0
+        period = "daily"
     return {
         "key": key,
         "name": str(raw.get("name") or key).strip(),
         "description": str(raw.get("description") or "").strip(),
         "quota_mode": quota_mode,
         "daily_limit": daily_limit,
-        "daily_minutes_limit": max(0, _safe_int(raw.get("daily_minutes_limit"))),
-        "monthly_minutes_limit": max(0, _safe_int(raw.get("monthly_minutes_limit"))),
+        "period": period,
+        "daily_minutes_limit": daily_minutes_limit,
+        "monthly_minutes_limit": monthly_minutes_limit,
         "total_video_limit": total_video_limit,
-        "max_video_seconds": max(15, min(1800, _safe_int(raw.get("max_video_seconds"), 60))),
+        "max_video_seconds": max_video_seconds,
+        "max_video_minutes": per_video_minutes,
         "material_mode": material_mode,
         "allowed_libraries": [str(item).strip() for item in libraries if str(item).strip()],
         "amount": max(0, _safe_int(raw.get("amount"))),
@@ -203,8 +219,8 @@ def permission_from_plan(plan: dict) -> dict:
         "enabled": True,
         "quota_mode": quota_mode,
         "daily_limit": 0 if quota_mode == "count_package" else int(plan.get("daily_limit") or 0),
-        "period": "lifetime" if quota_mode == "count_package" else "monthly",
-        "max_video_seconds": int(plan.get("max_video_seconds") or 60),
+        "period": "lifetime" if quota_mode == "count_package" else "daily",
+        "max_video_seconds": int(plan.get("max_video_seconds") or 300),
         "material_mode": "material_only" if material_mode == "hybrid" else material_mode,
         "visible_image_modes": ["material_only", "ai_image"] if material_mode == "hybrid" else [material_mode],
         "allowed_libraries": plan.get("allowed_libraries") or [],

@@ -45,19 +45,19 @@ def estimate_script_duration_seconds(script: str, speed_factor: float = 1.0) -> 
     return max(1, int(math.ceil(spoken_seconds + mid_pauses + ending_pauses + line_pauses)))
 
 
-def validate_script_duration_request(custom_script: Optional[str] = None, target_seconds: Optional[int] = None, max_video_seconds: int = 60) -> int:
+def validate_script_duration_request(custom_script: Optional[str] = None, target_seconds: Optional[int] = None, max_video_seconds: int = 300) -> int:
     clean_script = str(custom_script or "").strip()
     requested_seconds = int(target_seconds or 0)
     if clean_script and requested_seconds > 0:
         raise ValueError("自定义文案和目标时长不能同时选择")
     if requested_seconds < 0:
         raise ValueError("目标时长无效")
-    if requested_seconds and requested_seconds > int(max_video_seconds or 60):
-        raise ValueError(f"目标时长不能超过 {int(max_video_seconds or 60)} 秒")
+    if requested_seconds and requested_seconds > int(max_video_seconds or 300):
+        raise ValueError(f"目标时长不能超过 {int(max_video_seconds or 300)} 秒")
     if clean_script:
         estimated = estimate_script_duration_seconds(clean_script)
-        if estimated > int(max_video_seconds or 60):
-            raise ValueError(f"自定义文案预计 {estimated} 秒，超过当前上限 {int(max_video_seconds or 60)} 秒")
+        if estimated > int(max_video_seconds or 300):
+            raise ValueError(f"自定义文案预计 {estimated} 秒，超过当前上限 {int(max_video_seconds or 300)} 秒")
         return estimated
     return requested_seconds
 
@@ -75,7 +75,7 @@ def validate_stickman_quota(permission: dict, requested_seconds: int) -> None:
     if not permission.get("enabled", False):
         raise ValueError("当前账号暂未开通火柴人成片")
     seconds = max(1, int(requested_seconds or 1))
-    max_video_seconds = int(permission.get("max_video_seconds") or 60)
+    max_video_seconds = int(permission.get("max_video_seconds") or 300)
     if seconds > max_video_seconds:
         raise ValueError(f"单条视频不能超过 {max_video_seconds} 秒")
 

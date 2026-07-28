@@ -199,6 +199,7 @@ export interface StickmanWorkflowPlan {
   monthly_minutes_limit?: number
   total_video_limit?: number
   max_video_seconds: number
+  max_video_minutes?: number
   material_mode: 'material_only' | 'ai_image' | 'hybrid'
   allowed_libraries?: string[]
   amount: number

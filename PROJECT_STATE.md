@@ -853,3 +853,24 @@
 - `git push origin codex/3004-partner-stickman-platform-20260724` 已尝试 2 次，均因本机到 GitHub 443 连接失败/重置未成功；后续网络恢复后需要补推。
 - 本地 `origin` 曾配置为带 token 的 HTTPS URL，已改回 `https://github.com/mingze-great/manim.git`，避免继续在 git remote 中保留明文凭据；建议后续轮换该 GitHub token。
 - 推送失败后复验：本地工作树只剩本状态记录未提交；3004 前端 `http://152.136.218.74:3004` 返回 200，后端 `http://152.136.218.74:8004/health` 返回 healthy。
+
+## 2026-07-28 3004 火柴人实时生图、时长上限、关键词和套餐互斥修复记录
+- 当前任务：修复用户反馈的 4 个问题：实时生图必须走模型生成、生成时不能再被 60 秒旧默认限制、方框总结优先从当前分镜文案提取 2-4 字关键词、后台火柴人套餐中月卡和次数卡互斥配置。
+- 本地工作区：`C:\Users\Administrator\Documents\Codex\2026-07-18\300\work\3004-partner-stickman-worktree`。
+- 当前分支：`codex/3004-partner-stickman-platform-20260724`。
+- 编码前 HEAD：`2e97fd89769d333e8d1ad01b5c68b3ce16eb8956`，提交时间 `2026-07-28 10:45:02 +0800`，提交信息 `docs: correct qwen manbo deploy ref`。
+- 本次已完成：
+  - `backend/app/services/ai_video.py`：`imageMode=ai_image` 时严格拒绝素材库回退，除了相对 `/sc1-materials/`，也检查绝对素材 URL、素材库预览 URL、`fileName`、`relativePath` 和未标记 `generated=True` 的图片。
+  - `backend/app/api/stickman_workflow.py`、`backend/app/services/stickman_workflow_limits.py`：默认时长上限从旧 60 秒改为 300 秒，并把 API 静态 `targetSeconds` 上限放宽到 1800 秒，最终仍由账号/套餐动态权限校验。
+  - `frontend/src/pages/StickmanWorkflow/index.tsx`：前端火柴人页面 `maxVideoSeconds` 兜底从 60 秒改为 300 秒，避免配置加载缺失时误提示/误提交 60 秒限制。
+  - `backend/app/services/stickman_workflow_plans.py`、`frontend/src/pages/admin/AdminPartners.tsx`：后台套餐配置改为月卡/次数卡互斥；月卡只设置每日视频数和单条分钟数，自动计算每日/每月分钟；次数卡只设置总视频数和单条分钟数，清空周期分钟限制。
+  - `backend/app/api/admin.py`：管理员生成兑换码时按套餐类型写入 quota，次数卡为 lifetime 总次数，月卡为 daily 每日次数，并继承套餐的单条时长上限。
+  - `backend/app/services/ai_video.py`：方框总结候选优先使用当前 cue 中直接出现的关键词，再从当前文本抽取 2-4 字短词，最后才走总结和兜底池；去掉数字后缀式标签。
+- 最近修改文件：`backend/app/api/admin.py`、`backend/app/api/stickman_workflow.py`、`backend/app/services/ai_video.py`、`backend/app/services/stickman_workflow_limits.py`、`backend/app/services/stickman_workflow_plans.py`、`backend/tests/test_ai_video_sc1_material_urls.py`、`backend/tests/test_stickman_workflow_limits.py`、`frontend/src/pages/StickmanWorkflow/index.tsx`、`frontend/src/pages/admin/AdminPartners.tsx`、`frontend/src/pages/admin/AdminUserDetail.tsx`、`frontend/src/services/admin.ts`。
+- 本地验证：
+  - `python -m py_compile backend/app/api/stickman_workflow.py backend/app/services/stickman_workflow_plans.py backend/app/api/admin.py backend/app/services/stickman_workflow_limits.py backend/app/services/ai_video.py backend/app/services/image_gen.py backend/app/config.py` 通过。
+  - `PYTHONPATH=backend pytest backend/tests/test_stickman_workflow_limits.py backend/tests/test_ai_video_sc1_material_urls.py backend/tests/test_image_gen_service.py -q` -> `59 passed`。
+  - `npm run build`（frontend）通过，仅有既有 Vite chunk size warning。
+  - `git diff --check` 通过，仅提示既有 CRLF/LF 换行警告。
+- 下一步：提交本次修复，部署到 3004 `/opt/manim-v2-3004-snapshot`，只重启 3004 backend/worker/必要前端静态资源；部署后用 3004 平台创建一次 `imageMode=ai_image` 任务，确认 `project.json` 多张场景图均为模型生成 URL 而非 `E:\ai\火柴人工作流\素材库\outputs` 或 `/sc1-materials`，并复验 300 秒以内任务不再触发 60 秒限制。
+- 不要重复做：不要修改、重启或覆盖 3003；不要把生图/TTS API key 写入代码、git、日志或状态文件；实时生图失败时必须明确失败，不能静默回退素材库。

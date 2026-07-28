@@ -36,6 +36,7 @@ from app.services.stickman_workflow_limits import (
     validate_script_duration_request,
     validate_stickman_quota,
 )
+from app.services.stickman_workflow_plans import normalize_stickman_workflow_plans, permission_from_plan
 
 
 def test_estimate_script_duration_seconds_counts_chinese_text_and_pauses():
@@ -83,6 +84,18 @@ def test_duration_estimate_returns_plan_limit_and_allowed_state():
     assert response["estimatedSeconds"] > 0
     assert response["maxVideoSeconds"] == 300
     assert response["allowed"] is True
+
+
+def test_admin_creation_permission_keeps_300_second_limit():
+    user = SimpleNamespace(
+        is_admin=True,
+        get_module_permissions=lambda: {"stickman_v2": {"enabled": True, "daily_limit": -1, "used_today": 0}},
+    )
+
+    permission = stickman_workflow._stickman_permission_for_user(user)
+
+    assert permission["max_video_seconds"] == 300
+    validate_stickman_quota(permission, requested_seconds=300)
 
 
 def test_duration_estimate_request_accepts_script_longer_than_1200_chars():
@@ -183,6 +196,26 @@ def test_count_package_limits_total_videos_without_calendar_expiry():
     assert permission["used_total_videos"] == 40
     with pytest.raises(ValueError, match="视频次数"):
         validate_stickman_quota(permission, requested_seconds=60)
+
+
+def test_stickman_plan_normalization_keeps_month_and_count_cards_exclusive():
+    plans = normalize_stickman_workflow_plans([
+        {"key": "monthly", "quota_mode": "period", "daily_limit": 3, "max_video_minutes": 5},
+        {"key": "count", "quota_mode": "count_package", "daily_limit": 9, "total_video_limit": 40, "max_video_minutes": 5},
+    ])
+    monthly = next(item for item in plans if item["key"] == "monthly")
+    count = next(item for item in plans if item["key"] == "count")
+
+    assert monthly["daily_limit"] == 3
+    assert monthly["daily_minutes_limit"] == 15
+    assert monthly["monthly_minutes_limit"] == 450
+    assert monthly["total_video_limit"] == 0
+    assert permission_from_plan(monthly)["period"] == "daily"
+
+    assert count["daily_limit"] == 0
+    assert count["total_video_limit"] == 40
+    assert count["daily_minutes_limit"] == 0
+    assert permission_from_plan(count)["period"] == "lifetime"
 
 
 def test_stickman_quota_rejects_single_video_over_limit():

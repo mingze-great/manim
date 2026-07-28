@@ -838,10 +838,67 @@ def test_sc1_summary_labels_remain_unique_for_twenty_four_repeated_cues():
         label = service._sc1_make_unique_label("反复内耗", index, used)
         assert label not in used
         assert 2 <= len(label) <= 4
+        assert not any(ch.isdigit() for ch in label)
         used.add(label)
-
     assert len(used) == 24
 
+
+def test_sc1_summary_label_prefers_keyword_from_current_cue():
+    service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
+
+    assert service._sc1_make_unique_label("把价值感拿回来", 0, set()) == "价值"
+    assert service._sc1_make_unique_label("焦虑才会慢慢退下来", 1, set()) == "焦虑"
+
+
+def test_ai_image_mode_rejects_material_library_paths(monkeypatch):
+    service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
+    service._sc1_material_cache = (None, [])
+    service._infer_scene_count = lambda *_args, **_kwargs: 1
+    monkeypatch.setattr(service, "_media_for_scene", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(
+        service,
+        "_sc1_generated_images_for_scene",
+        lambda *_args, **_kwargs: [{"src": "/sc1-materials/1.png", "generated": False}],
+    )
+
+    with pytest.raises(RuntimeError, match="不能回退到素材库图片"):
+        service._build_scenes(
+            "先把对象和后果分开看",
+            {"sceneCount": 1, "scriptSource": "user", "imageMode": "ai_image", "useMaterialLibrary": False},
+            "knowledge_ip_stickman",
+            "sc1_stickman",
+            "medium",
+            script_source="user",
+        )
+
+
+def test_ai_image_mode_rejects_absolute_material_library_urls():
+    service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
+
+    assert service._sc1_is_material_fallback_image(
+        {
+            "src": "http://127.0.0.1:18788/sc1-materials/scene.png",
+            "generated": True,
+        }
+    )
+    assert service._sc1_is_material_fallback_image(
+        {
+            "src": "http://127.0.0.1:8004/api/stickman-workflow/material-libraries/lib/preview",
+            "generated": True,
+        }
+    )
+    assert service._sc1_is_material_fallback_image(
+        {
+            "src": "http://127.0.0.1:8004/api/article-images/generated.png",
+            "generated": False,
+        }
+    )
+    assert not service._sc1_is_material_fallback_image(
+        {
+            "src": "http://127.0.0.1:8004/api/article-images/generated.png",
+            "generated": True,
+        }
+    )
 
 def test_sc1_summary_label_does_not_fall_back_to_arbitrary_script_slice():
     service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
