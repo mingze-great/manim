@@ -239,7 +239,15 @@ def run_once(args, prompt_wav: Path, workspace: Path) -> bool:
     print(f"[local-tts] claimed {request_id}: {text[:60]}", flush=True)
     try:
         if args.provider == "dayun":
-            synthesize_with_dayun(text, output_path, args.sample_rate)
+            try:
+                synthesize_with_dayun(text, output_path, args.sample_rate)
+            except Exception as dayun_exc:
+                print(f"[local-tts] dayun failed, falling back to local voice: {dayun_exc}", file=sys.stderr, flush=True)
+                try:
+                    synthesize_with_sapi(text, output_path, args.sample_rate)
+                except Exception as sapi_exc:
+                    print(f"[local-tts] sapi fallback failed, trying edge: {sapi_exc}", file=sys.stderr, flush=True)
+                    synthesize_with_edge(text, output_path, args.sample_rate)
         elif args.provider == "sapi":
             synthesize_with_sapi(text, output_path, args.sample_rate)
         elif args.provider == "edge":
