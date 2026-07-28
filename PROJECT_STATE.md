@@ -845,3 +845,11 @@
 - 抽帧验证：`frame_02s.png`、`frame_06s.png`、`frame_10s.png` 均显示单张居中完整场景图，下方横线未遮挡场景图；中文字幕居中；右上角 `心理分享 | 认知突破` 可见；无 `@Sc1火柴人`。
 - 当前结论：3004 已支持服务端直接调用阿里 Qwen Audio 曼波复刻音色完成 `/stickman-workflow` 一键成片，用户端仍选择 `dayun_manbo`，底层实际 provider 记录为 `qwen_manbo`。
 - 后续注意：本轮验收使用素材库匹配模式验证音频主链路；实时生图分段已在 `job_136` 单独验收通过。若再做完整商业验收，可用 `imageMode=ai_image` 复跑一次更长文案，但会产生实时生图成本。
+
+## 2026-07-28 3004 Git 同步状态补充
+
+- 3004 部署快照已同步到最新：远程 `/opt/manim-v2-3004-snapshot/.deployed-ref` 记录 `commit=8bbe8f0727e065aa2266e7fb95bbb662b20af890`、`code_commit=bc7dbc2a3e55d70fc2c3b4ad5a5abd29af5565d5`、`validation_job=job_139`。
+- 本地 Git 分支最新提交：`8bbe8f0727e065aa2266e7fb95bbb662b20af890`（`docs: record qwen manbo platform validation`）。
+- `git push origin codex/3004-partner-stickman-platform-20260724` 已尝试 2 次，均因本机到 GitHub 443 连接失败/重置未成功；后续网络恢复后需要补推。
+- 本地 `origin` 曾配置为带 token 的 HTTPS URL，已改回 `https://github.com/mingze-great/manim.git`，避免继续在 git remote 中保留明文凭据；建议后续轮换该 GitHub token。
+- 推送失败后复验：本地工作树只剩本状态记录未提交；3004 前端 `http://152.136.218.74:3004` 返回 200，后端 `http://152.136.218.74:8004/health` 返回 healthy。
