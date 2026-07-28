@@ -10,7 +10,7 @@ from app.api import partner
 from app.database import Base
 from app.models.partner import InviteCode, PartnerProfile
 from app.models.user import User
-from app.services.partner_program import estimate_commission_amount, normalize_invite_code, stickman_entitlement_from_user
+from app.services.partner_program import apply_invite_code_to_user, estimate_commission_amount, normalize_invite_code, stickman_entitlement_from_user
 from app.services.stickman_workflow_plans import permission_from_plan
 
 
@@ -128,6 +128,64 @@ def test_partner_invite_inherits_single_visible_image_mode_even_if_payload_reque
     invite = db.query(InviteCode).filter(InviteCode.code == response["code"]).first()
     assert invite.material_mode == "material_only"
     assert response["material_mode"] == "material_only"
+
+
+def test_partner_invite_custom_video_seconds_are_not_capped_when_redeemed():
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(bind=engine)
+    db = sessionmaker(bind=engine)()
+    partner_user = User(
+        id=1,
+        username="partner_user",
+        email="partner@example.test",
+        hashed_password="x",
+        is_active=True,
+        is_approved=True,
+        role="partner",
+    )
+    partner_user.set_module_permissions({
+        "stickman_v2": {
+            "enabled": True,
+            "material_mode": "material_only",
+            "visible_image_modes": ["material_only"],
+            "max_video_seconds": 3600,
+        }
+    })
+    target_user = User(
+        id=2,
+        username="customer",
+        email="customer@example.test",
+        hashed_password="x",
+        is_active=True,
+        is_approved=False,
+        role="user",
+    )
+    db.add(partner_user)
+    db.add(target_user)
+    db.add(PartnerProfile(user_id=1, display_name="渠道", commission_rate_bps=3000, status="active"))
+    db.commit()
+
+    response = partner.create_partner_invite_code(
+        partner.PartnerInviteCodeCreate(
+            plan_key="count_40x5m",
+            quota_limit=40,
+            quota_period="lifetime",
+            max_video_seconds=3600,
+            amount=39900,
+        ),
+        db,
+        partner_user,
+    )
+
+    invite = db.query(InviteCode).filter(InviteCode.code == response["code"]).first()
+    assert invite.max_video_seconds == 3600
+    apply_invite_code_to_user(db, target_user, response["code"])
+
+    permission = target_user.get_module_permission("stickman_v2")
+    assert permission["max_video_seconds"] == 3600
+    assert permission["quota_mode"] == "count_package"
+    assert permission["total_video_limit"] == 40
+    assert permission["period"] == "lifetime"
 
 
 def test_partner_invite_rejects_hidden_or_custom_plan_key():

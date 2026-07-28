@@ -911,3 +911,20 @@
   - `npm run build`（frontend）此前同轮通过，仅有既有 Vite chunk size warning。
   - `git diff --check` 通过，仅提示既有 CRLF/LF 换行警告。
 - 下一步：提交并部署到 3004；使用正确模块权限接口设置 admin 验证账号 `stickman_v2.max_video_seconds=900`，复验配置、时长估算和实时生图任务。
+## 2026-07-28 3004 动态视频时长限制补充记录
+- 当前任务：按用户澄清修正火柴人成片时长限制语义，300s 只能作为默认值，不能作为固定上限；admin 必须能在后台用户详情中动态设置任意用户的 `stickman_v2.max_video_seconds`，合作者生成兑换码时也必须能设置单条视频时长。
+- 本地工作区：`C:\Users\Administrator\Documents\Codex\2026-07-18\300\work\3004-partner-stickman-worktree`。
+- 当前分支：`codex/3004-partner-stickman-platform-20260724`。
+- 编码前本地 HEAD：`62e666a5e1f3475d035c41a375f696599c988dbc`，提交信息 `fix: persist admin stickman permission limits`。
+- 编码前 3004 已部署记录：远程 `/opt/manim-v2-3004-snapshot/.deployed-ref` 显示 `commit=62e666a888eed527d7991e1f74801394bb8b4ef6`，短 hash 与本地同为 `62e666a` 但完整 hash 不一致；本次部署后必须用新的完整提交重写 `.deployed-ref`，避免可复现锚点混淆。
+- 本次修改：
+  - `frontend/src/pages/admin/AdminUserDetail.tsx`：用户详情页不再因为目标用户是 admin 就隐藏模块权限编辑；admin 用户仍默认拥有全部模块权限，但可以在页面中覆盖火柴人成片单条视频时长等动态限制。
+  - `frontend/src/pages/admin/AdminUserDetail.tsx`：火柴人成片月卡/周期卡的“每日视频数”保存时写入 `period='daily'`，次数卡仍走 `period='lifetime'`。
+  - `backend/tests/test_partner_program_service.py`：新增回归测试，合作者发兑换码设置 `max_video_seconds=3600` 后，兑换用户权限仍保持 3600，不被 300 或 1800 截断。
+- 本地验证：
+  - `python -m py_compile backend/app/api/stickman_workflow.py backend/app/services/stickman_workflow_plans.py backend/app/services/partner_program.py backend/app/api/partner.py backend/app/models/partner.py backend/app/api/admin.py backend/app/models/user.py` 通过。
+  - `PYTHONPATH=backend pytest backend/tests/test_partner_program_service.py backend/tests/test_stickman_workflow_limits.py backend/tests/test_admin_user_partner_profile.py -q` -> `30 passed`。
+  - `npm run build`（frontend）通过，仅有既有 Vite chunk-size warning。
+  - `git diff --check` 通过。
+- 下一步：提交本次修复，增量同步到 3004 `/opt/manim-v2-3004-snapshot`，只重启 3004 backend/worker/必要前端静态资源，不触碰 3003；部署后通过 3004 平台验证 admin 用户详情能设置大于 300 秒限制、合作者发码能保留自定义单条秒数、`/stickman-workflow/config` 能读到动态值。
+- 不要重复做：不要把 300s 写成服务端硬上限；不要再用短 hash 判断部署可复现；不要修改、重启或覆盖 3003。

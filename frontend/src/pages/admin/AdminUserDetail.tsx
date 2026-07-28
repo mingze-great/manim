@@ -298,10 +298,10 @@ export default function AdminUserDetail() {
           </Card>
 
           <Card title="模块权限与配额" className="mb-4">
-            {user.is_admin ? (
-              <Tag color="blue">管理员账号默认拥有全部模块权限</Tag>
-            ) : (
-              <Space direction="vertical" style={{ width: '100%' }} size="middle">
+            <Space direction="vertical" style={{ width: '100%' }} size="middle">
+              {user.is_admin ? (
+                <Tag color="blue">管理员默认拥有全部模块权限，也可以在这里单独覆盖火柴人成片时长等动态限制</Tag>
+              ) : null}
                 {moduleKeys.map((moduleKey) => {
                   const permission: any = modulePermissions[moduleKey] || { enabled: false, daily_limit: 0, used_today: 0, period: moduleKey === 'visual' ? 'daily' : 'monthly' }
                   const isStickmanWorkflow = moduleKey === 'stickman_v2'
@@ -358,7 +358,7 @@ export default function AdminUserDetail() {
                               <Row gutter={[12, 12]}>
                                 <Col xs={24} md={6}>
                                   <div className="text-gray-500 mb-1">每日视频数</div>
-                                  <InputNumber min={0} max={999} value={permission.daily_limit || 0} onChange={(value) => updatePermission(moduleKey, { daily_limit: value || 0, period: 'monthly' })} style={{ width: '100%' }} />
+                                  <InputNumber min={0} max={999} value={permission.daily_limit || 0} onChange={(value) => updatePermission(moduleKey, { daily_limit: value || 0, period: 'daily' })} style={{ width: '100%' }} />
                                 </Col>
                                 <Col xs={24} md={6}>
                                   <div className="text-gray-500 mb-1">每日分钟</div>
@@ -412,8 +412,7 @@ export default function AdminUserDetail() {
                     </Card>
                   )
                 })}
-              </Space>
-            )}
+            </Space>
           </Card>
         </Col>
 
