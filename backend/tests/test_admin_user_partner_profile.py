@@ -80,3 +80,31 @@ def test_admin_can_disable_partner_from_user_detail():
     assert response["status"] == "inactive"
     assert partner.status == "inactive"
     assert target.role == "user"
+
+
+def test_admin_can_update_admin_stickman_permission():
+    db = _session()
+    admin_user = _user("admin", is_admin=True, role="admin")
+    db.add(admin_user)
+    db.commit()
+    db.refresh(admin_user)
+
+    response = asyncio.run(admin.update_user_module_permissions(
+        admin_user.id,
+        {
+            "stickman_v2": {
+                "enabled": True,
+                "daily_limit": -1,
+                "max_video_seconds": 900,
+                "material_mode": "hybrid",
+                "visible_image_modes": ["material_only", "ai_image"],
+            }
+        },
+        db,
+        admin_user,
+        None,
+    ))
+    db.refresh(admin_user)
+
+    assert response["module_permissions"]["stickman_v2"]["max_video_seconds"] == 900
+    assert admin_user.get_module_permission("stickman_v2")["max_video_seconds"] == 900

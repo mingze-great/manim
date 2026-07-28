@@ -897,3 +897,17 @@
 - 本次修复：`frontend/src/pages/admin/AdminUserDetail.tsx` 允许 admin 在用户详情页编辑任意用户（包括 admin 自己）的模块权限；后端动态时长逻辑不变，仍由 `stickman_v2.max_video_seconds` 决定。
 - 本地验证：`PYTHONPATH=backend pytest backend/tests/test_stickman_workflow_limits.py backend/tests/test_partner_program_service.py -q` -> `26 passed`；`python -m py_compile backend/app/api/stickman_workflow.py backend/app/services/stickman_workflow_plans.py backend/app/services/partner_program.py backend/app/api/partner.py backend/app/models/partner.py backend/app/api/admin.py` 通过；`npm run build`（frontend）通过，仅有既有 Vite chunk size warning；`git diff --check` 通过。
 - 下一步：提交并增量部署到 3004，再通过正确的 module-permissions 接口设置 admin 验证账号 `max_video_seconds=900`，复验 `/stickman-workflow/config` 与时长估算。
+
+## 2026-07-28 3004 admin 动态火柴人权限真正生效修复
+- 当前任务补充：平台验证时发现 `PUT /api/admin/users/{id}/module-permissions` 对 admin 目标用户返回 400，且 `User.get_module_permissions()` 对 admin 账号直接返回默认无限制权限，跳过 `module_permissions_json`，导致 admin 在用户详情里设置 `stickman_v2.max_video_seconds` 后 `/stickman-workflow/config` 仍是 300。
+- 本次修复：
+  - `backend/app/api/admin.py`：允许 admin 通过模块权限接口更新 admin 账号自身或其他 admin 账号的模块权限；保留“admin 不能设置为合作者”的保护。
+  - `backend/app/models/user.py`：admin 默认权限仍是无限制，但会继续合并 `module_permissions_json` 和权限记录，因此 `stickman_v2.max_video_seconds`、图片模式、素材库范围等动态字段能被读取。
+  - `frontend/src/pages/admin/AdminUserDetail.tsx`：用户详情页不再阻止 admin 目标用户的模块权限编辑。
+  - `backend/tests/test_admin_user_partner_profile.py`：新增 admin 可更新 admin 火柴人权限的回归测试。
+- 本地验证：
+  - `python -m py_compile backend/app/models/user.py backend/app/api/admin.py backend/app/api/stickman_workflow.py` 通过。
+  - `PYTHONPATH=backend pytest backend/tests/test_admin_user_partner_profile.py backend/tests/test_stickman_workflow_limits.py backend/tests/test_partner_program_service.py -q` -> `29 passed`。
+  - `npm run build`（frontend）此前同轮通过，仅有既有 Vite chunk size warning。
+  - `git diff --check` 通过，仅提示既有 CRLF/LF 换行警告。
+- 下一步：提交并部署到 3004；使用正确模块权限接口设置 admin 验证账号 `stickman_v2.max_video_seconds=900`，复验配置、时长估算和实时生图任务。

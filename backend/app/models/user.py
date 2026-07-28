@@ -57,14 +57,15 @@ class User(Base):
 
     def get_module_permissions(self):
         if self.is_admin:
-            return {
+            permissions = {
                 "visual": {"enabled": True, "daily_limit": -1, "used_today": 0, "last_reset_date": None, "period": "daily"},
                 "stickman_legacy": {"enabled": True, "daily_limit": -1, "used_today": 0, "last_reset_date": None, "period": "monthly"},
                 "stickman_v2": {"enabled": True, "daily_limit": -1, "used_today": 0, "last_reset_date": None, "period": "monthly"},
                 "explainer": {"enabled": True, "daily_limit": -1, "used_today": 0, "last_reset_date": None, "period": "monthly"},
                 "article": {"enabled": True, "daily_limit": -1, "used_today": 0, "last_reset_date": None, "period": "monthly"},
             }
-        permissions = self.get_default_module_permissions()
+        else:
+            permissions = self.get_default_module_permissions()
         if self.module_permissions_json:
             try:
                 stored = json.loads(self.module_permissions_json)

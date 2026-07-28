@@ -1072,9 +1072,6 @@ async def update_user_module_permissions(
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
-    if user.is_admin:
-        raise HTTPException(status_code=400, detail="管理员账号默认无限制，请勿修改模块权限")
-
     permissions = _normalize_module_permissions(payload, user)
     user.set_module_permissions(permissions)
     _sync_permissions_to_db(db, user, permissions)
