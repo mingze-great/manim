@@ -451,7 +451,52 @@ def test_user_script_split_preserves_all_sentences_when_scene_count_is_smaller()
     assert all(chunk.count("。") <= 3 for chunk in chunks)
 
 
-def test_dayun_manbo_tts_routes_to_local_worker(tmp_path, monkeypatch):
+def test_dayun_manbo_tts_prefers_qwen_manbo_server_tts(tmp_path, monkeypatch):
+    service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
+    service.render_audio_root = tmp_path / "render-audio"
+    service.render_service_url = "http://127.0.0.1:18787"
+    service.cosyvoice_sample_rate = 22050
+    service.qwen_manbo_voice = "qwen-manbo-voice"
+    service._append_log = lambda *_args, **_kwargs: None
+    service._resolve_cosyvoice_voice = lambda _voice: "中文女"
+    service._resolve_edge_tts_voice = lambda _voice: "zh-CN-XiaoxiaoNeural"
+    service._resolve_dashscope_voice = lambda _voice: "longanhuan"
+    service.local_tts_allow_safe_fallback = False
+
+    qwen_calls = []
+
+    def qwen_tts(text, output_path):
+        qwen_calls.append(text)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with wave.open(str(output_path), "wb") as wav:
+            wav.setnchannels(1)
+            wav.setsampwidth(2)
+            wav.setframerate(22050)
+            wav.writeframes(b"\x01\x00" * 22050)
+        return 1.0
+
+    monkeypatch.setattr(service, "_generate_qwen_manbo_audio", qwen_tts)
+    monkeypatch.setattr(
+        service,
+        "_generate_local_tts_worker_audio",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("local worker should not run when Qwen works")),
+    )
+
+    project_json = {"scenes": [{"voiceText": "先别急着证明自己", "duration": 1.2}]}
+    audio_scenes = service._generate_cosyvoice_audio(
+        project_json,
+        tmp_path / "job_42",
+        None,
+        {"voiceProvider": "dayun_manbo", "voiceId": "dayun_manbo"},
+    )
+
+    assert qwen_calls == ["先别急着证明自己"]
+    assert audio_scenes[0]["provider"] == "qwen_manbo"
+    assert project_json["voice"]["speaker"] == "qwen-manbo-voice"
+    assert (tmp_path / "job_42" / "audio" / "scene-01.wav").exists()
+
+
+def test_dayun_manbo_tts_falls_back_to_local_worker_when_qwen_unavailable(tmp_path, monkeypatch):
     service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
     service.render_audio_root = tmp_path / "render-audio"
     service.render_service_url = "http://127.0.0.1:18787"
@@ -463,6 +508,12 @@ def test_dayun_manbo_tts_routes_to_local_worker(tmp_path, monkeypatch):
     service.local_tts_allow_safe_fallback = False
 
     local_worker_calls = []
+
+    monkeypatch.setattr(
+        service,
+        "_generate_qwen_manbo_audio",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("qwen unavailable")),
+    )
 
     def local_worker(text, output_path, voice, **kwargs):
         local_worker_calls.append((text, voice, kwargs["scene_index"], kwargs.get("cue_index")))
@@ -523,6 +574,11 @@ def test_dayun_manbo_tts_worker_failure_does_not_start_server_cosyvoice(tmp_path
 
     monkeypatch.setattr(
         service,
+        "_generate_qwen_manbo_audio",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("qwen unavailable")),
+    )
+    monkeypatch.setattr(
+        service,
         "_generate_local_tts_worker_audio",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("worker offline")),
     )
@@ -532,7 +588,7 @@ def test_dayun_manbo_tts_worker_failure_does_not_start_server_cosyvoice(tmp_path
         lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("server local CosyVoice should not run")),
     )
 
-    with pytest.raises(RuntimeError, match="本地曼波配音服务不可用"):
+    with pytest.raises(RuntimeError, match="worker offline"):
         service._generate_cosyvoice_audio(
             {"scenes": [{"voiceText": "先别急着证明自己", "duration": 1.2}]},
             tmp_path / "job_42",

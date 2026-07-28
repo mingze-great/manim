@@ -132,6 +132,11 @@ class Settings(BaseSettings):
     STICKMAN_TTS_FALLBACK_MODELS: str = "cosyvoice-v3.5-flash,cosyvoice-v3-plus,cosyvoice-v3-flash"
     STICKMAN_TTS_PROVIDER: str = "dashscope_cosyvoice"
     STICKMAN_TTS_VOICE: str = "longshuo_v3"
+    QWEN_MANBO_TTS_HTTP_URL: str = "https://ws-ckc5fvl317n4h4af.cn-beijing.maas.aliyuncs.com/api/v1"
+    QWEN_MANBO_TTS_MODEL: str = "qwen-audio-3.0-tts-plus"
+    QWEN_MANBO_VOICE: str = "qwen-audio-3.0-tts-plus-manbo-6260f62f5f1d427193925a3fab391d07"
+    QWEN_MANBO_SAMPLE_RATE: int = 24000
+    QWEN_MANBO_TTS_TIMEOUT: int = 240
     STICKMAN_TTS_VOICE_LIBRARY: str = "[{\"label\":\"稳重男声\",\"value\":\"longshuo_v3\",\"provider\":\"dashscope_cosyvoice\",\"gender\":\"male\",\"style\":\"steady\"},{\"label\":\"阳光男声\",\"value\":\"longanyang\",\"provider\":\"dashscope_cosyvoice\",\"gender\":\"male\",\"style\":\"bright\"},{\"label\":\"元气女声\",\"value\":\"longanhuan\",\"provider\":\"dashscope_cosyvoice\",\"gender\":\"female\",\"style\":\"energetic\"},{\"label\":\"理性播报男声\",\"value\":\"sambert-zhiming-v1\",\"provider\":\"dashscope_sambert\",\"gender\":\"male\",\"style\":\"rational\"},{\"label\":\"治愈陪伴女声\",\"value\":\"sambert-zhiya-v1\",\"provider\":\"dashscope_sambert\",\"gender\":\"female\",\"style\":\"healing\"},{\"label\":\"激励主播男声\",\"value\":\"sambert-zhihao-v1\",\"provider\":\"dashscope_sambert\",\"gender\":\"male\",\"style\":\"motivational\"}]"
     STICKMAN_OUTPUT_DIR: str = "stickman"
     STICKMAN_MATERIAL_LIBRARY_ENABLED: bool = True

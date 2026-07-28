@@ -286,6 +286,31 @@ class AiVideoService:
             _read_config_value("DASHSCOPE_BASE_HTTP_API_URL", "SC1_DASHSCOPE_HTTP_URL")
             or "https://ws-ckc5fvl317n4h4af.cn-beijing.maas.aliyuncs.com/api/v1",
         ).rstrip("/")
+        self.qwen_manbo_http_url = (
+            os.getenv("QWEN_MANBO_TTS_HTTP_URL")
+            or _read_config_value("QWEN_MANBO_TTS_HTTP_URL", "SC1_QWEN_MANBO_TTS_HTTP_URL")
+            or self.dashscope_http_url
+        ).rstrip("/")
+        self.qwen_manbo_model = (
+            os.getenv("QWEN_MANBO_TTS_MODEL")
+            or _read_config_value("QWEN_MANBO_TTS_MODEL", "SC1_QWEN_MANBO_TTS_MODEL")
+            or "qwen-audio-3.0-tts-plus"
+        )
+        self.qwen_manbo_voice = (
+            os.getenv("QWEN_MANBO_VOICE")
+            or _read_config_value("QWEN_MANBO_VOICE", "SC1_QWEN_MANBO_VOICE")
+            or "qwen-audio-3.0-tts-plus-manbo-6260f62f5f1d427193925a3fab391d07"
+        )
+        self.qwen_manbo_sample_rate = int(
+            os.getenv("QWEN_MANBO_SAMPLE_RATE")
+            or _read_config_value("QWEN_MANBO_SAMPLE_RATE", "SC1_QWEN_MANBO_SAMPLE_RATE", default="24000")
+            or "24000"
+        )
+        self.qwen_manbo_timeout = int(
+            os.getenv("QWEN_MANBO_TTS_TIMEOUT")
+            or _read_config_value("QWEN_MANBO_TTS_TIMEOUT", "SC1_QWEN_MANBO_TTS_TIMEOUT", default="240")
+            or "240"
+        )
         dashscope.api_key = self.dashscope_api_key
         dashscope.base_websocket_api_url = self.dashscope_websocket_url
         dashscope.base_http_api_url = self.dashscope_http_url
@@ -1712,6 +1737,15 @@ class AiVideoService:
             nonlocal actual_provider, provider, voice
             self._append_log(log_path, f"CosyVoice {label} provider={provider} voice={voice} text={synth_text[:80]}")
             if provider == "dayun_manbo":
+                qwen_error: Exception | None = None
+                try:
+                    seconds_value = self._generate_qwen_manbo_audio(synth_text, output_path)
+                    actual_provider = "qwen_manbo"
+                    voice = self.qwen_manbo_voice
+                    return seconds_value
+                except Exception as exc:
+                    qwen_error = exc
+                    self._append_log(log_path, f"Qwen Manbo TTS fallback to local worker {label} error={exc}")
                 try:
                     seconds_value = self._generate_local_tts_worker_audio(
                         synth_text,
@@ -1727,8 +1761,8 @@ class AiVideoService:
                     return seconds_value
                 except Exception as exc:
                     if not self.local_tts_allow_safe_fallback:
-                        raise RuntimeError(f"本地曼波配音服务不可用: {exc}") from exc
-                    self._append_log(log_path, f"Local Manbo worker fallback to safe TTS {label} error={exc}")
+                        raise RuntimeError(f"曼波配音服务不可用: Qwen={qwen_error}; local_worker={exc}") from exc
+                    self._append_log(log_path, f"Local Manbo worker fallback to safe TTS {label} qwen_error={qwen_error} local_error={exc}")
                     seconds_value, fallback_provider, fallback_voice = self._generate_safe_tts_fallback_audio(
                         synth_text,
                         output_path,
@@ -1944,6 +1978,59 @@ class AiVideoService:
         audio = AudioSegment.from_file(source_path)
         if len(audio.raw_data) < 1024 or audio.rms <= 0:
             raise RuntimeError("External TTS returned silent audio")
+        audio = audio.set_channels(1).set_frame_rate(self.cosyvoice_sample_rate)
+        audio = self._trim_audio_segment_silence(audio)
+        audio.export(output_path, format="wav")
+        source_path.unlink(missing_ok=True)
+        return max(len(audio) / 1000.0, 0.01)
+
+    def _generate_qwen_manbo_audio(self, text: str, output_path: Path) -> float:
+        if not self.dashscope_api_key:
+            raise RuntimeError("Qwen Manbo TTS API key is not configured")
+        tts_text = re.sub(r"\s+", " ", str(text or "").strip())
+        if not tts_text:
+            raise RuntimeError("Qwen Manbo TTS text is empty")
+
+        url = f"{self.qwen_manbo_http_url.rstrip('/')}/services/audio/tts/SpeechSynthesizer"
+        payload = {
+            "model": self.qwen_manbo_model,
+            "input": {
+                "text": tts_text,
+                "voice": self.qwen_manbo_voice,
+                "format": "wav",
+                "sample_rate": self.qwen_manbo_sample_rate,
+            },
+        }
+        response = requests.post(
+            url,
+            headers={
+                "Authorization": f"Bearer {self.dashscope_api_key}",
+                "Content-Type": "application/json; charset=utf-8",
+            },
+            json=payload,
+            timeout=self.qwen_manbo_timeout,
+        )
+        try:
+            data = response.json()
+        except ValueError:
+            data = {"raw_text": response.text[:500]}
+        if response.status_code != 200:
+            raise RuntimeError(f"Qwen Manbo TTS failed HTTP {response.status_code}: {data}")
+        audio_url = (((data.get("output") or {}).get("audio") or {}).get("url"))
+        if not audio_url:
+            raise RuntimeError(f"Qwen Manbo TTS did not return audio url: {data}")
+
+        audio_response = requests.get(str(audio_url), timeout=self.qwen_manbo_timeout)
+        audio_response.raise_for_status()
+        if len(audio_response.content or b"") < 1024:
+            raise RuntimeError("Qwen Manbo TTS returned implausibly short audio")
+
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        source_path = output_path.with_suffix(".qwen.wav")
+        source_path.write_bytes(audio_response.content)
+        audio = AudioSegment.from_file(source_path)
+        if len(audio.raw_data) < 1024 or audio.rms <= 0:
+            raise RuntimeError("Qwen Manbo TTS returned silent audio")
         audio = audio.set_channels(1).set_frame_rate(self.cosyvoice_sample_rate)
         audio = self._trim_audio_segment_silence(audio)
         audio.export(output_path, format="wav")

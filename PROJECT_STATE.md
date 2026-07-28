@@ -812,3 +812,21 @@
   - `frame_14s.png`：第四语义段显示价值拿回来的独立场景图。
 - 已确认本轮核心需求：实时生图不再整条视频只用一张图，而是按 SC1 语义分段生成多张图；风格为白底、火柴人/线稿人物、少量道具；声音试听此前已限制为 5 秒；平台 3004 可创建并完成实时生图成片。
 - 已知不足：本轮因 Dayun Manbo 外部接口持续 429，`job_136` 音频使用本地降级声音完成验证，不代表曼波音色服务已经恢复；后续如果必须固定曼波音色，需要替换稳定 TTS 服务或继续实现本地 CosyVoice 独立机器路由。
+
+## 2026-07-28 3004 服务端 Qwen 曼波 TTS 部署前记录
+
+- 当前任务：把用户已验证的阿里 Qwen Audio 曼波复刻音色接入 3004 服务端生成链路，让 `/stickman-workflow` 一键生成时由 3004 worker 直接合成音频，不再依赖本地 worker 才能得到曼波音色。
+- 本地工作区：`C:\Users\Administrator\Documents\Codex\2026-07-18\300\work\3004-partner-stickman-worktree`。
+- 当前分支：`codex/3004-partner-stickman-platform-20260724`。
+- 编码前 HEAD：`011d4d8d93ad633c4b7705bbe6670518ed205710`，提交时间 `2026-07-28 10:00:21 +0800`，提交信息 `docs: record realtime image platform validation`。
+- 本次改动：
+  - `backend/app/services/ai_video.py`：`dayun_manbo` 音色优先走服务端 Qwen Manbo TTS，使用 `/api/v1/services/audio/tts/SpeechSynthesizer` 返回的临时 `audio.url` 下载 wav；失败时再回退到已有 local TTS worker，最后才按配置进入安全兜底。
+  - `backend/app/config.py`、`deploy/env.backend.3004.example`：补充 `QWEN_MANBO_TTS_HTTP_URL`、`QWEN_MANBO_TTS_MODEL`、`QWEN_MANBO_VOICE`、`QWEN_MANBO_SAMPLE_RATE`、`QWEN_MANBO_TTS_TIMEOUT`，API Key 仍只读取 `DASHSCOPE_API_KEY`/`STICKMAN_TTS_API_KEY`，不写入代码。
+  - `backend/tests/test_ai_video_sc1_material_urls.py`：新增服务端 Qwen 优先、Qwen 不可用回退 local worker 的回归测试。
+- 本地验证：
+  - `python -m py_compile backend\app\services\ai_video.py backend\app\config.py backend\app\api\stickman_workflow.py scripts\local_tts_worker.py` 通过。
+  - `PYTHONPATH=backend pytest backend\tests\test_ai_video_sc1_material_urls.py backend\tests\test_image_gen_service.py backend\tests\test_stickman_workflow_limits.py -q` -> `54 passed`。
+  - `git diff --check` 通过，仅有 `deploy/env.backend.3004.example` 既有 LF/CRLF 换行提示。
+- 当前问题：本机当前没有 `DASHSCOPE_API_KEY` 环境变量，因此未在本机用新后端方法直连真实 Qwen 接口；用户已用 `C:\Users\Administrator\aliyun_qwen_tts.py` 验证同一 voice id 可生成 `E:\ai\火柴人工作流\配音\reuse_test_manbo.wav`。
+- 下一步：提交本次改动；同步到 `/opt/manim-v2-3004-snapshot`；确认 3004 backend/worker 环境中配置了 `DASHSCOPE_API_KEY` 和 Qwen Manbo 参数；只重启 3004 backend/worker；创建新 `/stickman-workflow` 平台任务，检查 `project.json` voice provider 为 `qwen_manbo`、MP4 有音视频流并抽帧验证。
+- 不要重复做：不要把 API Key 写进 git、日志或 `PROJECT_STATE.md`；不要启动服务器本机开源 CosyVoice；不要修改、重启或覆盖 3003。
