@@ -41,6 +41,20 @@ def test_stickman_entitlement_reads_material_scope_and_limits():
     assert entitlement["can_choose_image_mode"] is True
 
 
+def test_stickman_entitlement_does_not_cap_admin_configured_video_seconds():
+    class UserStub:
+        def get_module_permission(self, module_key):
+            assert module_key == "stickman_v2"
+            return {
+                "material_mode": "material_only",
+                "max_video_seconds": 3600,
+            }
+
+    entitlement = stickman_entitlement_from_user(UserStub())
+
+    assert entitlement["max_video_seconds"] == 3600
+
+
 def test_stickman_entitlement_limits_visible_modes_to_one_mode():
     class UserStub:
         def get_module_permission(self, module_key):

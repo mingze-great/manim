@@ -106,7 +106,7 @@ def _normalize_plan(raw: dict, index: int) -> dict:
     max_video_seconds = _safe_int(raw.get("max_video_seconds"), 0)
     if raw.get("max_video_minutes") is not None:
         max_video_seconds = _safe_int(raw.get("max_video_minutes"), 5) * 60
-    max_video_seconds = max(15, min(1800, max_video_seconds or 300))
+    max_video_seconds = max(15, max_video_seconds or 300)
     per_video_minutes = max(1, (max_video_seconds + 59) // 60)
     total_video_limit = max(0, _safe_int(raw.get("total_video_limit")))
     daily_limit = max(0, _safe_int(raw.get("daily_limit")))

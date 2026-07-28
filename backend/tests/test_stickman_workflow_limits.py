@@ -78,7 +78,7 @@ def test_duration_estimate_returns_plan_limit_and_allowed_state():
         stickman_workflow.StickmanWorkflowDurationEstimateRequest(
             script="你不需要为所有人的情绪负责。先分清对象，再承担属于自己的后果。",
         ),
-        current_user=SimpleNamespace(is_admin=True),
+        current_user=SimpleNamespace(is_admin=True, get_module_permission=lambda _key: {}),
     )
 
     assert response["estimatedSeconds"] > 0
@@ -90,12 +90,26 @@ def test_admin_creation_permission_keeps_300_second_limit():
     user = SimpleNamespace(
         is_admin=True,
         get_module_permissions=lambda: {"stickman_v2": {"enabled": True, "daily_limit": -1, "used_today": 0}},
+        get_module_permission=lambda _key: {},
     )
 
     permission = stickman_workflow._stickman_permission_for_user(user)
 
     assert permission["max_video_seconds"] == 300
     validate_stickman_quota(permission, requested_seconds=300)
+
+
+def test_admin_config_uses_dynamic_user_video_seconds_limit(monkeypatch):
+    monkeypatch.setattr(stickman_workflow, "_visible_libraries_for_user", lambda db, user: [])
+    user = SimpleNamespace(
+        is_admin=True,
+        get_module_permission=lambda _key: {"max_video_seconds": 900},
+    )
+
+    response = stickman_workflow.get_stickman_workflow_config(db=None, current_user=user)
+
+    assert response["capabilities"]["maxVideoSeconds"] == 900
+    validate_script_duration_request(target_seconds=900, max_video_seconds=response["capabilities"]["maxVideoSeconds"])
 
 
 def test_duration_estimate_request_accepts_script_longer_than_1200_chars():
@@ -107,7 +121,7 @@ def test_duration_estimate_request_accepts_script_longer_than_1200_chars():
 def test_stickman_config_exposes_allowed_image_modes_for_admin(monkeypatch):
     monkeypatch.setattr(stickman_workflow, "_visible_libraries_for_user", lambda db, user: [])
 
-    response = stickman_workflow.get_stickman_workflow_config(db=None, current_user=SimpleNamespace(is_admin=True))
+    response = stickman_workflow.get_stickman_workflow_config(db=None, current_user=SimpleNamespace(is_admin=True, get_module_permission=lambda _key: {}))
 
     assert response["capabilities"]["visibleImageModes"] == ["material_only", "ai_image"]
     assert response["capabilities"]["canChooseImageMode"] is True

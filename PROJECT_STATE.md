@@ -874,3 +874,20 @@
   - `git diff --check` 通过，仅提示既有 CRLF/LF 换行警告。
 - 下一步：提交本次修复，部署到 3004 `/opt/manim-v2-3004-snapshot`，只重启 3004 backend/worker/必要前端静态资源；部署后用 3004 平台创建一次 `imageMode=ai_image` 任务，确认 `project.json` 多张场景图均为模型生成 URL 而非 `E:\ai\火柴人工作流\素材库\outputs` 或 `/sc1-materials`，并复验 300 秒以内任务不再触发 60 秒限制。
 - 不要重复做：不要修改、重启或覆盖 3003；不要把生图/TTS API key 写入代码、git、日志或状态文件；实时生图失败时必须明确失败，不能静默回退素材库。
+
+## 2026-07-28 3004 火柴人动态时长上限补充修复记录
+- 当前任务补充：用户明确指出“300s 视频时长限制”不是固定上限，而是 admin 可在用户详情里动态设置；合作者生成兑换码时也可设置单条视频时长。300 秒只能作为默认值，不能作为服务端硬限制。
+- 本地工作区：`C:\Users\Administrator\Documents\Codex\2026-07-18\300\work\3004-partner-stickman-worktree`。
+- 当前分支：`codex/3004-partner-stickman-platform-20260724`。
+- 编码前 HEAD：`a155a6ba74bac90545855b0430c4e1c7ce29d809`，提交信息 `fix: enforce stickman realtime mode and plan limits`。
+- 本次补充修复：
+  - `backend/app/api/stickman_workflow.py`：`targetSeconds` 去掉静态 `le=1800`，改为只校验正数，最终由当前用户/套餐权限里的 `max_video_seconds` 动态校验；admin 自己也读取 `stickman_v2.max_video_seconds`，没有设置才默认 300。
+  - `backend/app/services/partner_program.py`：普通用户/兑换码权限不再被 `min(1800, ...)` 截断，`max_video_seconds` 按 admin 或合作者发码配置保存和生效。
+  - `backend/app/services/stickman_workflow_plans.py`：后台套餐归一化不再把单条时长截断到 1800 秒，月卡/次数卡仍按所填单条分钟自动计算。
+  - `frontend/src/pages/admin/AdminUserDetail.tsx`、`frontend/src/pages/admin/AdminPartners.tsx`、`frontend/src/pages/PartnerDashboard.tsx`：移除单条时长输入框的 1800 秒/30 分钟上限，避免前端先拦截 admin/合作者配置。
+- 本地验证：
+  - `python -m py_compile backend/app/api/stickman_workflow.py backend/app/services/stickman_workflow_plans.py backend/app/services/partner_program.py backend/app/api/partner.py backend/app/models/partner.py backend/app/api/admin.py backend/app/services/stickman_workflow_limits.py backend/app/services/ai_video.py` 通过。
+  - `PYTHONPATH=backend pytest backend/tests/test_stickman_workflow_limits.py backend/tests/test_partner_program_service.py backend/tests/test_ai_video_sc1_material_urls.py backend/tests/test_image_gen_service.py -q` -> `68 passed`。
+  - `npm run build`（frontend）通过，仅有既有 Vite chunk size warning。
+  - `git diff --check` 通过，仅提示既有 CRLF/LF 换行警告。
+- 下一步：提交并重新增量部署到 3004；平台验证 admin 设置 `stickman_v2.max_video_seconds=900` 后 `/stickman-workflow/config` 返回 900，时长估算/生成不会再触发旧 60/300 静态限制。

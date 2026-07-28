@@ -139,9 +139,9 @@ def stickman_entitlement_from_user(user: User) -> dict:
     visible_image_modes = normalize_visible_image_modes(permission.get("visible_image_modes"), material_mode)
     material_mode = normalize_effective_image_mode(material_mode, visible_image_modes)
     try:
-        max_video_seconds = int(permission.get("max_video_seconds") or 60)
+        max_video_seconds = int(permission.get("max_video_seconds") or 300)
     except Exception:
-        max_video_seconds = 60
+        max_video_seconds = 300
     allowed_libraries = permission.get("allowed_libraries")
     if isinstance(allowed_libraries, str):
         try:
@@ -155,7 +155,7 @@ def stickman_entitlement_from_user(user: User) -> dict:
         "visible_image_modes": visible_image_modes,
         "can_choose_image_mode": len(visible_image_modes) > 1,
         "can_use_ai_images": "ai_image" in visible_image_modes,
-        "max_video_seconds": max(15, min(1800, max_video_seconds)),
+        "max_video_seconds": max(15, max_video_seconds),
         "allowed_libraries": [str(item).strip() for item in allowed_libraries if str(item).strip()],
     }
 
@@ -215,7 +215,7 @@ def apply_invite_code_to_user(db: Session, user: User, raw_code: str) -> InviteC
             "material_mode": invite.material_mode or "material_only",
             "visible_image_modes": normalize_visible_image_modes([invite.material_mode or "material_only"], invite.material_mode or "material_only"),
             "daily_limit": invite.quota_limit,
-            "max_video_seconds": int(invite.max_video_seconds or 60),
+            "max_video_seconds": int(invite.max_video_seconds or 300),
             "allowed_libraries": allowed_libraries,
         },
     )

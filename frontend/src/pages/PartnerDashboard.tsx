@@ -175,7 +175,7 @@ export default function PartnerDashboard() {
               </Col>
             )}
             <Col xs={24} md={8}><Form.Item name="quota_limit" label="周期/总次数" rules={[{ required: true }]}><InputNumber min={0} max={9999} style={{ width: '100%' }} /></Form.Item></Col>
-            <Col xs={24} md={8}><Form.Item name="max_video_seconds" label="单条秒数" rules={[{ required: true }]}><InputNumber min={15} max={1800} step={15} style={{ width: '100%' }} /></Form.Item></Col>
+            <Col xs={24} md={8}><Form.Item name="max_video_seconds" label="单条秒数" rules={[{ required: true }]}><InputNumber min={15} step={15} style={{ width: '100%' }} /></Form.Item></Col>
             <Col xs={24} md={8}><Form.Item name="max_uses" label="可兑换次数" rules={[{ required: true }]}><InputNumber min={1} max={99} style={{ width: '100%' }} /></Form.Item></Col>
           </Row>
           <Form.Item name="quota_period" hidden><Input /></Form.Item>

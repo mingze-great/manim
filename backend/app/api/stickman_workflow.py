@@ -44,7 +44,7 @@ class StickmanWorkflowJobCreate(BaseModel):
     targetPlatform: str = "douyin"
     scriptMode: str = "ai"
     customScript: Optional[str] = None
-    targetSeconds: Optional[int] = Field(default=None, ge=1, le=1800)
+    targetSeconds: Optional[int] = Field(default=None, ge=1)
     backgroundMode: str = "default"
     backgroundTemplate: Optional[str] = None
     uploadedBackgroundUrl: Optional[str] = None
@@ -96,19 +96,24 @@ def _five_second_voice_preview(path: Path) -> Path:
 
 def _max_video_seconds(user: User) -> int:
     if user.is_admin:
-        return 300
+        permission_getter = getattr(user, "get_module_permission", None)
+        permission = permission_getter("stickman_v2") if callable(permission_getter) else {}
+        return max(15, int(permission.get("max_video_seconds") or 300))
     return stickman_entitlement_from_user(user)["max_video_seconds"]
 
 
 def _stickman_entitlement(user: User) -> dict:
     if user.is_admin:
+        permission_getter = getattr(user, "get_module_permission", None)
+        permission = permission_getter("stickman_v2") if callable(permission_getter) else {}
+        visible_image_modes = permission.get("visible_image_modes") or ["material_only", "ai_image"]
         return {
-            "material_mode": "material_only",
-            "visible_image_modes": ["material_only", "ai_image"],
+            "material_mode": permission.get("material_mode") or "material_only",
+            "visible_image_modes": visible_image_modes,
             "can_choose_image_mode": True,
             "can_use_ai_images": True,
-            "max_video_seconds": 300,
-            "allowed_libraries": [],
+            "max_video_seconds": max(15, int(permission.get("max_video_seconds") or 300)),
+            "allowed_libraries": permission.get("allowed_libraries") or [],
         }
     return stickman_entitlement_from_user(user)
 

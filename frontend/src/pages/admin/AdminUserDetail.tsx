@@ -351,7 +351,7 @@ export default function AdminUserDetail() {
                                 </Col>
                                 <Col xs={24} md={8}>
                                   <div className="text-gray-500 mb-1">单条最长秒数</div>
-                                  <InputNumber min={15} max={1800} value={permission.max_video_seconds || 300} onChange={(value) => updatePermission(moduleKey, { max_video_seconds: value || 300, unlimited_time: true, period: 'lifetime' })} style={{ width: '100%' }} />
+                                  <InputNumber min={15} value={permission.max_video_seconds || 300} onChange={(value) => updatePermission(moduleKey, { max_video_seconds: value || 300, unlimited_time: true, period: 'lifetime' })} style={{ width: '100%' }} />
                                 </Col>
                               </Row>
                             ) : (
@@ -370,7 +370,7 @@ export default function AdminUserDetail() {
                                 </Col>
                                 <Col xs={24} md={6}>
                                   <div className="text-gray-500 mb-1">单条最长秒数</div>
-                                  <InputNumber min={15} max={1800} value={permission.max_video_seconds || 300} onChange={(value) => updatePermission(moduleKey, { max_video_seconds: value || 300 })} style={{ width: '100%' }} />
+                                  <InputNumber min={15} value={permission.max_video_seconds || 300} onChange={(value) => updatePermission(moduleKey, { max_video_seconds: value || 300 })} style={{ width: '100%' }} />
                                 </Col>
                               </Row>
                             )}

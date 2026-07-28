@@ -40,7 +40,7 @@ class InviteCode(Base):
     material_mode = Column(String(20), default="material_only", nullable=False)
     quota_limit = Column(Integer, default=0, nullable=False)
     quota_period = Column(String(20), default="daily", nullable=False)
-    max_video_seconds = Column(Integer, default=60, nullable=False)
+    max_video_seconds = Column(Integer, default=300, nullable=False)
     allowed_libraries_json = Column(Text, nullable=True)
     amount = Column(Integer, default=0, nullable=False)
     commission_rate_bps = Column(Integer, default=0, nullable=False)

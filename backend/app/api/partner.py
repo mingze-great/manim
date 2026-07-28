@@ -138,7 +138,7 @@ def create_partner_invite_code(
     amount = int(payload.amount or plan.get("amount") or 0)
     commission_amount = estimate_commission_amount(amount, profile.commission_rate_bps)
     quota_limit = int(payload.quota_limit if payload.quota_limit is not None else (plan.get("daily_limit") or plan.get("total_video_limit") or 0))
-    max_video_seconds = int(payload.max_video_seconds if payload.max_video_seconds is not None else (plan.get("max_video_seconds") or 60))
+    max_video_seconds = int(payload.max_video_seconds if payload.max_video_seconds is not None else (plan.get("max_video_seconds") or 300))
     visible_modes = [str(item).strip() for item in entitlement.get("visible_image_modes") or ["material_only"] if str(item).strip()]
     requested_mode = str(payload.material_mode or plan.get("material_mode") or entitlement.get("material_mode") or "material_only").strip()
     if requested_mode == "hybrid":

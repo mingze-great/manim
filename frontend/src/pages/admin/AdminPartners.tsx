@@ -287,13 +287,13 @@ export default function AdminPartners() {
                                   return quotaMode === 'count_package' ? (
                                     <>
                                       <Col xs={24} md={8}><Form.Item name={[field.name, 'total_video_limit']} label="总视频次数"><InputNumber min={1} max={9999} style={{ width: '100%' }} /></Form.Item></Col>
-                                      <Col xs={24} md={8}><Form.Item name={[field.name, 'max_video_minutes']} label="单条上限分钟"><InputNumber min={1} max={30} style={{ width: '100%' }} /></Form.Item></Col>
+                                      <Col xs={24} md={8}><Form.Item name={[field.name, 'max_video_minutes']} label="单条上限分钟"><InputNumber min={1} style={{ width: '100%' }} /></Form.Item></Col>
                                       <Col xs={24} md={8}><Alert type="info" showIcon message={`系统自动按 ${plan.total_video_limit || 0} 个视频，每个 ${maxVideoMinutes} 分钟以内计算`} /></Col>
                                     </>
                                   ) : (
                                     <>
                                       <Col xs={24} md={8}><Form.Item name={[field.name, 'daily_limit']} label="每日视频数"><InputNumber min={1} max={999} style={{ width: '100%' }} /></Form.Item></Col>
-                                      <Col xs={24} md={8}><Form.Item name={[field.name, 'max_video_minutes']} label="单条上限分钟"><InputNumber min={1} max={30} style={{ width: '100%' }} /></Form.Item></Col>
+                                      <Col xs={24} md={8}><Form.Item name={[field.name, 'max_video_minutes']} label="单条上限分钟"><InputNumber min={1} style={{ width: '100%' }} /></Form.Item></Col>
                                       <Col xs={24} md={8}><Alert type="info" showIcon message={`自动计算：每日约 ${dailyLimit * maxVideoMinutes} 分钟，每月约 ${dailyLimit * maxVideoMinutes * 30} 分钟`} /></Col>
                                     </>
                                   )
@@ -384,7 +384,7 @@ export default function AdminPartners() {
           <Form.Item name="allowed_libraries" label="可用素材库"><Select mode="multiple" allowClear options={materialLibraryOptions} /></Form.Item>
           <Row gutter={12}>
             <Col span={8}><Form.Item name="quota_limit" label="周期/总次数"><InputNumber min={0} max={9999} style={{ width: '100%' }} /></Form.Item></Col>
-            <Col span={8}><Form.Item name="max_video_seconds" label="单条秒数"><InputNumber min={15} max={1800} step={15} style={{ width: '100%' }} /></Form.Item></Col>
+            <Col span={8}><Form.Item name="max_video_seconds" label="单条秒数"><InputNumber min={15} step={15} style={{ width: '100%' }} /></Form.Item></Col>
             <Col span={8}><Form.Item name="max_uses" label="可兑换次数"><InputNumber min={1} max={999} style={{ width: '100%' }} /></Form.Item></Col>
           </Row>
           <Form.Item name="quota_period" hidden><Input /></Form.Item>
