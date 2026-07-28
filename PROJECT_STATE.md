@@ -928,3 +928,32 @@
   - `git diff --check` 通过。
 - 下一步：提交本次修复，增量同步到 3004 `/opt/manim-v2-3004-snapshot`，只重启 3004 backend/worker/必要前端静态资源，不触碰 3003；部署后通过 3004 平台验证 admin 用户详情能设置大于 300 秒限制、合作者发码能保留自定义单条秒数、`/stickman-workflow/config` 能读到动态值。
 - 不要重复做：不要把 300s 写成服务端硬上限；不要再用短 hash 判断部署可复现；不要修改、重启或覆盖 3003。
+
+## 2026-07-28 3004 动态视频时长限制部署验收记录
+- 功能提交：`e897efb61bfa4c05a30929cd93c474c71cf30557`（`fix: keep stickman duration limits dynamic`）。
+- 3004 部署目录：`/opt/manim-v2-3004-snapshot`。
+- 3004 `.deployed-ref` 已重写为完整长提交：
+  - `branch=codex/3004-partner-stickman-platform-20260724`
+  - `commit=e897efb61bfa4c05a30929cd93c474c71cf30557`
+  - `deploy_method=incremental_upload_dynamic_duration_admin_partner`
+  - `target=3004`
+- 部署备份：
+  - `/opt/manim-v2-3004-backups/storage-manim_platform_3004.pre-dynamic-duration.20260728230932.db`
+  - `/opt/manim-v2-3004-backups/backend-manim_platform_3004.pre-dynamic-duration.20260728230932.db`
+- 部署方式：增量上传 `PROJECT_STATE.md`、`backend/tests/test_partner_program_service.py`、`frontend/src/pages/admin/AdminUserDetail.tsx` 和 `frontend/dist`；本次运行时代码只涉及前端静态资源，未重启 3003。
+- 服务健康验证：
+  - `manim-v2-3004-backend.service` active。
+  - `manim-v2-3004-worker.service` active。
+  - `manim-v2-3004-ai-video-render.service` active。
+  - `http://127.0.0.1:8004/health` 返回 healthy。
+  - `http://127.0.0.1:3004/` 返回 200。
+  - 服务器根分区约 3.1G 可用。
+- 平台 API 验证：
+  - 使用 3004 验证 admin 账号 `codex_admin_ui_verify` 调用 `PUT /api/admin/users/87/module-permissions`，写入 `stickman_v2.max_video_seconds=1200`。
+  - 随后 `GET /api/stickman-workflow/config` 返回 `capabilities.maxVideoSeconds=1200`，证明 admin 用户详情动态设置已被平台读取。
+  - `POST /api/stickman-workflow/duration-estimate` 使用约 281 秒脚本文案，返回 `maxVideoSeconds=1200`、`allowed=true`，证明不再触发旧 60/300 静态限制。
+  - 使用测试合作者 `codex3004_partner_phone` 调用 `POST /api/partner/invite-codes`，选择 `count_40x5m` 并设置 `max_video_seconds=2400`，返回 active 兑换码，金额 `39900` 分、预计佣金 `11970` 分。
+  - 使用该兑换码注册测试用户 `codex_dyn_duration_969399`，注册后自动 `is_approved=true`；登录后 `GET /api/stickman-workflow/config` 返回 `capabilities.maxVideoSeconds=2400`，证明合作者发码自定义单条视频时长已生效。
+- 前端静态验证：远程 `/opt/manim-v2-3004-snapshot/frontend/dist/assets/main-d10-ldjh.js` 包含“管理员默认拥有全部模块权限，也可以在这里单独覆盖火柴人成片时长等动态限制”，确认 3004 已加载新构建。
+- 当前结论：300s 当前仅是默认值，不是服务端硬上限；admin 用户详情和合作者兑换码链路均支持动态单条视频时长。
+- 后续注意：本轮未重新生成 MP4，因为改动范围是套餐/权限/前端管理页，不涉及 Remotion 成片画面；如下一轮继续动成片渲染或生成链路，必须再跑 `/stickman-workflow` 成片、ffprobe 和抽帧。
