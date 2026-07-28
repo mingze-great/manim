@@ -830,3 +830,18 @@
 - 当前问题：本机当前没有 `DASHSCOPE_API_KEY` 环境变量，因此未在本机用新后端方法直连真实 Qwen 接口；用户已用 `C:\Users\Administrator\aliyun_qwen_tts.py` 验证同一 voice id 可生成 `E:\ai\火柴人工作流\配音\reuse_test_manbo.wav`。
 - 下一步：提交本次改动；同步到 `/opt/manim-v2-3004-snapshot`；确认 3004 backend/worker 环境中配置了 `DASHSCOPE_API_KEY` 和 Qwen Manbo 参数；只重启 3004 backend/worker；创建新 `/stickman-workflow` 平台任务，检查 `project.json` voice provider 为 `qwen_manbo`、MP4 有音视频流并抽帧验证。
 - 不要重复做：不要把 API Key 写进 git、日志或 `PROJECT_STATE.md`；不要启动服务器本机开源 CosyVoice；不要修改、重启或覆盖 3003。
+
+## 2026-07-28 3004 服务端 Qwen 曼波 TTS 平台验收记录
+
+- 功能提交：`bc7dbc2a3e55d70fc2c3b4ad5a5abd29af5565d5`（`fix: use qwen manbo tts for sc1 audio`）。
+- 3004 部署目录：`/opt/manim-v2-3004-snapshot`；部署方式为增量上传 `backend/app/services/ai_video.py`、`backend/app/config.py`、`backend/tests/test_ai_video_sc1_material_urls.py`、`deploy/env.backend.3004.example`、`PROJECT_STATE.md`。
+- 服务重启：只重启 `manim-v2-3004-backend.service` 和 `manim-v2-3004-worker.service`，未修改、未重启 3003。
+- 部署后健康验证：`http://152.136.218.74:3004` 返回 200；`http://152.136.218.74:8004/health` 返回 healthy，uptime 重置后正常。
+- 平台闭环任务：3004 admin 通过 `/stickman-workflow/jobs` 创建真实任务 `job_139`，标题 `Qwen曼波音色验证`，使用 `voiceId=dayun_manbo`、`imageMode=material_only`、`scriptMode=custom`。
+- 任务结果：`job_139` 从 pending 到 completed，输出 URL `/api/ai-video/files/139/output/video.mp4`，本地下载目录 `C:\Users\Administrator\Documents\Codex\2026-07-18\300\outputs\job_139_qwen_manbo_validation`。
+- `project.json` 验证：`voice.provider=qwen_manbo`，`voice.speaker=qwen-audio-3.0-tts-plus-manbo-6260f62f5f1d427193925a3fab391d07`；`scene_count=4`、`cue_count=7`、`audioProviders=qwen_manbo`、`longCueCount=0`、无 `@Sc1`。
+- 方框关键词验证：`价值`、`证明`、`关系`、`对象`、`焦虑`、`释怀`、`害怕`，均为 2-4 字短词，优先来自或强相关于当前 cue 文案。
+- MP4 验证：`video.mp4` 大小 `1115559` 字节，时长约 `13.01s`；ffmpeg 显示包含 h264 视频流和 aac 音频流。
+- 抽帧验证：`frame_02s.png`、`frame_06s.png`、`frame_10s.png` 均显示单张居中完整场景图，下方横线未遮挡场景图；中文字幕居中；右上角 `心理分享 | 认知突破` 可见；无 `@Sc1火柴人`。
+- 当前结论：3004 已支持服务端直接调用阿里 Qwen Audio 曼波复刻音色完成 `/stickman-workflow` 一键成片，用户端仍选择 `dayun_manbo`，底层实际 provider 记录为 `qwen_manbo`。
+- 后续注意：本轮验收使用素材库匹配模式验证音频主链路；实时生图分段已在 `job_136` 单独验收通过。若再做完整商业验收，可用 `imageMode=ai_image` 复跑一次更长文案，但会产生实时生图成本。
