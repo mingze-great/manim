@@ -171,7 +171,7 @@ export default function AdminUserDetail() {
   }
 
   const updatePermission = async (moduleKey: string, patch: Record<string, any>) => {
-    if (!user || user.is_admin) return
+    if (!user) return
     const current = modulePermissions[moduleKey] || { enabled: false, daily_limit: 0, used_today: 0, period: 'monthly' }
     const nextPermissions = {
       ...modulePermissions,

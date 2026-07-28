@@ -891,3 +891,9 @@
   - `npm run build`（frontend）通过，仅有既有 Vite chunk size warning。
   - `git diff --check` 通过，仅提示既有 CRLF/LF 换行警告。
 - 下一步：提交并重新增量部署到 3004；平台验证 admin 设置 `stickman_v2.max_video_seconds=900` 后 `/stickman-workflow/config` 返回 900，时长估算/生成不会再触发旧 60/300 静态限制。
+
+## 2026-07-28 3004 用户详情 admin 权限可编辑补充
+- 当前任务补充：平台验证发现 `/api/admin/users/{id}` 不会更新 `module_permissions`，正确接口是 `/api/admin/users/{id}/module-permissions`；同时前端用户详情页原本 `if (!user || user.is_admin) return` 会阻止 admin 用户详情中修改 admin 自己的火柴人权限。
+- 本次修复：`frontend/src/pages/admin/AdminUserDetail.tsx` 允许 admin 在用户详情页编辑任意用户（包括 admin 自己）的模块权限；后端动态时长逻辑不变，仍由 `stickman_v2.max_video_seconds` 决定。
+- 本地验证：`PYTHONPATH=backend pytest backend/tests/test_stickman_workflow_limits.py backend/tests/test_partner_program_service.py -q` -> `26 passed`；`python -m py_compile backend/app/api/stickman_workflow.py backend/app/services/stickman_workflow_plans.py backend/app/services/partner_program.py backend/app/api/partner.py backend/app/models/partner.py backend/app/api/admin.py` 通过；`npm run build`（frontend）通过，仅有既有 Vite chunk size warning；`git diff --check` 通过。
+- 下一步：提交并增量部署到 3004，再通过正确的 module-permissions 接口设置 admin 验证账号 `max_video_seconds=900`，复验 `/stickman-workflow/config` 与时长估算。
