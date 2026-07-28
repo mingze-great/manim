@@ -791,3 +791,24 @@
   - `PYTHONPATH=backend pytest backend/tests/test_ai_video_sc1_material_urls.py backend/tests/test_image_gen_service.py backend/tests/test_stickman_workflow_limits.py -q` -> `53 passed`。
   - `git diff --check` 通过。
 - 下一步：提交并部署本地 URL 修复到 3004；创建新任务并复验抽帧，必须看到实时生成的白底火柴人场景图真实显示，而不是破图框。
+
+## 2026-07-28 3004 实时生图平台闭环验收记录
+
+- 当前本地提交：`612fc6c5100a012c75d8cb3a692b330f2cc7ba2b`（`fix: render realtime images from local backend urls`）。
+- 当前 3004 部署标记：`/opt/manim-v2-3004-snapshot/.deployed-ref` 记录 `branch=codex/3004-partner-stickman-platform-20260724`、`commit=612fc6c5100a012c75d8cb3a692b330f2cc7ba2b`、`deploy_method=incremental_upload_ai_image_local_backend_url`、`target=3004`。
+- 服务状态：3004 backend、worker、Remotion render 均为 active；`http://127.0.0.1:8004/health` healthy；`http://127.0.0.1:18788/api/health` ok；`http://127.0.0.1:3004/` 返回 200。
+- 平台任务：3004 admin 通过 `/stickman-workflow/jobs` 创建 `job_136`，使用 `imageMode=ai_image`、场景风格 `sc1_outputs`、声音 `dayun_manbo`、4 句自定义文案。
+- 本地 TTS worker：`scripts/local_tts_worker.py` 已增加两层容错：
+  - Dayun Manbo 429 时自动降级到本机 SAPI/Edge，避免整条任务失败。
+  - `/api/local-tts/claim` 遇到 502/网络抖动时不退出，等待后重试。
+  `job_136` 的 8 个 cue 均完成上传：`tts_136_01_01_2d928c6923`、`tts_136_01_02_59c6434f97`、`tts_136_02_01_f583a2d431`、`tts_136_02_02_58b375d7b1`、`tts_136_03_01_432d20ae72`、`tts_136_03_02_47eccfdc27`、`tts_136_04_01_94f0139314`、`tts_136_04_02_af4211c53e`。
+- 输出文件：平台输出 URL `/api/ai-video/files/136/output/video.mp4`；本地下载目录 `C:\Users\Administrator\Documents\Codex\2026-07-18\300\outputs\job_136_ai_image_validation`；MP4 大小 `1437672` 字节。
+- 数据验证：`project.json` 中 `scene_count=4`、`cue_count=8`、`generated_asset_count=4`、`unique_generated_asset_count=4`、`unique_prompt_count=4`，所有实时图 `src` 都是 `http://127.0.0.1:8004/api/article-images/...` 本地 backend URL；英文字幕缺失数 `0`；长字幕 `[]`；关键词为 `证明`、`关系`、`关系痛`、`自责`、`对象`、`焦虑`、`价值`、`患失`。
+- MP4 验证：ffmpeg 检查包含视频流和音频流。
+- 抽帧验证：
+  - `frame_02s.png`：实时生成白底火柴人场景图真实显示，不再是破图；右上角 `心理分享 | 认知突破` 可见；无 `@Sc1火柴人`。
+  - `frame_06s.png`：第二语义段显示另一张手机/沉默场景图，字幕和关键词变换。
+  - `frame_10s.png`：第三语义段显示对象/后果分开看的独立场景图。
+  - `frame_14s.png`：第四语义段显示价值拿回来的独立场景图。
+- 已确认本轮核心需求：实时生图不再整条视频只用一张图，而是按 SC1 语义分段生成多张图；风格为白底、火柴人/线稿人物、少量道具；声音试听此前已限制为 5 秒；平台 3004 可创建并完成实时生图成片。
+- 已知不足：本轮因 Dayun Manbo 外部接口持续 429，`job_136` 音频使用本地降级声音完成验证，不代表曼波音色服务已经恢复；后续如果必须固定曼波音色，需要替换稳定 TTS 服务或继续实现本地 CosyVoice 独立机器路由。

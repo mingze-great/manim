@@ -222,12 +222,16 @@ def report_failure(platform_url: str, token: str, request_id: str, error: str) -
 
 
 def run_once(args, prompt_wav: Path, workspace: Path) -> bool:
-    response = requests.post(
-        f"{args.platform_url.rstrip('/')}/api/local-tts/claim",
-        headers={"Authorization": f"Bearer {args.token}"},
-        timeout=30,
-    )
-    response.raise_for_status()
+    try:
+        response = requests.post(
+            f"{args.platform_url.rstrip('/')}/api/local-tts/claim",
+            headers={"Authorization": f"Bearer {args.token}"},
+            timeout=30,
+        )
+        response.raise_for_status()
+    except Exception as exc:
+        print(f"[local-tts] claim failed, will retry: {exc}", file=sys.stderr, flush=True)
+        return False
     request = response.json().get("request")
     if not request:
         return False
