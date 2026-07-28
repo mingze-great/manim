@@ -848,8 +848,8 @@
 
 ## 2026-07-28 3004 Git 同步状态补充
 
-- 3004 部署快照已同步到最新：远程 `/opt/manim-v2-3004-snapshot/.deployed-ref` 记录 `commit=8bbe8f0727e065aa2266e7fb95bbb662b20af890`、`code_commit=bc7dbc2a3e55d70fc2c3b4ad5a5abd29af5565d5`、`validation_job=job_139`。
-- 本地 Git 分支最新提交：`8bbe8f0727e065aa2266e7fb95bbb662b20af890`（`docs: record qwen manbo platform validation`）。
+- 3004 部署快照已同步到最新：远程 `/opt/manim-v2-3004-snapshot/.deployed-ref` 记录 `commit=0dee7d3265539c779839046bcc37ab4162b4fefa`、`code_commit=bc7dbc2a3e55d70fc2c3b4ad5a5abd29af5565d5`、`validation_job=job_139`。
+- 本地 Git 分支最新提交：`0dee7d3265539c779839046bcc37ab4162b4fefa`（`docs: record qwen manbo git sync status`）。
 - `git push origin codex/3004-partner-stickman-platform-20260724` 已尝试 2 次，均因本机到 GitHub 443 连接失败/重置未成功；后续网络恢复后需要补推。
 - 本地 `origin` 曾配置为带 token 的 HTTPS URL，已改回 `https://github.com/mingze-great/manim.git`，避免继续在 git remote 中保留明文凭据；建议后续轮换该 GitHub token。
 - 推送失败后复验：本地工作树只剩本状态记录未提交；3004 前端 `http://152.136.218.74:3004` 返回 200，后端 `http://152.136.218.74:8004/health` 返回 healthy。
