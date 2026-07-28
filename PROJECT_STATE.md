@@ -775,3 +775,19 @@
   - `PYTHONPATH=backend pytest backend/tests/test_ai_video_sc1_material_urls.py backend/tests/test_image_gen_service.py backend/tests/test_stickman_workflow_limits.py -q` -> `52 passed`。
   - `git diff --check` 通过，仅有既有 LF/CRLF 提示。
 - 下一步：提交并部署；远程 backend/worker drop-in 增加 `STICKMAN_IMAGE_TRANSPORT=urllib`，只重启 3004 backend/worker；重新创建短文案 `imageMode=ai_image` 平台任务验证至少 2 张实时场景图。
+
+## 2026-07-28 3004 实时图渲染 URL 修复部署前记录
+
+- 当前任务：继续修复 3004 实时生图平台闭环，当前不能只看任务 completed，必须抽帧确认中间场景图真实显示。
+- 已完成平台验证：`job_135` 使用 `imageMode=ai_image`、短文案 4 句，平台真实生成完成；本地 TTS worker 在 Dayun 429 时已降级到本机声音并完成 8 个 cue；MP4 下载到 `C:\Users\Administrator\Documents\Codex\2026-07-18\300\outputs\job_135_ai_image_validation\video.mp4`。
+- `job_135` 数据验证：`scene_count=4`、`cue_count=8`、`generated_asset_count=4`、`unique_generated_asset_count=4`、`unique_prompt_count=4`、英文字幕缺失数 `0`、长字幕 `[]`、MP4 同时包含音频流和视频流。
+- 当前问题：抽帧 `frame_02s.png` 显示中间场景图为破图占位。`project.json` 中 4 个实时图 `src` 都是 COS 外链，例如 `https://manim-1308464924.cos.ap-beijing.myqcloud.com/articles/images/...png`。说明图片已经生成，但 Remotion 渲染服务加载外链失败。
+- 本次本地改动：
+  - `backend/app/services/ai_video.py` 中 SC1 实时图 `src` 改为优先使用 `local_url`，通过 `AI_VIDEO_BACKEND_PUBLIC_URL` 转成 `http://127.0.0.1:8004/api/article-images/...`，保证 Remotion 在同机渲染时可访问。
+  - `backend/tests/test_ai_video_sc1_material_urls.py` 增加回归测试，确保 COS 存在时仍优先使用本地 backend URL。
+  - `scripts/local_tts_worker.py` 已提交 `e9fa993`：Dayun 429 时自动降级到本机 SAPI/Edge，避免平台任务因第三方接口限流失败。
+- 本地验证：
+  - `python -m py_compile backend/app/services/ai_video.py backend/app/services/image_gen.py backend/app/config.py backend/app/api/stickman_workflow.py scripts/local_tts_worker.py` 通过。
+  - `PYTHONPATH=backend pytest backend/tests/test_ai_video_sc1_material_urls.py backend/tests/test_image_gen_service.py backend/tests/test_stickman_workflow_limits.py -q` -> `53 passed`。
+  - `git diff --check` 通过。
+- 下一步：提交并部署本地 URL 修复到 3004；创建新任务并复验抽帧，必须看到实时生成的白底火柴人场景图真实显示，而不是破图框。

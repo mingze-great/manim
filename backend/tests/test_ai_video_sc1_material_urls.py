@@ -204,6 +204,35 @@ def test_ai_image_mode_generates_scene_asset(monkeypatch):
     assert asset["slot"] == "center"
 
 
+def test_ai_image_mode_prefers_local_backend_url_for_render(monkeypatch):
+    service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
+    service.backend_public_url = "http://127.0.0.1:8004"
+    service._sc1_material_cache = (None, [])
+    service._media_for_scene = lambda *_args, **_kwargs: []
+    service._infer_scene_count = lambda *_args, **_kwargs: 1
+
+    async def fake_generate_image(prompt):
+        return (
+            "/api/article-images/local.png",
+            "https://example-cos.test/articles/images/public.png",
+            "cos",
+        )
+
+    fake_service = types.SimpleNamespace(generate_image=fake_generate_image)
+    monkeypatch.setattr(ai_video, "image_gen_service", fake_service, raising=False)
+
+    scenes = service._build_scenes(
+        "你越想证明自己，越容易在关系里内耗。",
+        {"prompt": "关系内耗", "imageMode": "ai_image", "useMaterialLibrary": False},
+        "knowledge_ip_stickman",
+        "sc1_stickman",
+        "medium",
+    )
+
+    asset = scenes[0]["visual"]["assetImages"][0]
+    assert asset["src"] == "http://127.0.0.1:8004/api/article-images/local.png"
+
+
 def test_ai_image_mode_fails_clearly_when_realtime_generation_fails(monkeypatch):
     service = ai_video.AiVideoService.__new__(ai_video.AiVideoService)
     service.backend_public_url = "http://127.0.0.1:8004"

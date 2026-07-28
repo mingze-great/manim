@@ -834,7 +834,7 @@ class AiVideoService:
             if strict:
                 raise RuntimeError(f"实时生图失败：图片生成接口不可用或 API key 无效（第 {index + 1} 段）。{exc}") from exc
             return []
-        src = self._backend_asset_url(str(public_url or local_url or ""))
+        src = self._backend_asset_url(str(local_url or public_url or ""))
         if not src:
             if strict:
                 raise RuntimeError(f"实时生图失败：图片生成接口没有返回可用图片 URL（第 {index + 1} 段）。")
