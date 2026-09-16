@@ -291,29 +291,80 @@ class GLMAdapter(LLMAdapter):
 
 class LLMFactory:
     _client_cache = None
-    
+    _provider_cache = None
+
+    # provider name -> (settings key attribute, adapter class)
+    _PROVIDERS = {
+        "dashscope": ("DASHSCOPE_API_KEY", DashScopeAdapter),
+        "deepseek": ("DEEPSEEK_API_KEY", DeepSeekAdapter),
+        "glm": ("GLM_API_KEY", GLMAdapter),
+        "gemini": ("GEMINI_API_KEY", GeminiAdapter),
+        "openai": ("OPENAI_API_KEY", OpenAIAdapter),
+    }
+
+    # auto 模式下的探测顺序（百炼国内最稳，DS 次之）
+    _AUTO_ORDER = ["dashscope", "deepseek", "glm", "gemini", "openai"]
+
+    @classmethod
+    def _resolve_provider(cls) -> str:
+        want = (settings.LLM_PROVIDER or "auto").strip().lower()
+        if want != "auto":
+            key_attr, _ = cls._PROVIDERS.get(want, (None, None))
+            if key_attr and getattr(settings, key_attr, ""):
+                return want
+            print(f"[LLMFactory] LLM_PROVIDER={want} 但未配置 Key，回退到 auto 模式")
+
+        for name in cls._AUTO_ORDER:
+            key_attr, _ = cls._PROVIDERS[name]
+            if getattr(settings, key_attr, ""):
+                return name
+
+        raise ValueError(
+            "未配置任何 LLM Provider 的 API Key。\n"
+            "请在 .env 至少配置以下之一：DASHSCOPE_API_KEY / DEEPSEEK_API_KEY / GLM_API_KEY / GEMINI_API_KEY / OPENAI_API_KEY"
+        )
+
     @classmethod
     def get_client(cls) -> LLMAdapter:
         if cls._client_cache is not None:
             return cls._client_cache
-        
-        if not settings.DEEPSEEK_API_KEY:
-            raise ValueError(
-                "未配置 DEEPSEEK_API_KEY。\n"
-                "请在 .env 中配置 DEEPSEEK_API_KEY"
-            )
-        
-        cls._client_cache = DeepSeekAdapter()
+
+        provider = cls._resolve_provider()
+        _, adapter_cls = cls._PROVIDERS[provider]
+        print(f"[LLMFactory] 使用 provider: {provider}")
+        cls._client_cache = adapter_cls()
+        cls._provider_cache = provider
         return cls._client_cache
-    
+
+    @classmethod
+    def get_provider(cls) -> str:
+        if cls._provider_cache is None:
+            cls.get_client()
+        return cls._provider_cache
+
     @classmethod
     def get_model_name(cls) -> str:
-        return settings.DEEPSEEK_MODEL
-    
+        return cls.get_chat_model()
+
     @classmethod
     def get_chat_model(cls) -> str:
-        return settings.DEEPSEEK_MODEL
-    
+        provider = cls.get_provider()
+        # 各 provider 的默认聊天模型。返回 None 让适配器自己挑（DashScope 会走降级列表）
+        return {
+            "dashscope": None,
+            "deepseek": settings.DEEPSEEK_MODEL,
+            "glm": settings.GLM_MODEL,
+            "gemini": settings.GEMINI_MODEL,
+            "openai": settings.OPENAI_MODEL,
+        }.get(provider)
+
     @classmethod
     def get_code_model(cls) -> str:
-        return settings.DEEPSEEK_MODEL
+        provider = cls.get_provider()
+        return {
+            "dashscope": settings.DASHSCOPE_CODE_MODEL,
+            "deepseek": settings.DEEPSEEK_MODEL,
+            "glm": settings.GLM_MODEL,
+            "gemini": settings.GEMINI_MODEL,
+            "openai": settings.OPENAI_MODEL,
+        }.get(provider)

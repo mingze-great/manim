@@ -44,3 +44,7 @@ celerybeat.pid
 media/
 videos/
 *.mp4
+
+# Local scratch
+.tmp/
+backend/scripts/probe_llm.py

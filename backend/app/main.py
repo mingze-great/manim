@@ -182,12 +182,27 @@ class TheoremScene(Scene):
     from app.tasks.cleanup import start_scheduler
     start_scheduler()
     print("[Startup] Cleanup scheduler started")
-    
+
+    # OpenClaw 独立 scheduler（AI 热点每日 09:00 推送）—— 仅在启用时
+    try:
+        from app.openclaw import is_enabled as _oc_enabled
+        if _oc_enabled():
+            from app.openclaw.news import start_scheduler as _oc_start_news
+            _oc_start_news()
+    except Exception as _e:
+        print(f"[openclaw] news scheduler 启动失败（不影响主平台）: {type(_e).__name__}: {_e}")
+
     yield
-    
+
     from app.tasks.cleanup import shutdown_scheduler
     shutdown_scheduler()
     print("[Shutdown] Cleanup scheduler stopped")
+
+    try:
+        from app.openclaw.news import shutdown_scheduler as _oc_stop_news
+        _oc_stop_news()
+    except Exception:
+        pass
 
 
 app = FastAPI(title="Manim Video Platform API", version="2.0.0", lifespan=lifespan)
@@ -215,6 +230,15 @@ app.include_router(tasks.router, prefix="/api")
 app.include_router(templates.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
 app.include_router(payment.router, prefix="/api")
+
+# OpenClaw 独立模块（可选）—— OPENCLAW_ENABLED=true 时才挂载
+try:
+    from app.openclaw import router as openclaw_router, is_enabled as openclaw_enabled
+    if openclaw_enabled():
+        app.include_router(openclaw_router, prefix="/api")
+        print("[openclaw] 模块已启用，路由挂载在 /api/openclaw/*")
+except Exception as e:
+    print(f"[openclaw] 模块加载失败（不影响主平台）: {type(e).__name__}: {e}")
 
 
 @app.get("/")
