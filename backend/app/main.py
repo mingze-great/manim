@@ -183,14 +183,18 @@ class TheoremScene(Scene):
     start_scheduler()
     print("[Startup] Cleanup scheduler started")
 
-    # OpenClaw 独立 scheduler（AI 热点每日 09:00 推送）—— 仅在启用时
+    # OpenClaw 独立 scheduler（AI 热点每日 09:00 推送 + 日程 08:30/22:00/分钟扫描 + 监控 09:15）
     try:
         from app.openclaw import is_enabled as _oc_enabled
         if _oc_enabled():
             from app.openclaw.news import start_scheduler as _oc_start_news
+            from app.openclaw.schedule import start_schedule_scheduler as _oc_start_sched
+            from app.openclaw.monitor import start_monitor_scheduler as _oc_start_mon
             _oc_start_news()
+            _oc_start_sched()
+            _oc_start_mon()
     except Exception as _e:
-        print(f"[openclaw] news scheduler 启动失败（不影响主平台）: {type(_e).__name__}: {_e}")
+        print(f"[openclaw] scheduler 启动失败（不影响主平台）: {type(_e).__name__}: {_e}")
 
     yield
 
@@ -200,7 +204,11 @@ class TheoremScene(Scene):
 
     try:
         from app.openclaw.news import shutdown_scheduler as _oc_stop_news
+        from app.openclaw.schedule import shutdown_schedule_scheduler as _oc_stop_sched
+        from app.openclaw.monitor import shutdown_monitor_scheduler as _oc_stop_mon
         _oc_stop_news()
+        _oc_stop_sched()
+        _oc_stop_mon()
     except Exception:
         pass
 
@@ -239,6 +247,15 @@ try:
         print("[openclaw] 模块已启用，路由挂载在 /api/openclaw/*")
 except Exception as e:
     print(f"[openclaw] 模块加载失败（不影响主平台）: {type(e).__name__}: {e}")
+
+# 语音助手「小曼」（可选）—— VOICE_ENABLED != false 时挂载
+try:
+    from app.voice import router as voice_router, is_enabled as voice_enabled
+    if voice_enabled():
+        app.include_router(voice_router, prefix="/api")
+        print("[voice] 语音助手模块已启用，路由挂载在 /api/voice/*")
+except Exception as e:
+    print(f"[voice] 模块加载失败（不影响主平台）: {type(e).__name__}: {e}")
 
 
 @app.get("/")

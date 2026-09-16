@@ -3,7 +3,8 @@ import { Layout, Menu, Avatar, Dropdown, Space, Button, Drawer, FloatButton } fr
 import type { MenuProps } from 'antd'
 import {
   PlusOutlined, HistoryOutlined, UserOutlined,
-  LogoutOutlined, MenuOutlined, BellOutlined, BookOutlined, SafetyOutlined
+  LogoutOutlined, MenuOutlined, BellOutlined, BookOutlined, SafetyOutlined,
+  AudioOutlined
 } from '@ant-design/icons'
 import { useAuthStore } from '@/stores/authStore'
 import { useState, useEffect } from 'react'
@@ -26,6 +27,7 @@ export default function MainLayout() {
   const menuItems: MenuProps['items'] = [
     { key: '/creator', icon: <PlusOutlined />, label: '开始创作' },
     { key: '/history', icon: <HistoryOutlined />, label: '我的作品' },
+    { key: '/voice', icon: <AudioOutlined />, label: '语音对话' },
     { key: '/docs', icon: <BookOutlined />, label: '帮助中心' },
   ]
 

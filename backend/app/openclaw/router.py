@@ -120,15 +120,16 @@ async def feishu_webhook(request: Request) -> dict[str, Any]:
     print(f"[openclaw.feishu] will answer: message_id={message_id} chat={chat_id} text={user_text!r}")
 
     # 后台处理（不阻塞飞书 3s 超时）
-    asyncio.create_task(_handle_and_reply(client, message_id, user_text, cfg, chat_id))
+    asyncio.create_task(_handle_and_reply(client, message_id, user_text, cfg, chat_id, sender_id))
     return {"code": 0, "msg": "ok"}
 
 
 async def _handle_and_reply(
-    client: FeishuClient, message_id: str, user_text: str, cfg, chat_id: str | None = None
+    client: FeishuClient, message_id: str, user_text: str, cfg, chat_id: str | None = None,
+    sender_open_id: str | None = None,
 ) -> None:
     try:
-        replies = await answer(user_text, cfg, chat_id=chat_id, fs_client=client)
+        replies = await answer(user_text, cfg, chat_id=chat_id, fs_client=client, user_open_id=sender_open_id)
         # answer() 返回 list[str]，合并为单条飞书消息（超长再切片）。
         combined = "\n".join(replies) if replies else "(空回复)"
         for i, chunk in enumerate(split_for_feishu(combined)):

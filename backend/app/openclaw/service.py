@@ -128,9 +128,12 @@ HELP_TEXT = (
     "\n直接 @我 说需求即可（例如 '记一笔今天午饭 35'），我会自动派给合适的员工群。"
     "\n\n📋 命令：\n"
     "/team                          查看员工花名册\n"
-    "/hire <name> <chat_id> <职责>  招新员工\n"
+    "/hire <name> <chat_id> <职责>  招新员工（也可到 hr 群说「招人」走向导）\n"
     "/fire <name>                   解雇员工\n"
     "/news now                      立即抓一次 AI 热点推送到 AI热点群\n"
+    "/schedule add HH:MM 事项       添加日程（更多用法 /schedule）\n"
+    "/schedule list                 查看今日日程\n"
+    "/monitor now                   立即探测 manim 平台健康\n"
     "/model                         查看/切换模型\n"
     "/help                          本帮助"
 )
@@ -224,6 +227,14 @@ async def _handle_command(
             asyncio.create_task(_run_news_and_ack(fs_client, chat_id))
             return ["🚀 已开始抓取 AI 热点，抓完会推送到 AI热点群，稍等约 30~60 秒"]
         return ["用法：/news now  （立即触发一次 AI 热点推送）"]
+
+    if cmd == "/schedule":
+        from app.openclaw.schedule import handle_command_schedule
+        return handle_command_schedule(chat_id or "", rest)
+
+    if cmd == "/monitor":
+        from app.openclaw.monitor import handle_command_monitor
+        return await handle_command_monitor(chat_id or "", rest)
 
     if cmd == "/fire":
         if not rest:
@@ -338,6 +349,7 @@ async def answer(
     cfg: OpenClawSettings,
     chat_id: str | None = None,
     fs_client: FeishuClient | None = None,
+    user_open_id: str | None = None,
 ) -> list[str]:
     if not user_text:
         return ["请在 @我 后面写下你想说的～"]
@@ -351,6 +363,27 @@ async def answer(
     if _is_news_intent(user_text) and fs_client is not None and chat_id:
         asyncio.create_task(_run_news_and_ack(fs_client, chat_id, target_chat_id=chat_id))
         return ["🚀 正在抓当天最新 AI 热点，30~60 秒后送到这个群～"]
+
+    # 1.6) hr 群 —— 招人向导优先
+    try:
+        from app.openclaw.hr import handle_hr_message, is_hr_chat
+        if is_hr_chat(chat_id):
+            hr_reply = await handle_hr_message(chat_id or "", user_open_id or "", user_text, fs_client)
+            if hr_reply is not None:
+                return hr_reply
+    except Exception as e:  # noqa: BLE001
+        print(f"[openclaw.service] hr wizard 异常: {type(e).__name__}: {e}")
+
+    # 1.7) 日程助手群 —— 自然语言直接解析成日程
+    try:
+        from app.openclaw.schedule import handle_natural_language, SCHEDULE_EMPLOYEE
+        sched_emp = load_state().find(SCHEDULE_EMPLOYEE)
+        if sched_emp and chat_id == sched_emp.chat_id:
+            sched_reply = await handle_natural_language(chat_id or "", user_text)
+            if sched_reply is not None:
+                return sched_reply
+    except Exception as e:  # noqa: BLE001
+        print(f"[openclaw.service] schedule nl 异常: {type(e).__name__}: {e}")
 
     # 2) 如果消息发生在某个员工群里，走「直答」（避免自己派给自己）
     state = load_state()

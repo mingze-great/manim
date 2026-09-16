@@ -13,6 +13,7 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import ProjectChat from './pages/ProjectChat'
 import ProjectTask from './pages/ProjectTask'
+import VoicePage from './pages/Voice'
 import AdminDashboard from './pages/admin/AdminDashboard'
 import AdminUsers from './pages/admin/AdminUsers'
 import AdminLogs from './pages/admin/AdminLogs'
@@ -74,6 +75,7 @@ function AppContent() {
         <Route path="/project/:id/task" element={<ProjectTask />} />
         <Route path="/history" element={<History />} />
         <Route path="/profile" element={<Profile />} />
+        <Route path="/voice" element={<VoicePage />} />
       </Route>
 
       <Route element={<AdminRoute><AdminLayout /></AdminRoute>}>
